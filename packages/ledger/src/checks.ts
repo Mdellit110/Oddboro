@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
 import { LINUX, MAC, SYSTEM, WINDOWS, serviceInstalled } from './platform.ts';
+import { secretStore } from './secrets.ts';
 
 export type Check = {
   id: string;
@@ -50,6 +51,31 @@ export async function checkMac(): Promise<Check> {
     state: 'missing',
     found: SYSTEM ? 'Windows is not ready yet' : `This is ${process.platform}`,
     fix: 'Oddboro runs on a Mac or Linux for now.'
+  };
+}
+
+/**
+ * The secret store that holds the keys and sign-ins the owner connects: the
+ * Keychain on a Mac, the desktop keyring on Linux. Windows has none yet.
+ */
+export function checkKeyring(): Check {
+  const r = secretStore();
+  if (r.ok)
+    return {
+      id: 'keyring',
+      name: 'Keyring',
+      state: 'ok',
+      found: MAC ? 'The Mac keychain' : 'The desktop keyring, through secret-tool'
+    };
+  return {
+    id: 'keyring',
+    name: 'Keyring',
+    state: 'optional',
+    found:
+      LINUX && r.problem === 'not installed' ? 'secret-tool not installed' : `Keyring ${r.problem}`,
+    fix: LINUX
+      ? 'Install libsecret (it brings secret-tool) and run a keyring that speaks the Secret Service, such as GNOME Keyring, KWallet or KeePassXC. Until then, tools that need a key cannot connect.'
+      : 'Until the secret store answers, tools that need a key cannot connect.'
   };
 }
 
@@ -372,6 +398,7 @@ export async function checkMachine(): Promise<Check[]> {
     checkDocker(),
     checkOllama(),
     checkUv(),
-    checkService()
+    checkService(),
+    checkKeyring()
   ]);
 }
