@@ -62,6 +62,7 @@ window, the hold, the install decision and a poke's grace.
 | `src/time.ts`          | The office's time zone (`OFFICE_TIME_ZONE`), and a schedule's next run                                                                                                       |
 | `src/checks.ts`        | What an install needs, one check each. Imports no db.ts, so it runs before a database exists                                                                                 |
 | `src/setup.ts`         | `npm run setup`: asks nothing. Checks the Mac, starts the office service, opens the browser                                                                                  |
+| `src/platform.ts`      | What differs between systems: log folder, login service (launchd, systemd), opening a URL                                                                                    |
 | `src/env.ts`           | `.env` read and written a key at a time, by setup and by the office                                                                                                          |
 | `src/local-db.ts`      | The office's own Postgres (PGlite), its socket, and NOTIFY from other processes                                                                                              |
 | `src/upgrade.ts`       | Brings the tables up to date: pgvector, then migrations. `markBaseline()` moves an install made before the baseline onto it, once, and takes out the Google connector it had |

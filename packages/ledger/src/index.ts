@@ -15,6 +15,7 @@ export * from './tools.ts';
 export { searchRegistry, ensureConnector, type Candidate } from './registry.ts';
 export { sql as pg, DATABASE_URL, LOCAL } from './db.ts';
 export * from './home.ts';
+export * from './platform.ts';
 export * from './offices.ts';
 export * from './managers.ts';
 export * from './goals.ts';

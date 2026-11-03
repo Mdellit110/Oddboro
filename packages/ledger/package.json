@@ -9,6 +9,7 @@
     "./tools": "./src/tools.ts",
     "./goals": "./src/goal-words.ts",
     "./checks": "./src/checks.ts",
+    "./platform": "./src/platform.ts",
     "./env": "./src/env.ts",
     "./local-db": "./src/local-db.ts",
     "./upgrade": "./src/upgrade.ts",
