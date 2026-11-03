@@ -17,7 +17,6 @@ import {
   editOwnJob,
   giveTask,
   reconnectTask,
-  grantsFor,
   jobsFor,
   levelAtMost,
   officeActivity,
@@ -43,6 +42,7 @@ import {
   type GoalView
 } from './goals.ts';
 import { goalWhen, HEALTH_WORDS, HORIZONS, STATUS_WORDS } from './goal-words.ts';
+import { capabilities, levelLine, outsideLines } from './capabilities.ts';
 import { ensureConnector, searchRegistry } from './registry.ts';
 import type { GoalPlanItem, HireProposal } from './schema.ts';
 import { clockTime, describe as describeSchedule, officeAt, WEEKDAYS, zoneName } from './time.ts';
@@ -373,19 +373,19 @@ if (has('give_owner_a_task'))
 server.registerTool(
   'my_access',
   {
-    description: `The tools ${OWNER} has connected for you, with the level for each.`,
+    description: `Your level, and each outside tool ${OWNER} gave you: what it reaches, or why a run leaves it out for now.`,
     inputSchema: {}
   },
   async () => {
-    const rows = await grantsFor(ME);
-    if (!rows.length) return text(`${OWNER} has connected no outside tools for you yet.`);
+    const caps = await capabilities(me);
+    const lines = outsideLines(caps, OWNER);
     return text(
-      rows
-        .map(
-          (g) =>
-            `- ${g.connector.name} (${g.connectorId}): ${g.level}${g.connector.readyAt ? '' : `, waiting on ${OWNER} to finish connecting it`}`
-        )
-        .join('\n')
+      [
+        levelLine(caps.level, OWNER),
+        lines.length
+          ? lines.map((l, i) => `- ${l} (id: ${caps.outside[i].connector.id})`).join('\n')
+          : `${OWNER} has connected no outside tools for you yet.`
+      ].join('\n')
     );
   }
 );
@@ -870,10 +870,28 @@ if (has('office_report'))
   server.registerTool(
     'office_report',
     {
-      description: `Everything the office did in a window: each Odd with its jobs and runs, asks open and decided, and tasks for ${OWNER} open and done. For the daily report. followUps is the work owed after ${OWNER} answered: carrying out an approved ask, reworking one they sent back, acting on their feedback on a report, or picking up after a task they finished, each with its outcome (done, failed, waiting on ${OWNER}, or null while still to do). Each run has a trigger: 'schedule' means its timer started it, 'manual' means ${OWNER} pressed Run now. Judge a job's timing by its schedule runs only; a manual run at any hour is expected. Every time is ${ZONE}, like the schedules.`,
+      description: `Everything the office did in a window: each Odd with its remit, its level (read, draft or act), the office tools it holds beyond the ones every Odd has, its outside tools (each with what it reaches, or why a run leaves it out), and its jobs and runs, asks open and decided, and tasks for ${OWNER} open and done. For the daily report. followUps is the work owed after ${OWNER} answered: carrying out an approved ask, reworking one they sent back, acting on their feedback on a report, or picking up after a task they finished, each with its outcome (done, failed, waiting on ${OWNER}, or null while still to do). Each run has a trigger: 'schedule' means its timer started it, 'manual' means ${OWNER} pressed Run now. Judge a job's timing by its schedule runs only; a manual run at any hour is expected. Every time is ${ZONE}, like the schedules.`,
       inputSchema: { hours: z.number().int().min(1).max(168).default(24) }
     },
-    async ({ hours }) => json(await officeActivity(new Date(Date.now() - hours * 3_600_000)))
+    async ({ hours }) => {
+      const activity = await officeActivity(new Date(Date.now() - hours * 3_600_000));
+      const people = new Map((await roster()).map((p) => [p.id, p]));
+      const staff = await Promise.all(
+        activity.staff.map(async (s) => {
+          const who = people.get(s.id);
+          if (!who) return s;
+          const caps = await capabilities(who);
+          return {
+            ...s,
+            remit: caps.remit,
+            level: caps.level,
+            officeTools: caps.office,
+            outsideTools: outsideLines(caps, OWNER)
+          };
+        })
+      );
+      return json({ ...activity, staff });
+    }
   );
 
 await server.connect(new StdioServerTransport());

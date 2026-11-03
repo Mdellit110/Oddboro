@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Candidate } from '@oddboro/ledger';
+  import type { Candidate, HeldBack } from '@oddboro/ledger';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import { call } from './api.ts';
   import type { StaffProfile } from '../staff/roster.ts';
@@ -8,8 +8,9 @@
     connector: string;
     name: string;
     level: 'read' | 'act';
-    ready: boolean;
-    tools: number;
+    /** What a run reaches, like "3 tools" or "every tool". */
+    reach: string;
+    heldBack: HeldBack | null;
   };
   type Own = { id: string; name: string; description: string; kind: string; ready: boolean };
   type Props = { profile: StaffProfile; version: number };
@@ -70,6 +71,12 @@
   }
 
   const LEVEL = { read: 'Read only', act: 'Read and write' } as const;
+  /** Why its runs leave a granted tool out, for the owner. Grants are read or act, so only act can sit above a level. */
+  const HELD_BACK: Record<HeldBack, string> = {
+    'above its level': 'held back until you raise its level to Act',
+    'still connecting': 'waiting on your steps',
+    'sign-in ran out': 'sign in again'
+  };
   const RANK = { read: 0, draft: 1, act: 2 } as const;
   const levels = ['read', 'act'] as const;
   /** Never above the staffer's own level. */
@@ -265,7 +272,7 @@
             <div class="min-w-0 flex-1">
               <div class="font-medium">{g.name}</div>
               <div class="text-xs text-muted">
-                {LEVEL[g.level]} · {g.tools} tools{g.ready ? '' : ' · waiting on your steps'}
+                {LEVEL[g.level]} · {g.reach}{g.heldBack ? ` · ${HELD_BACK[g.heldBack]}` : ''}
               </div>
             </div>
             <button class="text-xs text-muted hover:text-coral" onclick={() => revoke(g)}

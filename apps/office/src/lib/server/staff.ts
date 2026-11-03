@@ -26,10 +26,11 @@ import {
   DATABASE_URL,
   goalsFor,
   goalWhen,
-  grantsFor,
+  capabilities,
   HEALTH_WORDS,
   hasTool,
-  levelAtMost,
+  levelLine,
+  outsideLines,
   ownerName,
   recordUsage,
   setPlanLimits,
@@ -43,6 +44,7 @@ import {
   task as taskById,
   taskFiles,
   type AskRow,
+  type Capabilities,
   type FollowUpRow,
   type GoalRow,
   type JobRow,
@@ -72,6 +74,8 @@ import { downtime, installsAt } from './update.ts';
 /** The owner's data folder, which every staffer may read. */
 const DATA = home('data');
 const HOMES = home('staff');
+/** Hard rule 4's one exception to asking first, said the same way in every brief that tells an Odd to ask. */
+const ACT_WRITE = 'unless you hold Act and use a tool {owner} connected for you at read and write';
 const CHAT_TIMEOUT_MS = 5 * 60_000;
 const JOB_TIMEOUT_MS = 20 * 60_000;
 
@@ -240,7 +244,7 @@ async function replyBrief(
   return {
     ref: { kind: 'report', id: r.id, title: r.title },
     brief: [
-      `({owner} is replying about your report "${r.title}". If it is feedback, act on it: work inside the office now, raise_ask before changing one of your jobs or anything outside the office, and give_owner_a_task for anything only they can do.`,
+      `({owner} is replying about your report "${r.title}". If it is feedback, act on it: work inside the office now, raise_ask before changing one of your jobs, or anything outside the office ${ACT_WRITE}, and give_owner_a_task for anything only they can do.`,
       '',
       'The report:',
       '',
@@ -275,7 +279,7 @@ export function staffEnv(): NodeJS.ProcessEnv {
 
 type Server = Record<string, unknown>;
 
-/** The servers and tool permissions one run gets, from the owner's grants. */
+/** The servers and tool permissions one run gets: the outside tools `capabilities` says it holds. */
 async function access(who: StaffRow) {
   const servers: Record<string, Server> = {
     office: {
@@ -285,12 +289,10 @@ async function access(who: StaffRow) {
     }
   };
   const allowed = ['mcp__office'];
-  const notes: string[] = [];
-  for (const g of await grantsFor(who.id)) {
-    const c = g.connector;
-    // A grant above the staffer's current level waits until the owner raises it again.
-    if (!levelAtMost(g.level, who.permission)) continue;
-    if (!c.readyAt) continue;
+  const caps = await capabilities(who);
+  for (const a of caps.outside) {
+    if (a.heldBack) continue;
+    const c = a.connector;
     const env = Object.fromEntries(
       (c.config.secrets ?? []).map((n) => [n, getSecret(c.id, n) ?? ''])
     );
@@ -300,7 +302,7 @@ async function access(who: StaffRow) {
     if (c.config.oauth) {
       const token = await bearer(c.id).catch(() => undefined);
       if (!token) {
-        notes.push(`${c.name}: its sign-in ran out. {owner} needs to sign in again.`);
+        a.heldBack = 'sign-in ran out';
         continue;
       }
       headers.Authorization = `Bearer ${token}`;
@@ -309,15 +311,10 @@ async function access(who: StaffRow) {
       c.kind === 'http'
         ? { type: 'http', url: c.config.url, headers }
         : { command: c.config.command, args: c.config.args, env };
-    if (g.level === 'act') {
-      allowed.push(`mcp__${c.id}`);
-      notes.push(`${c.name} (read and write): every tool.`);
-    } else {
-      allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
-      notes.push(`${c.name} (read only): ${c.readTools.length} tools.`);
-    }
+    if (a.level === 'act') allowed.push(`mcp__${c.id}`);
+    else allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
   }
-  return { servers, allowed, notes };
+  return { servers, allowed, caps };
 }
 
 /** How the office works, naming only the office tools this staffer holds. */
@@ -340,8 +337,8 @@ function house(who: StaffRow, now: string): string {
     `- {owner}'s desk is how you reach them. Anything that needs their yes goes through raise_ask${has('give_owner_a_task') ? ', and anything only they can do goes through give_owner_a_task' : ''}. Do not ask for a decision in chat when it should be an ask.`,
     has('search_ledger') &&
       '- Before you raise an ask, search_ledger for how they decided things like it. Follow a decision that fits. If the closest one gave no reason, say so.',
-    `- my_access lists the outside tools you have.${more} When one stops working (its tools fail to load, or it turns down its key), call reconnect_access.`,
-    "- Nothing leaves the office without {owner}'s yes on that exact action.",
+    `- my_access lists your outside tools.${more} When one stops working (its tools fail to load, or it turns down its key), call reconnect_access.`,
+    `- Nothing leaves the office without {owner}'s yes on that exact action, ${ACT_WRITE}.`,
     '- Write to {owner} in active voice: the person or thing that acts is the subject ("I moved the call", not "the call was moved"). Plain words, short sentences.',
     ''
   ]
@@ -392,7 +389,26 @@ async function whoFor(who: StaffRow, dir: string): Promise<string> {
     .join('\n');
 }
 
-async function prompt(who: StaffRow, dir: string, notes: string[]): Promise<string> {
+/** What this run can do: its level, where it writes, and each outside tool it holds or was granted. */
+function canDo(caps: Capabilities, owner: string): string {
+  const lines = outsideLines(caps, owner);
+  return [
+    '',
+    '## What you can do',
+    '',
+    `- ${levelLine(caps.level, owner)}`,
+    '- You write files only in your folder. Your own tools work on files only: no shell and no web. The outside tools below are your only reach beyond the office.',
+    '- Outside tools:',
+    ...(lines.length ? lines.map((l) => `  - ${l}`) : ['  - None yet.']),
+    ''
+  ].join('\n');
+}
+
+async function prompt(
+  who: StaffRow,
+  opts: { dir: string; caps: Capabilities; owner: string }
+): Promise<string> {
+  const { dir } = opts;
   const now = new Date().toLocaleString('en-US', {
     timeZone: zone(),
     weekday: 'long',
@@ -407,7 +423,7 @@ async function prompt(who: StaffRow, dir: string, notes: string[]): Promise<stri
     (await whoFor(who, dir)) +
     house(who, now) +
     `\n## Where things are\n\n- Your folder: ${dir}\n- Your notes: ${join(dir, 'notes')}\n- {owner}'s data folder: ${DATA}\n` +
-    `\n## Outside tools\n\n${notes.length ? notes.map((n) => `- ${n}`).join('\n') : '- None yet.'}\n`
+    canDo(opts.caps, opts.owner)
   );
 }
 
@@ -508,7 +524,7 @@ async function run(
     opts.sessionFile && existsSync(opts.sessionFile)
       ? (JSON.parse(readFileSync(opts.sessionFile, 'utf8')) as { sessionId: string }).sessionId
       : undefined;
-  const { servers, allowed, notes } = await access(who);
+  const { servers, allowed, caps } = await access(who);
   // Prompts name the owner as {owner}: each install's staff use its own name.
   const owner = await ownerName();
   const say = (s: string) => s.replaceAll('{owner}', owner);
@@ -552,7 +568,7 @@ async function run(
     DATA,
     ...modelArgs(),
     '--append-system-prompt',
-    say((await prompt(who, dir, notes)) + (opts.extra ?? '')),
+    say((await prompt(who, { dir, caps, owner })) + (opts.extra ?? '')),
     ...(prior ? ['--resume', prior] : ['--session-id', randomUUID()])
   ];
 
@@ -738,8 +754,8 @@ function followUpBrief(
       ...(g.why ? [`- Why it matters: ${g.why}`] : []),
       ...(g.doneWhen ? [`- Done when: ${g.doneWhen}`] : []),
       '',
-      '1. Read the office: office_report for each Odd and what it does, list_goals for the goals they already serve.',
-      '2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Hire only for work nobody here fits.',
+      '1. Read the office: office_report for each Odd, what it does, its level and the tools it holds or is waiting on, and list_goals for the goals they already serve.',
+      '2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it, or say in its part that it asks for what it lacks with ask_for_access. Put only a level raise in owner_steps. Hire only for work nobody here fits.',
       '3. If you need answers from {owner} before you can plan it, write the questions to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop. You pick up when they finish it.',
       "4. Otherwise bring the whole plan in one ask with propose_goal_plan, including the steps only {owner} can do. Write each hire's job description to a file first, and pass any intake as its intake_file.",
       '5. If the office already meets this goal as it is, say so and stop.'
@@ -812,7 +828,7 @@ function followUpBrief(
     r?.body ?? '',
     '',
     '1. Work inside the office that they asked for, such as notes or a file in your folder, do now.',
-    '2. Anything that changes something outside the office, or changes one of your jobs, raise_ask first, one exact action per ask.',
+    `2. Anything that changes one of your jobs, or something outside the office ${ACT_WRITE}: raise_ask first, one exact action per ask.`,
     '3. Anything only they can do goes on their desk with give_owner_a_task.',
     '4. If the feedback needs nothing done, say so.'
   ];
