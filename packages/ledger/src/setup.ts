@@ -10,8 +10,6 @@
 //   npm run setup -- --check       check everything, change nothing
 //   npm run setup -- --env <file>  check against a different .env, to try one out
 import { execFile, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { checkDatabase, checkMachine, type Check } from './checks.ts';
 import { OFFICE_LOG, openUrl, restartService, serviceInstalled } from './platform.ts';
 import { ENV_FILE, readEnv } from './env.ts';
@@ -116,14 +114,12 @@ const probe = (url: string) =>
     .then((r) => r.office === true)
     .catch(() => false);
 let opened = `http://${NAMES[1]}:${OFFICE_PORT}`;
-// HTTPS first, once the office's certificate is trusted on this Mac (the first card sets that up).
-const root = `${homedir()}/Library/Application Support/Caddy/pki/authorities/local/root.crt`;
-const secure =
-  existsSync(root) &&
-  (await new Promise<boolean>((done) =>
-    execFile('security', ['verify-cert', '-c', root], (e) => done(!e))
-  )) &&
-  (await probe(`http://${NAMES[0]}`));
+// HTTPS first, once the office's certificate is trusted here (the first card sets that up).
+// The office itself answers whether it is: it knows where its Caddy keeps the certificate.
+const secure = await fetch(`${OFFICE}/api/setup/address`, { signal: AbortSignal.timeout(5000) })
+  .then((r) => r.json() as Promise<{ secure?: boolean }>)
+  .then((r) => r.secure === true)
+  .catch(() => false);
 for (const name of secure ? [] : NAMES) {
   if (await probe(`http://${name}`)) {
     opened = `http://${name}`;
