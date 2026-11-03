@@ -407,9 +407,12 @@ address when it answers and is trusted.
 ## Running it always
 
 1. `npm run service:install -w apps/office` installs a login service
-   (`scripts/office-service.sh`, label `com.oddboro.office`). It runs the
-   office under `caffeinate -s`, so the Mac stays awake on power, and restarts
-   it if it stops. Logs go to `~/Library/Logs/oddboro-office.log`.
+   (`scripts/office-service.ts`, label `com.oddboro.office`): launchd on a
+   Mac, a systemd user unit on Linux (`@oddboro/ledger/platform`). On a Mac it
+   runs the office under `caffeinate -s`, so the Mac stays awake on power.
+   Either way it restarts the office if it stops. Logs go to
+   `~/Library/Logs/oddboro-office.log` on a Mac and
+   `~/.local/state/oddboro/office.log` on Linux.
 2. `npm run service:uninstall -w apps/office` removes it. Stop it before
    running `npm run dev`, since both want port 4500.
 3. The office starts its own database, so nothing else has to. A database in
@@ -429,7 +432,7 @@ address when it answers and is trusted.
 | `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow              |
 | `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music |
 | `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                       |
-| `scripts/office-service.sh`       | The login service                                                   |
+| `scripts/office-service.ts`       | The login service                                                   |
 | `src/app.css`                     | Tokens. Every colour in the chrome reads these.                     |
 
 ## Rules for this app

@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
-import { LINUX, MAC, SYSTEM, WINDOWS } from './platform.ts';
+import { LINUX, MAC, SYSTEM, WINDOWS, serviceInstalled } from './platform.ts';
 
 export type Check = {
   id: string;
@@ -176,9 +176,7 @@ export async function checkDocker(): Promise<Check> {
 
 /** The login service that keeps the office running with no terminal open. */
 export async function checkService(): Promise<Check> {
-  const uid = process.getuid?.() ?? 501;
-  const r = await run('launchctl', ['print', `gui/${uid}/com.oddboro.office`]);
-  return r.ok
+  return (await serviceInstalled('com.oddboro.office'))
     ? { id: 'service', name: 'Login service', state: 'ok', found: 'The office starts at login' }
     : {
         id: 'service',
