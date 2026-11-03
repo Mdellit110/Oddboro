@@ -1,9 +1,11 @@
-// What an install needs, checked one thing at a time: this Mac, Claude Code,
+// What an install needs, checked one thing at a time: this computer, Claude Code,
 // the database and the optional helpers. `npm run setup` walks the owner
 // through these, and the office's Setup window shows them again. Nothing here
 // imports db.ts, so it runs before there is a database to connect to.
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
+import { LINUX, MAC, SYSTEM, WINDOWS } from './platform.ts';
 
 export type Check = {
   id: string;
@@ -23,17 +25,32 @@ const run = (cmd: string, args: string[], timeout = 8000) =>
     )
   );
 
+/**
+ * The system the office runs on. It keeps its id "mac" because the setup card
+ * and older installs look for that id. Windows is known but not ready: it has
+ * no login service or office address yet.
+ */
 export async function checkMac(): Promise<Check> {
-  if (process.platform !== 'darwin')
-    return {
-      id: 'mac',
-      name: 'macOS',
-      state: 'missing',
-      found: `This is ${process.platform}`,
-      fix: 'Oddboro runs on a Mac for now.'
-    };
-  const v = await run('sw_vers', ['-productVersion']);
-  return { id: 'mac', name: 'macOS', state: 'ok', found: `macOS ${v.out || 'found'}` };
+  if (MAC) {
+    const v = await run('sw_vers', ['-productVersion']);
+    return { id: 'mac', name: 'macOS', state: 'ok', found: `macOS ${v.out || 'found'}` };
+  }
+  if (LINUX) {
+    let name = 'Linux';
+    try {
+      name = /^PRETTY_NAME="?([^"\n]+)/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? name;
+    } catch {
+      // No os-release: plain Linux is enough.
+    }
+    return { id: 'mac', name: 'Linux', state: 'ok', found: name };
+  }
+  return {
+    id: 'mac',
+    name: WINDOWS ? 'Windows' : 'System',
+    state: 'missing',
+    found: SYSTEM ? 'Windows is not ready yet' : `This is ${process.platform}`,
+    fix: 'Oddboro runs on a Mac or Linux for now.'
+  };
 }
 
 export function checkNode(): Check {
@@ -129,7 +146,9 @@ export async function checkUv(): Promise<Check> {
         name: 'uv',
         state: 'optional',
         found: 'Not installed',
-        fix: 'Install it with `brew install uv` to connect tools that come from PyPI.'
+        fix: MAC
+          ? 'Install it with `brew install uv` to connect tools that come from PyPI.'
+          : 'Install uv (docs.astral.sh/uv) to connect tools that come from PyPI.'
       };
 }
 
