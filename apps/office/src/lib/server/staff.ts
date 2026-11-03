@@ -534,6 +534,12 @@ async function run(
     (servers.office.env as Record<string, string>).OWNER_SAID = opts.ownerSaid.slice(0, 4000);
   if (opts.approvedAsk)
     (servers.office.env as Record<string, string>).APPROVED_ASK = String(opts.approvedAsk);
+  // Only this run knows which sign-ins ran out, so my_access hears it from here.
+  const signedOut = caps.outside.filter((a) => a.heldBack === 'sign-in ran out');
+  if (signedOut.length)
+    (servers.office.env as Record<string, string>).SIGNED_OUT = signedOut
+      .map((a) => a.connector.id)
+      .join(',');
   const args = [
     '-p',
     '--output-format',
@@ -755,7 +761,7 @@ function followUpBrief(
       ...(g.doneWhen ? [`- Done when: ${g.doneWhen}`] : []),
       '',
       '1. Read the office: office_report for each Odd, what it does, its level and the tools it holds or is waiting on, and list_goals for the goals they already serve.',
-      '2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it, or say in its part that it asks for what it lacks with ask_for_access. Put only a level raise in owner_steps. Hire only for work nobody here fits.',
+      '2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it. For a tool an Odd lacks, put any level raise in owner_steps, and have the Odd ask for the tool itself with ask_for_access when its officeTools include it, or put connecting it in owner_steps when they do not. Keep every other step only {owner} can do in owner_steps too. Hire only for work nobody here fits.',
       '3. If you need answers from {owner} before you can plan it, write the questions to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop. You pick up when they finish it.',
       "4. Otherwise bring the whole plan in one ask with propose_goal_plan, including the steps only {owner} can do. Write each hire's job description to a file first, and pass any intake as its intake_file.",
       '5. If the office already meets this goal as it is, say so and stop.'
@@ -775,7 +781,7 @@ function followUpBrief(
         : []),
       '',
       '1. Read what they gave you: the files above, their answers and their note.',
-      '2. Do the next step you told them would follow, now. When it needs their yes, such as a hire, a change outside the office or a new job, raise it with the tool for it (propose_goal_plan for a goal, propose_hire, raise_ask and the rest).',
+      `2. Do the next step you told them would follow, now. When it needs their yes, such as a hire, a change outside the office ${ACT_WRITE}, or a new job, raise it with the tool for it (propose_goal_plan for a goal, propose_hire, raise_ask and the rest).`,
       '3. If something you need is missing or unclear, put one short question on their desk with give_owner_a_task, then stop.',
       '4. If nothing was waiting on this task, say so and stop.'
     ];

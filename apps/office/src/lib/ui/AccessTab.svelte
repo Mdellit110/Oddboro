@@ -73,7 +73,7 @@
   const LEVEL = { read: 'Read only', act: 'Read and write' } as const;
   /** Why its runs leave a granted tool out, for the owner. Grants are read or act, so only act can sit above a level. */
   const HELD_BACK: Record<HeldBack, string> = {
-    'above its level': 'held back until you raise its level to Act',
+    'above its level': 'held back until you set its level to Acts on its own',
     'still connecting': 'waiting on your steps',
     'sign-in ran out': 'sign in again'
   };

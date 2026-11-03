@@ -378,12 +378,16 @@ server.registerTool(
   },
   async () => {
     const caps = await capabilities(me);
+    // The run left these out because their sign-in ran out; only it could tell.
+    const signedOut = (process.env.SIGNED_OUT ?? '').split(',');
+    for (const a of caps.outside)
+      if (!a.heldBack && signedOut.includes(a.connector.id)) a.heldBack = 'sign-in ran out';
     const lines = outsideLines(caps, OWNER);
     return text(
       [
         levelLine(caps.level, OWNER),
         lines.length
-          ? lines.map((l, i) => `- ${l} (id: ${caps.outside[i].connector.id})`).join('\n')
+          ? lines.map((l, i) => `- (id: ${caps.outside[i].connector.id}) ${l}`).join('\n')
           : `${OWNER} has connected no outside tools for you yet.`
       ].join('\n')
     );

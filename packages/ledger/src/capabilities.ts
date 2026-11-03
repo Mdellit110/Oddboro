@@ -3,7 +3,8 @@
 // A run loads its tools from this, my_access shows it, office_report shows it
 // for every Odd, and the owner's Access tab shows it, so all of them see the
 // same thing. The one gap is a hosted sign-in that ran out: only the run's
-// fresh token shows it.
+// fresh token shows it. The run tells its own my_access (SIGNED_OUT), but
+// office_report and the Access tab, read outside any run, cannot know.
 import {
   grantsFor,
   levelAtMost,
@@ -44,7 +45,7 @@ export async function capabilities(who: StaffRow): Promise<Capabilities> {
 }
 
 /** One grant as a run finds it: what it reaches, or why it is held back. */
-function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: Level): Access {
+export function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: Level): Access {
   const heldBack: HeldBack | undefined = !levelAtMost(g.level, permission)
     ? 'above its level'
     : g.connector.readyAt
@@ -65,7 +66,7 @@ export function outsideLines(c: Capabilities, owner: string): string[] {
     const what = `${a.connector.name} (${a.level === 'act' ? 'read and write' : 'read only'})`;
     switch (a.heldBack) {
       case 'above its level':
-        return `${what}: held back. It needs the ${a.level} level, and the current level is ${c.level}. It works again once ${owner} raises the level.`;
+        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises the level.`;
       case 'still connecting':
         return `${what}: held back until ${owner} finishes connecting it.`;
       case 'sign-in ran out':
@@ -75,6 +76,8 @@ export function outsideLines(c: Capabilities, owner: string): string[] {
     }
   });
 }
+
+const LEVEL_NAME = { read: 'Read', draft: 'Draft', act: 'Act' } as const;
 
 /** The Odd's level, said to the Odd. */
 export function levelLine(level: Level, owner: string): string {
