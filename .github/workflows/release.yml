@@ -21,6 +21,9 @@ concurrency:
 jobs:
   mac:
     runs-on: macos-15
+    # The signing keys live in the release environment, which only main may
+    # use, so a run from any other branch never sees them.
+    environment: release
     timeout-minutes: 90
     env:
       GH_TOKEN: ${{ github.token }}
