@@ -6,8 +6,11 @@ Mac, and its first Odd is the Office Manager you pick.
 
 ## Get started
 
-You need a Mac, [Node](https://nodejs.org) 24 or later, and a Claude plan or an
-Anthropic API key.
+You need a Mac or Linux, [Node](https://nodejs.org) 24 or later, and a Claude
+plan or an Anthropic API key. On Linux the office keeps keys in your desktop
+keyring through `secret-tool` (libsecret; any keyring that speaks the Secret
+Service, such as GNOME Keyring, KWallet or KeePassXC), shows notifications
+with `notify-send`, and runs at login as a systemd user unit.
 
 1. Clone the repo:
 
