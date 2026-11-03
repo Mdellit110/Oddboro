@@ -5,7 +5,16 @@
   // The first card: what the Mac has, ticked off one at a time. Anything
   // missing gets a button that fixes it from here. The owner moves on with
   // Next once everything is there.
-  export type Setup = { checks: Check[]; owner: string; suggested: string; app?: boolean };
+  export type Setup = {
+    checks: Check[];
+    owner: string;
+    suggested: string;
+    app?: boolean;
+    /** mac, linux or windows. */
+    system?: string;
+    /** Whether the office can show its own notifications on this computer. */
+    notify?: boolean;
+  };
   type Props = { onnext: () => void; onkey: () => void; onsetup: (s: Setup) => void };
   let { onnext, onkey, onsetup }: Props = $props();
 
@@ -14,6 +23,10 @@
   let checks = $state<Check[] | undefined>();
   /** In the Mac app, which shows its own notifications and has no browser tab. */
   let app = $state(false);
+  let system = $state<string | undefined>();
+  let canNotify = $state(true);
+  /** What the owner calls this computer. */
+  const computer = $derived(system === 'mac' ? 'Your Mac' : 'This computer');
   let problem = $state('');
   let fixing = $state<'install' | 'sign-in' | undefined>();
   let log = $state<string[]>([]);
@@ -24,6 +37,8 @@
       const s = await call<Setup>('/api/setup');
       onsetup(s);
       app = !!s.app;
+      system = s.system;
+      canNotify = s.notify !== false;
       checks = s.checks.filter((c) => SHOWN.includes(c.id));
     } catch (e) {
       problem = e instanceof Error ? e.message : String(e);
@@ -232,56 +247,73 @@
   <div class="mt-4">
     <div class="text-[10px] tracking-[0.14em] text-muted uppercase">Notifications</div>
     <div class="mt-2 grid gap-1">
-      <div class="rounded-lg bg-raise px-3 py-2 text-sm">
-        <div class="flex items-center gap-3">
-          <span class="min-w-0 flex-1">
-            {app ? 'Oddboro' : 'Your Mac'}
-            <span class="block text-xs text-muted"
-              >{app
-                ? 'Pings from your Odds, even with the window closed.'
-                : 'Pings from your Odds, even with the office closed.'}</span
-            >
-          </span>
-          {#if mac === 'shown'}
-            <span class="text-xs text-moss">✓ On</span>
-          {:else if mac === 'idle'}
-            <button class="btn" onclick={testMac}>Send a test</button>
+      <!-- Windows has no way to show the office's own notifications yet; the browser's still work. -->
+      {#if canNotify}
+        <div class="rounded-lg bg-raise px-3 py-2 text-sm">
+          <div class="flex items-center gap-3">
+            <span class="min-w-0 flex-1">
+              {app ? 'Oddboro' : computer}
+              <span class="block text-xs text-muted"
+                >{app
+                  ? 'Pings from your Odds, even with the window closed.'
+                  : 'Pings from your Odds, even with the office closed.'}</span
+              >
+            </span>
+            {#if mac === 'shown'}
+              <span class="text-xs text-moss">✓ On</span>
+            {:else if mac === 'idle'}
+              <button class="btn" onclick={testMac}>Send a test</button>
+            {/if}
+          </div>
+          {#if mac === 'sent'}
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+              <span class="flex-1 text-muted">Did a notification appear?</span>
+              <button class="btn" onclick={() => (mac = 'shown')}>Yes</button>
+              <button
+                class="btn"
+                onclick={() => {
+                  mac = 'missing';
+                  openSettings();
+                }}>No</button
+              >
+            </div>
+          {:else if mac === 'missing' && system !== 'mac' && !app}
+            <ol class="mt-2 list-decimal space-y-1 ps-4 text-xs text-muted">
+              <li>
+                Check that notifications are on in your system's settings, and not paused or in Do
+                Not Disturb.
+              </li>
+              {#if system === 'linux'}
+                <li>
+                  Oddboro sends them with notify-send, so your desktop needs a notification service.
+                  GNOME, KDE and most desktops have one built in.
+                </li>
+              {/if}
+              <li><button class="link" onclick={testMac}>Send another test</button>.</li>
+            </ol>
+          {:else if mac === 'missing'}
+            <ol class="mt-2 list-decimal space-y-1 ps-4 text-xs text-muted">
+              <li>
+                In System Settings, open Notifications.
+                <button class="link" onclick={openSettings}>Open it</button>
+              </li>
+              {#if app}
+                <li>Find Oddboro. Turn on Allow notifications.</li>
+              {:else}
+                <li>
+                  Find Script Editor: it carries the office's notifications. Turn on Allow
+                  notifications.
+                </li>
+                <li>
+                  If Script Editor is not listed, open it once from Applications, Utilities, then
+                  come back.
+                </li>
+              {/if}
+              <li><button class="link" onclick={testMac}>Send another test</button>.</li>
+            </ol>
           {/if}
         </div>
-        {#if mac === 'sent'}
-          <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            <span class="flex-1 text-muted">Did a notification appear?</span>
-            <button class="btn" onclick={() => (mac = 'shown')}>Yes</button>
-            <button
-              class="btn"
-              onclick={() => {
-                mac = 'missing';
-                openSettings();
-              }}>No</button
-            >
-          </div>
-        {:else if mac === 'missing'}
-          <ol class="mt-2 list-decimal space-y-1 ps-4 text-xs text-muted">
-            <li>
-              In System Settings, open Notifications.
-              <button class="link" onclick={openSettings}>Open it</button>
-            </li>
-            {#if app}
-              <li>Find Oddboro. Turn on Allow notifications.</li>
-            {:else}
-              <li>
-                Find Script Editor: it carries the office's notifications. Turn on Allow
-                notifications.
-              </li>
-              <li>
-                If Script Editor is not listed, open it once from Applications, Utilities, then come
-                back.
-              </li>
-            {/if}
-            <li><button class="link" onclick={testMac}>Send another test</button>.</li>
-          </ol>
-        {/if}
-      </div>
+      {/if}
       {#if !app}
         <div class="flex items-center gap-3 rounded-lg bg-raise px-3 py-2 text-sm">
           <span class="min-w-0 flex-1">
