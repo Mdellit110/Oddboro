@@ -1,0 +1,11 @@
+Oddboro: licensing of assets that are not code
+
+All code is licensed under Apache 2.0. However, every audio file in
+apps/office/static/audio/ (all 25 tracks) and apps/site/static/audio/ is
+not licensed under the Apache License 2.0. New Altitude, Inc. holds them.
+
+They are provided for demonstration purposes only, as part of the office's
+music player. You may not extract, redistribute, sell or use them
+commercially. A third party who wants to use this audio commercially must
+secure its own rights. If you fork Oddboro, remove the audio or replace it
+with your own.

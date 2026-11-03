@@ -1,0 +1,41 @@
+# A shop window in the brick front: a walnut frame under a short teal and
+# cream awning, the stone string course for a sill. The glass is translucent
+# so the sky paints behind it by the hour.
+sprite wall-brick-window
+size 16 32
+layer wall
+tag wall window brick
+
+frame 0
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hTT==TT==TT==TTh
+HTT==TT==TT==TTH
+h66qq66qq66qq66h
+h33333333333333h
+H3wwwwwwwwwwww3H
+]3w//////////w3H
+h3w((////////w3H
+H3w(/////////w3H
+h3w//////////w3h
+h3w//////////w3h
+H3wwwwwwwwwwww3H
+]3w//////////w3H
+h3w//////////w3H
+H3w//////////w3H
+h3w//////////w3h
+h3w//////////w3h
+H3w//////////w3H
+]3wwwwwwwwwwww3H
+h33333333333333H
+****************
+++++++++++++++++
+||||||||||||||||
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+****************
+++++++++++++++++
+++++++++++++++++
+||||||||||||||||

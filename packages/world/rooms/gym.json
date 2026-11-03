@@ -1,0 +1,99 @@
+{
+  "id": "gym",
+  "name": "Gym",
+  "wall": "wall-teal",
+  "floor": "rubber",
+  "map": [
+    "WWWWWWWWWWWWWWWW",
+    "WWWWWWNNWWWWWWWW",
+    "WWWWWWNNWWWWWWWW",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "WWWWWWW..WWWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "gym-mirror",
+      "at": [1, 2]
+    },
+    {
+      "sprite": "gym-wall-light",
+      "at": [5, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [8, 2]
+    },
+    {
+      "sprite": "gym-poster",
+      "at": [9, 2]
+    },
+    {
+      "sprite": "gym-wall-light",
+      "at": [10, 2]
+    },
+    {
+      "sprite": "gym-wall-light",
+      "at": [13, 2]
+    },
+    {
+      "sprite": "gym-treadmill",
+      "at": [1, 4]
+    },
+    {
+      "sprite": "gym-treadmill",
+      "at": [3, 4]
+    },
+    {
+      "sprite": "gym-cooler",
+      "at": [4, 3]
+    },
+    {
+      "sprite": "gym-dumbbells",
+      "at": [8, 3]
+    },
+    {
+      "sprite": "gym-rack",
+      "at": [12, 3]
+    },
+    {
+      "sprite": "gym-bench",
+      "at": [12, 5]
+    },
+    {
+      "sprite": "gym-kettlebells",
+      "at": [14, 6]
+    },
+    {
+      "sprite": "gym-bike",
+      "at": [6, 6]
+    },
+    {
+      "sprite": "gym-mat",
+      "at": [1, 7]
+    },
+    {
+      "sprite": "gym-mat",
+      "at": [3, 7],
+      "variant": "rust"
+    },
+    {
+      "sprite": "gym-mat",
+      "at": [10, 7],
+      "variant": "sage"
+    },
+    {
+      "sprite": "gym-bottle",
+      "at": [5, 7]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [14, 7],
+      "variant": "teal"
+    }
+  ]
+}

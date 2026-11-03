@@ -1,0 +1,58 @@
+# A tall walnut bookcase, two tiles wide, four shelves of mixed spines. Covers a back wall face.
+sprite library-shelf
+size 32 48
+layer object
+footprint 2 1
+origin 0 32
+tag shelf books library clear-1
+variant oak W=O w=o 3=1
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw33333kkkk3333333kkk333333333Wk
+kw3kkk3kRRk3kkk333kSk3kkk33333Wk
+kw3kTkkkyyk3kzkkkkkSkkk6k33333Wk
+kw3k=k6kRRkkk=kk88kSk=kyk33333Wk
+kw3kTk6kRRkYkzkkyykSkTk6k33333Wk
+kw3kTk6kRRkYkzkk88kSk=k6k33333Wk
+kw3kTk6kRRkYkzkk88kSk=k6k33333Wk
+kw3kTk6kRRkYkzkk88kSk=k6k33333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw33333333333kkkk33333kkkk3333Wk
+kw333333333kkkTTk333kkk66k3333Wk
+kw3kkkkk333kzkyykkk3k9k==k3333Wk
+kw3kTTTk333kzkTTk8kkkyk66k3333Wk
+kw3kkkkkk33kzkTTk=kSk9k66k3333Wk
+kw3kYYYYk33kzkTTk8kSk9k66k3333Wk
+kw3kkkkkkk3kzkTTk8kSk9k66k3333Wk
+kw3kRRRRRk3kzkTTk8kSk9k66k3333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw333kkkk33333333kkk3333333333Wk
+kw333kzzkkk333333k6kkkk3333333Wk
+kw3kkk==kRk33333kkyk==kkk33333Wk
+kw3kYkzzkykkk33kSk6kRRk8k33333Wk
+kw3kYkzzkRkTk3kSSk6k==k8k33333Wk
+kw3kYkzzkRkTkkSSkk6k==k8k33333Wk
+kw3kYkzzkRkTkSSk3k6k==k8k33333Wk
+kw3kYkzzkRkTkkk33k6k==k8k33333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw3kkkk3333333333kkk3333333333Wk
+kw3k77k3kkk3vVk33kTkkkk3333333Wk
+kw3kyykkkSkkVV!k3k=kYYkkk33333Wk
+kw3k77kRkSk3k!k33kTkRRkzk33333Wk
+kw3k77k=kSk3kRk33kTkYYkzk33333Wk
+kw3k77kRkSk3kRk33kTkYYkzk33333Wk
+kw3k77kRkSkkR8k33kTkYYkzk33333Wk
+kw3k77kRkSk3kkk33kTkYYkzk33333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kkWWWWWWWWWWWWWWWWWWWWWWWWWWWWkk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+k333333333333333333333333333333k
+k333333333333333333333333333333k

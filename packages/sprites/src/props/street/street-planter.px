@@ -1,0 +1,35 @@
+# A walnut planter box by the door, full of leaves and a few rust flowers.
+# One tile. The teal variant paints the box in the brand colour.
+sprite street-planter
+size 16 24
+layer object
+footprint 1 1
+origin 0 8
+tag plant planter street
+variant teal w=t W=T 3=6
+
+frame default
+.....kkkkk......
+...kkvVVVVkk....
+..kvVVrVVVV!k...
+.kvVVVVVyVVV!k..
+.kVVrVVVVVV!!k..
+.kVVVVVVrVV!!k..
+..kVV!VVVV!!k...
+...kk!!!!!!kk...
+..kkkkkkkkkkkk..
+.kwwwwwwwwwwwwk.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kWWWWWWWWWWW3k.
+.kwWWWWWWWWWW3k.
+.k333333333333k.
+.kkkkkkkkkkkkkk.
+................

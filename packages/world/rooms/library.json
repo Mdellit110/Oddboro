@@ -1,0 +1,119 @@
+{
+  "id": "library",
+  "name": "Library",
+  "wall": "wall-plaster",
+  "floor": "oak",
+  "map": [
+    "WWWWWWWWWWWWWWWW",
+    "WNNWWWWWWWWNNWWW",
+    "WNNWWWWWWWWNNWWW",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "WWWWWWW..WWWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "library-map",
+      "at": [9, 2]
+    },
+    {
+      "sprite": "library-window-seat",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "library-shelf",
+      "at": [3, 3]
+    },
+    {
+      "sprite": "library-shelf-b",
+      "at": [5, 3]
+    },
+    {
+      "sprite": "library-ladder",
+      "at": [6, 3]
+    },
+    {
+      "sprite": "library-fireplace",
+      "at": [7, 3]
+    },
+    {
+      "sprite": "library-globe",
+      "at": [9, 3]
+    },
+    {
+      "sprite": "library-shelf-b",
+      "at": [13, 3],
+      "variant": "oak"
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [10, 4]
+    },
+    {
+      "sprite": "library-rug",
+      "at": [4, 5]
+    },
+    {
+      "sprite": "library-armchair",
+      "at": [5, 6]
+    },
+    {
+      "sprite": "library-side-table",
+      "at": [6, 6]
+    },
+    {
+      "sprite": "library-lamp",
+      "at": [6, 6]
+    },
+    {
+      "sprite": "library-armchair",
+      "at": [7, 6],
+      "variant": "rust",
+      "frame": "throw"
+    },
+    {
+      "sprite": "library-books",
+      "at": [4, 7]
+    },
+    {
+      "sprite": "library-cat",
+      "at": [8, 4]
+    },
+    {
+      "sprite": "library-armchair",
+      "at": [13, 5],
+      "variant": "sage"
+    },
+    {
+      "sprite": "library-books",
+      "at": [12, 5],
+      "variant": "teal"
+    },
+    {
+      "sprite": "library-chair",
+      "at": [11, 7]
+    },
+    {
+      "sprite": "library-table",
+      "at": [10, 8]
+    },
+    {
+      "sprite": "library-bankers-lamp",
+      "at": [12, 8]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [1, 6]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [14, 8],
+      "variant": "teal"
+    }
+  ]
+}

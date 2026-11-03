@@ -1,0 +1,25 @@
+# A cut tree stump, one tile. Oak rings on the top, bark down the sides, a
+# little moss on the shaded left and a root flare at the foot.
+sprite park-stump
+size 16 16
+layer object
+footprint 1 1
+tag stump wood park
+
+frame default
+................
+................
+................
+.....kkkkkk.....
+...kk}oooOOkk...
+..koo1111ooOOk..
+..ko1oo2oo1OOk..
+..koO11111OO1k..
+..kw222222233k..
+..kwwWWWWW333k..
+.}kwwWWWW}333k..
+.}kw}WWWWW333k..
+_kkwwWWWW3333kk_
+-kkkkkkkkkkkkkk-
+._-----------_..
+................

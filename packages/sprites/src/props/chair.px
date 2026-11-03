@@ -1,0 +1,33 @@
+# An office chair seen from behind. zbias 1 paints it over the person
+# sitting on it, so the backrest hides their lower back.
+sprite chair
+size 16 19
+layer object
+footprint 1 1
+origin 0 5
+walkable
+zbias 1
+tag chair seat
+variant rust 6=R T=r 7=8
+variant sage 6=S T=s 7=0
+
+frame default
+................
+................
+................
+....kkkkkkkk....
+...kTT666666k...
+..kT666666666k..
+..kT666666666k..
+..kT666666666k..
+..kT666666666k..
+..kT666666667k..
+..k6666666677k..
+..k7777777777k..
+..kkkkkkkkkkkk..
+.kTTTTTTTTTTTTk.
+.k666666666677k.
+..kkkkkkkkkkkk..
+.......k5k......
+...kkkkk5kkkkk..
+..k5k..k5k..k5k.

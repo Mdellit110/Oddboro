@@ -1,0 +1,26 @@
+# A water bottle and a rolled towel left on the floor beside the mats. One
+# tile, walkable so nobody paths around it.
+sprite gym-bottle
+size 16 14
+layer object
+footprint 1 1
+origin 0 -2
+walkable
+zbias 1
+tag bottle towel gym any-side
+
+frame default
+................
+................
+....kkk.........
+....kTTk........
+....k66k........
+...kTTTTk.......
+...kT6T6k.......
+...kT6T6kkkkkk..
+...kT6T6k====Tk.
+...kT6T6k=cc=Tk.
+...kT666k====Tk.
+...k6666kcccTTk.
+...kkkkkkkkkkkk.
+................

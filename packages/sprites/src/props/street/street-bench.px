@@ -1,0 +1,35 @@
+# A slatted walnut bench on cast iron ends, facing the street. Two tiles wide.
+# zbias -1 so anyone sitting on it paints over the seat.
+sprite street-bench
+size 32 24
+layer object
+footprint 2 1
+origin 0 8
+zbias -1
+tag bench seat street
+
+frame default
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kk5kkkkkkkkkkkkkkkkkkkkkkkkkk5kk
+.k5k........................k5k.
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+k333333333333333333333333333333k
+.k5k........................k5k.
+.k5k........................k5k.
+.k5k........................k5k.
+.k5k........................k5k.
+.k5k........................k5k.
+kk5kk......................kk5kk
+k555k......................k555k
+kKKKk......................kKKKk
+kkkkk......................kkkkk

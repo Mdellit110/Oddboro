@@ -1,0 +1,38 @@
+{
+  "name": "@oddboro/ledger",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./time": "./src/time.ts",
+    "./tools": "./src/tools.ts",
+    "./goals": "./src/goal-words.ts",
+    "./checks": "./src/checks.ts",
+    "./env": "./src/env.ts",
+    "./local-db": "./src/local-db.ts",
+    "./upgrade": "./src/upgrade.ts",
+    "./update-window": "./src/update-window.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "node --env-file-if-exists=../../.env src/migrate.ts",
+    "check-types": "tsc -p tsconfig.json",
+    "lint": "prettier --check . --ignore-path ../../.prettierignore",
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.11"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.13",
+    "@electric-sql/pglite-pgvector": "0.0.14",
+    "@electric-sql/pglite-socket": "0.2.16",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@oddboro/sprites": "*",
+    "@oddboro/world": "*",
+    "drizzle-orm": "^0.45.4",
+    "postgres": "^3.4.9",
+    "zod": "^4.6.7"
+  }
+}

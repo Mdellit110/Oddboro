@@ -1,0 +1,14 @@
+{
+  "name": "Hero",
+  "wall": "plaster",
+  "floor": "oak",
+  "grounds": "park",
+  "plants": "some",
+  "rooms": [
+    { "kind": "office", "name": "Your office", "size": "small" },
+    { "kind": "lobby", "name": "Lobby", "size": "small" },
+    { "kind": "workspace", "name": "Workspace", "size": "medium", "seats": 4 },
+    { "kind": "library", "name": "Library", "size": "small" },
+    { "kind": "break", "name": "Break room", "size": "small" }
+  ]
+}

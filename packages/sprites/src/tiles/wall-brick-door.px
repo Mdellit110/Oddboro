@@ -1,0 +1,41 @@
+# An opening cut through the brick front: a stone lintel, brick jambs and a
+# dark interior. Two tiles tall because the street face is two tiles tall. The
+# front door prop paints over it, so it only shows if a doorway has no door.
+sprite wall-brick-door
+size 16 32
+layer wall
+tag wall door brick
+
+frame 0
+HHHHHHHHHHHHHHHH
+****************
+++++++++++++++++
+||||||||||||||||
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*77777777777776|
+*11111111111111|
+*OOOOOOOOOOOOOO|
+++++++++++++++++
+||||||||||||||||

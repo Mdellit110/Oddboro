@@ -1,0 +1,71 @@
+{
+  "id": "lobby",
+  "name": "Lobby",
+  "wall": "wall-teal",
+  "floor": "oak",
+  "map": [
+    "WWWWWWWWWWWWWDDW",
+    "WWWWWNNNNWWWWDDW",
+    "WWWWWNNNNWWWWDDW",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "W..............W",
+    "WWWWWWWWW..WWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "lobby-sign",
+      "at": [9, 1]
+    },
+    {
+      "sprite": "owner-door",
+      "at": [13, 2]
+    },
+    {
+      "sprite": "lobby-aquarium",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "owner-bench",
+      "at": [11, 3]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [5, 4],
+      "variant": "teal"
+    },
+    {
+      "sprite": "lobby-coat-rack",
+      "at": [8, 4]
+    },
+    {
+      "sprite": "lobby-reception",
+      "at": [9, 5]
+    },
+    {
+      "sprite": "bin",
+      "at": [12, 6]
+    },
+    {
+      "sprite": "lobby-couch",
+      "at": [1, 6]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [4, 6]
+    },
+    {
+      "sprite": "rug",
+      "at": [5, 7],
+      "variant": "teal"
+    },
+    {
+      "sprite": "lobby-plant-big",
+      "at": [13, 8]
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "id": "owner-office",
+  "name": "Your Office",
+  "wall": "wall-teal",
+  "floor": "carpet",
+  "map": [
+    "WWWWWWWWWWWW",
+    "WWWNNWWWNNWW",
+    "WWWNNWWWNNWW",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "WWWWW..WWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "owner-photos",
+      "at": [5, 2]
+    },
+    {
+      "sprite": "art-frame",
+      "at": [7, 2]
+    },
+    {
+      "sprite": "bookshelf",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "owner-chair",
+      "at": [5, 3]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [10, 3]
+    },
+    {
+      "sprite": "owner-sideboard",
+      "at": [8, 3]
+    },
+    {
+      "sprite": "owner-desk",
+      "at": [4, 4]
+    },
+    {
+      "sprite": "desk-lamp",
+      "at": [4, 4],
+      "variant": "teal"
+    },
+    {
+      "sprite": "rug",
+      "at": [4, 5],
+      "variant": "teal"
+    },
+    {
+      "sprite": "owner-guitar",
+      "at": [1, 5]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [10, 6]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [1, 7],
+      "variant": "teal"
+    }
+  ]
+}

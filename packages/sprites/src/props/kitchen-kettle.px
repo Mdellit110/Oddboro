@@ -1,0 +1,25 @@
+# A rust enamel kettle. Sits on a counter.
+sprite kitchen-kettle
+size 16 12
+layer object
+footprint 1 1
+origin 0 14
+walkable
+zbias 1
+tag kitchen kettle
+variant teal r=t R=T 8=6
+variant cream r=P R=p 8=q
+
+frame default
+....kkkkk.......
+...kk...kk......
+..kkkkkkkkk.....
+.krrrrrrrrRk....
+krrrrrrrrrRRkk..
+krrrRRRRRRRRRk8k
+krrrRRRRRRRRR88k
+krrrRRRRRRRRRkk.
+kRRRRRRRRRRR88k.
+.kRRRRRRRRR88k..
+.k88888888888k..
+..kkkkkkkkkkk...

@@ -1,0 +1,25 @@
+# The near curb: half a slab of sidewalk, the curb stone's lit top, its face
+# dropping to the road, and the gutter in shadow. Sits between the sidewalk
+# and the asphalt.
+sprite floor-curb
+size 16 16
+layer floor
+tag floor street
+
+frame 0
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
+||||||||||||||||
+***************|
++++++++++++++++|
+||||||||||||||||
+||||||||||||||||
+::::::::::::::::
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,

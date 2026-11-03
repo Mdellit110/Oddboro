@@ -1,0 +1,55 @@
+# An open doorway through the accent wall, cap included.
+sprite wall-teal-door
+size 16 48
+layer wall
+tag wall door
+
+frame default
+kkkkkkkkkkkkkkkk
+PPPPPPPPPPPPPPPP
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqq
+QQQQQQQQQQQQQQQQ
+kkkkkkkkkkkkkkkk
+QQQQQQQQQQQQQQQQ
+qqqqqqqqqqqqqqqq
+PPPPPPPPPPPPPPPP
+PPPPPPPPPPPPPPPP
+PPPPPPPPPPPPPPPP
+PPPPPPPPPPPPPPPP
+3333333333333333
+3wwwwwwwwwwwwww3
+3wkkkkkkkkkkkkw3
+3wkkkkkkkkkkkkw3
+3wkkkkkkkkkkkkw3
+3wkkkkkkkkkkkkw3
+3wkkkkkkkkkkkkw3
+3wkkkkkkkkkkkkw3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3w777777777766w3
+3wWWWWWWWWWWWWw3
+3wwwwwwwwwwwwww3

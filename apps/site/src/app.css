@@ -1,0 +1,464 @@
+@import 'tailwindcss';
+
+/* The fonts ship with the site. No request leaves for them. */
+@import '@fontsource/pixelify-sans/400.css';
+@import '@fontsource/pixelify-sans/600.css';
+@import '@fontsource-variable/inter';
+
+/* Site tokens. The same night-sky surfaces as the office (apps/office/src/app.css),
+   so the site and the product read as one place. Nothing hard-codes a colour. */
+@theme {
+  --color-night: #0b0d17;
+  --color-panel: rgb(17 20 36 / 0.78);
+  --color-panel-solid: #141829;
+  --color-raise: rgb(255 255 255 / 0.06);
+  --color-hairline: rgb(255 255 255 / 0.1);
+  --color-ink: #f3efe6;
+  --color-muted: #a8a3b8;
+  /* A step lighter than the office's faint (#6e6a82), which measures 3.8:1 on
+     night. Small text on the site needs 4.5:1, and this is 5.5:1. */
+  --color-faint: #8b87a1;
+  /* Idle icons: the lightness midpoint of faint and panel-solid. Decorative, so
+     below the 3:1 floor on purpose (2.3:1 on the page); the text beside them carries the meaning. */
+  --color-icon: #4c4c62;
+  --color-sea: #2fb3a6;
+  --color-sea-deep: #0f3b3a;
+  --color-ember: #f2b45a;
+  --color-coral: #ef7a6b;
+  --color-moss: #8fc36b;
+
+  --font-pixel: 'Pixelify Sans', ui-monospace, monospace;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --shadow-float: 0 18px 50px -12px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --shadow-glow: 0 0 80px -20px rgb(47 179 166 / 0.45);
+}
+
+/* Day. The same brand on warm paper: the palette's own ink, sea as the accent,
+   the warm colours deepened so they read as text. Set by data-theme on <html>,
+   which the inline script in app.html writes before first paint and
+   src/lib/theme.svelte.ts keeps current. Every pair was checked for AA; the
+   ratios are in CLAUDE.md. Sea #2fb3a6 is 2.3:1 on paper, so day uses a
+   deeper sea for text, buttons and focus rings. */
+html[data-theme='day'] {
+  color-scheme: light;
+  --color-night: #f7f3ea;
+  --color-panel: rgb(247 243 234 / 0.82);
+  --color-panel-solid: #efe9dc;
+  --color-raise: rgb(28 23 39 / 0.045);
+  --color-hairline: rgb(28 23 39 / 0.12);
+  --color-ink: #1c1727;
+  --color-muted: #4e4860;
+  --color-faint: #655f78;
+  --color-icon: #a8a1a9;
+  --color-sea: #136e66;
+  --color-sea-deep: #cfe7e3;
+  --color-ember: #8a5500;
+  --color-coral: #b23a2b;
+  --color-moss: #3a7228;
+  --shadow-float: 0 18px 50px -12px rgb(28 23 39 / 0.22), 0 0 0 1px rgb(28 23 39 / 0.05);
+  --shadow-glow: 0 0 80px -20px rgb(19 110 102 / 0.25);
+}
+
+/* The art, one variable per file, keyed off the theme so a page fetches only
+   the set it shows. static/art/ is the night set, static/art/day/ the day one;
+   both come from scripts/art.ts. */
+:root {
+  --art-lot: url(/art/lot.png);
+  --art-floors: url(/art/floors.png);
+  --art-walls: url(/art/walls.png);
+  --art-props: url(/art/props.png);
+  --art-lit: url(/art/lit.png);
+  --art-pieces: url(/art/pieces.png);
+  --art-door-open: url(/art/door-open.png);
+  --art-bus: url(/art/bus.png);
+  --art-bus-body: url(/art/bus-body.png);
+  --art-bus-wheels: url(/art/bus-wheels.png);
+  --art-marshall: url(/art/marshall.png);
+  --art-ada: url(/art/ada.png);
+  --art-theo: url(/art/theo.png);
+  --art-juno: url(/art/juno.png);
+  --art-vignette-desk: url(/art/vignette-desk.png);
+  --art-vignette-desk-staff-anim: url(/art/vignette-desk-staff-anim.png);
+  --art-vignette-desk-front: url(/art/vignette-desk-front.png);
+  --art-vignette-mail: url(/art/vignette-mail.png);
+  --art-vignette-mail-staff-anim: url(/art/vignette-mail-staff-anim.png);
+  --art-vignette-mail-front: url(/art/vignette-mail-front.png);
+  --art-vignette-library: url(/art/vignette-library.png);
+  --art-vignette-library-staff-anim: url(/art/vignette-library-staff-anim.png);
+  --art-vignette-library-prop-anim: url(/art/vignette-library-prop-anim.png);
+  --art-vignette-library-front: url(/art/vignette-library-front.png);
+  --art-vignette-door: url(/art/vignette-door.png);
+  --art-vignette-door-staff-anim: url(/art/vignette-door-staff-anim.png);
+  --art-vignette-door-front: url(/art/vignette-door-front.png);
+  --art-vignette-reception: url(/art/vignette-reception.png);
+  --art-vignette-reception-staff-anim: url(/art/vignette-reception-staff-anim.png);
+  --art-vignette-reception-front: url(/art/vignette-reception-front.png);
+  --art-vignette-chat: url(/art/vignette-chat.png);
+  --art-vignette-chat-staff-anim: url(/art/vignette-chat-staff-anim.png);
+  --art-vignette-chat-front: url(/art/vignette-chat-front.png);
+  --art-vignette-chat-dust: none;
+}
+html[data-theme='day'] {
+  --art-lot: url(/art/day/lot.png);
+  --art-floors: url(/art/day/floors.png);
+  --art-walls: url(/art/day/walls.png);
+  --art-props: url(/art/day/props.png);
+  --art-lit: url(/art/day/lit.png);
+  --art-pieces: url(/art/day/pieces.png);
+  --art-door-open: url(/art/day/door-open.png);
+  --art-bus: url(/art/day/bus.png);
+  --art-bus-body: url(/art/day/bus-body.png);
+  --art-bus-wheels: url(/art/day/bus-wheels.png);
+  --art-marshall: url(/art/day/marshall.png);
+  --art-ada: url(/art/day/ada.png);
+  --art-theo: url(/art/day/theo.png);
+  --art-juno: url(/art/day/juno.png);
+  --art-vignette-desk: url(/art/day/vignette-desk.png);
+  --art-vignette-desk-staff-anim: url(/art/day/vignette-desk-staff-anim.png);
+  --art-vignette-desk-front: url(/art/day/vignette-desk-front.png);
+  --art-vignette-mail: url(/art/day/vignette-mail.png);
+  --art-vignette-mail-staff-anim: url(/art/day/vignette-mail-staff-anim.png);
+  --art-vignette-mail-front: url(/art/day/vignette-mail-front.png);
+  --art-vignette-library: url(/art/day/vignette-library.png);
+  --art-vignette-library-staff-anim: url(/art/day/vignette-library-staff-anim.png);
+  --art-vignette-library-prop-anim: url(/art/day/vignette-library-prop-anim.png);
+  --art-vignette-library-front: url(/art/day/vignette-library-front.png);
+  --art-vignette-door: url(/art/day/vignette-door.png);
+  --art-vignette-door-staff-anim: url(/art/day/vignette-door-staff-anim.png);
+  --art-vignette-door-front: url(/art/day/vignette-door-front.png);
+  --art-vignette-reception: url(/art/day/vignette-reception.png);
+  --art-vignette-reception-staff-anim: url(/art/day/vignette-reception-staff-anim.png);
+  --art-vignette-reception-front: url(/art/day/vignette-reception-front.png);
+  --art-vignette-chat: url(/art/day/vignette-chat.png);
+  --art-vignette-chat-staff-anim: url(/art/day/vignette-chat-staff-anim.png);
+  --art-vignette-chat-front: url(/art/day/vignette-chat-front.png);
+  --art-vignette-chat-dust: url(/art/day/vignette-chat-dust.png);
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+body {
+  margin: 0;
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Pixel art stays crisp at every integer scale. */
+.pixel,
+.pixel img,
+.pixel canvas,
+.art {
+  image-rendering: pixelated;
+}
+
+/* A piece of art drawn as a background, from one of the --art-* variables. */
+.art {
+  background-repeat: no-repeat;
+}
+
+.glass {
+  background: var(--color-panel);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-sea);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--color-sea-deep);
+  color: var(--color-ink);
+}
+
+/* Motion. Only transform and opacity ever animate, and nothing runs forever.
+   The helpers in src/lib/motion add these classes. */
+
+/* use:reveal. Hidden until it enters the viewport, then in once. */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Section beats. Each plays once, on enter or on interaction, then holds. */
+
+/* A vignette's Odd steps in after its card has revealed, and the bubble follows.
+   The bubble's anchor is a point 2 art px over the Odd's head: it centres
+   on it and stands on it, and grows from its own bottom edge. */
+.vignette-staff {
+  opacity: 0;
+  transform: translateY(-10px);
+  transition:
+    opacity 0.4s ease 0.45s,
+    transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) 0.45s;
+}
+.vignette-bubble {
+  opacity: 0;
+  transform: translate(-50%, calc(6px - 100%)) scale(0.7);
+  transform-origin: 50% 100%;
+  transition:
+    opacity 0.3s ease 1s,
+    transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) 1s;
+}
+.is-in .vignette-staff {
+  opacity: 1;
+  transform: none;
+}
+.is-in .vignette-bubble {
+  opacity: 1;
+  transform: translate(-50%, -100%) scale(1);
+}
+
+/* While the section is on screen each card plays in bursts on its own
+   random clock (HowItWorks.svelte): a burst flips data-play between a and b,
+   and the change of animation name restarts it. Every strip steps through
+   its frames by transform for a few whole loops (--vig-k) and ends on its
+   still at frame 0. By day the dust lifts two pixels and settles back.
+   What never stops in a real room (the library fire) is a vignette-loop: it
+   runs at the office's fps for as long as the list carries data-live, which
+   comes off when the section leaves the screen or the tab hides. */
+.vignette-loop {
+  animation: vignette-a var(--vig-d) steps(var(--vig-n), jump-none) infinite paused;
+}
+[data-live] .vignette-loop {
+  animation-play-state: running;
+}
+.vignette-strip {
+  transform: translateX(0);
+}
+[data-play] .vignette-strip {
+  animation: vignette-a var(--vig-d) steps(var(--vig-n), jump-none) var(--vig-k);
+}
+[data-play='b'] .vignette-strip {
+  animation-name: vignette-b;
+}
+.vignette-dust {
+  transform: translateY(0);
+}
+html[data-theme='day'] [data-play] .vignette-dust {
+  animation: dust-a 1.25s steps(2, jump-none) 2 alternate;
+}
+html[data-theme='day'] [data-play='b'] .vignette-dust {
+  animation-name: dust-b;
+}
+@keyframes vignette-a {
+  to {
+    transform: translateX(var(--vig-end));
+  }
+}
+@keyframes vignette-b {
+  to {
+    transform: translateX(var(--vig-end));
+  }
+}
+/* Two art pixels of the vignette's 96. */
+@keyframes dust-a {
+  to {
+    transform: translateY(-2.0833%);
+  }
+}
+@keyframes dust-b {
+  to {
+    transform: translateY(-2.0833%);
+  }
+}
+
+/* A manager walks while their card is awake (pointed at or keyboard focused,
+   see use:awake) and stands again on leaving; a pick by tap takes two steps.
+   The portrait blinks by showing its blink frame over the open one. */
+.walk-strip {
+  transform: translateX(0);
+}
+.manager[data-picked='true'] .walk-strip {
+  animation: walk-cycle 0.64s steps(4, jump-none) 2;
+}
+.manager[data-awake] .walk-strip {
+  animation: walk-cycle 0.64s steps(4, jump-none) infinite;
+}
+.blink-frame {
+  opacity: 0;
+}
+.manager[data-blink] .blink-frame {
+  opacity: 1;
+}
+/* A staff portrait that blinks on its own while on screen (use:blinks). */
+.blinker[data-blink] .blink-frame {
+  opacity: 1;
+}
+@keyframes walk-cycle {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-144px);
+  }
+}
+
+/* The bus by What happens next (GetStarted.svelte). While it is on screen and
+   the tab shows, data-on turns the wheels through their two frames at the
+   hero's 120 ms; every 1.5 to 3.5 s data-bump lifts the body one art pixel
+   (2px at its 2x) and holds it a moment before it settles. Whole art pixels
+   only, so the keyframes hold (step-end) rather than easing through a half
+   pixel, which would part the body from the wheels on the art grid. */
+.bus-wheels {
+  animation: bus-wheels 240ms steps(2) infinite paused;
+}
+[data-on] .bus-wheels {
+  animation-play-state: running;
+}
+[data-on][data-bump] .bus-body {
+  animation: bus-bump 540ms step-end;
+}
+@keyframes bus-wheels {
+  to {
+    transform: translateX(-320px);
+  }
+}
+@keyframes bus-bump {
+  0%,
+  15% {
+    transform: none;
+  }
+  15.01% {
+    transform: translateY(-2px);
+  }
+  70%,
+  100% {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bus-wheels,
+  .bus-body {
+    animation: none !important;
+  }
+}
+
+/* The goals plan: its line draws down as the section scrolls into view, driven
+   by the scroll position itself, so nothing runs while the page is still.
+   Browsers without scroll-driven animations show it drawn. The line is one
+   segment per gap between numbers, all on the list's one timeline, so each
+   segment draws only after the one above it has finished. */
+.goal-line {
+  transform-origin: top;
+}
+@supports (animation-timeline: view()) {
+  .goal-plan {
+    view-timeline-name: --goal-plan;
+  }
+  .goal-line {
+    animation: draw-down linear both;
+    animation-timeline: --goal-plan;
+    animation-range: entry 20% cover 30%;
+  }
+  .goal-line[data-seg='1'] {
+    animation-range: cover 30% cover 45%;
+  }
+  /* Each number after the first stays dim until its line arrives, then lights
+     as the segment above it completes. */
+  .goal-step[data-step='1'],
+  .goal-step[data-step='2'] {
+    animation: light-up linear both;
+    animation-timeline: --goal-plan;
+  }
+  .goal-step[data-step='1'] {
+    animation-range: cover 28% cover 30%;
+  }
+  .goal-step[data-step='2'] {
+    animation-range: cover 43% cover 45%;
+  }
+}
+@keyframes light-up {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes draw-down {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* Something new on the desk, or an answer opening: in once, then still. */
+.pop-in {
+  animation: pop-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+details[open] > .faq-answer {
+  animation: pop-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.faq-chevron {
+  transition: transform 0.25s ease;
+}
+details[open] .faq-chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .reveal,
+  .vignette-staff,
+  .vignette-bubble {
+    opacity: 1;
+    transition: none;
+  }
+  .reveal,
+  .vignette-staff {
+    transform: none;
+  }
+  .vignette-bubble {
+    transform: translate(-50%, -100%);
+  }
+  .goal-line,
+  .goal-step,
+  .pop-in,
+  .vignette-strip,
+  .vignette-loop,
+  .vignette-dust,
+  details[open] > .faq-answer,
+  .manager .walk-strip {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

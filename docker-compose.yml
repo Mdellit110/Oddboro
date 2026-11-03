@@ -1,0 +1,18 @@
+# The office's Postgres, with pgvector. Local only: it listens on 127.0.0.1.
+# Start it with `npm run db:up`. The password comes from .env.
+name: oddboro
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: oddboro
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: oddboro
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres:/var/lib/postgresql/data
+
+volumes:
+  postgres:

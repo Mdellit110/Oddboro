@@ -1,0 +1,1 @@
+- [meta] **Decision (2026-11-02): open questions, ideas and unstarted work stay out of the repo.** The repo holds what is built and decided, so a reader never mistakes a plan for a promise. Supersedes the 2026-10-29 ruling that kept them in a backlog file.

@@ -1,0 +1,21 @@
+{
+  "name": "@oddboro/world",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./rooms/*": "./rooms/*",
+    "./plans/*": "./plans/*",
+    "./load": "./src/load.ts",
+    "./render": "./src/render.ts"
+  },
+  "scripts": {
+    "render": "node scripts/render.ts",
+    "check-types": "tsc -p tsconfig.json",
+    "lint": "prettier --check . --ignore-path ../../.prettierignore"
+  },
+  "dependencies": {
+    "@oddboro/sprites": "*"
+  }
+}

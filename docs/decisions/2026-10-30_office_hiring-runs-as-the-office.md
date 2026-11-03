@@ -1,0 +1,1 @@
+- [office] **Decision (2026-10-30): drafting a job description and drawing a look run as the office itself, with no staffer, no tools and no MCP, and their usage is recorded with no staffer.** A new office starts with nobody on staff, so its first hire cannot depend on a staffer who is already there. Code in `apps/office/src/lib/server/office-run.ts`.

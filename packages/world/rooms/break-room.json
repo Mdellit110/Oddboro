@@ -1,0 +1,92 @@
+{
+  "id": "break-room",
+  "name": "Break room",
+  "wall": "wall-plaster",
+  "floor": "carpet",
+  "map": [
+    "WWWWWWWWWWWWWW",
+    "WWWNNWWNNWWWWW",
+    "WWWNNWWNNWWWWW",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "WWWWWW..WWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "break-poster",
+      "at": [9, 2]
+    },
+    {
+      "sprite": "break-dartboard",
+      "at": [10, 2]
+    },
+    {
+      "sprite": "break-arcade",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "break-arcade",
+      "at": [2, 3],
+      "variant": "rust"
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [1, 7]
+    },
+    {
+      "sprite": "break-tv",
+      "at": [5, 3]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [8, 3],
+      "variant": "teal"
+    },
+    {
+      "sprite": "break-fridge",
+      "at": [9, 3]
+    },
+    {
+      "sprite": "bin",
+      "at": [10, 3]
+    },
+    {
+      "sprite": "break-vending",
+      "at": [11, 3]
+    },
+    {
+      "sprite": "rug",
+      "at": [4, 5],
+      "variant": "teal"
+    },
+    {
+      "sprite": "break-beanbag",
+      "at": [5, 5]
+    },
+    {
+      "sprite": "break-beanbag",
+      "at": [6, 6],
+      "variant": "teal"
+    },
+    {
+      "sprite": "break-couch",
+      "at": [9, 5]
+    },
+    {
+      "sprite": "break-coffee-table",
+      "at": [9, 7]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [3, 3]
+    },
+    {
+      "sprite": "plant-small",
+      "at": [9, 7]
+    }
+  ]
+}

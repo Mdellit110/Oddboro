@@ -1,0 +1,27 @@
+# A cast iron manhole cover in the road. Floor layer, walkable, place it once
+# or twice so it stays rare.
+sprite street-manhole
+size 16 16
+layer floor
+footprint 1 1
+origin 0 0
+walkable
+tag street road
+
+frame default
+................
+....kkkkkkkk....
+..kk55555555kk..
+.k5K5K5K5K5K55k.
+.k55555555555Kk.
+k5K5K5K5K5K5K5Kk
+k555555555555K5k
+k5K5K5K5K5K5K5Kk
+k555555555555K5k
+k5K5K5K5K5K5K5Kk
+k555555555555K5k
+.k5K5K5K5K5K5Kk.
+.k5555555555KKk.
+..kkKKKKKKKKkk..
+....kkkkkkkk....
+................

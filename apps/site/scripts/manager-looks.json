@@ -1,0 +1,42 @@
+{
+  "ziva": {
+    "hair": "long-straight",
+    "top": "blazer",
+    "bottom": "trousers",
+    "colours": {
+      "hair": "dark brown",
+      "skin": "light tan",
+      "top": "cream",
+      "second": "navy",
+      "bottom": "navy",
+      "shoes": "black"
+    }
+  },
+  "jamal": {
+    "hair": "short-crop",
+    "top": "blazer",
+    "bottom": "trousers",
+    "colours": {
+      "hair": "black",
+      "skin": "brown",
+      "top": "white",
+      "second": "charcoal",
+      "accent": "amber",
+      "bottom": "charcoal",
+      "shoes": "black"
+    }
+  },
+  "cindy": {
+    "hair": "bob",
+    "top": "sweater",
+    "bottom": "trousers",
+    "colours": {
+      "hair": "black",
+      "skin": "fair",
+      "top": "burgundy",
+      "bottom": "black",
+      "shoes": "black"
+    },
+    "glasses": "black"
+  }
+}

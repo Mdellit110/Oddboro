@@ -1,0 +1,37 @@
+{
+  "name": "oddboro-platform",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "setup": "npm install --no-audit --no-fund --loglevel=error && node packages/ledger/src/setup.ts",
+    "reset": "node packages/ledger/src/reset.ts",
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "db:up": "docker compose up -d",
+    "db:migrate": "npm run migrate -w @oddboro/ledger",
+    "db:generate": "npm run generate -w @oddboro/ledger",
+    "lint": "npm run lint:guards && npm run format:check && turbo run lint",
+    "lint:guards": "node scripts/check-voice.ts && node scripts/check-stack.ts && node scripts/check-directions.ts && node scripts/check-context-index.ts && node scripts/check-ledger.ts && node scripts/check-private.ts && node scripts/check-secrets.ts",
+    "check-types": "turbo run check-types",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "sprites": "npm run build -w @oddboro/sprites",
+    "render": "node packages/world/scripts/render.ts"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10",
+    "prettier-plugin-svelte": "^4.1.1",
+    "turbo": "^2.11.10",
+    "typescript": "^6.0.3",
+    "@types/node": "^24.0.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.19.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

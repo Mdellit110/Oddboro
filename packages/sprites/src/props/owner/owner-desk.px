@@ -1,0 +1,53 @@
+# The owner's desk. Walnut, three tiles wide, two pedestals of drawers, a monitor
+# facing the room, keyboard, notebook, mug and a photo turned towards their
+# chair. The talk spot is the middle tile in front of it, facing up.
+sprite owner-desk
+size 48 40
+layer object
+footprint 3 1
+origin 0 24
+tag desk owner talk
+spot talk 1 1 up talk stand
+light 37 9 28 #63dccf 0.5
+
+frame default
+................................................
+................................................
+................................................
+................................................
+..............................kkkkkkkkkkkkkk....
+..............................k555555555555k....
+..............................k5gggGGGGGGG5k....
+..............................k5GGGGGggGGG5k....
+..............................k5GgggggGGGG5k....
+..............................k5GGGGGGGGgg5k....
+..............................k5GGggGGGGGG5k....
+..............................k5GGGGGGGGGG5k....
+....kkkkkkk...................kM55555555555k....
+....kwwwwWk...................kkkkkkkkkkkkkk....
+....kwtTtWk.........................k5k.........
+....kwTTtWk.........................k5k.........
+kkkkkwWWWWkkkkkkkkkkkkkkkkkkkkkkkkkk555kkkkkkkkk
+kwwwkkkkkkkwwwwwwwwwwwwwwwwwwwwwwwk55555Mkwwwwwk
+kwwkkkkkkkwwwwwwwwwwwwwwwwwwwwwwwwkkkkkkkkwwwwwk
+kwwk==kWkkwwwwkkkkkkkkkkkwwWWWWwwwwwwwwwwwwwwwwk
+kwwk=qq==kwwwwkmMmMmMmMmkwwwwwwwwwwwwwwwwwwwwwwk
+kwwk==qq=kwwwwk555555555kwwwwwwwwwwwwwwwwwwwwwwk
+kwwk=====kwwwwkkkkkkkkkkkwwwwwwwwwwwwwwwWWWWwwwk
+kwwkkkkkkkwwkkkWwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kwwwwwwwwwwkttTkwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kwwwwwwwwwwktTTkkwwwWWWWwwwwwwwwwwwwwwwwwwwwwwwk
+kWWWWWWWWWWkTTTkWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+k33333333333kkk33333333333333333333333333333333k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kWwwwwwwwwwwwwwwW33333333333333Wwwwwwwwwwwwwww3k
+kWWWWWWWYWWWWWWWW3wwwwwwwwwwww3WWWWWWWYWWWWWWW3k
+kW33333333333333W3WWWWWWWWWWWW3W333333333333333k
+kWwwwwwwwwwwwwwwW3WWWWWWWWWWWW3Wwwwwwwwwwwwwww3k
+kWWWWWWWYWWWWWWWW3WWWWWWWWWWWW3WWWWWWWYWWWWWWW3k
+kW33333333333333W33333333333333W333333333333333k
+kW33333333333333WWWWWWWWWWWWWWWW333333333333333k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kWW3k......................................kWW3k
+kWW3k......................................kWW3k
+kkkkk......................................kkkkk

@@ -1,0 +1,127 @@
+{
+  "id": "main-street",
+  "name": "Main Street",
+  "grounds": { "room": "grounds-main-street", "margin": [28, 14, 28, 10] },
+  "halls": [
+    {
+      "at": [1, 21],
+      "size": [62, 5],
+      "floor": "oak",
+      "wall": "wall-plaster"
+    },
+    {
+      "at": [58, 21],
+      "size": [5, 19],
+      "floor": "oak",
+      "wall": "wall-plaster"
+    },
+    {
+      "at": [1, 35],
+      "size": [62, 6],
+      "floor": "oak",
+      "wall": "wall-brick"
+    }
+  ],
+  "rooms": [
+    {
+      "room": "owner-office",
+      "at": [27, 2],
+      "label": "Your office"
+    },
+    {
+      "room": "workspace",
+      "at": [2, 10]
+    },
+    {
+      "room": "lobby",
+      "at": [19, 11]
+    },
+    {
+      "room": "mail-room",
+      "at": [34, 12]
+    },
+    {
+      "room": "workspace-east",
+      "at": [45, 10],
+      "label": "Workspace East"
+    },
+    {
+      "room": "break-room",
+      "at": [2, 26]
+    },
+    {
+      "room": "kitchen",
+      "at": [15, 26]
+    },
+    {
+      "room": "library",
+      "at": [28, 25]
+    },
+    {
+      "room": "gym",
+      "at": [43, 26]
+    },
+    {
+      "room": "front-door",
+      "at": [31, 40]
+    },
+    {
+      "room": "street",
+      "at": [0, 41]
+    }
+  ],
+  "props": [
+    {
+      "sprite": "plant-tall",
+      "at": [3, 22]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [21, 22]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [24, 22]
+    },
+    {
+      "sprite": "plant-small",
+      "at": [32, 22]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [49, 22]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [52, 22]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [61, 22]
+    },
+    {
+      "sprite": "plant-small",
+      "at": [61, 30]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [3, 38]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [14, 38]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [27, 38]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [42, 38]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [56, 38]
+    }
+  ]
+}

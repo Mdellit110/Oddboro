@@ -1,0 +1,26 @@
+# An open walnut shelf with jars, mugs and a stack of bowls. Hangs on a back
+# wall face cell, two cells wide.
+sprite kitchen-shelf
+size 32 16
+layer wall
+footprint 2 1
+origin 0 16
+tag wall kitchen shelf
+
+frame default
+................................
+...kkkk.........................
+..k3333k..kkkk..................
+..kaaaAk.k3333k...............k.
+..ka33Ak.kaaaAk.kkkkkk.kkkkkkk=k
+..k333Ak.kyyyAk.kRrrRkkkTttTkkqk
+..k333Ak.kyYyAk.kRRRRRkkTTTTTk=k
+..k333Ak.kyyYAk.kRRR8kkkTTT6kkqk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww
+WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+33333333333333333333333333333333
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+..kWk......................kWk..
+..kWk......................kWk..
+...kk......................kk...

@@ -1,0 +1,42 @@
+# A walnut dining chair seen from the front, sage cushion. The person sits on
+# its tile facing the room, so it paints under them (zbias -1).
+sprite kitchen-chair
+size 16 28
+layer object
+footprint 1 1
+origin 0 12
+walkable
+zbias -1
+tag chair kitchen seat
+variant teal s=t S=T
+variant rust s=r S=R
+
+frame default
+.kkkkkkkkkkkkkk.
+.kwwwwwwwwwwwWk.
+.kWWWWWWWWWWW3k.
+.kWk.kWk.kWk.Wk.
+.kWk.kWk.kWk.Wk.
+.kWk.kWk.kWk.Wk.
+.kWk.kWk.kWk.Wk.
+.kWk.kWk.kWk.Wk.
+.kWk.kWk.kWk.Wk.
+.kWkkkkkkkkkkWk.
+.kkkkkkkkkkkkkk.
+.ksssssssssssSk.
+.kssssssssssSSk.
+.kSSSSSSSSSSSSk.
+.kkkkkkkkkkkkkk.
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..kWk......kWk..
+..k3k......k3k..
+..k3k......k3k..
+..kkk......kkk..

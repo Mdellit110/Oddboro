@@ -1,0 +1,46 @@
+# A two-tile desk with a glowing monitor over the right tile. The seat
+# below the right tile is the work spot; the left tile is clear for a lamp.
+sprite desk
+size 32 32
+layer object
+footprint 2 1
+origin 0 16
+tag desk work
+spot seat 1 1 up work sit
+light 23 5 28 #63dccf 0.5
+variant walnut o=w O=W 1=3 2=3
+variant ash o=a O=A 1=4 2=4
+
+frame default
+................kkkkkkkkkkkkkk..
+................k555555555555k..
+................k5gggGGGGGGG5k..
+................k5GGGGGggGGG5k..
+................k5GgggggGGGG5k..
+................k5GGGGGGGGgg5k..
+................k5GGggGGGGGG5k..
+kkkkkkkkkkkkkkkkk5GGGGGGGGGG5kkk
+koooooooooooooookM55555555555kOk
+koooooooooooooookkkkkkkkkkkkkkOk
+koo======okkkkooooooooM5ooooooOk
+koo=qqq==OkttTkkooooooM5ooooooOk
+koo======OkTTTkMkoo55555555oooOk
+koo=qqqq=OkTT6kkoooOOOOOOOOoooOk
+koo======Ookkkooo555555555555oOk
+kooOOOOOOooOOOooomMmMmMmMmMmmomk
+koooooooooooooooo555555555555o5k
+koooooooooooooooooooooooooooooOk
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOk
+k222222222222222222222222222222k
+kOOOOOOOOOOOOOOOOO222222222222Ok
+kOOOOOOOOOOOOOOOOO2OOOmmmmMOO2Ok
+kOOOOOOOOOOOOOOOOO2OOOOOOOOOO2Ok
+kOOOOOOOOOOOOOOOOO222222222222Ok
+kOOOOOOOOOOOOOOOOO2OOOmmmmMOO2Ok
+kOOOOOOOOOOOOOOOOO2OOOOOOOOOO2Ok
+kOOOOOOOOOOOOOOOOO222222222222Ok
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+.kO1k.......................kO1k
+.kO1k.......................kO1k
+.kO1k.......................kO1k
+.kO1k.......................kO1k

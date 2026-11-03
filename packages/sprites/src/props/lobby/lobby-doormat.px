@@ -1,0 +1,26 @@
+# A coir doormat with a rust border. Floor layer, walkable, in front of the door.
+sprite lobby-doormat
+size 32 16
+layer floor
+footprint 2 1
+origin 0 0
+walkable
+tag mat soft
+
+frame default
+................................
+................................
+.888888888888888888888888888888.
+.8RRRRRRRRRRRRRRRRRRRRRRRRRRRR8.
+.8RUUUUUUUUUUUUUUUUUUUUUUUUUUR8.
+.8RUuUUuUUuUUuUUuUUuUUuUUuUUUR8.
+.8RUUUuUUuUUuUUuUUuUUuUUuUUuUR8.
+.8RUUuUUuUUuUUuUUuUUuUUuUUuUUR8.
+.8RUuUUuUUuUUuUUuUUuUUuUUuUUUR8.
+.8RUUUuUUuUUuUUuUUuUUuUUuUUuUR8.
+.8RUUuUUuUUuUUuUUuUUuUUuUUuUUR8.
+.8RUUUUUUUUUUUUUUUUUUUUUUUUUUR8.
+.8RRRRRRRRRRRRRRRRRRRRRRRRRRRR8.
+.888888888888888888888888888888.
+.uuuuuuuuuuuuuuuuuuuuuuuuuuuuuu.
+................................

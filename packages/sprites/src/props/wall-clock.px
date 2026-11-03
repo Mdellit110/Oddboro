@@ -1,0 +1,25 @@
+# A round walnut wall clock. Hangs on a back wall face cell.
+sprite wall-clock
+size 16 16
+layer wall
+footprint 1 1
+origin 0 13
+tag wall decor
+
+frame default
+.....kkkkkk.....
+...kkwwwwwwkk...
+..kwwk====kwwk..
+.kwk===q====kwk.
+.kwk========kwk.
+kwk==q==k==q==wk
+kwk=====k====kwk
+kwk=====kkk==kwk
+kwk===q=====q=wk
+kwk==========kwk
+.kwk===q====kwk.
+.kwk========kwk.
+..kwwk====kwwk..
+...kkWWWWWWkk...
+.....kkkkkk.....
+................

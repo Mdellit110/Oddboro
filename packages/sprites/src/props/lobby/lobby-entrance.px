@@ -1,0 +1,59 @@
+# The street door: double glass doors in a walnut frame under a transom, teal
+# kick panels, brass pulls. Place it over two D cells on the lower face row.
+# Tagged window so the sky shows through the glass by the hour.
+sprite lobby-entrance
+size 32 48
+layer wall
+footprint 2 1
+origin 0 32
+tag wall door window entrance
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+33333333333333333333333333333333
+3wwwwwwwwwwwwwwwwwwwwwwwwwwwwww3
+3w/////////////w3/////////////W3
+3w/((//////////w3/////////////W3
+3w/(///////////w3/////////////W3
+3w/////////////w3/////////////W3
+3w/////////////w3/////////////W3
+3w/////////////w3/////////////W3
+3wwwwwwwwwwwwwwwwwwwwwwwwwwwwww3
+33333333333333333333333333333333
+3wwwwwwwwwwwwww3wwwwwwwwwwwww3W3
+3wwWWWWWWWWWWWW3wWWWWWWWWWWWW3W3
+3wwW//////////W3wW//////////W3W3
+3wwW((////////W3wW((////////W3W3
+3wwW(/////////W3wW//////////W3W3
+3wwW//////////W3wW//////////W3W3
+3wwW/////////YW3wWY/////////W3W3
+3wwW/////////YW3wWY/////////W3W3
+3wwW/////////YW3wWY/////////W3W3
+3wwW/////////9W3wW9/////////W3W3
+3wwW//////////W3wW//////////W3W3
+3wwW//////////W3wW//////////W3W3
+3wwWWWWWWWWWWWW3wWWWWWWWWWWWW3W3
+3wwWTTTTTTTTTTW3wWTTTTTTTTTTW3W3
+3wwWT666666666W3wWT666666666W3W3
+3wwWT666666666W3wWT666666666W3W3
+3wwWT666666666W3wWT666666666W3W3
+3wwWT666666666W3wWT666666666W3W3
+3wwWWWWWWWWWWWW3wWWWWWWWWWWWW3W3
+3wwWWWWWWWWWWWW3wWWWWWWWWWWWW3W3
+3WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3
+3wwwwwwwwwwwwwwwwwwwwwwwwwwwwww3

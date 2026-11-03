@@ -1,0 +1,37 @@
+{
+  "name": "@oddboro/site",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check-types": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
+    "lint": "prettier --check . --ignore-path ../../.prettierignore",
+    "art": "node scripts/art.ts"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/pixelify-sans": "^5.3.0",
+    "markdown-it": "^14.3.3"
+  },
+  "devDependencies": {
+    "@oddboro/sprites": "*",
+    "@oddboro/world": "*",
+    "@sveltejs/adapter-static": "^4.0.1",
+    "@sveltejs/kit": "^3.1.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/markdown-it": "^14.2.0",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.7",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.5"
+  }
+}

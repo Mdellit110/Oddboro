@@ -1,0 +1,42 @@
+# A walnut bookcase, two tiles wide, three shelves of books.
+sprite bookshelf
+size 32 32
+layer object
+footprint 2 1
+origin 0 16
+tag shelf books clear-1
+variant oak W=O w=o 3=1
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw3333kkk33333kk3333333333kkk3Wk
+kw3kkkTTk33kkkzk333kk33kkk88k3Wk
+kw3RRkT=kkk66k=kkkkRk33yyk8ykkkk
+kw3RykTTkYk6tkzkSSk=k33ykk88kTkk
+kw3RRkTTkkk66kzkS=kRk33yyk88k=kk
+kw3RRkTTkYk66kzkSSkRk33yyk88kTkk
+kw3RRkTTkYk66kzkSSkRk33yyk88kTkk
+kw3RRkTTkYk66kzkSSkRk33yyk88kTkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWkkkWWWWWWWWWWkkkWWWWWkkWWWk
+kw3kkyyk333kk33333TTkkk333Ykkkkk
+kw3zkyRkkkk8k33333T=kRkkkkkkzzkk
+kw3=kyykSSkyk33333tttkk66kYkz=kk
+kw3zkyykS=k8k33333TTTkk6tkYkzzkk
+kw3zkyykSSk8k3333rrrrkk66kYkzzkk
+kw3zkyykSSk8k3333RRRRkk66kYkzzkk
+kw3zkyykSSk8k33333TTkRk66kYkzzkk
+kwwwwwwwkkkwwwwwwwwkkwwwwwkkkwWk
+kwWkkkWW66kkkkkkWWWzkkkkWWyykWWk
+kw3TTkkk6tkYYkSkkkk=kRRkkkykk3Wk
+kw3T=kRk66kYkk=k88kzkRykTkyyk3Wk
+kw3TTk=k66kYYkSk8ykzkRRk=kyyk3Wk
+kw3TTkRk66kYYkSk88kzkRRkTkyyk3Wk
+kw3TTkRk66kYYkSk88kzkRRkTkyyk3Wk
+kw3TTkRk66kYYkSk88kzkRRkTkyyk3Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kkWWWWWWWWWWWWWWWWWWWWWWWWWWWWkk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+k333333333333333333333333333333k

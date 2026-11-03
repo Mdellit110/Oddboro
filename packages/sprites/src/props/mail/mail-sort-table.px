@@ -1,0 +1,44 @@
+# The sorting table: an oak bench with a letter tray, a stack of post, a brass
+# postal scale and a parcel waiting. Staff stand at the middle tile to pull
+# in new items.
+sprite mail-sort-table
+size 48 32
+layer object
+footprint 3 1
+origin 0 16
+tag desk mail intake
+spot sort 1 1 up intake stand
+
+frame default
+................................................
+................................................
+...kkkkkkkkkkkkk....................kkkkk.......
+...kMMMMMMMMMMMk...................kyYYY9k......
+...kM=k=k=kM=kMk...................kY=k=Yk......
+...kM=k=k=kM=kMk...................kYY=YYk......
+...kM=k=k=kM=kMk...................kk999kk......
+...kM=k=k=kM=kMk.....................k5k........
+kkkk5kkkkkkk5kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kookM=====kM==MkoooooooooooooooookmmmmmmmmMkoo1k
+kookM=q===kM==MkooookkkkkkkkoooookMMMMMMMM5koo1k
+kookM=====kM==Mkoook========kooook555555555koo1k
+kook555555k5555koook=qqqq===kooookkkkkkkkkkkoo1k
+kookkkkkkkkkkkkkoook========kooooooooooooooooo1k
+kooooooooooooooooookkkkkkkkkkooooookkkkkkkoooo1k
+kooooooooooooooooook========kooooookUUyUUkoooo1k
+kooooooooooooooooook=qqqq===kooooookUUyUUkoooo1k
+kooooooooooooooooookkkkkkkkkkooooookuuyuukoooo1k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOkkkkkkkOOOO1k
+k2222222222222222222222222222222222222222222221k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO1k
+kO111111111111111111111111111111111111111111111k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO1k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO1k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO1k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO1k
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO1k
+k2222222222222222222222222222222222222222222221k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+.kO1k.......................................kO1k
+.kO1k.......................................kO1k
+.kO1k.......................................kO1k

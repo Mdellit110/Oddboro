@@ -1,0 +1,44 @@
+# The left end of a counter run: stone top, ash door, chrome handle. Place it
+# flipped for the right end. Things set on it use origin <height + 2> to sit on
+# the slab, back from its edge.
+sprite kitchen-counter-end
+size 16 32
+layer object
+footprint 1 1
+origin 0 16
+tag counter kitchen
+variant teal A=T a=t 4=6
+
+frame default
+................
+................
+................
+................
+................
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmm
+kmmmmmmmmmmmmmmm
+kmMmmmmmmmmmmmmm
+kmmmmmmmmmmmmmmm
+kmmmmmmmmmmmmmmm
+kmmmmmmMmmmmmmmm
+kmmmmmmmmmmmmmmm
+kmmmmmmmmmmmmmmm
+kmmmmmmmmmmmMmmm
+kmmmmmmmmmmmmmmm
+kmmmmmmmmmmmmmmm
+kMMMMMMMMMMMMMMM
+k555555555555555
+kaaaaaaaaaaaaaaa
+kA444444444444AA
+kA4aaaaaaaaaa4AA
+kA4AAAAAAAAAA4AA
+kA4AAAAAAAAmA4AA
+kA4AAAAAAAAmA4AA
+kA4AAAAAAAA5A4AA
+kA4AAAAAAAAAA4AA
+kA4AAAAAAAAAA4AA
+kA444444444444AA
+kAAAAAAAAAAAAAAA
+k555555555555555
+kkkkkkkkkkkkkkkk

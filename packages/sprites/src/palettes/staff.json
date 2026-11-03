@@ -1,0 +1,17 @@
+{
+  "name": "staff",
+  "colors": {
+    "X": {
+      "hex": "#f5d4b4",
+      "name": "glasses: skin fair until a variant swaps it to K"
+    },
+    "x": {
+      "hex": "#d9a484",
+      "name": "beard: skin fair shade until a variant swaps it to a hair key"
+    },
+    "[": {
+      "hex": "#c2653c",
+      "name": "hair tie: rust until a variant swaps it"
+    }
+  }
+}

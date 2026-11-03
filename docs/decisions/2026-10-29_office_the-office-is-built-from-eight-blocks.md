@@ -1,0 +1,1 @@
+- [office] **Decision (2026-10-29): the office is built from eight blocks (item, source, desk, room, rule, office, person, area) and grows by adding instances of them.** New needs become new instances, so the core stays small while the office grows for years.

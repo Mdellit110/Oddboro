@@ -1,0 +1,1 @@
+- [arch] **Decision (2026-10-29): the platform is a Turborepo on npm workspaces, with `apps/` and `packages/`, under the `@oddboro/*` scope.** Its guardrails are a pointer `AGENTS.md`, a short root `CLAUDE.md`, a nearest-ancestor context index enforced by a guard, and one file per decision. Layout in the root `CLAUDE.md`.

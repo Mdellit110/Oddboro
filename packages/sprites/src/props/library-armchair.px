@@ -1,0 +1,90 @@
+# A wingback reading armchair facing the viewer. Four pixels wider than its
+# tile on each side, so the arms hug whoever sits in it. zbias -1 paints it
+# before the person on the same tile; the arms sit outside the body's columns
+# so nothing has to paint over them. Frame "throw" has a blanket on one arm.
+sprite library-armchair
+size 24 36
+layer object
+footprint 1 1
+origin 4 20
+zbias -1
+tag chair seat library
+spot read 0 0 down read sit
+variant rust T=r 6=R 7=8 t=y
+variant sage T=s 6=S 7=0 t=s
+
+frame default
+........................
+......kkkkkkkkkkkk......
+.....ktT6666666667k.....
+.....kT66666666667k.....
+.....kT66666666667k.....
+.....kT66666666667k.....
+.....kT66666666667k.....
+..kkkkT66666666667kkkk..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+.kkkkkT66666666667kkkkk.
+ktTTT7T666666666677TTT7k
+kTT667T6666666666776667k
+kTT667T6666666666776667k
+kTT667T6666666666776667k
+kTT667T6666666666776667k
+kTT66777777777777776667k
+kTT667TTTTTTTTTTT776667k
+kTT667T6666666666776667k
+kTT667T6666666666776667k
+kTT667T6666666666776667k
+kTT66777777777777776667k
+k7777777777777777777777k
+kkkkkkkkkkkkkkkkkkkkkkkk
+.k3k................k3k.
+
+frame throw
+........................
+......kkkkkkkkkkkk......
+.....ktT6666666667k.....
+.....kT66666666667k.....
+.....kT66666666667k.....
+.....kT66666666667k.....
+.....kT66666666667k.....
+..kkkkT66666666667kkkk..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+..kTT6666666666666677k..
+.kkkkkT66666666667kkkkk.
+ktTTT7T66666666667kyyyyk
+kTT667T66666666667kyYY9k
+kTT667T66666666667kyYY9k
+kTT667T66666666667kyYY9k
+kTT667T66666666667kyYY9k
+kTT667777777777777kyYY9k
+kTT667TTTTTTTTTTT7k9999k
+kTT667T66666666667kk9k9k
+kTT667T6666666666776667k
+kTT667T6666666666776667k
+kTT66777777777777776667k
+k7777777777777777777777k
+kkkkkkkkkkkkkkkkkkkkkkkk
+.k3k................k3k.

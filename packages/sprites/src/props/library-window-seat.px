@@ -1,0 +1,43 @@
+# A window seat: a walnut box bench under a back wall window, a sage cushion,
+# pillows against the sill. Two tiles wide; the reader sits on the right one
+# facing the viewer, and zbias -1 paints the bench before them.
+sprite library-window-seat
+size 32 30
+layer object
+footprint 2 1
+origin 0 14
+zbias -1
+tag seat read library
+spot read 1 0 down read sit
+
+frame default
+.kkkkkk.........................
+kTTT666k..kkkkkkk......kkkkkkkk.
+kT666667k.kRrrRR8k....kYyyYYY9k.
+kT666667kkRrrrRR8k....kYyyYYY9k.
+kT666667kkRrrrRR8k....kYyyYYY9k.
+kT666667kkRrrRRR8k....kYyyYYY9k.
+kT666667kkRrRRRR8k....kYyYYYY9k.
+kT666677kkRRRRR88k....kYYYYYY9k.
+k66667777kRRRR888k....kYYYY999k.
+k777777777k888888k....k9999999k.
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kssssssssssssssssssssssssssssSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+ksSSSSSSSSSSSSSSSSSSSSSSSSSSSSSk
+kS0000000000000000000000000000Sk
+k000000000000000000000000000000k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+k333333333333333333333333333333k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk

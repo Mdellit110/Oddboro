@@ -1,0 +1,129 @@
+{
+  "id": "kitchen",
+  "name": "Kitchen",
+  "wall": "wall-teal",
+  "floor": "tile",
+  "map": [
+    "WWWWWWWWWWWWWW",
+    "WWWWWWWWNNWNNW",
+    "WWWWWWWWNNWNNW",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "WWWWWW..WWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "kitchen-cabinet",
+      "at": [1, 2]
+    },
+    {
+      "sprite": "kitchen-shelf",
+      "at": [3, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [10, 2]
+    },
+    {
+      "sprite": "kitchen-counter-end",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "kitchen-counter",
+      "at": [2, 3]
+    },
+    {
+      "sprite": "kitchen-counter-sink",
+      "at": [3, 3]
+    },
+    {
+      "sprite": "kitchen-counter",
+      "at": [5, 3]
+    },
+    {
+      "sprite": "kitchen-counter-end",
+      "at": [6, 3],
+      "flip": true
+    },
+    {
+      "sprite": "kitchen-kettle",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "kitchen-microwave",
+      "at": [2, 3]
+    },
+    {
+      "sprite": "kitchen-coffee",
+      "at": [5, 3]
+    },
+    {
+      "sprite": "kitchen-fridge",
+      "at": [7, 3]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [12, 3],
+      "variant": "teal"
+    },
+    {
+      "sprite": "plant-small",
+      "at": [6, 3],
+      "variant": "teal"
+    },
+    {
+      "sprite": "kitchen-mat",
+      "at": [3, 4]
+    },
+    {
+      "sprite": "kitchen-chair",
+      "at": [4, 6]
+    },
+    {
+      "sprite": "kitchen-chair",
+      "at": [5, 6],
+      "variant": "teal"
+    },
+    {
+      "sprite": "kitchen-chair",
+      "at": [6, 6]
+    },
+    {
+      "sprite": "kitchen-chair",
+      "at": [7, 6],
+      "variant": "rust"
+    },
+    {
+      "sprite": "kitchen-table",
+      "at": [4, 7]
+    },
+    {
+      "sprite": "kitchen-fruit-bowl",
+      "at": [5, 7]
+    },
+    {
+      "sprite": "kitchen-pendant",
+      "at": [5, 7]
+    },
+    {
+      "sprite": "kitchen-pendant",
+      "at": [6, 7]
+    },
+    {
+      "sprite": "kitchen-cooler",
+      "at": [12, 5]
+    },
+    {
+      "sprite": "bin",
+      "at": [8, 3]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [1, 7]
+    }
+  ]
+}

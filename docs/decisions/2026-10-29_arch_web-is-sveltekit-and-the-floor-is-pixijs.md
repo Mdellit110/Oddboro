@@ -1,0 +1,1 @@
+- [arch] **Decision (2026-10-29): every web surface is Svelte 5 and SvelteKit 3, and PixiJS draws the floor.** One framework keeps every surface and every agent on one idiom. PixiJS draws pixels and owns no UI state, so it fits inside that rule. Enforced by `scripts/check-stack.ts`.

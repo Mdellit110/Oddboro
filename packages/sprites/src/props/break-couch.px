@@ -1,0 +1,44 @@
+# A three-seat couch facing the room. Staff sit on it, feet on the floor in
+# front, so it paints under them (zbias -1). Two pillows for when it is empty.
+sprite break-couch
+size 48 28
+layer object
+footprint 3 1
+origin 0 12
+zbias -1
+tag couch seat rest
+spot seat-0 0 0 down rest sit
+spot seat-1 1 0 down rest sit
+spot seat-2 2 0 down rest sit
+variant teal r=t R=T 8=6 t=r T=R
+variant sage r=s R=S 8=0
+
+frame default
+................................................
+.....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.....
+.....krrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrk.....
+.....krRRRRRRRRRR8rRRRRRRRRRRR8rRRRRRRRRRRk.....
+.kkk.kRRkkkkkkkRR8RRRRRRRRRRRR8RRkkkkkkkRRk.kkk.
+krrrkkRkyyyyyyYkR8RRRRRRRRRRRR8RkttttttTkRkkrrrk
+.rrr.kRkyyyyyyYkR8RRRRRRRRRRRR8RkttttttTkRk.rrr.
+krRRkkRkyyyyyyYkR8RRRRRRRRRRRR8RkttttttTkRkkRR8k
+krRRkkRkyyyyyyYkR8RRRRRRRRRRRR8RkttttttTkRkkRR8k
+krRRkkRkyYYYYYYkR8RRRRRRRRRRRR8RktTTTTTTkRkkRR8k
+krRRkkRRkkkkkkkRR8RRRRRRRRRRRR8RRkkkkkkkRRkkRR8k
+krRRkk888888888888888888888888888888888888kkRR8k
+krRRkrrrrrrrrrrrr8rrrrrrrrrrrr8rrrrrrrrrrrrkRR8k
+krRRkrrrrrrrrrrrr8rrrrrrrrrrrr8rrrrrrrrrrrrkRR8k
+krRRkrrrrrrrrrrrr8rrrrrrrrrrrr8rrrrrrrrrrrrkRR8k
+krRRkrrrrrrrrrrrr8rrrrrrrrrrrr8rrrrrrrrrrrrkRR8k
+krRRkRRRRRRRRRRRR8RRRRRRRRRRRR8RRRRRRRRRRRRkRR8k
+krRRkRRRRRRRRRRRR8RRRRRRRRRRRR8RRRRRRRRRRRRkRR8k
+krRRkRRRRRRRRRRRR8RRRRRRRRRRRR8RRRRRRRRRRRRkRR8k
+krRRkRRRRRRRRRRRR8RRRRRRRRRRRR8RRRRRRRRRRRRkRR8k
+krRRk88888888888888888888888888888888888888kRR8k
+krRRkRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+krRRkRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+krRRkRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+krRRk88888888888888888888888888888888888888kRR8k
+kWWWkWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWkWWWk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+.k3k............k3k..........k3k............k3k.

@@ -1,0 +1,360 @@
+// What an install needs, checked one thing at a time: this Mac, Claude Code,
+// the database and the optional helpers. `npm run setup` walks the owner
+// through these, and the office's Setup window shows them again. Nothing here
+// imports db.ts, so it runs before there is a database to connect to.
+import { execFile } from 'node:child_process';
+import postgres from 'postgres';
+
+export type Check = {
+  id: string;
+  name: string;
+  /** ok: ready. missing: the office cannot run without it. optional: works without, with less. */
+  state: 'ok' | 'missing' | 'optional';
+  /** What was found, in a few words. */
+  found: string;
+  /** What to do about it, when it is not ok. */
+  fix?: string;
+};
+
+const run = (cmd: string, args: string[], timeout = 8000) =>
+  new Promise<{ ok: boolean; out: string }>((done) =>
+    execFile(cmd, args, { timeout }, (err, stdout, stderr) =>
+      done({ ok: !err, out: `${stdout}${stderr}`.trim() })
+    )
+  );
+
+export async function checkMac(): Promise<Check> {
+  if (process.platform !== 'darwin')
+    return {
+      id: 'mac',
+      name: 'macOS',
+      state: 'missing',
+      found: `This is ${process.platform}`,
+      fix: 'Oddboro runs on a Mac for now.'
+    };
+  const v = await run('sw_vers', ['-productVersion']);
+  return { id: 'mac', name: 'macOS', state: 'ok', found: `macOS ${v.out || 'found'}` };
+}
+
+export function checkNode(): Check {
+  const major = Number(process.versions.node.split('.')[0]);
+  return major >= 24
+    ? { id: 'node', name: 'Node', state: 'ok', found: `Node ${process.versions.node}` }
+    : {
+        id: 'node',
+        name: 'Node',
+        state: 'missing',
+        found: `Node ${process.versions.node}`,
+        fix: 'Install Node 24 or later from nodejs.org, then run setup again.'
+      };
+}
+
+/** Claude Code, signed in to a Claude plan or given an API key. Staff runs use it. */
+export async function checkClaude(): Promise<Check> {
+  const version = await run('claude', ['--version']);
+  if (!version.ok)
+    return {
+      id: 'claude',
+      name: 'Claude Code',
+      state: 'missing',
+      found: 'Not installed',
+      fix: 'Install it: `npm install -g @anthropic-ai/claude-code`. Then run `claude` once and sign in.'
+    };
+  const status = await run('claude', ['auth', 'status']);
+  let signedIn = false;
+  let method = '';
+  try {
+    const s = JSON.parse(status.out) as { loggedIn?: boolean; authMethod?: string };
+    signedIn = !!s.loggedIn;
+    method = s.authMethod ?? '';
+  } catch {
+    // An older Claude Code without `auth status`: an API key still works.
+  }
+  const v = version.out.split(' ')[0];
+  // Staff run on the owner's API key, from the keychain, when the owner chose one.
+  if (process.env.OFFICE_AUTH === 'key')
+    return { id: 'claude', name: 'Claude Code', state: 'ok', found: `${v}, with your API key` };
+  if (signedIn)
+    return {
+      id: 'claude',
+      name: 'Claude Code',
+      state: 'ok',
+      found: `${v}, signed in${method === 'claude.ai' ? ' with a Claude plan' : method ? ` (${method})` : ''}`
+    };
+  return {
+    id: 'claude',
+    name: 'Claude Code',
+    state: 'missing',
+    found: `${v}, not signed in`,
+    fix: 'Run `claude auth login` and sign in with your Claude plan, or give the office an API key.'
+  };
+}
+
+/** Ollama and its embedding model, for searching the ledger by meaning. */
+export async function checkOllama(): Promise<Check> {
+  const url = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
+  try {
+    const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    const tags = (await res.json()) as { models?: { name: string }[] };
+    if (tags.models?.some((m) => m.name.startsWith('nomic-embed-text')))
+      return { id: 'ollama', name: 'Ollama', state: 'ok', found: 'Running, with nomic-embed-text' };
+    return {
+      id: 'ollama',
+      name: 'Ollama',
+      state: 'optional',
+      found: 'Running, without the embedding model',
+      fix: 'Run `ollama pull nomic-embed-text`. Until then the ledger is searched by its words only.'
+    };
+  } catch {
+    const installed = (await run('ollama', ['--version'])).ok;
+    return {
+      id: 'ollama',
+      name: 'Ollama',
+      state: 'optional',
+      found: installed ? 'Installed, not running' : 'Not installed',
+      fix: installed
+        ? 'Open the Ollama app, then run `ollama pull nomic-embed-text`.'
+        : 'Install Ollama from ollama.com, then run `ollama pull nomic-embed-text`. Until then the ledger is searched by its words only.'
+    };
+  }
+}
+
+/** uv, which runs the tools that come from PyPI. */
+export async function checkUv(): Promise<Check> {
+  const v = await run('uvx', ['--version']);
+  return v.ok
+    ? { id: 'uv', name: 'uv', state: 'ok', found: v.out.split('\n')[0] }
+    : {
+        id: 'uv',
+        name: 'uv',
+        state: 'optional',
+        found: 'Not installed',
+        fix: 'Install it with `brew install uv` to connect tools that come from PyPI.'
+      };
+}
+
+/** Docker, which runs the office's own Postgres when it is not hosted. */
+export async function checkDocker(): Promise<Check> {
+  if (!(await run('docker', ['--version'])).ok)
+    return {
+      id: 'docker',
+      name: 'Docker',
+      state: 'optional',
+      found: 'Not installed',
+      fix: 'Only needed to run Postgres on this Mac. Install Docker Desktop, or use hosted Postgres.'
+    };
+  const info = await run('docker', ['info', '--format', '{{.ServerVersion}}']);
+  return info.ok
+    ? { id: 'docker', name: 'Docker', state: 'ok', found: `Running, ${info.out}` }
+    : {
+        id: 'docker',
+        name: 'Docker',
+        state: 'optional',
+        found: 'Installed, not running',
+        fix: 'Open Docker Desktop. Only needed to run Postgres on this Mac.'
+      };
+}
+
+/** The login service that keeps the office running with no terminal open. */
+export async function checkService(): Promise<Check> {
+  const uid = process.getuid?.() ?? 501;
+  const r = await run('launchctl', ['print', `gui/${uid}/com.oddboro.office`]);
+  return r.ok
+    ? { id: 'service', name: 'Login service', state: 'ok', found: 'The office starts at login' }
+    : {
+        id: 'service',
+        name: 'Login service',
+        state: 'optional',
+        found: 'Not installed',
+        fix: 'Run `npm run service:install -w apps/office` to keep the office running at login. Until then, `npm run dev`.'
+      };
+}
+
+/** Where a connection string points, without its password. */
+export function describeUrl(url: string): { host: string; local: boolean; pooled: boolean } {
+  try {
+    const u = new URL(url);
+    const local = ['127.0.0.1', 'localhost', '::1'].includes(u.hostname);
+    // Transaction poolers drop LISTEN, which live updates need: Neon's
+    // "-pooler" hosts and Supabase's port 6543.
+    const pooled = /-pooler\./.test(u.hostname) || u.port === '6543';
+    return { host: u.port ? `${u.hostname}:${u.port}` : u.hostname, local, pooled };
+  } catch {
+    return { host: '', local: false, pooled: false };
+  }
+}
+
+export type DatabaseReport = {
+  checks: Check[];
+  /** The URL that worked, with sslmode added when the server wanted it. */
+  url?: string;
+  /** The database already holds an office. */
+  hasOffice: boolean;
+};
+
+/**
+ * Everything the office needs from a Postgres: it connects, it is 15 or
+ * later, it has pgvector, LISTEN and NOTIFY reach back (the page's live
+ * updates ride on them), and it answers fast enough to feel local.
+ */
+export async function checkDatabase(url: string): Promise<DatabaseReport> {
+  const where = describeUrl(url);
+  const fail = (found: string, fix: string): DatabaseReport => ({
+    checks: [{ id: 'database', name: 'Postgres', state: 'missing', found, fix }],
+    hasOffice: false
+  });
+  if (!/^postgres(ql)?:\/\//.test(url) || !where.host)
+    return fail(
+      'That is not a Postgres connection string',
+      'Paste one that starts with postgres:// or postgresql://, from your provider’s Connect page.'
+    );
+
+  // A hosted server usually wants TLS. Try as given, then with sslmode=require.
+  const tries = [url];
+  if (!where.local && !/[?&]sslmode=/.test(url))
+    tries.push(`${url}${url.includes('?') ? '&' : '?'}sslmode=require`);
+  let sql: postgres.Sql | undefined;
+  let used = url;
+  let lastError = '';
+  for (const t of tries) {
+    const s = postgres(t, { max: 1, connect_timeout: 10, onnotice: () => {} });
+    try {
+      await s`select 1`;
+      sql = s;
+      used = t;
+      break;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      await s.end({ timeout: 1 }).catch(() => {});
+    }
+  }
+  if (!sql)
+    return fail(
+      `Could not connect to ${where.host}: ${lastError}`,
+      /password|auth/i.test(lastError)
+        ? 'Check the user and password in the connection string.'
+        : 'Check the host and port, and that the database accepts connections from this Mac.'
+    );
+
+  const checks: Check[] = [];
+  try {
+    const [{ server_version_num: num, server_version: ver }] = await sql<
+      { server_version_num: string; server_version: string }[]
+    >`select current_setting('server_version_num') as server_version_num, current_setting('server_version') as server_version`;
+    const major = Math.floor(Number(num) / 10000);
+    checks.push(
+      major >= 15
+        ? {
+            id: 'database',
+            name: 'Postgres',
+            state: 'ok',
+            found: `Postgres ${ver.split(' ')[0]} at ${where.host}${where.local ? '' : ', hosted'}`
+          }
+        : {
+            id: 'database',
+            name: 'Postgres',
+            state: 'missing',
+            found: `Postgres ${ver} at ${where.host}`,
+            fix: 'The office needs Postgres 15 or later.'
+          }
+    );
+
+    const [vector] = await sql<
+      { installed: string | null }[]
+    >`select installed_version as installed from pg_available_extensions where name = 'vector'`;
+    if (!vector)
+      checks.push({
+        id: 'pgvector',
+        name: 'pgvector',
+        state: 'missing',
+        found: 'Not available on this server',
+        fix: 'Pick a provider with pgvector: Neon, Supabase, Amazon RDS and most others have it.'
+      });
+    else {
+      let installed = !!vector.installed;
+      if (!installed)
+        installed = await sql`create extension if not exists vector`.then(
+          () => true,
+          () => false
+        );
+      checks.push(
+        installed
+          ? { id: 'pgvector', name: 'pgvector', state: 'ok', found: 'Ready' }
+          : {
+              id: 'pgvector',
+              name: 'pgvector',
+              state: 'missing',
+              found: 'Available, but this user cannot turn it on',
+              fix: 'Turn it on in your provider’s dashboard (Extensions: vector), or run `create extension vector` as the owner of the database.'
+            }
+      );
+    }
+
+    // Live updates: listen, notify, and wait for it to come back.
+    const heard = await new Promise<boolean>((done) => {
+      const timer = setTimeout(() => done(false), 4000);
+      sql!
+        .listen('oddboro_setup', () => {
+          clearTimeout(timer);
+          done(true);
+        })
+        .then(() => sql!`select pg_notify('oddboro_setup', 'ping')`)
+        .catch(() => {
+          clearTimeout(timer);
+          done(false);
+        });
+    });
+    checks.push(
+      heard
+        ? { id: 'notify', name: 'Live updates', state: 'ok', found: 'LISTEN and NOTIFY work' }
+        : {
+            id: 'notify',
+            name: 'Live updates',
+            state: 'missing',
+            found: where.pooled
+              ? 'This is a pooled connection, which drops LISTEN'
+              : 'NOTIFY did not come back',
+            fix: 'Use the direct connection string, not the pooled one. On Neon, turn off “Connection pooling” (no -pooler in the host). On Supabase, use the session pooler or the direct connection on port 5432.'
+          }
+    );
+
+    const times: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t = performance.now();
+      await sql`select 1`;
+      times.push(performance.now() - t);
+    }
+    const ms = Math.round(times.sort((a, b) => a - b)[2]);
+    checks.push(
+      ms <= 120
+        ? { id: 'latency', name: 'Speed', state: 'ok', found: `${ms} ms a query` }
+        : {
+            id: 'latency',
+            name: 'Speed',
+            state: 'optional',
+            found: `${ms} ms a query`,
+            fix: 'The office works, but pages will feel slow. Pick a region near you.'
+          }
+    );
+
+    const [office] = await sql<
+      { exists: boolean }[]
+    >`select to_regclass('public.ledger') is not null as exists`;
+    return { checks, url: used, hasOffice: office.exists };
+  } finally {
+    await sql.end({ timeout: 2 }).catch(() => {});
+  }
+}
+
+/** Every check that needs no database, in the order setup shows them. */
+export async function checkMachine(): Promise<Check[]> {
+  return Promise.all([
+    checkMac(),
+    checkNode(),
+    checkClaude(),
+    checkDocker(),
+    checkOllama(),
+    checkUv(),
+    checkService()
+  ]);
+}

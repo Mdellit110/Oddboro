@@ -1,0 +1,41 @@
+# A three-seat couch seen from behind, facing something on the back wall,
+# like the TV. Staff sit on it facing away from the viewer, and its back
+# hides their lower half (zbias 1).
+sprite break-couch-back
+size 48 24
+layer object
+footprint 3 1
+origin 0 8
+zbias 1
+tag couch seat rest
+spot seat-0 0 0 up rest sit
+spot seat-1 1 0 up rest sit
+spot seat-2 2 0 up rest sit
+variant teal r=t R=T 8=6
+variant sage r=s R=S 8=0
+
+frame default
+................................................
+................................................
+................................................
+................................................
+................................................
+................................................
+.....kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.....
+....krrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrk....
+....kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRk....
+....kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRk....
+kkkkkRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkkkkk
+krrrkRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkrrrk
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kRR8k88888888888888888888888888888888888888kRR8k
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kRR8kRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRkRR8k
+kWWWkWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWkWWWk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+.k3k............k3k..........k3k............k3k.
+................................................

@@ -1,0 +1,1 @@
+- [office] **Decision (2026-10-30): reports, chat replies, job results and ledger details render as Markdown, through markdown-it with raw HTML off.** Staff write Markdown, and the owner reads it formatted; with HTML off, a staffer's text can format but never inject. Code in `apps/office/src/lib/ui/Markdown.svelte`.

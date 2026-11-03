@@ -1,0 +1,36 @@
+# A wide gym mirror in a dark metal frame. Hangs on a back wall, three cells
+# wide. Pale glass with two diagonal shines.
+sprite gym-mirror
+size 48 26
+layer wall
+footprint 3 1
+origin 0 14
+tag wall mirror gym
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmk
+kmeeeeeeeeeeeeeeeeeeeeeeeeEEEEEEEEEEEEEEEEEEEE5k
+kmeeeeeeeeeeeeeeeeeeeee==EEEEEEEEEEEEEEEEEEEEE5k
+kmeeeeeeeeeeeeeeeeeeee==EEEEEEEEEEEEEEEEEEEEEE5k
+kmeeeeeeeeeeeeeeeeeeE==EEEEEEEE=EEEEEEEEEEEEEE5k
+kmeeeeeeeeeeeeeeeeEE==EEEEEEEE=EEEEEEEEEEEEEEE5k
+kmeeeeeeeeeeeeeeEEE==EEEEEEEE=EEEEEEEEEEEEEEEE5k
+kmeeeeeeeeeeeeEEEE==EEEEEEEE=EEEEEEEEEEEEEEEEE5k
+kmeeeeeeeeeeEEEEE==EEEEEEEE=EEEEEEEEEEEEEEEEEE5k
+kmeeeeeeeeEEEEEE==EEEEEEEE=EEEEEEEEEEEEEEEEEcc5k
+kmeeeeeeEEEEEEE==EEEEEEEE=EEEEEEEEEEEEEEEEcccc5k
+kmeeeeEEEEEEEE==EEEEEEEE=EEEEEEEEEEEEEEEcccccc5k
+kmeeEEEEEEEEE==EEEEEEEE=EEEEEEEEEEEEEEcccccccc5k
+kmEEEEEEEEEE==EEEEEEEE=EEEEEEEEEEEEEcccccccccc5k
+kmEEEEEEEEE==EEEEEEEE=EEEEEEEEEEEEcccccccccccc5k
+kmEEEEEEEE==EEEEEEEE=EEEEEEEEEEEcccccccccccccc5k
+kmEEEEEEE==EEEEEEEE=EEEEEEEEEEcccccccccccccccc5k
+kmEEEEEE==EEEEEEEE=EEEEEEEEEcccccccccccccccccc5k
+kmEEEEE==EEEEEEEE=EEEEEEEEcccccccccccccccccccc5k
+kmEEEE==EEEEEEEE=EEEEEEEcccccccccccccccccccccc5k
+kmEEEEEEEEEEEEE=EEEEEEcccccccccccccccccccccccc5k
+kmEEEEEEEEEEEE=EEEEEcccccccccccccccccccccccccc5k
+kmEEEEEEEEEEEEEEEEcccccccccccccccccccccccccccc5k
+km555555555555555555555555555555555555555555555k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk

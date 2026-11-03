@@ -1,0 +1,1 @@
+- [art] **Decision (2026-10-31): indoor lamps glow at half strength and outdoor lamps at 70%, glow and bloom both; a room template marks itself `outdoor`.** At full strength the rooms washed out at night, and the street lamps lit the lot like day. Supersedes the 2026-10-30 ruling that outdoor lamps glow at full strength. Code in `packages/world/src/light.ts`.

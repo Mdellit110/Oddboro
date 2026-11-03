@@ -1,0 +1,25 @@
+# Two kettlebells left on the floor, one iron and one teal. One tile.
+sprite gym-kettlebells
+size 16 16
+layer object
+footprint 1 1
+origin 0 0
+tag kettlebell weights gym
+
+frame default
+................
+..kkkk..........
+.kM55Mk..kkkk...
+.kMk.kMkkT66Tk..
+.k5k.kMkTk.kTk..
+kkkkkkkkk6kk6k..
+kM55555kkkkkkkk.
+kM5555555kT6666k
+k55555555k66666k
+k555555K5k66667k
+k55555KK5k66677k
+.k5555K5k.k6677k
+.kk5555kk.kk777k
+..kkkkkk...kkkk.
+................
+................

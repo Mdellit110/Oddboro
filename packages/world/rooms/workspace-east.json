@@ -1,0 +1,136 @@
+{
+  "id": "workspace-east",
+  "name": "Workspace East",
+  "wall": "wall-plaster",
+  "floor": "oak",
+  "map": [
+    "WWWWWWWWWWWWWWWWWW",
+    "WWNNWWNNWWNNWWNNDW",
+    "WWNNWWNNWWNNWWNNDW",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "WWWWWWWW..WWWWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "art-frame",
+      "at": [13, 2]
+    },
+    {
+      "sprite": "whiteboard",
+      "at": [8, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [5, 2]
+    },
+    {
+      "sprite": "desk",
+      "at": [14, 4],
+      "flip": true
+    },
+    {
+      "sprite": "desk-lamp",
+      "at": [15, 4],
+      "flip": true
+    },
+    {
+      "sprite": "chair",
+      "at": [14, 5],
+      "flip": true
+    },
+    {
+      "sprite": "desk",
+      "at": [10, 4],
+      "variant": "walnut",
+      "flip": true
+    },
+    {
+      "sprite": "plant-small",
+      "at": [11, 4],
+      "flip": true
+    },
+    {
+      "sprite": "chair",
+      "at": [10, 5],
+      "variant": "rust",
+      "flip": true
+    },
+    {
+      "sprite": "desk",
+      "at": [6, 4],
+      "flip": true
+    },
+    {
+      "sprite": "desk-lamp",
+      "at": [7, 4],
+      "variant": "teal",
+      "flip": true
+    },
+    {
+      "sprite": "chair",
+      "at": [6, 5],
+      "flip": true
+    },
+    {
+      "sprite": "desk",
+      "at": [2, 4],
+      "variant": "ash",
+      "flip": true
+    },
+    {
+      "sprite": "plant-small",
+      "at": [3, 4],
+      "variant": "teal",
+      "flip": true
+    },
+    {
+      "sprite": "chair",
+      "at": [2, 5],
+      "variant": "sage",
+      "flip": true
+    },
+    {
+      "sprite": "bookshelf",
+      "at": [4, 3],
+      "flip": true
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [1, 3],
+      "flip": true
+    },
+    {
+      "sprite": "bin",
+      "at": [13, 5],
+      "flip": true
+    },
+    {
+      "sprite": "rug",
+      "at": [8, 7],
+      "flip": true
+    },
+    {
+      "sprite": "filing-cabinet",
+      "at": [16, 8],
+      "flip": true
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [16, 9],
+      "variant": "teal",
+      "flip": true
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [1, 9],
+      "flip": true
+    }
+  ]
+}

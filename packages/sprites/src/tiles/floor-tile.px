@@ -1,0 +1,77 @@
+# Kitchen tile. Cream squares with the odd mint one, grout in plaster shade.
+sprite floor-tile
+size 16 16
+layer floor
+tag floor hard
+
+frame 0
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+pppppppqpppppppq
+qqqqqqqqqqqqqqqq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+pppppppqpppppppq
+qqqqqqqqqqqqqqqq
+
+frame 1
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+pppppppqEEEEEEEq
+qqqqqqqqqqqqqqqq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+pppppppqpppppppq
+qqqqqqqqqqqqqqqq
+
+frame 2
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+PPPPPPpqPPPPPPpq
+pppppppqpppppppq
+qqqqqqqqqqqqqqqq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+EEEEEEEqpppppppq
+qqqqqqqqqqqqqqqq
+
+frame 3
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+eeeeeeEqPPPPPPpq
+EEEEEEEqpppppppq
+qqqqqqqqqqqqqqqq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+PPPPPPpqeeeeeeEq
+pppppppqEEEEEEEq
+qqqqqqqqqqqqqqqq

@@ -1,0 +1,44 @@
+# A middle counter piece with three drawers. No side outline, so a run reads
+# as one slab. Things set on it use origin <height + 2> to sit on the slab,
+# back from its edge.
+sprite kitchen-counter
+size 16 32
+layer object
+footprint 1 1
+origin 0 16
+tag counter kitchen
+variant teal A=T a=t 4=6
+
+frame default
+................
+................
+................
+................
+................
+kkkkkkkkkkkkkkkk
+mmmmmmmmmmmmmmmm
+mmmmmmmmmmmmmmmm
+mmMmmmmmmmmmmmmm
+mmmmmmmmmmmmmmmm
+mmmmmmmmmmmmmmmm
+mmmmmmmMmmmmmmmm
+mmmmmmmmmmmmmmmm
+mmmmmmmmmmmmmmmm
+mmmmmmmmmmmmMmmm
+mmmmmmmmmmmmmmmm
+mmmmmmmmmmmmmmmm
+MMMMMMMMMMMMMMMM
+5555555555555555
+aaaaaaaaaaaaaaaa
+A4aaaaaaaaaaaa4A
+A4AAAAAmmAAAAA4A
+A44444444444444A
+A4aaaaaaaaaaaa4A
+A4AAAAAmmAAAAA4A
+A44444444444444A
+A4aaaaaaaaaaaa4A
+A4AAAAAmmAAAAA4A
+A44444444444444A
+AAAAAAAAAAAAAAAA
+5555555555555555
+kkkkkkkkkkkkkkkk

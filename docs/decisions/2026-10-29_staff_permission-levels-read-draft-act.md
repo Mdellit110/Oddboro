@@ -1,0 +1,1 @@
+- [staff] **Decision (2026-10-29): every staffer holds one permission level (read, draft or act), only the owner raises it, and act covers housekeeping inside the office only.** Anything outward is a draft that waits for the owner's yes on that exact action, which keeps every send, post and schedule the owner's call.

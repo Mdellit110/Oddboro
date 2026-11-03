@@ -1,0 +1,40 @@
+# A ginger cat asleep in a loaf, tail curled round. Lives on the rug by the
+# fire. Two frames: it breathes, and the tail tip flicks.
+sprite library-cat
+size 16 12
+layer object
+footprint 1 1
+origin 0 -4
+walkable
+zbias 1
+fps 1
+tag cat library any-side
+variant grey r=m R=M 8=5
+
+frame sleep-0
+................
+................
+....kkkk........
+...krrrRk.kkk...
+..krrrrRRkrrRk..
+..kRkRRRRRRRRRk.
+..kRRRRRRRRR88k.
+.kRRRRRRRRRRR8k.
+.kRRRR8RRRRR88k.
+.k8RR8kk8RR888k.
+..kkkk..kkkkkk..
+................
+
+frame sleep-1
+................
+................
+................
+....kkkk........
+...krrrRk...kk..
+..krrrrRRk.kRRk.
+..kRkRRRRRkrRRk.
+..kRRRRRRRRRR8k.
+.kRRRRRRRRRRR8k.
+.kRRRR8RRRRR88k.
+.k8RR8kk8RR888k.
+..kkkk..kkkkkk..

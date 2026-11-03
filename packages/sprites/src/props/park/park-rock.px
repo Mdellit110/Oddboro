@@ -1,0 +1,25 @@
+# A mossy boulder, one tile. Grey stone lit from the upper left, moss on the
+# shaded top left and a little at the foot where the grass meets it.
+sprite park-rock
+size 16 16
+layer object
+footprint 1 1
+tag rock stone park
+
+frame default
+................
+................
+................
+.....kkkkk......
+...kkVVmmmkk....
+..kVVVmmmmMMk...
+.kVVmmmmMMMMMk..
+.kVmmmMMMMMM5k..
+kVmmMMMMMMM55k..
+kmmMMMMMMM555k..
+kmMMMMMMM5555kk.
+kMMMMMMM555555k.
+.kMMMM!!5555!5k.
+.kk!!5555555!kk.
+..kkkkkkkkkkkk..
+................

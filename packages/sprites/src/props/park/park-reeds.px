@@ -1,0 +1,45 @@
+# Cattails on the riverbank, one tile, placed on the grass cell beside the
+# water. Walnut heads on dark stems with a few blades. Two frames at 1 fps so
+# the heads lean in a slow sway. Stems are one pixel, so they carry no outline.
+sprite park-reeds
+size 16 16
+layer object
+footprint 1 1
+fps 1
+tag reeds plant park water
+
+frame sway-0
+....k...........
+...k3k......k...
+...k3k.....k3k..
+...k3k.....k3k..
+...kWk..k..kWk..
+....!..k3k..!...
+.V..!..k3k..!.V.
+.V..!..kWk..!V..
+.!V.!...!.V.!V..
+..!V!...!V..!...
+..!V!..V!...!.V.
+...!!..V!...!V..
+...!!..!!..V!...
+...!!.V!!..V!...
+...!!!V!!..!!...
+..}}}}}}}}}}}}..
+
+frame sway-1
+.....k..........
+....k3k......k..
+....k3k.....k3k.
+....k3k.....k3k.
+....kWk..k..kWk.
+....!...k3k.!...
+.V..!...k3k.!.V.
+.V..!...kWk.!V..
+.!V.!...!.V.!V..
+..!V!...!V..!...
+..!V!..V!...!.V.
+...!!..V!...!V..
+...!!..!!..V!...
+...!!.V!!..V!...
+...!!!V!!..!!...
+..}}}}}}}}}}}}..

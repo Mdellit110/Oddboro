@@ -1,0 +1,32 @@
+# A motivational poster: a teal mountain under an amber sun, a line of
+# type beneath it. Hangs on a back wall face cell.
+sprite gym-poster
+size 16 22
+layer wall
+footprint 1 1
+origin 0 14
+tag wall decor poster gym
+
+frame default
+kkkkkkkkkkkkkkkk
+k==============k
+k==========yy==k
+k=========yYYy=k
+k=======k=yYYy=k
+k======kTk=yy==k
+k=====kTTTk====k
+k====kTTT6Tk===k
+k===kTTT66TTk==k
+k==kTT6666TTTk=k
+k=kTT66666TTTTkk
+kkkkkkkkkkkkkkkk
+k==============k
+k==KKKKK=KKK===k
+k==============k
+k==KKK=KKKK=KK=k
+k==============k
+k==============k
+kkkkkkkkkkkkkkkk
+................
+................
+................

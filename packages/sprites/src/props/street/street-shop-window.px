@@ -1,0 +1,45 @@
+# A shop window on the street face: a walnut frame under a short teal and
+# cream awning, a window box of flowers under the sill, and warm glass so the
+# rooms behind it read as lit at night. Two cells wide. Everything outside the
+# frame is transparent so the brick face shows through.
+sprite street-shop-window
+size 32 32
+layer wall
+footprint 2 1
+origin 0 16
+tag wall window-front decor
+light 16 14 40 #ffd27a 0.6
+
+frame default
+................................
+................................
+.ttt===ttt===ttt===ttt===ttt===.
+.TTT===TTT===TTT===TTT===TTT===.
+.TTT===TTT===TTT===TTT===TTT===.
+.666qqq666qqq666qqq666qqq666qqq.
+.66.66.66.66.66.66.66.66.66.66..
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+.kwwwwwwwwwwwwwwwwwwwwwwwwwwwwk.
+.kw(()))))))))w3(()))))))))))3k.
+.kw(()))))))))w3)))))))))))))3k.
+.kw))))))6))))w3)))))))))))))3k.
+.kw))))))6))))w3)))))))))))))3k.
+.kw)))))TTT)))w3)))))))))))))3k.
+.kw))))TTTTT))w3)))))))))))))3k.
+.kw))))66666))w3)))))))))))))3k.
+.kw)))))))))))w3))))))))VV)))3k.
+.kw)))))))))))w3)))))))VV!V))3k.
+.kw)))))))))))w3))))))))!!)))3k.
+.kw)))))))))))w3))))))))WW)))3k.
+.kwwwwwwwwwwwwwwwwwwwwwwwwwwwwk.
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+....kvVk......kVvk.....kvVVk....
+...kVrVVk....kVVyVk...kVrVVVk...
+..kVrVVVyVVVrVVVVyVVVrVVVVyVVVk.
+..kwwwwwwwwwwwwwwwwwwwwwwwwwwwk.
+..kWWWWWWWWWWWWWWWWWWWWWWWWWW3k.
+..kkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+................................
+................................
+................................
+................................

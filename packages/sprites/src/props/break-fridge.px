@@ -1,0 +1,37 @@
+# A teal mini fridge with a chrome handle, a note and a magnet on the door.
+sprite break-fridge
+size 16 26
+layer object
+footprint 1 1
+origin 0 10
+tag fridge clear-1
+variant rust t=r T=R 6=8
+variant cream t=P T=p 6=q
+
+frame default
+.kkkkkkkkkkkkkk.
+kttttttttttttTk.
+kttttttttttttTk.
+kkkkkkkkkkkkkkk.
+kTTTTTTTTTTTT6k.
+kTTTTTTTTTTTT6k.
+kTTTTTTTTTTmk6k.
+kTTT===TTTTmk6k.
+kTTT=k=TTTTmk6k.
+kTTT===TTTTmk6k.
+kTTTTTTTTTTmk6k.
+kTTTTTTTTTTmk6k.
+kTTTTTTTTTTmk6k.
+kTTTTTTTTTTmk6k.
+kTTTTTTTTTT666k.
+kTTTTTTTTTTTT6k.
+kTTyyTTTTTTTT6k.
+kTTyyTTTTTTTT6k.
+kTTTTTTTTTTTT6k.
+kTTTTTTTTTTTT6k.
+kTTTTTTTTTTTT6k.
+kTTTTTTTTTTTT6k.
+kTTTTTTTTTTTT6k.
+k6666666666666k.
+k5555555555555k.
+.kkkkkkkkkkkkk..

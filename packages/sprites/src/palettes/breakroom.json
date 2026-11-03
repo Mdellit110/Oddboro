@@ -1,0 +1,6 @@
+{
+  "name": "breakroom",
+  "colors": {
+    "$": { "hex": "#ff8a6a", "name": "glow coral", "emissive": true, "off": "K" }
+  }
+}

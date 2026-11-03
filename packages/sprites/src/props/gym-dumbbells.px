@@ -1,0 +1,39 @@
+# A two-tier dumbbell rack, two tiles wide, with three pairs climbing in
+# size. Whoever lifts here stands in front of it facing up.
+sprite gym-dumbbells
+size 32 28
+layer object
+footprint 2 1
+origin 0 12
+tag dumbbells weights exercise gym
+spot lift 1 1 up exercise stand
+
+frame default
+.kkk.......kkk.......kkk........
+.kM5k..kkk.kM5k.kkk..kM5k..kkk..
+.kM5kkkk5kkkM5kkk5kkkkM5kkkk5kk.
+.kM5kMMM5MMkM5kM5MMkMkM5kMM5MMk.
+.kM5kkkk5kkkM5kkk5kkkkM5kkkk5kk.
+.kM5k..kkk.kM5k.kkk..kM5k..kkk..
+.kkk.......kkk.......kkk........
+kmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMk
+k555555555555555555555555555555k
+.kkk.......kkk.......kkk...kkk..
+.kM5k......kM5k......kM5k..kM5k.
+.kM5kkkkkkkkM5kkkkkkkkM5kkkkM5k.
+.kM5kMMMMMMkM5kMMMMMMkM5kMMkM5k.
+.kM5kkkkkkkkM5kkkkkkkkM5kkkkM5k.
+.kM5k......kM5k......kM5k..kM5k.
+.kkk.......kkk.......kkk...kkk..
+kmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMk
+k555555555555555555555555555555k
+.kM5k........................k5k
+.kM5k........................k5k
+.kM5k........................k5k
+.kM5k........................k5k
+.kM5k........................k5k
+.kM5k........................k5k
+.kM5k........................k5k
+kkkkkk......................kkkk
+k55555k.....................k55k
+kkkkkkk.....................kkkk

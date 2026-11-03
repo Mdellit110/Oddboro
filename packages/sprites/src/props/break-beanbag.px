@@ -1,0 +1,33 @@
+# A beanbag on the floor, facing the TV. Staff sit on it with their back to
+# the room, so it paints under them (zbias -1).
+sprite break-beanbag
+size 16 18
+layer object
+footprint 1 1
+origin 0 2
+zbias -1
+tag beanbag seat play
+spot seat 0 0 up play sit
+variant teal y=t Y=T 9=6
+variant rust y=r Y=R 9=8
+variant sage y=s Y=S 9=0
+
+frame default
+....kkkkkkk.....
+..kkyyyyyyYkk...
+.kyyyyYYYYYYYk..
+.kyyY999999YYYk.
+kyyY9YYYYYY9YY9k
+kyYY9YYYYYY9YY9k
+kyYYY999999YYY9k
+kyYYYYyyyyYYYY9k
+kyYYYYYYYYYYYY9k
+kyYYYYYYYYYYY99k
+kyY9YYYYYYY9Y99k
+kYYYYYYYYYYY999k
+kYYYYYYYYYYY999k
+.kYYYYYYYYY999k.
+.kY9YYYYYY9999k.
+..k99999999999k.
+...kk9999999kk..
+.....kkkkkkk....

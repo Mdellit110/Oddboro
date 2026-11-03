@@ -1,0 +1,43 @@
+# The bench outside the owner's door. Walnut slats, a sage cushion, two wait spots
+# facing the room. zbias -1 so whoever waits draws over it.
+sprite owner-bench
+size 32 28
+layer object
+footprint 2 1
+origin 0 12
+zbias -1
+tag bench seat wait
+spot left 0 0 down wait sit
+spot right 1 0 down wait sit
+variant teal S=T s=t 0=6
+variant rust S=R s=r 0=8
+
+frame default
+.kkk........................kkk.
+.kwkkkkkkkkkkkkkkkkkkkkkkkkkkwk.
+.kWkwwwwwwwwwwwwwwwwwwwwwwwwkWk.
+.kWkWWWWWWWWWWWWWWWWWWWWWWWWkWk.
+.kWk333333333333333333333333kWk.
+.kWkkkkkkkkkkkkkkkkkkkkkkkkkkWk.
+.kWkwwwwwwwwwwwwwwwwwwwwwwwwkWk.
+.kWkWWWWWWWWWWWWWWWWWWWWWWWWkWk.
+.kWk333333333333333333333333kWk.
+.kWkkkkkkkkkkkkkkkkkkkkkkkkkkWk.
+.kWkwwwwwwwwwwwwwwwwwwwwwwwwkWk.
+.kWkWWWWWWWWWWWWWWWWWWWWWWWWkWk.
+.kWk333333333333333333333333kW..
+.kWkkkkkkkkkkkkkkkkkkkkkkkkkkW..
+.kWssssssssssssssssssssssssssW..
+.kWsSSSSSSSSSSSSSSSSSSSSSSSS0W..
+.kWsSSSSSSSSSSS00SSSSSSSSSSS0W..
+.kWsSSSSSSSSSSSSSSSSSSSSSSSS0W..
+.kWsSSSSSSSSSSSSSSSSSSSSSSSS0W..
+.kWsSSSSSSSSSSS00SSSSSSSSSSS0W..
+.kWsSSSSSSSSSSSSSSSSSSSSSSSS0W..
+.kWs0000000000000000000000000W..
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+k333333333333333333333333333333k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+.k33k......................k33k.
+.kkkk......................kkkk.

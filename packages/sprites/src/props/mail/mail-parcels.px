@@ -1,0 +1,29 @@
+# Two kraft parcels stacked, taped and labelled. One tile.
+sprite mail-parcels
+size 16 20
+layer object
+footprint 1 1
+origin 0 4
+tag parcel mail
+
+frame default
+....kkkkkkk.....
+...kUUUUUUUk....
+..kUUUyyUUUUk...
+.kUUUUyyUUUUuk..
+.kkkkkkyykkkkk..
+.kUUUUUyyUUUUk..
+.kUUUUUyyUUUUk..
+.kuuuuuyyuuuuk..
+.kkkkkkkkkkkkk..
+kkkkkkkkkkkkkkk.
+kUUUUUUUUUUUUUUk
+kUUUyUUUUUUUUUuk
+kkkkykkkkkkkkkkk
+kUUUyUUUUU=UUUuk
+kUUUyUUUU===UUuk
+kUUUyUUUUU=UUUuk
+kUUUyUUUUUUUUUuk
+kUUUyUUUUUUUUUuk
+kuuuyuuuuuuuuuuk
+kkkkkkkkkkkkkkkk

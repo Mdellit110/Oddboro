@@ -1,0 +1,34 @@
+# A low walnut coffee table, two tiles wide, with a mug and a magazine.
+sprite break-coffee-table
+size 32 24
+layer object
+footprint 2 1
+origin 0 8
+tag table low
+variant oak w=o W=O 3=1
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kWWWWkkkkWWWWWWkkkkkkkkkkkWWWWWk
+kWWWk3333kkWWWWkttttttttTkWWWWWk
+kWWWk====MkWWWWkt=tTTt=ttkWWWWWk
+kWWWk====MkWWWWkttttttttTkWWWWWk
+kWWWWkkkkWWWWWWkt=tt=ttttkWWWWWk
+kWWWWWWWWWWWWWWkTTTTTTTTTkWWWWWk
+kWWWWWWWWWWWWWWkkkkkkkkkkkWWWWWk
+kWWWWWWWWWWW333WWWWWWWWWWWWWWWWk
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+k333333333333333333333333333333k
+k333333333333333333333333333333k
+.kWk........................kWk.
+.kWk........................kWk.
+.kWkkkkkkkkkkkkkkkkkkkkkkkkkkWk.
+.kWkWWWWWWWWWWWWWWWWWWWWWWWWkWk.
+.kWkkkkkkkkkkkkkkkkkkkkkkkkkkWk.
+.kWk........................kWk.
+.k3k........................k3k.
+.k3k........................k3k.
+.kkk........................kkk.
+................................

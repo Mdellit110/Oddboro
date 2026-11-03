@@ -1,0 +1,23 @@
+# A steel microwave with its clock lit. Sits on a counter.
+sprite kitchen-microwave
+size 16 12
+layer object
+footprint 1 1
+origin 0 14
+walkable
+zbias 1
+tag kitchen microwave appliance
+
+frame default
+kkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmMk
+kMkkkkkkkkMMMM5k
+kMkKKKKKKkMGGM5k
+kMkKKKKKKkMMMM5k
+kMkKKKKKKkMkkM5k
+kMkKKKKKKkMMMM5k
+kMkKKKKKKkMkkM5k
+kMkkkkkkkkM$MM5k
+kMMMMMMMMMMMMM5k
+k55555555555555k
+kkkkkkkkkkkkkkkk

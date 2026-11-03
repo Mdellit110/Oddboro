@@ -1,0 +1,66 @@
+# The bus shelter: a teal roof on iron posts, a glass back with a poster, a
+# slatted bench inside. Three tiles wide, open to the street. The poster is a
+# placeholder, a glowing O roundel over two lines of teal type: the name is
+# too wide to read on it, and Oddboro has no mark yet. The home spot is the
+# middle tile under the roof, which is where staff arrive in the morning and
+# where they wait for the bus home. zbias -1 so whoever stands there paints
+# over the shelter.
+sprite street-bus-shelter
+size 48 48
+layer object
+footprint 3 1
+origin 0 32
+zbias -1
+tag shelter street stop
+spot stop 1 0 up home stand
+light 24 8 36 #ffd27a 0.5
+
+frame default
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+kttttttttttttttttttttttttttttttttttttttttttttttk
+kTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTk
+kTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTk
+kTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTk
+k6666666666666666666666666666666666666666666666k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+k5kllllllllllllllllllllllllllllllllllllllllllk5k
+k5kk5555555555555555555555555555555555555555kk5k
+k5k5////////////////////////////5k6666666666k5k5
+k5k5/((/////////////////////////5k6666666666k5k5
+k5k5/(//////////////////////////5k666GGGG666k5k5
+k5k5////////////////////////////5k66GG66GG66k5k5
+k5k5////////////////////////////5k66G6666G66k5k5
+k5k5////////////////////////////5k66G6666G66k5k5
+k5k5////////////////////////////5k66G6666G66k5k5
+k5k5////////////////////////////5k66GG66GG66k5k5
+k5k5////////////////////////////5k666GGGG666k5k5
+k5k5////////////////////////////5k6666666666k5k5
+k5k5////////////////////////////5k6666666666k5k5
+k5k5////////////////////////////5k66tttttt66k5k5
+k5k5////////////////////////////5k6666666666k5k5
+k5k5////////////////////////////5k66tttt6666k5k5
+k5k5////////////////////////////5k6666666666k5k5
+k5k5////////////////////////////5k6666666666k5k5
+k5k5////////////////////////////5k6666666666k5k5
+k5k5///kkkkkkkkkkkkkkkkkkkkkk///5k6666666666k5k5
+k5k5///kwwwwwwwwwwwwwwwwwwww3k//5k6666666666k5k5
+k5k5///kWWWWWWWWWWWWWWWWWWWW3k//5k6666666666k5k5
+k5k5///kkkkkkkkkkkkkkkkkkkkkkk//5kkkkkkkkkkkk5k5
+k5k5///kwwwwwwwwwwwwwwwwwwww3k//5555555555555k5k
+k5kk55k5kkkkkkkkkkkkkkkkkkkkk5k5555555555555kk5k
+k5kkkkk5k..................k5kkkkkkkkkkkkkkkkk5k
+k5k....k5k..................k5k..............k5k
+k5k....kkk..................kkk..............k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+k5k..........................................k5k
+kKk..........................................kKk
+kkk..........................................kkk

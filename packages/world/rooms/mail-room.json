@@ -1,0 +1,68 @@
+{
+  "id": "mail-room",
+  "name": "Mail Room",
+  "wall": "wall-plaster",
+  "floor": "tile",
+  "map": [
+    "WWWWWWWWWWWW",
+    "WWWWWNNWWWWW",
+    "WWWWWNNWWWWW",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "W..........W",
+    "WWWWW..WWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "mail-corkboard",
+      "at": [8, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [2, 2]
+    },
+    {
+      "sprite": "mail-pigeonholes",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "mail-printer",
+      "at": [9, 3]
+    },
+    {
+      "sprite": "mail-parcels",
+      "at": [4, 3]
+    },
+    {
+      "sprite": "mail-sort-table",
+      "at": [4, 5]
+    },
+    {
+      "sprite": "mail-cart",
+      "at": [8, 6]
+    },
+    {
+      "sprite": "mail-box-stack",
+      "at": [1, 7]
+    },
+    {
+      "sprite": "bin",
+      "at": [3, 6]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [10, 7]
+    },
+    {
+      "sprite": "mail-parcels",
+      "at": [7, 7]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [1, 5]
+    }
+  ]
+}

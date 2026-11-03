@@ -1,0 +1,9 @@
+{
+  "id": "front-door",
+  "name": "Front door",
+  "sign": false,
+  "wall": "wall-brick",
+  "floor": "oak",
+  "map": ["DD"],
+  "props": [{ "sprite": "street-front-door", "at": [0, 0] }]
+}

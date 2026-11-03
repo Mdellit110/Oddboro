@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0d17" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+    <script>
+      // The theme before first paint: the pick this browser stored, else the
+      // system setting. Same key as src/lib/theme.svelte.ts, which takes over
+      // once the page is up.
+      (function () {
+        var pick = 'auto';
+        try {
+          pick = localStorage.getItem('oddboro.theme') || 'auto';
+        } catch (e) {}
+        var dark =
+          pick === 'night' ||
+          (pick !== 'day' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'night' : 'day';
+        if (!dark) document.querySelector('meta[name="theme-color"]').content = '#f7f3ea';
+      })();
+    </script>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

@@ -1,0 +1,51 @@
+# A tall cream fridge with chrome handles and a note held on by a magnet.
+sprite kitchen-fridge
+size 16 40
+layer object
+footprint 1 1
+origin 0 24
+tag kitchen fridge clear-1
+variant teal p=T P=t q=6
+variant rust p=R P=r q=8
+
+frame default
+kkkkkkkkkkkkkkkk
+kPPPPPPPPPPPPPPk
+kPPPPPPPPPPPPPPk
+kqqqqqqqqqqqqqqk
+kpppppppppppppqk
+kppppppppppkkpqk
+kppppppppppm5pqk
+kppppppppppm5pqk
+kppppppppppm5pqk
+kppppppppppm5pqk
+kppppppppppm5pqk
+kppppppppppkkpqk
+kpppppppppppppqk
+kqqqqqqqqqqqqqqk
+kPPPPPPPPPPPPPPk
+kpppppppppppppqk
+kppppppppppkkpqk
+kppppppppppm5pqk
+kppppppppppm5pqk
+kppyypptpppm5pqk
+kppyYppppppm5pqk
+kppppppppppm5pqk
+kppppppppppm5pqk
+kppkkkkkpppm5pqk
+kppk===kpppm5pqk
+kppk=K=kpppm5pqk
+kppk===kpppkkpqk
+kppkkkkkppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+kpppppppppppppqk
+k55555555555555k
+k55555555555555k
+kkkkkkkkkkkkkkkk

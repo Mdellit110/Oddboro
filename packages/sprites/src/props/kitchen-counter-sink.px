@@ -1,0 +1,43 @@
+# A two tile counter piece with a sunk basin and a gooseneck tap. Goes in the
+# middle of a run.
+sprite kitchen-counter-sink
+size 32 32
+layer object
+footprint 2 1
+origin 0 16
+tag counter kitchen sink
+variant teal A=T a=t 4=6
+
+frame default
+..............kkkk..............
+.............kmmmmk.............
+.............kM.kMk.............
+.............kM.k5k.............
+.............kM..5k.............
+kkkkkkkkkkkkkkMkktkkkkkkkkkkkkkk
+mmmmmmmmmmmmmkMmmmmmmmmmmmmmmmmm
+mmmmmmmmmmmmmk5mmmmmmmmmmmmmmmmm
+mmMmmmMMMMMMMkMkMMMMMMMMMMmmmmmm
+mmmmmmMMMMMMMMMMMMMMMMMMMMmmmmmm
+mmmmmmMMMMMMMMMMMMMMMMMMMMmmmmmm
+mmmmmmMMM555555555555555MMmmmmmm
+mmmmmmMMM555555555555555MMmmmmmm
+mmmmmmMMM5555555k5555555MMmmmmmm
+mmmmmmMMMMMMMMMMMMMMMMMMMMmMmmmm
+mmmmmmMMMMMMMMMMMMMMMMMMMMmmmmmm
+mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm
+MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
+55555555555555555555555555555555
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+AA4444444444444AA4444444444444AA
+AA4aaaaaaaaaaa4AA4aaaaaaaaaaa4AA
+AA4AAAAAAAAAAA4AA4AAAAAAAAAAA4AA
+AA4AAAAAAAAAmA4AA4AmAAAAAAAAA4AA
+AA4AAAAAAAAAmA4AA4AmAAAAAAAAA4AA
+AA4AAAAAAAAA5A4AA4A5AAAAAAAAA4AA
+AA4AAAAAAAAAAA4AA4AAAAAAAAAAA4AA
+AA4AAAAAAAAAAA4AA4AAAAAAAAAAA4AA
+AA4444444444444AA4444444444444AA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+55555555555555555555555555555555
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk

@@ -1,0 +1,383 @@
+// The office's own address: https://local.oddboro.com, so nobody has to
+// remember a port. That name reaches this Mac through a public DNS record
+// pointing it at 127.0.0.1; where a network's DNS drops such answers, the
+// office uses http://oddboro.localhost, which always reaches this Mac.
+//
+// Caddy answers on ports 80 and 443 and hands everything to the office on
+// 127.0.0.1:4500. Three cases, by what this Mac already has:
+//
+// - Nothing on port 80: the office runs its own Caddy as a login service
+//   (com.oddboro.caddy), downloading Caddy first if this Mac has none.
+// - A Caddy of the owner's on port 80: the office adds its site to it through
+//   Caddy's admin API on this Mac, and touches none of the owner's files. That
+//   Caddy forgets the site when it reloads its own config, so the office adds
+//   it again when it starts and when a page loads.
+// - Something else on port 80, or a Caddy with its admin API off: the office
+//   stays at oddboro.localhost:4500, which needs nothing.
+//
+// HTTPS: a browser lets only a secure page show notifications, so the office
+// serves local.oddboro.com over HTTPS with a certificate from Caddy's own
+// authority. No public authority can vouch for a name that points at
+// 127.0.0.1. This Mac trusts that authority once, with the owner's password in
+// the macOS dialog. Until then the plain http:// address works.
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { request } from 'node:https';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { IN_APP, OFFICE_PORT, home } from '@oddboro/ledger';
+import { writeEnv } from '@oddboro/ledger/env';
+
+/** The names Caddy answers to, best first. The first one is served over HTTPS too. */
+export const HOSTS = ['local.oddboro.com', 'oddboro.localhost'];
+const SECURE = HOSTS[0];
+const UPSTREAM = `127.0.0.1:${OFFICE_PORT}`;
+// Caddy's admin API listens on 127.0.0.1 by default; Node would try IPv6's ::1 first for localhost.
+const ADMIN = 'http://127.0.0.1:2019';
+const HTTP_ROUTE = 'oddboro';
+const HTTPS_ROUTE = 'oddboro-https';
+const TLS_POLICY = 'oddboro-tls';
+const LABEL = 'com.oddboro.caddy';
+const HOME = home();
+const OWN_CADDY = join(HOME, 'bin', 'caddy');
+const CADDYFILE = join(HOME, 'caddy', 'Caddyfile');
+const PLIST = join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
+/** Where a Caddy run by this user keeps its own authority's root certificate. */
+const ROOT = join(
+  homedir(),
+  'Library',
+  'Application Support',
+  'Caddy',
+  'pki',
+  'authorities',
+  'local',
+  'root.crt'
+);
+
+/** How the address stands, with the name it uses. */
+export type Address = { host: string } & (
+  | {
+      state: 'ready';
+      url: string;
+      /** Served over HTTPS with a certificate this Mac trusts. */
+      secure: boolean;
+      /** Served over HTTPS, waiting only for this Mac to trust Caddy's authority. */
+      canSecure: boolean;
+    }
+  | { state: 'own'; installed: boolean }
+  | { state: 'shared' }
+  | { state: 'blocked'; holder: string }
+);
+
+const run = (cmd: string, args: string[]) =>
+  new Promise<{ ok: boolean; out: string }>((done) =>
+    execFile(cmd, args, { timeout: 120_000 }, (e, out) => done({ ok: !e, out: String(out ?? '') }))
+  );
+
+const get = (url: string, init?: RequestInit) =>
+  fetch(url, { ...init, signal: AbortSignal.timeout(3000) }).catch(() => undefined);
+
+/**
+ * A request to Caddy's admin API. Caddy refuses one that carries a browser's
+ * fetch headers and no origin, as Node's `fetch` does, so it names its own.
+ */
+const admin = (path: string, init: RequestInit = {}) =>
+  get(`${ADMIN}${path}`, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...(init.headers as Record<string, string>),
+      origin: ADMIN
+    }
+  });
+const put = (path: string, body: unknown) =>
+  admin(path, { method: 'PUT', body: JSON.stringify(body) });
+
+/** The best name that reaches this Mac from here. */
+async function host(): Promise<string> {
+  const r = await lookup(SECURE).catch(() => undefined);
+  return r?.address === '127.0.0.1' ? SECURE : HOSTS[1];
+}
+
+/** Whether the address answers, and with this office rather than something else. */
+async function answers(url: string): Promise<boolean> {
+  const r = await get(`${url}/api/setup/address?probe=1`);
+  if (!r?.ok) return false;
+  return ((await r.json().catch(() => ({}))) as { office?: boolean }).office === true;
+}
+
+/**
+ * Whether the office answers over HTTPS. Node keeps its own list of trusted
+ * authorities, not the Mac's, so this checks who answers, not the certificate;
+ * `trusted` checks that.
+ */
+function answersSecurely(name: string): Promise<boolean> {
+  return new Promise((done) => {
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port: 443,
+        servername: name,
+        path: '/api/setup/address?probe=1',
+        headers: { host: name },
+        rejectUnauthorized: false,
+        timeout: 3000
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (c) => (body += c));
+        res.on('end', () => {
+          try {
+            done(res.statusCode === 200 && JSON.parse(body).office === true);
+          } catch {
+            done(false);
+          }
+        });
+      }
+    );
+    req.on('error', () => done(false));
+    req.on('timeout', () => req.destroy());
+    req.end();
+  });
+}
+
+/** Whether this Mac trusts Caddy's authority, so browsers accept its certificates. */
+async function trusted(): Promise<boolean> {
+  return existsSync(ROOT) && (await run('security', ['verify-cert', '-c', ROOT])).ok;
+}
+
+/** What holds port 80, by program name, if anything. */
+async function port80(): Promise<string | undefined> {
+  const r = await run('lsof', ['-nP', '-iTCP:80', '-sTCP:LISTEN', '-Fc']);
+  return r.out
+    .split('\n')
+    .find((l) => l.startsWith('c'))
+    ?.slice(1);
+}
+
+/** A Caddy already on this Mac: Homebrew's or anyone's on the PATH, else the office's own. */
+async function caddyBinary(): Promise<string | undefined> {
+  const found = (await run('which', ['caddy'])).out.trim();
+  if (found) return found;
+  return existsSync(OWN_CADDY) ? OWN_CADDY : undefined;
+}
+
+export async function address(): Promise<Address> {
+  const name = await host();
+  if (await answers(`http://${name}`)) {
+    const https = name === SECURE && (await answersSecurely(name));
+    const secure = https && (await trusted());
+    return {
+      host: name,
+      state: 'ready',
+      url: `${secure ? 'https' : 'http'}://${name}`,
+      secure,
+      canSecure: https && !secure && existsSync(ROOT)
+    };
+  }
+  const holder = await port80();
+  if (!holder) return { host: name, state: 'own', installed: !!(await caddyBinary()) };
+  if (holder === 'caddy' && (await admin('/config/'))?.ok) return { host: name, state: 'shared' };
+  return { host: name, state: 'blocked', holder };
+}
+
+/** Download the official Caddy for this Mac's chip, checked against its published checksum. */
+async function download(): Promise<string> {
+  const release = (await (
+    await fetch('https://api.github.com/repos/caddyserver/caddy/releases/latest')
+  ).json()) as { tag_name: string; assets: { name: string; browser_download_url: string }[] };
+  const version = release.tag_name.replace(/^v/, '');
+  const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
+  const archive = `caddy_${version}_mac_${arch}.tar.gz`;
+  const url = (name: string) => release.assets.find((a) => a.name === name)?.browser_download_url;
+  const tarUrl = url(archive);
+  const sumsUrl = url(`caddy_${version}_checksums.txt`);
+  if (!tarUrl || !sumsUrl) throw new Error(`Caddy ${version} has no download for this Mac.`);
+  const tar = Buffer.from(await (await fetch(tarUrl)).arrayBuffer());
+  const sums = await (await fetch(sumsUrl)).text();
+  const want = sums
+    .split('\n')
+    .find((l) => l.trim().endsWith(archive))
+    ?.split(/\s+/)[0];
+  const got = createHash('sha512').update(tar).digest('hex');
+  if (!want || want !== got) throw new Error('The Caddy download did not match its checksum.');
+  mkdirSync(join(HOME, 'bin'), { recursive: true });
+  const file = join(HOME, 'bin', archive);
+  writeFileSync(file, tar);
+  if (!(await run('tar', ['-xzf', file, '-C', join(HOME, 'bin'), 'caddy'])).ok)
+    throw new Error('The Caddy download would not unpack.');
+  chmodSync(OWN_CADDY, 0o755);
+  return OWN_CADDY;
+}
+
+/** The office's own Caddy, started now and at every login. */
+async function startOwn(): Promise<void> {
+  const caddy = (await caddyBinary()) ?? (await download());
+  mkdirSync(join(HOME, 'caddy'), { recursive: true });
+  // HTTPS from Caddy's own authority for the real name, plain HTTP for both
+  // names so the address works before this Mac trusts that authority. The
+  // owner trusts it from the card, so Caddy does not ask on its own.
+  writeFileSync(
+    CADDYFILE,
+    [
+      '# Written by the office: its address on this Mac.',
+      '{',
+      '\tadmin off',
+      '\tpersist_config off',
+      '\tskip_install_trust',
+      '}',
+      '',
+      `${SECURE} {`,
+      '\ttls internal',
+      `\treverse_proxy ${UPSTREAM}`,
+      '}',
+      '',
+      `${HOSTS.map((h) => `http://${h}`).join(', ')} {`,
+      `\treverse_proxy ${UPSTREAM}`,
+      '}',
+      ''
+    ].join('\n')
+  );
+  const log = join(homedir(), 'Library', 'Logs', 'oddboro-caddy.log');
+  writeFileSync(
+    PLIST,
+    `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${caddy}</string><string>run</string>
+    <string>--config</string><string>${CADDYFILE}</string>
+    <string>--adapter</string><string>caddyfile</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>${log}</string>
+  <key>StandardErrorPath</key><string>${log}</string>
+</dict>
+</plist>
+`
+  );
+  const uid = process.getuid?.();
+  await run('launchctl', ['bootout', `gui/${uid}/${LABEL}`]);
+  if (!(await run('launchctl', ['bootstrap', `gui/${uid}`, PLIST])).ok)
+    throw new Error('Caddy would not start as a login service.');
+}
+
+type Servers = Record<string, { listen?: string[] }>;
+const proxy = [{ handler: 'reverse_proxy', upstreams: [{ dial: UPSTREAM }] }];
+
+/** The server in the owner's Caddy listening on a port, by name. */
+const onPort = (servers: Servers, port: number) =>
+  Object.entries(servers).find(([, s]) =>
+    (s.listen ?? []).some((l) => new RegExp(`:${port}$`).test(l))
+  )?.[0];
+
+/** Put a route first on the owner's server for a port, or on a server of the office's own. */
+async function addRoute(servers: Servers, port: number, route: object, own: object) {
+  const name = onPort(servers, port);
+  const r = name
+    ? await put(`/config/apps/http/servers/${name}/routes/0`, route)
+    : await put(`/config/apps/http/servers/${port === 80 ? HTTP_ROUTE : HTTPS_ROUTE}`, own);
+  if (!r?.ok) throw new Error(`Your Caddy did not take the office's site: ${await r?.text()}`);
+}
+
+/** A certificate for the real name from Caddy's own authority, first among the owner's policies. */
+async function addPolicy(): Promise<void> {
+  const policy = { '@id': TLS_POLICY, subjects: [SECURE], issuers: [{ module: 'internal' }] };
+  const tls = (await (await admin('/config/apps/tls'))?.json().catch(() => null)) as {
+    automation?: { policies?: unknown[] };
+  } | null;
+  const r = !tls
+    ? await put('/config/apps/tls', { automation: { policies: [policy] } })
+    : !tls.automation
+      ? await put('/config/apps/tls/automation', { policies: [policy] })
+      : !tls.automation.policies
+        ? await put('/config/apps/tls/automation/policies', [policy])
+        : await put('/config/apps/tls/automation/policies/0', policy);
+  if (!r?.ok)
+    throw new Error(`Your Caddy did not take the office's certificate: ${await r?.text()}`);
+}
+
+/** The office's site, added to the owner's own Caddy through its admin API. */
+async function addShared(): Promise<void> {
+  const servers = ((await (
+    await admin('/config/apps/http/servers')
+  )
+    ?.json()
+    .catch(() => undefined)) ?? {}) as Servers;
+  if (!(await admin(`/id/${HTTP_ROUTE}`))?.ok)
+    await addRoute(
+      servers,
+      80,
+      { '@id': HTTP_ROUTE, match: [{ host: HOSTS }], handle: proxy, terminal: true },
+      {
+        listen: [':80'],
+        routes: [{ '@id': HTTP_ROUTE, match: [{ host: HOSTS }], handle: proxy, terminal: true }],
+        automatic_https: { disable: true }
+      }
+    );
+  if (!(await admin(`/id/${TLS_POLICY}`))?.ok) await addPolicy();
+  if (!(await admin(`/id/${HTTPS_ROUTE}`))?.ok) {
+    const route = {
+      '@id': HTTPS_ROUTE,
+      match: [{ host: [SECURE] }],
+      handle: proxy,
+      terminal: true
+    };
+    await addRoute(servers, 443, route, { listen: [':443'], routes: [route] });
+  }
+}
+
+/** Set the address up in whichever way this Mac allows, and check it answers. */
+export async function setUpAddress(): Promise<Address> {
+  const now = await address();
+  if (now.state === 'own') {
+    await startOwn();
+    writeEnv({ OFFICE_ADDRESS: 'own' });
+  } else if (now.state === 'shared') {
+    await addShared();
+    writeEnv({ OFFICE_ADDRESS: 'shared' });
+    process.env.OFFICE_ADDRESS = 'shared';
+  } else return now;
+  const url = `http://${await host()}`;
+  for (let i = 0; i < 20 && !(await answers(url)); i++)
+    await new Promise((r) => setTimeout(r, 500));
+  return address();
+}
+
+/**
+ * Trust Caddy's authority on this Mac, so browsers accept the office's
+ * certificate. macOS asks for the owner's password in its own dialog.
+ */
+export async function secureAddress(): Promise<Address> {
+  if (!existsSync(ROOT))
+    throw new Error('Caddy has not made its certificate yet. Try again in a moment.');
+  const command = `security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '${ROOT.replaceAll("'", "'\\''")}'`;
+  const r = await run('osascript', [
+    '-e',
+    'on run argv',
+    '-e',
+    'do shell script (item 1 of argv) with prompt "Oddboro wants to trust its own certificate, so your browser opens the office securely." with administrator privileges',
+    '-e',
+    'end run',
+    command
+  ]);
+  if (!r.ok)
+    throw new Error('The certificate was not trusted. Try again, and enter your password.');
+  return address();
+}
+
+/**
+ * The owner's Caddy forgets the office's site when it reloads its own config:
+ * put it back. Runs when the office starts and when a page loads, and costs
+ * a few requests to the admin API.
+ */
+export async function keepAddress(): Promise<void> {
+  if (IN_APP || process.env.OFFICE_ADDRESS !== 'shared') return;
+  await addShared().catch(() => {});
+}

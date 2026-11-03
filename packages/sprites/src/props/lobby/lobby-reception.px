@@ -1,0 +1,57 @@
+# The reception counter. Oak top in a U, teal panelled front, and a monitor
+# on the counter with its back to the room. The receptionist sits in the U on
+# a chair, facing the door with the monitor in front of them.
+sprite lobby-reception
+size 48 44
+layer object
+footprint 3 2
+origin 0 12
+tag desk reception work
+spot seat 1 0 down work sit
+light 31 12 20 #63dccf 0.35
+
+frame default
+................................................
+......?..y......................................
+.....???yyy.....................................
+......?Vky......................................
+.......V!.......................................
+......k!Vk......................................
+......ktTk......................................
+.....kttTTk.....................................
+kkkkkkttTTkkkkkk................kkkkkkkkkkkkkkkk
+kooooktTTTkooook................kooooooooooooook
+kooooktTT6kooook................kooooooooooooook
+koooookTT6kooook..........kkkkkkkkkkkkoooooooook
+koooookkkkkooook..........kGGGGGGGGGGkoooooooook
+koooOOOooooooook..........k5555555555koooOOOoook
+kooooooooooooook..........k5MMMMMMMM5koooooooook
+kooooooooooooook..........k5MmMMMMMM5koooooooook
+kooooooooooooook..........k5MMMMMMMM5koooooooook
+kooooooooooooook..........k5MMMMMMMM5koooooooook
+kooooooooOOOoook..........k5555555555koooooooook
+kooooooooooooook..........kkkkkkkkkkkkOOoooooooo
+kooooooooooooookkkkkkkkkkkkkkkk55koooooooooooook
+koooooooooooooooooooyooooooookk55kkooooooooooook
+kooooooooooooooooookYkoookkkkkkkoooooooooooooook
+koooooooooooooooookyYYkook=====koooooooooooooook
+koooooOOOoooooooookYYY9ook=KK=Kkoooooooooooooook
+koooooooooooooooookkkkkook=====kooooOOOooooooook
+kooooooooooooooooooooooookkkkkkkoooooooooooooook
+kooooooooooooooooooooooooooooooooooooooooooooook
+kOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOk
+k2222222222222222222222222222222222222222222222k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kWWTTTTTTTTTTTTWWTTTTTTTTTTTTTTWWTTTTTTTTTTTTW3k
+kWWT66666666667WWT6666666666667WWT66666666667W3k
+kWWT66666666667WWT6666666666667WWT66666666667W3k
+kWWT66666666667WWT6666666666667WWT66666666667W3k
+kWWT66666666667WWT6666666666667WWT66666666667W3k
+kWWT66666666667WWT6666666666667WWT66666666667W3k
+kWWT66666666667WWT6666666666667WWT66666666667W3k
+kWWT77777777777WWT7777777777777WWT77777777777W3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+k3333333333333333333333333333333333333333333333k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk

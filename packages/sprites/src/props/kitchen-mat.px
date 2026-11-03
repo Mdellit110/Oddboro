@@ -1,0 +1,28 @@
+# A sage runner for the floor in front of the sink. Two tiles wide, walkable.
+sprite kitchen-mat
+size 32 16
+layer floor
+footprint 2 1
+origin 0 0
+walkable
+tag rug soft kitchen
+variant rust s=r S=R 0=8
+variant teal s=t S=T 0=6
+
+frame default
+................................
+................................
+................................
+................................
+.000000000000000000000000000000.
+.0SSSSSSSSSSSSSSSSSSSSSSSSSSSS0.
+.0ssssssssSssssssssssSssssssss0.
+.0ssssssssSssssssssssSssssssss0.
+.0ssssssssSssssssssssSssssssss0.
+.0ssssssssSssssssssssSssssssss0.
+.0ssssssssSssssssssssSssssssss0.
+.0SSSSSSSSSSSSSSSSSSSSSSSSSSSS0.
+.000000000000000000000000000000.
+................................
+................................
+................................

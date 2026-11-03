@@ -1,0 +1,85 @@
+{
+  "name": "oddboro",
+  "colors": {
+    "k": { "hex": "#1c1727", "name": "ink" },
+    "K": { "hex": "#3d3248", "name": "ink soft" },
+    "=": { "hex": "#fbf6ea", "name": "paper white" },
+
+    "P": { "hex": "#f4ead8", "name": "plaster light" },
+    "p": { "hex": "#e7d9bf", "name": "plaster" },
+    "q": { "hex": "#cdb99b", "name": "plaster shade" },
+    "Q": { "hex": "#a08b6d", "name": "plaster deep" },
+
+    "o": { "hex": "#deb078", "name": "oak light" },
+    "O": { "hex": "#c6955f", "name": "oak" },
+    "1": { "hex": "#a3774a", "name": "oak dark" },
+    "2": { "hex": "#7e5431", "name": "oak line" },
+
+    "w": { "hex": "#9e6c46", "name": "walnut light" },
+    "W": { "hex": "#7c5034", "name": "walnut" },
+    "3": { "hex": "#553321", "name": "walnut dark" },
+
+    "a": { "hex": "#ead6b2", "name": "ash light" },
+    "A": { "hex": "#cfb48c", "name": "ash" },
+    "4": { "hex": "#a68c64", "name": "ash dark" },
+
+    "m": { "hex": "#d0d3d9", "name": "metal light" },
+    "M": { "hex": "#8f95a3", "name": "metal" },
+    "5": { "hex": "#585d6d", "name": "metal dark" },
+
+    "t": { "hex": "#62c4ba", "name": "teal light" },
+    "T": { "hex": "#2e8c8c", "name": "teal" },
+    "6": { "hex": "#1b5c64", "name": "teal deep" },
+    "7": { "hex": "#112f3a", "name": "teal abyss" },
+    "g": { "hex": "#c0f7ee", "name": "glow aqua", "emissive": true, "off": "K" },
+    "G": { "hex": "#63dccf", "name": "screen aqua", "emissive": true, "off": "K" },
+
+    "r": { "hex": "#e48f5f", "name": "rust light" },
+    "R": { "hex": "#c2653c", "name": "rust" },
+    "8": { "hex": "#8d4027", "name": "rust dark" },
+
+    "y": { "hex": "#f4c455", "name": "amber light" },
+    "Y": { "hex": "#d8982f", "name": "amber" },
+    "9": { "hex": "#a76b1d", "name": "amber dark" },
+
+    "l": { "hex": "#fff0c2", "name": "lamp glow", "emissive": true, "off": "a" },
+    "L": { "hex": "#ffd27a", "name": "lamp warm", "emissive": true, "off": "A" },
+
+    "s": { "hex": "#adc89e", "name": "sage light" },
+    "S": { "hex": "#72976a", "name": "sage" },
+    "0": { "hex": "#476941", "name": "sage dark" },
+
+    "v": { "hex": "#a1d872", "name": "leaf light" },
+    "V": { "hex": "#619e49", "name": "leaf" },
+    "!": { "hex": "#36682f", "name": "leaf dark" },
+
+    "c": { "hex": "#a7bcb6", "name": "carpet light" },
+    "C": { "hex": "#8ea59f", "name": "carpet" },
+    "%": { "hex": "#728c86", "name": "carpet dark" },
+
+    "e": { "hex": "#dbe9df", "name": "tile mint" },
+    "E": { "hex": "#b6cfc1", "name": "tile mint shade" },
+
+    "f": { "hex": "#f5d4b4", "name": "skin fair" },
+    "F": { "hex": "#d9a484", "name": "skin fair shade" },
+    "d": { "hex": "#cf9263", "name": "skin tan" },
+    "D": { "hex": "#a56b43", "name": "skin tan shade" },
+    "b": { "hex": "#7e4b2d", "name": "skin deep" },
+    "B": { "hex": "#562f18", "name": "skin deep shade" },
+
+    "n": { "hex": "#6c4428", "name": "hair brown" },
+    "N": { "hex": "#916040", "name": "hair brown light" },
+    "i": { "hex": "#2c2636", "name": "hair black" },
+    "I": { "hex": "#4c4259", "name": "hair black light" },
+
+    "z": { "hex": "#5c90ba", "name": "shirt blue" },
+    "Z": { "hex": "#3c678a", "name": "shirt blue shade" },
+    "^": { "hex": "#3a4062", "name": "trouser navy" },
+    "&": { "hex": "#262b45", "name": "trouser navy shade" },
+
+    "-": { "hex": "#1c17274d", "name": "shadow" },
+    "_": { "hex": "#1c172726", "name": "shadow soft" },
+    "/": { "hex": "#d7ecf24d", "name": "glass" },
+    "(": { "hex": "#ffffff80", "name": "glass shine" }
+  }
+}

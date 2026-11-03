@@ -1,0 +1,26 @@
+# A stack of three books left on the floor, the top one open. One tile.
+sprite library-books
+size 16 16
+layer object
+footprint 1 1
+origin 0 0
+tag books library
+variant teal R=T 8=6 r=t
+
+frame default
+................
+................
+................
+................
+....kkkkkkkk....
+...k======k=k...
+...k=KK==k==k...
+..kk======k=kk..
+..kYYYYYYYYYYk..
+..k9kkkkkkkkkk..
+..kRRRRRRRRRRRk.
+..kRRRRRRRRRRRk.
+..k88kkkkkkkkkk.
+..kTTTTTTTTTTTk.
+..k66666666666k.
+..kkkkkkkkkkkkk.

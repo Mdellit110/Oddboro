@@ -1,0 +1,117 @@
+{
+  "id": "workspace",
+  "name": "Workspace",
+  "wall": "wall-plaster",
+  "floor": "oak",
+  "map": [
+    "WWWWWWWWWWWWWWWWWW",
+    "WDNNWWNNWWNNWWNNWW",
+    "WDNNWWNNWWNNWWNNWW",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "W................W",
+    "WWWWWWWW..WWWWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "art-frame",
+      "at": [4, 2]
+    },
+    {
+      "sprite": "whiteboard",
+      "at": [8, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [12, 2]
+    },
+    {
+      "sprite": "desk",
+      "at": [2, 4]
+    },
+    {
+      "sprite": "desk-lamp",
+      "at": [2, 4]
+    },
+    {
+      "sprite": "chair",
+      "at": [3, 5]
+    },
+    {
+      "sprite": "desk",
+      "at": [6, 4],
+      "variant": "walnut"
+    },
+    {
+      "sprite": "plant-small",
+      "at": [6, 4]
+    },
+    {
+      "sprite": "chair",
+      "at": [7, 5],
+      "variant": "rust"
+    },
+    {
+      "sprite": "desk",
+      "at": [10, 4]
+    },
+    {
+      "sprite": "desk-lamp",
+      "at": [10, 4],
+      "variant": "teal"
+    },
+    {
+      "sprite": "chair",
+      "at": [11, 5]
+    },
+    {
+      "sprite": "desk",
+      "at": [14, 4],
+      "variant": "ash"
+    },
+    {
+      "sprite": "plant-small",
+      "at": [14, 4],
+      "variant": "teal"
+    },
+    {
+      "sprite": "chair",
+      "at": [15, 5],
+      "variant": "sage"
+    },
+    {
+      "sprite": "bookshelf",
+      "at": [12, 3]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [16, 3]
+    },
+    {
+      "sprite": "bin",
+      "at": [4, 5]
+    },
+    {
+      "sprite": "rug",
+      "at": [7, 7]
+    },
+    {
+      "sprite": "filing-cabinet",
+      "at": [1, 8]
+    },
+    {
+      "sprite": "plant-fern",
+      "at": [1, 9],
+      "variant": "teal"
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [16, 9]
+    }
+  ]
+}

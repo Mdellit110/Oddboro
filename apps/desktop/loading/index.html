@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Oddboro</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0b0d17;
+        color: #f3efe6;
+        font:
+          15px/1.4 ui-sans-serif,
+          system-ui,
+          sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: default;
+      }
+      main {
+        height: 100%;
+        display: grid;
+        place-content: center;
+        text-align: center;
+        gap: 6px;
+      }
+      p {
+        margin: 0;
+      }
+      .muted {
+        color: #a8a3b8;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p id="title">Opening the office</p>
+      <p class="muted" id="detail">The first start can take a minute.</p>
+    </main>
+    <script src="loading.js"></script>
+  </body>
+</html>

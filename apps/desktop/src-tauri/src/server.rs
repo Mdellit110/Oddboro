@@ -1,0 +1,372 @@
+//! The office server: Node running the SvelteKit build. The shell starts it,
+//! waits for it to answer, restarts it when it dies, and stops it on quit.
+
+use std::collections::VecDeque;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::net::{SocketAddr, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering::SeqCst};
+use std::sync::{Condvar, Mutex};
+use std::thread::{self, sleep};
+use std::time::{Duration, Instant};
+
+/// The server's entry point, relative to the staged code.
+pub const ENTRY: &str = "apps/office/build/index.js";
+
+const READY_TIMEOUT: Duration = Duration::from_secs(90);
+const STOP_TIMEOUT: Duration = Duration::from_secs(10);
+/// Seconds to wait before the first, second, and every later restart.
+const BACKOFF: [u64; 3] = [1, 5, 30];
+const MAX_RESTARTS: usize = 5;
+const RESTART_WINDOW: Duration = Duration::from_secs(600);
+/// A line Node writes to ask for a notification: the prefix, then the title,
+/// a tab, and the text (`apps/office/src/lib/server/notify.ts`).
+const NOTIFY: &str = "oddboro:notify ";
+/// The log moves aside to `office.log.1` past this size, when Node starts.
+const LOG_LIMIT: u64 = 10 * 1024 * 1024;
+
+/// Node's pid while it runs, 0 otherwise.
+static NODE_PID: AtomicI32 = AtomicI32::new(0);
+static QUITTING: AtomicBool = AtomicBool::new(false);
+/// Held while Node starts or the shell begins to quit, so the two never race.
+/// The supervisor notifies it when Node is gone.
+static GONE: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
+/// The write end of the pipe a quit signal wakes. -1 until it exists.
+static SIGNAL_PIPE: AtomicI32 = AtomicI32::new(-1);
+
+pub struct Server {
+    pub node: PathBuf,
+    pub code: PathBuf,
+    pub port: u16,
+    pub path: String,
+    pub home: PathBuf,
+    pub log: PathBuf,
+    /// The app's version, passed as `ODDBORO_VERSION`.
+    pub version: String,
+    /// The secret the server checks on the shell's update requests. Empty
+    /// when this build does not update itself.
+    pub update_token: String,
+}
+
+enum Ready {
+    Answered,
+    Exited(ExitStatus),
+    TimedOut,
+}
+
+impl Server {
+    pub fn url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
+    /// Runs Node until the shell quits. Calls `on_ready` each time the server
+    /// answers, the first time and after every restart. Returns the message
+    /// to show the owner when it gives up.
+    pub fn supervise(&self, on_ready: impl Fn()) -> Result<(), String> {
+        let mut restarts: VecDeque<Instant> = VecDeque::new();
+        loop {
+            let mut child = {
+                let _guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
+                if QUITTING.load(SeqCst) {
+                    return Ok(());
+                }
+                self.spawn()
+                    .map_err(|e| format!("Oddboro could not start its server: {e}"))?
+            };
+            note(&self.log, &format!("started node, pid {}", child.id()));
+            // Hold Node's stdin here, open until this loop moves on:
+            // `Child::wait` closes a stdin it still holds, and the server
+            // quits when its stdin closes.
+            let _stdin = child.stdin.take();
+
+            let status = match wait_ready(&mut child, self.port) {
+                Ready::Answered => {
+                    on_ready();
+                    child.wait()
+                }
+                Ready::Exited(status) => Ok(status),
+                Ready::TimedOut => {
+                    terminate(&mut child);
+                    mark_gone();
+                    return Err(format!(
+                        "The office did not answer within 90 seconds.\n\n{}",
+                        self.log_tail()
+                    ));
+                }
+            };
+            mark_gone();
+            if QUITTING.load(SeqCst) {
+                return Ok(());
+            }
+            let status = status.map_or_else(|e| e.to_string(), |s| s.to_string());
+            note(&self.log, &format!("node stopped: {status}"));
+
+            restarts.retain(|t| t.elapsed() < RESTART_WINDOW);
+            if restarts.len() >= MAX_RESTARTS {
+                return Err(format!(
+                    "The office stopped {MAX_RESTARTS} times in 10 minutes, so Oddboro gave up.\n\n{}",
+                    self.log_tail()
+                ));
+            }
+            let delay = BACKOFF[restarts.len().min(BACKOFF.len() - 1)];
+            restarts.push_back(Instant::now());
+            note(&self.log, &format!("restarting node in {delay}s"));
+            sleep(Duration::from_secs(delay));
+        }
+    }
+
+    fn spawn(&self) -> io::Result<Child> {
+        let log = open_log(&self.log)?;
+        let port = self.port.to_string();
+        let mut child = Command::new(&self.node)
+            .arg(self.code.join(ENTRY))
+            .current_dir(self.code.join("apps/office"))
+            .env("PORT", &port)
+            .env("ODDBORO_PORT", &port)
+            .env("HOST", "127.0.0.1")
+            .env("ORIGIN", self.url())
+            .env("ODDBORO_HOME", &self.home)
+            .env("ODDBORO_CODE", &self.code)
+            // Tells the server to quit when this stdin closes.
+            .env("ODDBORO_APP", "1")
+            // On quit, close the page's open connections (the live event
+            // stream) after a second instead of the default 30.
+            .env("SHUTDOWN_TIMEOUT", "1")
+            .env("PATH", &self.path)
+            .env("ODDBORO_VERSION", &self.version)
+            // A pipe the shell holds open. It closes when the shell dies by
+            // any means, so the server can treat its end as "quit".
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(log.try_clone()?)
+            .envs(
+                (!self.update_token.is_empty())
+                    .then_some(("ODDBORO_UPDATE_TOKEN", self.update_token.as_str())),
+            )
+            .spawn()?;
+        if let Some(out) = child.stdout.take() {
+            thread::spawn(move || relay(out, log));
+        }
+        NODE_PID.store(child.id() as i32, SeqCst);
+        keep_awake(child.id());
+        Ok(child)
+    }
+
+    fn log_tail(&self) -> String {
+        format!(
+            "The last lines of {}:\n\n{}",
+            self.log.display(),
+            tail(&self.log, 12)
+        )
+    }
+}
+
+/// True when anything listens on the port.
+pub fn port_taken(port: u16) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
+}
+
+/// Asks the shell to quit: SIGTERM to Node, up to 10 seconds to go, then
+/// SIGKILL. Blocks until Node is gone.
+pub fn stop() {
+    let pid = {
+        let _guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
+        QUITTING.store(true, SeqCst);
+        NODE_PID.load(SeqCst)
+    };
+    if pid <= 0 {
+        return;
+    }
+    signal(pid, libc::SIGTERM);
+    if !wait_gone(STOP_TIMEOUT) {
+        signal(pid, libc::SIGKILL);
+        wait_gone(Duration::from_secs(2));
+    }
+}
+
+/// When the shell itself gets SIGTERM, SIGINT or SIGHUP, run `quit` on a
+/// thread, so a `kill` or a Ctrl-C quits the same way the menu does and Node
+/// gets its 10 seconds and then SIGKILL. A second signal kills the shell
+/// outright.
+pub fn on_quit_signal(quit: impl FnOnce() + Send + 'static) {
+    extern "C" fn on_signal(sig: libc::c_int) {
+        let fd = SIGNAL_PIPE.load(SeqCst);
+        let byte = 0u8;
+        // SAFETY: signal and write are async-signal-safe, and `byte` outlives
+        // the write.
+        unsafe {
+            libc::signal(sig, libc::SIG_DFL);
+            libc::write(fd, (&raw const byte).cast(), 1);
+        }
+    }
+    let mut fds = [0; 2];
+    // SAFETY: pipe writes two fds into an array of two.
+    if unsafe { libc::pipe(fds.as_mut_ptr()) } != 0 {
+        return;
+    }
+    let [read_fd, write_fd] = fds;
+    SIGNAL_PIPE.store(write_fd, SeqCst);
+    thread::spawn(move || {
+        let mut byte = 0u8;
+        // SAFETY: reads one byte into `byte`, which outlives the call.
+        if unsafe { libc::read(read_fd, (&raw mut byte).cast(), 1) } == 1 {
+            quit();
+        }
+    });
+    let handler = on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t;
+    for sig in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        // SAFETY: the handler only calls async-signal-safe functions.
+        unsafe {
+            libc::signal(sig, handler);
+        }
+    }
+}
+
+fn wait_ready(child: &mut Child, port: u16) -> Ready {
+    let deadline = Instant::now() + READY_TIMEOUT;
+    while Instant::now() < deadline {
+        if let Ok(Some(status)) = child.try_wait() {
+            return Ready::Exited(status);
+        }
+        if answers_http(port) {
+            return Ready::Answered;
+        }
+        sleep(Duration::from_millis(500));
+    }
+    Ready::TimedOut
+}
+
+/// True when `GET /` gets any HTTP response at all.
+fn answers_http(port: u16) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(500)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let request = format!("GET / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    let mut head = [0u8; 5];
+    stream.write_all(request.as_bytes()).is_ok()
+        && stream.read_exact(&mut head).is_ok()
+        && &head == b"HTTP/"
+}
+
+/// SIGTERM, up to 10 seconds, then SIGKILL, for a child this thread owns.
+fn terminate(child: &mut Child) {
+    signal(child.id() as i32, libc::SIGTERM);
+    let deadline = Instant::now() + STOP_TIMEOUT;
+    while Instant::now() < deadline {
+        if let Ok(Some(_)) = child.try_wait() {
+            return;
+        }
+        sleep(Duration::from_millis(100));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn signal(pid: i32, sig: libc::c_int) {
+    // SAFETY: kill has no memory-safety preconditions.
+    unsafe {
+        libc::kill(pid, sig);
+    }
+}
+
+fn mark_gone() {
+    let _guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
+    NODE_PID.store(0, SeqCst);
+    GONE.1.notify_all();
+}
+
+fn wait_gone(timeout: Duration) -> bool {
+    let guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
+    let (_guard, result) = GONE
+        .1
+        .wait_timeout_while(guard, timeout, |_| NODE_PID.load(SeqCst) != 0)
+        .unwrap_or_else(|e| e.into_inner());
+    !result.timed_out()
+}
+
+/// Keeps the Mac awake on AC power for as long as Node runs, like
+/// `caffeinate -s`. caffeinate exits by itself when Node does.
+fn keep_awake(pid: u32) {
+    let spawned = Command::new("/usr/bin/caffeinate")
+        .args(["-s", "-w", &pid.to_string()])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    if let Ok(mut caffeinate) = spawned {
+        thread::spawn(move || caffeinate.wait());
+    }
+}
+
+/// Node's stdout: a notification request goes to macOS as Oddboro's own, a
+/// Check now to the update watcher, everything else to the log.
+fn relay(out: impl Read, mut log: File) {
+    for line in BufReader::new(out).lines().map_while(Result::ok) {
+        if line == crate::update::CHECK_LINE {
+            crate::update::check_now();
+            continue;
+        }
+        match line.strip_prefix(NOTIFY) {
+            Some(ask) => {
+                let (title, text) = ask.split_once('\t').unwrap_or(("Oddboro", ask));
+                notify(title, text);
+            }
+            None => {
+                let _ = writeln!(log, "{line}");
+            }
+        }
+    }
+}
+
+/// Show a notification as Oddboro's, with the Glass sound the office used before.
+fn notify(title: &str, text: &str) {
+    use mac_notification_sys::{send_notification, set_application, Notification};
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let _ = set_application("com.newaltitude.oddboro");
+    });
+    let _ = send_notification(title, None, text, Some(Notification::new().sound("Glass")));
+}
+
+fn open_log(path: &Path) -> io::Result<File> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    if fs::metadata(path).is_ok_and(|m| m.len() > LOG_LIMIT) {
+        let _ = fs::rename(path, path.with_extension("log.1"));
+    }
+    OpenOptions::new().create(true).append(true).open(path)
+}
+
+/// Writes one line of the shell's own to the log.
+pub fn note(path: &Path, line: &str) {
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "oddboro: {line}");
+    }
+}
+
+/// The last `count` lines of the log, each cut to 200 characters.
+fn tail(path: &Path, count: usize) -> String {
+    let Ok(mut file) = File::open(path) else {
+        return "(the log is empty)".to_string();
+    };
+    let len = file.metadata().map_or(0, |m| m.len());
+    let _ = file.seek(SeekFrom::Start(len.saturating_sub(8192)));
+    let mut bytes = Vec::new();
+    let _ = file.read_to_end(&mut bytes);
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.chars().take(200).collect())
+        .collect();
+    lines[lines.len().saturating_sub(count)..].join("\n")
+}

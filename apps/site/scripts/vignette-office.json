@@ -1,0 +1,29 @@
+{
+  "name": "Vignettes",
+  "wall": "plaster",
+  "floor": "oak",
+  "grounds": "park",
+  "plants": "some",
+  "rooms": [
+    { "kind": "office", "name": "Your office", "size": "small" },
+    {
+      "kind": "lobby",
+      "name": "Lobby",
+      "size": "medium",
+      "edits": [{ "move": "lobby-reception#1", "to": [7, 4], "hand": true }]
+    },
+    { "kind": "workspace", "name": "Workspace", "size": "small", "seats": 3 },
+    {
+      "kind": "library",
+      "name": "Library",
+      "size": "medium",
+      "edits": [{ "move": "library-table#1", "to": [6, 5], "hand": true }]
+    },
+    {
+      "kind": "mail",
+      "name": "Mail room",
+      "size": "medium",
+      "edits": [{ "move": "mail-sort-table#1", "to": [5, 4], "hand": true }]
+    }
+  ]
+}

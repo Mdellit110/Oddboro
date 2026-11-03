@@ -1,0 +1,114 @@
+# An espresso machine. Sits on a counter; the cup under the group steams.
+sprite kitchen-coffee
+size 16 24
+layer object
+footprint 1 1
+origin 0 26
+walkable
+zbias 1
+fps 3
+tag kitchen coffee appliance
+
+frame steam-0
+................
+................
+................
+...(............
+................
+................
+................
+................
+.kkkk=kkkkkkkkk.
+.kmm=mmmmmmmmMk.
+.kMM==MM==MMM5k.
+.kM$Mk5kMMMMM5k.
+.kMMkkkkkMMMk5k.
+.kMMk555kMMMMkk.
+.kkk=kkkkMMMMMk.
+.kM=Mk5kMMMMM5k.
+.kMM====MMkmmkk.
+.kMM=qq=MMkMMMk.
+.kMM=qq=MMkMM5k.
+.kMMkkkkMMkkkkk.
+.kM5555555555Mk.
+.k555555555555k.
+.k555555555555k.
+.kkkkkkkkkkkkkk.
+
+frame steam-1
+................
+....(...........
+................
+................
+................
+................
+....(...........
+...(............
+.kkkkkkkkkkkkkk.
+.kmmmmmmmmmmmMk.
+.kMM==MM==MMM5k.
+.kM$Mk5kMMMMM5k.
+.kMMk=kkkMMMk5k.
+.kMM=555kMMMMkk.
+.kkkkkkkkMMMMMk.
+.kMMMk5kMMMMM5k.
+.kMM====MMkmmkk.
+.kMM=qq=MMkMMMk.
+.kMM=qq=MMkMM5k.
+.kMMkkkkMMkkkkk.
+.kM5555555555Mk.
+.k555555555555k.
+.k555555555555k.
+.kkkkkkkkkkkkkk.
+
+frame steam-2
+................
+................
+................
+................
+.....(..........
+....(...........
+................
+................
+.kkkkkkkkkkkkkk.
+.kmmmmmmmmmmmMk.
+.kMM==MM==MMM5k.
+.kM=Mk5kMMMMM5k.
+.kMMkkkkkMMMk5k.
+.kMMk555kMMMMkk.
+.kkkkkkkkMMMMMk.
+.kMMMk5kMMMMM5k.
+.kMM====MMkmmkk.
+.kMM=qq=MMkMMMk.
+.kMM=qq=MMkMM5k.
+.kMMkkkkMMkkkkk.
+.kM5555555555Mk.
+.k555555555555k.
+.k555555555555k.
+.kkkkkkkkkkkkkk.
+
+frame steam-3
+................
+................
+....(...........
+...(............
+................
+................
+................
+................
+.kkkk=kkkkkkkkk.
+.kmm=mmmmmmmmMk.
+.kMM==MM==MMM5k.
+.kM$Mk5kMMMMM5k.
+.kMMkkkkkMMMk5k.
+.kMMk555kMMMMkk.
+.kkkkkkkkMMMMMk.
+.kMMMk5kMMMMM5k.
+.kMM====MMkmmkk.
+.kMM=qq=MMkMMMk.
+.kMM=qq=MMkMM5k.
+.kMMkkkkMMkkkkk.
+.kM5555555555Mk.
+.k555555555555k.
+.k555555555555k.
+.kkkkkkkkkkkkkk.

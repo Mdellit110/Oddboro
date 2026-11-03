@@ -1,0 +1,1 @@
+- [deploy] **Decision (2026-10-29): Main Street, the first office, runs on the owner's Mac and works only while the Mac is on.** Odds use the seats and connectors already on the Mac. The office app serves on 127.0.0.1:4500 with `adapter-node`.

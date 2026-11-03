@@ -1,0 +1,31 @@
+// Once, when the office server starts: the office's own database if .env names
+// no other (copied aside first on a new version's first start), the tables
+// brought up to date, the update row reset, then the job clock, the follow-up
+// watcher, and the office's address in the owner's Caddy if it uses theirs
+// (never in the app, which has no address).
+// In the app (ODDBORO_APP) it also quits when the app does: on SIGTERM, once
+// the HTTP server has closed, and when the app's stdin pipe closes, which
+// happens however the app ends, Force Quit included.
+import type { ServerInit } from '@sveltejs/kit/hooks';
+import { LOCAL } from '@oddboro/ledger';
+import { startLocalDatabase } from '@oddboro/ledger/local-db';
+import { bringUpToDate } from '@oddboro/ledger/upgrade';
+import { keepAddress } from '#lib/server/address.ts';
+import { startFollowUps } from '#lib/server/follow-ups.ts';
+import { startClock } from '#lib/server/jobs.ts';
+import { loadUpdate } from '#lib/server/update.ts';
+
+if (process.env.ODDBORO_APP) {
+  process.on('sveltekit:shutdown', () => process.exit(0));
+  process.stdin.on('close', () => process.exit(0)).resume();
+}
+
+export const init: ServerInit = async () => {
+  if (LOCAL) await startLocalDatabase();
+  await bringUpToDate();
+  // Before the clock: a poke that came due while the app updated still lands.
+  await loadUpdate();
+  startClock();
+  startFollowUps();
+  void keepAddress();
+};

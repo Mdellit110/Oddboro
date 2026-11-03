@@ -1,0 +1,29 @@
+# A framed poster: a diver going under at sunset. Hangs on a back wall face cell.
+sprite break-poster
+size 16 20
+layer wall
+footprint 1 1
+origin 0 14
+tag wall decor
+
+frame default
+kkkkkkkkkkkkkkkk
+k3333333333333Wk
+k3666666666666Wk
+k3666666yy6666Wk
+k366666yyyy666Wk
+k366666yyyy666Wk
+k3TTTTTTyyTTTTWk
+k3TTTTTTTTTTTTWk
+k3tTTTtTTTtTTTWk
+k3TtTtTTTtTtTTWk
+k3TTTTTTTTTTTTWk
+k3TTTTTTkTTTTTWk
+k3TTTTTkkkTTTTWk
+k3tttttkkktttTWk
+k3tttttttttttTWk
+k3ttttttttt=tTWk
+k3t=tttttttttTWk
+k3tttttttttttTWk
+k3WWWWWWWWWWWWWk
+kkkkkkkkkkkkkkkk

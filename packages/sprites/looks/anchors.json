@@ -1,0 +1,287 @@
+{
+  "idle-down-0": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "idle-down-1": {
+    "dir": "down",
+    "head": [0, 1],
+    "torso": [0, 1]
+  },
+  "idle-down-2": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "idle-down-3": {
+    "dir": "down",
+    "head": [0, 1],
+    "torso": [0, 1]
+  },
+  "idle-up-0": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "idle-up-1": {
+    "dir": "up",
+    "head": [0, 1],
+    "torso": [0, 1]
+  },
+  "idle-up-2": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "idle-up-3": {
+    "dir": "up",
+    "head": [0, 1],
+    "torso": [0, 1]
+  },
+  "idle-side-0": {
+    "dir": "side",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "idle-side-1": {
+    "dir": "side",
+    "head": [0, 1],
+    "torso": [0, 1]
+  },
+  "idle-side-2": {
+    "dir": "side",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "idle-side-3": {
+    "dir": "side",
+    "head": [0, 1],
+    "torso": [0, 1]
+  },
+  "walk-down-0": {
+    "dir": "down",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "walk-down-1": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "walk-down-2": {
+    "dir": "down",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "walk-down-3": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "walk-up-0": {
+    "dir": "up",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "walk-up-1": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "walk-up-2": {
+    "dir": "up",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "walk-up-3": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "walk-side-0": {
+    "dir": "side",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "walk-side-1": {
+    "dir": "side",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "walk-side-2": {
+    "dir": "side",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "walk-side-3": {
+    "dir": "side",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "sit-up-0": {
+    "dir": "up",
+    "head": [0, -2],
+    "torso": [0, -2]
+  },
+  "sit-up-1": {
+    "dir": "up",
+    "head": [0, -2],
+    "torso": [0, -2]
+  },
+  "sit-up-2": {
+    "dir": "up",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "sit-up-3": {
+    "dir": "up",
+    "head": [0, -2],
+    "torso": [0, -2]
+  },
+  "sit-down-0": {
+    "dir": "down",
+    "head": [0, 3],
+    "torso": [0, 3]
+  },
+  "sit-down-1": {
+    "dir": "down",
+    "head": [0, 4],
+    "torso": [0, 4]
+  },
+  "sit-down-2": {
+    "dir": "down",
+    "head": [0, 4],
+    "torso": [0, 4]
+  },
+  "read-down-0": {
+    "dir": "down",
+    "head": [0, 3],
+    "torso": [0, 3]
+  },
+  "read-down-1": {
+    "dir": "down",
+    "head": [0, 3],
+    "torso": [0, 3]
+  },
+  "read-down-2": {
+    "dir": "down",
+    "head": [0, 4],
+    "torso": [0, 4]
+  },
+  "eat-down-0": {
+    "dir": "down",
+    "head": [0, 3],
+    "torso": [0, 3]
+  },
+  "eat-down-1": {
+    "dir": "down",
+    "head": [0, 3],
+    "torso": [0, 3]
+  },
+  "eat-down-2": {
+    "dir": "down",
+    "head": [0, 3],
+    "torso": [0, 3]
+  },
+  "play-up-0": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "play-up-1": {
+    "dir": "up",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "play-up-2": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "play-up-3": {
+    "dir": "up",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-run-0": {
+    "dir": "side",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-run-1": {
+    "dir": "side",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "exercise-run-2": {
+    "dir": "side",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-run-3": {
+    "dir": "side",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "exercise-lift-0": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-lift-1": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-lift-2": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-lift-3": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-stretch-0": {
+    "dir": "down",
+    "head": [0, 0],
+    "torso": [0, 0]
+  },
+  "exercise-stretch-1": {
+    "dir": "down",
+    "head": [0, -1],
+    "torso": [0, -1]
+  },
+  "exercise-stretch-2": {
+    "dir": "down",
+    "head": [-1, 0],
+    "torso": [0, -1]
+  },
+  "exercise-stretch-3": {
+    "dir": "down",
+    "head": [1, 0],
+    "torso": [0, -1]
+  },
+  "exercise-cycle-0": {
+    "dir": "side",
+    "head": [1, 2],
+    "torso": [0, 2]
+  },
+  "exercise-cycle-1": {
+    "dir": "side",
+    "head": [1, 2],
+    "torso": [0, 2]
+  },
+  "exercise-cycle-2": {
+    "dir": "side",
+    "head": [1, 2],
+    "torso": [0, 2]
+  },
+  "exercise-cycle-3": {
+    "dir": "side",
+    "head": [1, 2],
+    "torso": [0, 2]
+  }
+}

@@ -1,0 +1,1 @@
+- [office] **Decision (2026-10-29): the building sits in grounds (a river, a path, trees and the street's ends), and the grounds are scenery staff never walk.** A building floating in empty space reads as unfinished, and keeping the grounds out of the walkable grid leaves spots and paths unchanged. Detail in `packages/world/CLAUDE.md`.

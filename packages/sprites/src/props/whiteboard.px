@@ -1,0 +1,33 @@
+# A whiteboard with a sketch on it. Hangs on a back wall, two cells wide.
+sprite whiteboard
+size 32 24
+layer wall
+footprint 2 1
+origin 0 10
+tag wall decor
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmk
+km============================Mk
+km============================Mk
+km==TTTTTTT===TTTTTTT=========Mk
+km==T=====T==kT=====T==kkkkk==Mk
+km==T=====TkkkT=====T=========Mk
+km==T=====T==kT=====T==kkkk===Mk
+km==TTTTTTT===TTTkTTT=========Mk
+km===============k=====kkkkk==Mk
+km===============k============Mk
+km===============k=====kkk====Mk
+km=======RRRRRRRR=============Mk
+km=======R======R=============Mk
+km==TTT==R======R=============Mk
+km=======R======R====RRRRRRR==Mk
+km==TTTT=R======R=============Mk
+km=======RRRRRRRR====RRRRR====Mk
+km============================Mk
+km============================Mk
+kmMMMMMMMMMMMMMMMMMMMMMMMMMMMMMk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kkkkkkkkkkTTTkkkRRRkkkkkkkkkkkkk
+.MMMMMMMMMMMMMMMMMMMMMMMMMMMMMM.

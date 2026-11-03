@@ -1,0 +1,58 @@
+# The second tall bookcase: a bust, a jar of pencils and a lean of books break up the spines.
+sprite library-shelf-b
+size 32 48
+layer object
+footprint 2 1
+origin 0 32
+tag shelf books library clear-1
+variant oak W=O w=o 3=1
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw333kkk3333333333333kkkk33333Wk
+kw3kkkTk3kkk33333kkk3k88k33333Wk
+kw3kRkykk==mk3kkkk6k3k==k33333Wk
+kw3kRkTkk==mk3kYYk6kkk88k33333Wk
+kw3kRkTk3k=k33k==k6kzk88k33333Wk
+kw3kRkTkk==mk3kYYk6kyk88k33333Wk
+kw3kRkTkkmmMk3kYYk6kzk88k33333Wk
+kw3kRkTk3kkk33kYYk6kzk88k33333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw333333kkk333kkkk333333333333Wk
+kw333kkkkTkkk3kzzk3333kkk33333Wk
+kw3kkkSSkykRk3kyyk333kk6k33333Wk
+kw3k=kSSkTk=kkkzzk33kYk6k33333Wk
+kw3kTkSSkTkRk9kzzk3kYYk6k33333Wk
+kw3k=kSSkTkRk9kzzkkYYkk6k33333Wk
+kw3k=kSSkTkRk9kzzkYYk3k6k33333Wk
+kw3k=kSSkTkRk9kzzkkk33k6k33333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw3333333kkk333333kkk333333333Wk
+kw3333333k8kkkk3kkkzk333333333Wk
+kw33kkk33kykTTkkkSkzkkkk333333Wk
+kw3k(/tk3k8k==kYkykzkRRk333333Wk
+kw3k//tk3k8kTTkYkSkzk==k333333Wk
+kw3k//Tk3k8kTTkYkSkzkRRk333333Wk
+kw3k/TTk3k8kTTkYkSkzkRRk333333Wk
+kw33kkk33k8kTTkYkSkzkRRk333333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kw33333kkkk3333333333kkk333333Wk
+kw3kkk3kYYk33333333kkkSk333333Wk
+kw3kTkkkRRkkkkkk333k8kSkkk3333Wk
+kw3k=k6kYYk====k333kykSkTk3333Wk
+kw3kTk6kYYkkkkkkk33k8kSk=k3333Wk
+kw3kTk6kYYkRRRRRk33k8kSkTk3333Wk
+kw3kTk6kYYkkkkkkkk3k8kSkTk3333Wk
+kw3kTk6kYYkzzzzzzk3k8kSkTk3333Wk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kkWWWWWWWWWWWWWWWWWWWWWWWWWWWWkk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+k333333333333333333333333333333k
+k333333333333333333333333333333k

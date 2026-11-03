@@ -1,0 +1,326 @@
+{
+  "hair": [
+    {
+      "name": "brown",
+      "light": "#916040",
+      "body": "#6c4428",
+      "shade": "#4a2c18"
+    },
+    {
+      "name": "black",
+      "light": "#4c4259",
+      "body": "#2c2636",
+      "shade": "#1a1622"
+    },
+    {
+      "name": "dark brown",
+      "light": "#6b4a36",
+      "body": "#4a3020",
+      "shade": "#2e1c12"
+    },
+    {
+      "name": "silver",
+      "light": "#d0d3d9",
+      "body": "#8f95a3",
+      "shade": "#585d6d"
+    },
+    {
+      "name": "grey",
+      "light": "#b0aab8",
+      "body": "#7e7888",
+      "shade": "#524c5c"
+    },
+    {
+      "name": "blond",
+      "light": "#f4c455",
+      "body": "#d8982f",
+      "shade": "#9a6a1e"
+    },
+    {
+      "name": "platinum",
+      "light": "#fbf0d0",
+      "body": "#e8d8a8",
+      "shade": "#b8a678"
+    },
+    {
+      "name": "white",
+      "light": "#fbfaf6",
+      "body": "#e6e3dc",
+      "shade": "#b8b4ae"
+    },
+    {
+      "name": "auburn",
+      "light": "#e48f5f",
+      "body": "#c2653c",
+      "shade": "#8d4027"
+    },
+    {
+      "name": "copper",
+      "light": "#f0a060",
+      "body": "#d4743a",
+      "shade": "#9c4a22"
+    },
+    {
+      "name": "teal dye",
+      "light": "#62c4ba",
+      "body": "#2e8c8c",
+      "shade": "#1b5c64"
+    },
+    {
+      "name": "pink dye",
+      "light": "#f4a6c0",
+      "body": "#e46f80",
+      "shade": "#a8475a"
+    }
+  ],
+  "skin": [
+    {
+      "name": "fair",
+      "light": "#fbe4cc",
+      "body": "#f5d4b4",
+      "shade": "#d9a484",
+      "deep": "#a56b43",
+      "lip": "#e0928a",
+      "lipShade": "#bd6a64",
+      "blush": "#f0b4a0"
+    },
+    {
+      "name": "rosy",
+      "light": "#fde2d6",
+      "body": "#f2c4b0",
+      "shade": "#d69a86",
+      "deep": "#9c6050",
+      "lip": "#e08a90",
+      "lipShade": "#bc6068",
+      "blush": "#eba8a0"
+    },
+    {
+      "name": "light tan",
+      "light": "#f6d2ae",
+      "body": "#e8b48a",
+      "shade": "#c88a62",
+      "deep": "#8e5a38",
+      "lip": "#d48474",
+      "lipShade": "#ab5c50",
+      "blush": "#e09c80"
+    },
+    {
+      "name": "tan",
+      "light": "#e8b088",
+      "body": "#cf9263",
+      "shade": "#a56b43",
+      "deep": "#6e4228",
+      "lip": "#c07060",
+      "lipShade": "#93503f",
+      "blush": "#c98068"
+    },
+    {
+      "name": "olive",
+      "light": "#d8b080",
+      "body": "#b98a5a",
+      "shade": "#8e6438",
+      "deep": "#5a3c1e",
+      "lip": "#ad6c58",
+      "lipShade": "#84493a",
+      "blush": "#b07658"
+    },
+    {
+      "name": "brown",
+      "light": "#b07a52",
+      "body": "#96603a",
+      "shade": "#6e4224",
+      "deep": "#4a2a14",
+      "lip": "#8f5444",
+      "lipShade": "#6a3829",
+      "blush": "#935640"
+    },
+    {
+      "name": "deep",
+      "light": "#9a6444",
+      "body": "#7e4b2d",
+      "shade": "#562f18",
+      "deep": "#3a1e0e",
+      "lip": "#7a4234",
+      "lipShade": "#582a20",
+      "blush": "#7e4535"
+    },
+    {
+      "name": "very deep",
+      "light": "#6e4630",
+      "body": "#563322",
+      "shade": "#3a2014",
+      "deep": "#24120a",
+      "lip": "#5e3328",
+      "lipShade": "#40201a",
+      "blush": "#5e3428"
+    }
+  ],
+  "cloth": [
+    {
+      "name": "blue",
+      "light": "#8cb6d6",
+      "body": "#5c90ba",
+      "shade": "#3c678a"
+    },
+    {
+      "name": "navy",
+      "light": "#555c85",
+      "body": "#3a4062",
+      "shade": "#262b45"
+    },
+    {
+      "name": "rust",
+      "light": "#e48f5f",
+      "body": "#c2653c",
+      "shade": "#8d4027"
+    },
+    {
+      "name": "sage",
+      "light": "#adc89e",
+      "body": "#72976a",
+      "shade": "#476941"
+    },
+    {
+      "name": "teal",
+      "light": "#62c4ba",
+      "body": "#2e8c8c",
+      "shade": "#1b5c64"
+    },
+    {
+      "name": "charcoal",
+      "light": "#8a8f9e",
+      "body": "#585d6d",
+      "shade": "#3d3248"
+    },
+    {
+      "name": "cream",
+      "light": "#fbf6ea",
+      "body": "#e8dcc0",
+      "shade": "#c0b090"
+    },
+    {
+      "name": "white",
+      "light": "#ffffff",
+      "body": "#eef0f2",
+      "shade": "#c8ccd4"
+    },
+    {
+      "name": "black",
+      "light": "#4c4259",
+      "body": "#2c2636",
+      "shade": "#1c1727"
+    },
+    {
+      "name": "amber",
+      "light": "#f4c455",
+      "body": "#d8982f",
+      "shade": "#9a6a1e"
+    },
+    {
+      "name": "plum",
+      "light": "#b07aa8",
+      "body": "#7e4a7a",
+      "shade": "#522c52"
+    },
+    {
+      "name": "coral",
+      "light": "#f4a0a8",
+      "body": "#e46f80",
+      "shade": "#a8475a"
+    },
+    {
+      "name": "forest",
+      "light": "#6fa060",
+      "body": "#3f7040",
+      "shade": "#24482a"
+    },
+    {
+      "name": "denim",
+      "light": "#7a9cc8",
+      "body": "#4e6e9e",
+      "shade": "#34507a"
+    },
+    {
+      "name": "khaki",
+      "light": "#d8c890",
+      "body": "#b8a468",
+      "shade": "#8a7848"
+    },
+    {
+      "name": "burgundy",
+      "light": "#b0485a",
+      "body": "#882838",
+      "shade": "#561622"
+    },
+    {
+      "name": "lavender",
+      "light": "#c8c0e8",
+      "body": "#a094cc",
+      "shade": "#706aa0"
+    }
+  ],
+  "shoes": [
+    {
+      "name": "walnut",
+      "light": "#7c5034",
+      "body": "#553321",
+      "shade": "#3a2214"
+    },
+    {
+      "name": "black",
+      "light": "#4c4259",
+      "body": "#2c2636",
+      "shade": "#1c1727"
+    },
+    {
+      "name": "white",
+      "light": "#ffffff",
+      "body": "#d8dce4",
+      "shade": "#a8acb8"
+    },
+    {
+      "name": "tan",
+      "light": "#c89060",
+      "body": "#a06a3a",
+      "shade": "#6e4422"
+    },
+    {
+      "name": "red",
+      "light": "#e46f80",
+      "body": "#b04050",
+      "shade": "#782838"
+    }
+  ],
+  "glasses": [
+    {
+      "name": "metal",
+      "light": "#585d6d",
+      "body": "#585d6d",
+      "shade": "#3d3248"
+    },
+    {
+      "name": "black",
+      "light": "#1c1727",
+      "body": "#1c1727",
+      "shade": "#1c1727"
+    },
+    {
+      "name": "tortoise",
+      "light": "#a8643a",
+      "body": "#8d4027",
+      "shade": "#5a2814"
+    },
+    {
+      "name": "gold",
+      "light": "#f4c455",
+      "body": "#d8982f",
+      "shade": "#9a6a1e"
+    },
+    {
+      "name": "red",
+      "light": "#e46f80",
+      "body": "#b04050",
+      "shade": "#782838"
+    }
+  ]
+}

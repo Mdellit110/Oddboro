@@ -1,0 +1,20 @@
+# Three small framed photos: two faces, a tree, the sea. Hangs on a back
+# wall face, two cells wide.
+sprite owner-photos
+size 32 10
+layer wall
+footprint 2 1
+origin 0 12
+tag wall decor photos
+
+frame default
+kkkkkkkkkk..kkkkkkkkk...........
+kwwwwwwwwk..kwwwwwwwk...........
+kwzz=ffzwk..kwPPPPPwk..kkkkkkkk.
+kwzzkffzwk..kwPVVPPwk..kwwwwwwk.
+kwz=ffd=wk..kwVVVVPwk..kw~t~~Wk.
+kwzzffdzwk..kwP!VPPwk..kw~~~~Wk.
+kwWWWWWWwk..kwPP!PPwk..kw~>>~Wk.
+kkkkkkkkkk..kwWWWWWwk..kw>>>>Wk.
+............kkkkkkkkk..kwWWWWWk.
+.......................kkkkkkkk.

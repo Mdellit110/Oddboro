@@ -1,0 +1,46 @@
+# A walnut captain's chair with a teal cushion, seen from the front. Goes on
+# the reader's tile behind the reading table. zbias -1 paints it before the
+# person, so only the back shows round their head and shoulders.
+sprite library-chair
+size 16 32
+layer object
+footprint 1 1
+origin 0 16
+walkable
+zbias -1
+tag chair seat library
+variant oak w=o W=O 3=1
+
+frame default
+..kkkkkkkkkkkk..
+.kwwwwwwwwwwwwk.
+.kwWWWWWWWWWWWk.
+.kwW77777777WWk.
+.kwW7TT666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW7T6666667WWk
+.kwW77777777WWk.
+.kkkkkkkkkkkkkk.
+kwwwwwwwwwwwwwwk
+kwWWWWWWWWWWWWWk
+k33333333333333k
+.kW3k......kW3k.
+.kkkk......kkkk.

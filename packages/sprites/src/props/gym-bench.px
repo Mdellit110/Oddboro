@@ -1,0 +1,44 @@
+# A flat weight bench, one tile wide and two deep: a black vinyl pad on a
+# steel frame, with a folded white towel left on the far end.
+sprite gym-bench
+size 16 34
+layer object
+footprint 1 2
+origin 0 2
+tag bench exercise gym
+
+frame default
+...kkkkkkkkkk...
+..kK55555555Kk..
+..kKKKKKKKKKKk..
+..kKkkkkkkkkKk..
+..kk========kk..
+..k==========k..
+..k=TT=TT=TT=k..
+..k==========k..
+..k=ccccccccck..
+..kkkkkkkkkkkk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..k5KKKKKKKKKk..
+..kkkkkkkkkkkk..
+..kKKKKKKKKKKk..
+..kkkkkkkkkkkk..
+.kkM5kkkkkkM5kk.
+.kM5kk....kM5kk.
+.k55k.....k55k..
+.kkkk.....kkkk..

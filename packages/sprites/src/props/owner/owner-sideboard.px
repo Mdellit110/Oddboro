@@ -1,0 +1,41 @@
+# A walnut sideboard with a record player and a few records leaning on it.
+sprite owner-sideboard
+size 32 32
+layer object
+footprint 2 1
+origin 0 16
+tag sideboard decor clear-1
+
+frame default
+................................
+................................
+...kkkkkkkkkkkkkk...............
+...kwwwwwwwwwwwWk...............
+...kwkkkkkkkwwwWk.....kkkkk.....
+...kwkKKKKKkwYwWk....kK?KKk.....
+...kwkKK=KKkwYwWk....kKKKKk.....
+...kwkKKKKKkwYwWk...kKRKKKk.....
+...kwkkkkkkkwwwWk...kKKKKKk.....
+...kwwwwwwwwwwwWk...kKKyKKk.....
+...k333333333333k...kkkkkkk.....
+...kkkkkkkkkkkkkk...............
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+k333333333333333333333333333333k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWYW3wWYWWWWWWWWWWW3k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kWWWWWWWWWWWWWW3wWWWWWWWWWWWWW3k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kWWWk.....................kWWWk.
+kkkkk.....................kkkkk.

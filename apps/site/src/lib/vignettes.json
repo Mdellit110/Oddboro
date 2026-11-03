@@ -1,0 +1,56 @@
+{
+  "w": 128,
+  "h": 96,
+  "items": [
+    {
+      "id": "desk",
+      "name": "ada",
+      "staff": { "x": 56, "y": 36 },
+      "head": { "x": 64, "y": 38 },
+      "frame": "sit-up-0",
+      "staffAnim": { "frames": 4, "fps": 3.54 }
+    },
+    {
+      "id": "mail",
+      "name": "juno",
+      "staff": { "x": 56, "y": 30 },
+      "head": { "x": 64, "y": 34 },
+      "frame": "idle-up-0",
+      "staffAnim": { "frames": 4, "fps": 4.77 }
+    },
+    {
+      "id": "library",
+      "name": "theo",
+      "staff": { "x": 56, "y": 28 },
+      "head": { "x": 64, "y": 35 },
+      "frame": "read-down-0",
+      "staffAnim": { "frames": 3, "fps": 4.5 },
+      "propAnim": { "sprite": "library-fireplace", "frames": 4, "fps": 6 }
+    },
+    {
+      "id": "reception",
+      "name": "ada",
+      "staff": { "x": 56, "y": 28 },
+      "head": { "x": 64, "y": 35 },
+      "frame": "sit-down-0",
+      "staffAnim": { "frames": 3, "fps": 3.54 }
+    },
+    {
+      "id": "door",
+      "name": "marshall",
+      "staff": { "x": 56, "y": 28 },
+      "head": { "x": 64, "y": 35 },
+      "frame": "sit-down-0",
+      "staffAnim": { "frames": 3, "fps": 3.2 }
+    },
+    {
+      "id": "chat",
+      "name": "theo",
+      "staff": { "x": 56, "y": 30 },
+      "head": { "x": 64, "y": 34 },
+      "frame": "idle-up-0",
+      "staffAnim": { "frames": 4, "fps": 4.5 },
+      "dust": true
+    }
+  ]
+}

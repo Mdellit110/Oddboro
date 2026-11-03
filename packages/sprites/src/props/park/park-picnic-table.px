@@ -1,0 +1,43 @@
+# A walnut picnic table on the grass, two tiles wide. Three planks on top
+# with a lit back edge and a thick front edge, a bench on each side and
+# A-frame legs. The far bench shows above the table, the near one below it.
+sprite park-picnic-table
+size 32 32
+layer object
+footprint 2 1
+origin 0 16
+tag table picnic park seat
+
+frame default
+................................
+................................
+..kkkkkkkkkkkkkkkkkkkkkkkkkkkk..
+.kwwwwwwwwwwwwwwwwwwwwwwwwwww3k.
+.kWWWWWWWWWWWWWWWWWWWWWWWWWWW3k.
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kwWWW3WWWWWWWWWWWWWWWW3WWWWWWW3k
+kw33333333333333333333333333333k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kwWWWWWWWW3WWWWWWWWWWWWWWWWWWW3k
+kw33333333333333333333333333333k
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwww3k
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWW3k
+kwWWWWWWWWWWWWWWWWW3WWWWWWWWWW3k
+k333333333333333333333333333333k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+...kW3k..................kW3k...
+...kW3k..................kW3k...
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+.kwwwwwwwwwwwwwwwwwwwwwwwwwww3k.
+.kWWWWWWWWWWWWWWWWWWWWWWWWWWW3k.
+.k3333333333333333333333333333k.
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+...kW3k..................kW3k...
+...kW3k..................kW3k...
+...kW3k..................kW3k...
+..kkkkkk................kkkkkk..
+................................
+................................

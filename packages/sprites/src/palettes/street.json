@@ -1,0 +1,19 @@
+{
+  "name": "street",
+  "colors": {
+    "]": { "hex": "#c98160", "name": "brick light: the lit top edge of a brick" },
+    "h": { "hex": "#a85a43", "name": "brick: the facade body" },
+    "H": { "hex": "#7a3d2e", "name": "brick dark: mortar lines, the shadow under the coping" },
+    "*": { "hex": "#d9d3c6", "name": "concrete light: slab edges, coping, curb tops" },
+    "+": { "hex": "#b9b2a4", "name": "concrete: the sidewalk body" },
+    "|": { "hex": "#9a9386", "name": "concrete dark: slab seams, the curb face" },
+    "{": { "hex": "#7fb35b", "name": "grass: the verge across the street" },
+    "}": { "hex": "#5c8f44", "name": "grass dark: tufts and mower lines" },
+    ")": {
+      "hex": "#f6cf86",
+      "name": "window warm: shop glass with the lights on behind it, emissive so the street glows at night",
+      "emissive": true,
+      "off": "K"
+    }
+  }
+}

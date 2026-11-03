@@ -1,0 +1,25 @@
+# A fallen log, two tiles long. Bark lying on the grass with moss along the
+# top, a snapped branch stub, and the cut end with its rings facing east.
+sprite park-log
+size 32 16
+layer object
+footprint 2 1
+tag log wood park
+
+frame default
+................................
+................................
+..........kk....................
+.........kw3k............kkkkkk.
+.kkkkkkkkkw3kkkkkkkkkkkk2ooooOOk
+kwwVVVwwwwwwwwVVVwwwwww2oo111oOk
+kwVVVVVWWWWWWVVVVWWWWW2o1o2o1OOk
+kWWWV!WWWWWWWWV!!WWWWW2o1oo2o1Ok
+kWWWWWWW3WWWWW!WWW3WW2oo1o1oOOOk
+k3WWW3WWWW33WWWWWW3WW32o11111OOk
+k333333333W333333333332OO1OOO1Ok
+.kkkkkkkkkkkkkkkkkkkkkk2OO111OOk
+.-----------------------kkkkkkkk
+.._-------------------------_...
+................................
+................................

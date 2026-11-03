@@ -1,0 +1,28 @@
+# A pair of teal upper cabinet doors in a walnut frame. Hangs on a back wall
+# face cell, two cells wide.
+sprite kitchen-cabinet
+size 32 16
+layer wall
+footprint 2 1
+origin 0 16
+tag wall kitchen cabinet light
+light 16 15 24 #ffd27a 0.5
+variant cream T=p t=P 6=q
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwk
+ktttttttttttttt6tttttttttttttt6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTmT6tTmTTTTTTTTTTT6k
+ktTTTTTTTTTTT5T6tT5TTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+ktTTTTTTTTTTTTT6tTTTTTTTTTTTTT6k
+k666666666666666t66666666666666k
+k33LLLLLLLLLLLL33LLLLLLLLLLLL33k
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk

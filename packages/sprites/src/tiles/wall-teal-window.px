@@ -1,0 +1,39 @@
+# A window in the accent wall. Translucent glass; the sky paints behind it.
+sprite wall-teal-window
+size 16 32
+layer wall
+tag wall window
+
+frame 0
+QQQQQQQQQQQQQQQQ
+qqqqqqqqqqqqqqqq
+P33333333333333P
+P3wwwwwwwwwwww3P
+P3w/////w////w3P
+P3w/((//w////w3P
+P3w/(///w////w3P
+P3w/////w////w3P
+P3w/////w////w3P
+P3w/////w////w3P
+P3w/////w////w3P
+P3wwwwwwwwwwww3P
+P3w3333333333w3P
+P3w/////w////w3P
+P3w/////w////w3P
+P3w/////w////w3P
+w3w/////w////w3w
+33w/////w////w33
+73w/////w////w37
+73wwwwwwwwwwww37
+7333333333333337
+wwwwwwwwwwwwwwww
+3333333333333333
+7qqqqqqqqqqqqqq7
+7T6666777T666677
+7T6666777T666677
+7777777777777777
+7666666776666667
+wwwwwwwwwwwwwwww
+WWWWWWWWWWWWWWWW
+WWWWWWWWWWWWWWWW
+3333333333333333

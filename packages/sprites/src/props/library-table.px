@@ -1,0 +1,38 @@
+# A walnut reading table with a green leather inlay and an open book. Three
+# tiles wide. The reader sits on the tile north of the middle one, facing the
+# viewer, and the table top paints over their lap. Put the banker's lamp on
+# the right tile.
+sprite library-table
+size 48 24
+layer object
+footprint 3 1
+origin 0 8
+tag table read library
+spot read 1 -1 down read sit
+variant oak w=o W=O 3=1
+
+frame default
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwWWWW;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;;;kkkkkkkkkkkkk;;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;;k======k======k;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;;k=KK==k=KKK==k;;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;;k=KKK=k=KK===k;;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;;k=KK==k=KKK==k;;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;;kk====k=====kk;;;;;;;;;;;;;;;;;;;;;;JWWWk
+kwWWW;JJkkkkkkkkkkkkJJJJJJJJJJJJJJJJJJJJJJJJWWWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+k3333333333333333333333333333333333333333333333k
+.kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk.
+.kWWWWWWWWWWWWWWWWWWWWWW3WWWWWWWWWWWWWWWWWWWWWk.
+.k33333333333333333333333333333333333333333333k.
+.kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk.
+.kW3k.....................................kW3k..
+.kW3k.....................................kW3k..
+.kW3k.....................................kW3k..
+.kW3k.....................................kW3k..
+.kW3k.....................................kW3k..
+.kW3k.....................................kW3k..
+.kW3k.....................................kW3k..
+.kkkk.....................................kkkk..

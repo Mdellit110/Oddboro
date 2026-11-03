@@ -1,0 +1,10 @@
+{
+  "name": "library-gym",
+  "colors": {
+    ",": { "hex": "#5d626e", "name": "rubber" },
+    ":": { "hex": "#484d58", "name": "rubber dark" },
+    ";": { "hex": "#2f8f66", "name": "emerald" },
+    "J": { "hex": "#1d5e44", "name": "emerald deep" },
+    "j": { "hex": "#8ff0b4", "name": "emerald glow", "emissive": true, "off": "0" }
+  }
+}

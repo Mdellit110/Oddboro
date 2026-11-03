@@ -1,0 +1,22 @@
+{
+  "name": "lobby",
+  "colors": {
+    "~": { "hex": "#2a7a94", "name": "water" },
+    "<": {
+      "hex": "#4cb0c0",
+      "name": "water light: caustic ripples and bubbles, emissive so the tank shimmers at night",
+      "emissive": true,
+      "off": "6"
+    },
+    ">": { "hex": "#163f58", "name": "water deep: the bottom of the tank" },
+    "?": { "hex": "#e46f80", "name": "coral" },
+    "@": {
+      "hex": "#ff9fd4",
+      "name": "biolum: anemone tips, a few pixels only",
+      "emissive": true,
+      "off": "r"
+    },
+    "U": { "hex": "#c9b98a", "name": "sand: the tank bed, kraft parcels" },
+    "u": { "hex": "#9c8c62", "name": "sand shade" }
+  }
+}

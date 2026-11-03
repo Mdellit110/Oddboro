@@ -1,0 +1,24 @@
+# The road's centre line: a yellow dash per tile, ten on and six off, so a row
+# of these reads as one dashed line.
+sprite floor-asphalt-line
+size 16 16
+layer floor
+tag floor street road
+
+frame 0
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,YYYYYYYYYY,,,,
+,,YYYYYYYYYY,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,:,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,

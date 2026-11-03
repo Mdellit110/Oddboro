@@ -1,0 +1,110 @@
+# The owner's office door, seen from the lobby side: a walnut door with a
+# plain brass plate (two screws and an engraved rule, no name) and a glass
+# side light. Frame "closed" first, so it is the default; "open" shows the
+# leaf swung back and the room beyond. Covers two D cells.
+sprite owner-door
+size 32 48
+layer wall
+footprint 2 1
+origin 0 32
+tag wall door owner
+
+frame closed
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+33333333333333333333333333333333
+3wwwwwwwwwwwwwwwwwwwwwwwwwwwwww3
+3wwwwwwwwwwwwwwwwwwww33333333333
+3wwWWWWWWWWWWWWWWWWWW33///////w3
+3wwWWWWWWWWWWWWWWWWWW33/((////w3
+3wwWyyyyyyyyyyyyyyy9W33/(/////w3
+3wwWyY9YYYYYYYYYY9Y9W33///////w3
+3wwWyYYYYYYYYYYYYYY9W33///////w3
+3wwWyYY9999999999YY9W33///////w3
+3wwWyYYyyyyyyyyyyYY9W33///////w3
+3wwWyY9YYYYYYYYYY9Y9W33///////w3
+3wwW9999999999999999W33///////w3
+3wwWWWWWWWWWWWWWWWWWW33///////w3
+3wwWWWWWWWWWWWWWWWWWW33///////w3
+3wwWWWWWWWWWWWWWWWWWW33///////w3
+3wwWW3333333333333wWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33wwwwwwww3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwYy33///////w3
+3wwWW3WWWWWWWWWWWWw9W33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWW3WWWWWWWWWWWWwWW33///////w3
+3wwWWwwwwwwwwwwwwwwWW33///////w3
+3wwWWWWWWWWWWWWWWWWWW33///////w3
+3ww33333333333333333333///////w3
+3WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW3
+3wwwwwwwwwwwwwwwwwwwwwwwwwwwwww3
+
+frame open
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq
+QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+33333333333333333333333333333333
+3wwW3wwwwwwwwwwwwwwwwwwwwwwwwww3
+3wwW3677777777777777773333333333
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773/((////w3
+3wwW3677777777777777773/(/////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773wwwwwwww3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3wwW3677777777777777773///////w3
+3WwW3WWWWWWWWWWWWWWWWWWWWWWWWWW3
+3wwwwwwwwwwwwwwwwwwwwwwwwwwwwww3

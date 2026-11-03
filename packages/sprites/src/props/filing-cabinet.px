@@ -1,0 +1,76 @@
+# A steel filing cabinet, three drawers. Against a side wall it shows its
+# side (frame side, drawers facing right, mirrored on the east wall).
+sprite filing-cabinet
+size 16 32
+layer object
+footprint 1 1
+origin 0 16
+tag cabinet storage clear-1
+
+frame default
+................
+................
+................
+................
+.kkkkkkkkkkkkkk.
+.kMMMMMMMMMMMMk.
+.kM55555555555k.
+.kM55555555555k.
+.kMmmmmmmmmm55k.
+.kMMMMMMMMMM55k.
+.kMMMMmkkkMM55k.
+.kMMMMMM=MMM55k.
+.kMMMMMMMMMM55k.
+.kM55555555555k.
+.kM55555555555k.
+.kMmmmmmmmmm55k.
+.kMMMMMMMMMM55k.
+.kMMMMmkkkMM55k.
+.kMMMMMM=MMM55k.
+.kMMMMMMMMMM55k.
+.kM55555555555k.
+.kM55555555555k.
+.kMmmmmmmmmm55k.
+.kMMMMMMMMMM55k.
+.kMMMMmkkkMM55k.
+.kMMMMMM=MMM55k.
+.kMMMMMMMMMM55k.
+.kM55555555555k.
+.kM55555555555k.
+.kM55555555555k.
+.kkkkkkkkkkkkkk.
+.kkkkkkkkkkkkkk.
+
+frame side
+................
+................
+................
+................
+.kkkkkkkkkkkkkk.
+.kMMMMMMMMMMMMk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mkk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555kkk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mkk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555kkk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mkk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kM555555555Mmk.
+.kkkkkkkkkkkkkk.
+.kkkkkkkkkkkkkk.

@@ -1,0 +1,14 @@
+node_modules/
+.turbo/
+.svelte-kit/
+build/
+dist/
+out/
+.wrangler/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# People and family data. Stays on this Mac. See docs/hard-rules.md rule 9.
+data/

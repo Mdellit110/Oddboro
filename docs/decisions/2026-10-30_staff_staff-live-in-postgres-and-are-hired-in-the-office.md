@@ -1,0 +1,1 @@
+- [staff] **Decision (2026-10-30): staff live in Postgres, job description included, and the owner hires them in the office, not in the repo.** Hiring writes a row and the staffer walks in live; the UI never edits tracked files. Code in `apps/office/src/lib/ui/HireDrawer.svelte`.

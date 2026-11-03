@@ -1,0 +1,36 @@
+# The owner's chair: a high-backed leather chair seen from the front, so it sits
+# behind their desk facing the room. Left empty; the owner is not a character.
+sprite owner-chair
+size 16 25
+layer object
+footprint 1 1
+origin 0 9
+tag chair owner
+variant teal R=T r=t 8=6
+
+frame default
+....kkkkkkkk....
+...kr8RRRRRRk...
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+..kr8RRRRRRR8k..
+.kkr8RRRRRRR8kk.
+kRRkrRRRRRRR8kRk
+kRRkkkkkkkkkkkRk
+kRRrrrrrrrrrrrRk
+k8RRRRRRRRRRRR8k
+k8RRRRRRRRRRRR8k
+k88888888888888k
+.kkkkkkkkkkkkkk.
+......k5k.......
+......k5k.......
+......k5k.......
+...kkkk5kkkk....
+..k5k.k5k.k5k...

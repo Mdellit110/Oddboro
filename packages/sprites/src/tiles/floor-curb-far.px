@@ -1,0 +1,25 @@
+# The far curb, seen from above: the gutter, the curb's edge line, its top,
+# then the first half of the far sidewalk. Its face points north, so none of
+# it shows.
+sprite floor-curb-far
+size 16 16
+layer floor
+tag floor street
+
+frame 0
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+::::::::::::::::
+||||||||||||||||
+***************|
++++++++++++++++|
+||||||||||||||||
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
++++++++++++++++|
+||||||||||||||||

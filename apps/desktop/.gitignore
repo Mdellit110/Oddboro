@@ -1,0 +1,7 @@
+# The staged server and the Node binary come from the stage script.
+stage/
+src-tauri/binaries/
+# Cargo and tauri-build output.
+src-tauri/target/
+src-tauri/gen/
+release/

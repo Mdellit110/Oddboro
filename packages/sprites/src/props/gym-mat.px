@@ -1,0 +1,47 @@
+# A yoga mat, one tile wide and two deep, unrolled with the last turn still
+# curled at the far end. Whoever stretches stands on the top tile facing the
+# viewer, with the mat running out in front.
+sprite gym-mat
+size 16 32
+layer floor
+footprint 1 2
+origin 0 0
+walkable
+tag mat exercise gym
+spot stretch 0 0 down exercise stand
+variant rust t=r T=R 6=8
+variant sage t=s T=S 6=0
+
+frame default
+.kkkkkkkkkkkkkk.
+kttttttttttttt6k
+kt6TTTTTTTTTT66k
+kt6TTTTTTTTTT66k
+kt6TTTTTTTTTT66k
+k66666666666666k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6TTTTTTTTTTT6k
+kt6666666666666k
+k66666666666666k
+k66666666666666k
+.kkkkkkkkkkkkkk.

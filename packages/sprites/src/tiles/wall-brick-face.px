@@ -1,0 +1,110 @@
+# The building's street front: warm red brick in running bond, a stone string
+# course at the window sill line (rows 21 to 23) and a stone plinth where the
+# wall meets the sidewalk (rows 28 to 31). Frame 0 is the quiet one; 1 and 2
+# swap in a redder brick, a paler brick and a hairline crack.
+sprite wall-brick-face
+size 16 32
+layer wall
+tag wall brick
+
+frame 0
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+****************
+++++++++++++++++
+||||||||||||||||
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+****************
+++++++++++++++++
+++++++++++++++++
+||||||||||||||||
+
+frame 1
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]RRRRRRH]hhh
+hhhHRRRRRRRHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]]]]]]]H
+hhhhhhhHh]]]]]]H
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+****************
+++++++++++++++++
+||||||||||||||||
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+****************
+++++++++++++++++
++++++++++++|++++
+||||||||||||||||
+
+frame 2
+HHHHHHHHHHHHHHHH
+]hhhhhhH]888888H
+hhhhhhhHh888888H
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]RRRRRRH]hhhhhhH
+hRRRRRRHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+HHHHHHHHHHHHHHHH
+hhhH]hhhhhhH]hhh
+hhhHhhhhhhhHhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+hhhhhhhHhhhhhhhH
+****************
+++++++++++++++++
+||||||||||||||||
+hhhH]888888H]hhh
+hhhH8888888Hhhhh
+HHHHHHHHHHHHHHHH
+]hhhhhhH]hhhhhhH
+****************
+++++|+++++++++++
+++++++++++++++++
+||||||||||||||||

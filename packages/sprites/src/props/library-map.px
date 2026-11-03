@@ -1,0 +1,34 @@
+# A framed antique map: parchment coast, teal water, a compass rose. Hangs on
+# a back wall, two cells wide.
+sprite library-map
+size 32 24
+layer wall
+footprint 2 1
+origin 0 14
+tag wall decor map library
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwaaaaaaaaaaa4ttttttttttttttaaWk
+kwaaaaaaaaa44tttttttttttttt4aaWk
+kwaaaaaaaa4tttttttttttttt44aaaWk
+kwaaaaaaa4ttttttttttttt44aaaaaWk
+kwaaaaaaa4tttttttttttt4aaaaaaaWk
+kwaaaa4444ttttttttttt4aaaaaaaaWk
+kwaaa4ttttttttttttttt4aaaaaaaaWk
+kwaa4ttttttttttttttt4aaaaaaaAaWk
+kwa4tttttttttttttt44aaaaaaaAAaWk
+kwa4ttttttttttttt4aaaaaaaaaAaaWk
+kwa4ttttttttt4ttt4aaaaaa=aaaaaWk
+kwaa4ttttttt4a4t4aaaaaa===aaaaWk
+kwaaa4ttttt4aaa4aaaaaa=====aaaWk
+kwaaaa44444aaaaaaaaaaaa===aaaaWk
+kwaaaaaaaaaaaaaaaaaaaaaa=aaaaaWk
+kwaAAaaaaaaaaaaaaaaaaaaaaaaaaaWk
+kwAaaaaaaAAAaaaaaaaaaaaaaaaAAaWk
+kwaaaaaaaaaaaaaaaaaaaaaaaaaaaaWk
+kwaaaaaaaaaaaaaaaaaaaaaaaaaaaaWk
+kwWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+................................

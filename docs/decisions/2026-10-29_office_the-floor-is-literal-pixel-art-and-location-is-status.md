@@ -1,0 +1,1 @@
+- [office] **Decision (2026-10-29): the floor is literal top-down pixel art, and where a staffer stands is what it is doing.** A glance at the floor should work as a status report, so each place maps to one activity (desk is work, break room is idle, outside the owner's door is waiting on them).

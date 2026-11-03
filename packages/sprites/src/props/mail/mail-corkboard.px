@@ -1,0 +1,34 @@
+# A cork board in a walnut frame, pinned with notes, a list and a postcard of
+# the sea. Hangs on a back wall face, two cells wide.
+sprite mail-corkboard
+size 32 24
+layer wall
+footprint 2 1
+origin 0 10
+tag wall decor board
+
+frame default
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwwwwwwwwwwwwwwwwWk
+kwAAAAAAAAAAAAAAAAAAAAAAAAAAAAWk
+kwAyyRyyAAAAAAAA4At8ttAAkkkkAAWk
+kwAyKKyyAA==R===AAtKKtAAkt~kAAWk
+kwAyyyyyAA=KK=K=AAttttA4k~>kAAWk
+kwAyKyKyAA======AAtKttA?kkkkAAWk
+kwAyyyyy4A=K=KK=AAA4AAA?KK??AAWk
+kwAAAA4AAA======A4AAAAA?????4AWk
+kwAA4AAAAA======AAAAAAA??KK?AAWk
+kwAAAAAAAAAAA4AAAAAAAAA?????AAWk
+kwAA===8===4AAAAAAAAAA4?????AAWk
+kwAA=KKKK==AAAAAAAAA4AAAAAAAAAWk
+kwAA=======AAssRss4AAAAAAAAAAAWk
+kwAA=KK=KK=AAsKKssAAyy8yyyA4AAWk
+kwA4=======AAsssssAAyKKKyyAAAAWk
+kwAA=K=====A4sKsKsAAyyyyyyAAAAWk
+kwAA=======AAsssssAAyyKKyyAAAAWk
+kwAAAAAA4AAAAAAAAAA4yyyyyyAAAAWk
+kwAAAA4AAAAAAAAAA4AAAAAAAAAA4AWk
+kwAA4AAAAAAAAAA4AAAAAAAAAA4AAAWk
+kwAAAAAAAAAAAAAAAAAAAAAAAAAAAAWk
+kWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWk
+kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk

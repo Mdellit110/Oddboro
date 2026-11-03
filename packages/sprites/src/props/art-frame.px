@@ -1,0 +1,29 @@
+# A framed print of the deep. Hangs on a back wall face cell.
+sprite art-frame
+size 16 20
+layer wall
+footprint 1 1
+origin 0 14
+tag wall decor
+
+frame default
+kkkkkkkkkkkkkkkk
+kwwwwwwwwwwwwwwk
+kwTTTTtTTTTTTTWk
+kwTTTttTTTTTTTWk
+kw666ttt666666Wk
+kw666ttt666666Wk
+kw666ttt666t66Wk
+kw777ttt777777Wk
+kw777ttt777777Wk
+kw777tt77t7777Wk
+kw7777t7777777Wk
+kw7777t7777777Wk
+kw777777777t77Wk
+kw777777777777Wk
+kw77t777777777Wk
+kw77777777t777Wk
+kw767777777766Wk
+kw666666666666Wk
+kwWWWWWWWWWWWWWk
+kkkkkkkkkkkkkkkk
