@@ -12,7 +12,7 @@
 // Claude Code half installed.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { error, json } from '@sveltejs/kit';
-import { WINDOWS } from '@oddboro/ledger';
+import { WINDOWS, claudeCommand } from '@oddboro/ledger';
 import {
   claudeAccount,
   claudeSettings,
@@ -49,24 +49,28 @@ export const PUT: RequestHandler = async ({ request }) => {
 
 type Action = 'install' | 'sign-in';
 
-const COMMANDS: Record<Action, readonly [string, readonly string[]]> = {
+const COMMANDS: Record<Action, () => [string, string[]]> = {
   // Windows rarely has Node, so it gets Claude Code's own installer, the one
   // its docs give there. It puts claude.exe in ~/.local/bin, which the app's
   // PATH already names (apps/desktop/src-tauri/src/env.rs).
-  install: WINDOWS
-    ? [
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-Command',
-          'irm https://claude.ai/install.ps1 | iex'
+  install: () =>
+    WINDOWS
+      ? [
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            'irm https://claude.ai/install.ps1 | iex'
+          ]
         ]
-      ]
-    : ['npm', ['install', '-g', '@anthropic-ai/claude-code']],
+      : ['npm', ['install', '-g', '@anthropic-ai/claude-code']],
   // Opens the sign-in page in the browser; the command ends when the owner finishes there.
-  'sign-in': ['claude', ['auth', 'login', '--claudeai']]
+  'sign-in': () => {
+    const [cmd, before] = claudeCommand();
+    return [cmd, [...before, 'auth', 'login', '--claudeai']];
+  }
 };
 
 /** The command running now, with the way to end its answer. */
@@ -85,8 +89,7 @@ process.once('exit', () => current?.child.kill());
 export const POST: RequestHandler = async ({ request }) => {
   const b = (await request.json().catch(() => ({}))) as { action?: unknown };
   const action = b.action as Action;
-  const command = COMMANDS[action];
-  if (!command) error(400, 'Say install or sign-in');
+  if (!Object.hasOwn(COMMANDS, action)) error(400, 'Say install or sign-in');
   if (current?.action === 'install') error(409, 'Claude Code is still installing');
   if (current) {
     // Signing in again: the owner closed the page or wants a fresh one.
@@ -94,7 +97,7 @@ export const POST: RequestHandler = async ({ request }) => {
     old.finish(false, 'Started over.');
     stop(old.child);
   }
-  const [cmd, args] = command;
+  const [cmd, args] = COMMANDS[action]();
   const encoder = new TextEncoder();
   // The page can leave before the command ends; the command still finishes.
   let open = true;
@@ -103,7 +106,11 @@ export const POST: RequestHandler = async ({ request }) => {
       const send = (o: unknown) => {
         if (open) out.enqueue(encoder.encode(`${JSON.stringify(o)}\n`));
       };
-      const child = spawn(cmd, [...args], { stdio: ['ignore', 'pipe', 'pipe'], env: cleanEnv() });
+      const child = spawn(cmd, args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: cleanEnv(),
+        windowsHide: true
+      });
       const lines = (chunk: Buffer) =>
         chunk
           .toString()

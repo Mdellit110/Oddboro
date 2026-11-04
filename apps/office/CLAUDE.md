@@ -247,8 +247,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     from a chat or a job run; it belongs to the Odd, never to a job. The
     office clock (`src/lib/server/jobs.ts`) delivers it on the minute
     (`deliverPoke` in `staff.ts`): a `poke` line in the Odd's chat and a
-    Mac notification (`notifyMac`: as Oddboro's in the app, through
-    `osascript` from the repo). More than 15 minutes late (the Mac
+    notification on the owner's computer (`notifyMac`: as Oddboro's in the
+    app; from the repo through `osascript` on a Mac, `notify-send` on Linux,
+    and a toast shown as Windows PowerShell's on Windows). More than 15 minutes late (the Mac
     slept) it is marked missed instead (`pokeMissed`); time the app spent
     down for an update does not count, so a poke due then lands after the
     restart. The chat ends with a line per poke to
@@ -405,8 +406,11 @@ none. With the owner's Caddy on port 80 it adds two routes and a certificate
 policy through Caddy's admin API (127.0.0.1:2019, with an explicit origin, which
 that API wants), touches none of their files, and adds them again when the
 office starts and when a page loads (`keepAddress`). With anything else on port
-80 it stays at `:4500`. HTTPS uses Caddy's own authority; the Mac trusts it once,
-with the owner's password in the macOS dialog (Make it secure), because a
+80 it stays at `:4500`; on Windows that is often http.sys, Windows' own web
+server. On Windows the office's Caddy listens on 127.0.0.1 only, so the
+firewall never asks. HTTPS uses Caddy's own authority; the Mac trusts it once,
+with the owner's password in the macOS dialog (Make it secure; Windows asks in
+its own dialog and adds it to the owner's list, with no admin), because a
 browser shows notifications only on a secure page. Firefox keeps its own trusted
 list, and the card says so to Firefox users. `npm run setup` opens the secure
 address when it answers and is trusted.
@@ -439,12 +443,16 @@ into the page (scripts, styles, images) are served before the check.
 
 1. `npm run service:install -w apps/office` installs a login service
    (`scripts/office-service.ts`, label `com.oddboro.office`): launchd on a
-   Mac, a systemd user unit on Linux (`@oddboro/ledger/platform`). On Linux it
-   starts with the desktop session, so what it runs can open windows. On a Mac it
-   runs the office under `caffeinate -s`, so the Mac stays awake on power.
-   Either way it restarts the office if it stops. Logs go to
-   `~/Library/Logs/oddboro-office.log` on a Mac and
-   `~/.local/state/oddboro/office.log` on Linux.
+   Mac, a systemd user unit on Linux, a Task Scheduler task on Windows
+   (`@oddboro/ledger/platform`). On Linux it starts with the desktop session,
+   so what it runs can open windows. On a Mac it runs the office under
+   `caffeinate -s`, so the Mac stays awake on power. On Windows the task runs
+   a batch loop in `%LOCALAPPDATA%\Oddboro\services` under
+   `conhost --headless`, so no window shows, and needs no admin. Every way, it
+   restarts the office if it stops. Logs go to
+   `~/Library/Logs/oddboro-office.log` on a Mac,
+   `~/.local/state/oddboro/office.log` on Linux and
+   `%LOCALAPPDATA%\Oddboro\Logs\office.log` on Windows.
 2. `npm run service:uninstall -w apps/office` removes it. Stop it before
    running `npm run dev`, since both want port 4500.
 3. The office starts its own database, so nothing else has to. A database in

@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { release } from 'node:os';
 import postgres from 'postgres';
-import { LINUX, MAC, WINDOWS, serviceInstalled } from './platform.ts';
+import { LINUX, MAC, WINDOWS, claudeCommand, serviceInstalled } from './platform.ts';
 import { secretStore } from './secrets.ts';
 
 export type Check = {
@@ -107,7 +107,11 @@ export function checkNode(): Check {
 
 /** Claude Code, signed in to a Claude plan or given an API key. Staff runs use it. */
 export async function checkClaude(): Promise<Check> {
-  const version = await run('claude', ['--version']);
+  const claude = (args: string[]) => {
+    const [cmd, before] = claudeCommand();
+    return run(cmd, [...before, ...args]);
+  };
+  const version = await claude(['--version']);
   if (!version.ok)
     return {
       id: 'claude',
@@ -115,10 +119,10 @@ export async function checkClaude(): Promise<Check> {
       state: 'missing',
       found: 'Not installed',
       fix: WINDOWS
-        ? 'Install it from PowerShell: `irm https://claude.ai/install.ps1 | iex`. Then run `claude` once and sign in. An npm install of Claude Code does not work here.'
+        ? 'Install it from PowerShell: `irm https://claude.ai/install.ps1 | iex`. Then run `claude` once and sign in.'
         : 'Install it: `npm install -g @anthropic-ai/claude-code`. Then run `claude` once and sign in.'
     };
-  const status = await run('claude', ['auth', 'status']);
+  const status = await claude(['auth', 'status']);
   let signedIn = false;
   let method = '';
   try {
