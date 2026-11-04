@@ -152,7 +152,14 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    only the office tools the owner ticked under "In the office" on the Access tab,
    and whatever outside access the owner granted: servers at read (the tools
    the owner ticked as read-only) or write (every tool, only while the Odd
-   holds Act). Hosted servers sign in with
+   holds Act). Which outside tools a run gets comes from `capabilities()` in
+   `packages/ledger/src/capabilities.ts`, which also says why a granted one is
+   held back (above the Odd's level, still connecting). The prompt's "What you
+   can do" section, `my_access`, `office_report` and the owner's Access tab all
+   read it for the level and each outside tool. A hosted sign-in that ran out
+   shows only to the run, which passes it to its own `my_access` as
+   `SIGNED_OUT`; `office_report` and the Access tab still show that tool as
+   working. Hosted servers sign in with
    OAuth (`src/lib/server/oauth.ts`): the task's Sign in opens the service, it
    returns to `/connect/callback`, the tokens go in the keychain, and each run
    gets a fresh access token as a header. When a tool an Odd holds stops working, it calls

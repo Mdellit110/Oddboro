@@ -74,6 +74,9 @@ jobs:
   mac:
     needs: version
     runs-on: macos-15
+    # The signing keys live in the release environment, which only main may
+    # use, so a run from any other branch never sees them.
+    environment: release
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
@@ -166,6 +169,7 @@ jobs:
           - runner: ubuntu-22.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
+    environment: release
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5

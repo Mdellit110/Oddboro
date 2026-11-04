@@ -88,6 +88,10 @@ The rules are in `CLAUDE.md`.
 See `CONTRIBUTING.md`. Every commit in a pull request is signed off under the
 Developer Certificate of Origin (`git commit -s`).
 
+## Security
+
+Report a vulnerability privately, never in a public issue. See `SECURITY.md`.
+
 ## License
 
 Apache License 2.0. See `LICENSE`, and `NOTICE` for the attribution that
