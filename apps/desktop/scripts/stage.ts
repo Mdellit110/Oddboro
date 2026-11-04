@@ -6,6 +6,9 @@
 //   stage/node_modules/             production packages, at the versions installed here
 //   stage/node_modules/@oddboro/*   ledger, sprites and world, as JavaScript, with their files
 //
+// Packages' test folders stay out, and no path may run long enough to stop
+// the Windows installer's builder (see LONGEST).
+//
 // It also fetches the Node binary the app carries, checked against nodejs.org's
 // published sums. `--smoke` then starts the staged office on a spare port and
 // home, and stops it once it answers.
@@ -129,6 +132,32 @@ function stagePackage(name: string): void {
   );
 }
 
+/** Folders a package keeps for its own tests, which the app never loads. */
+const TEST_DIRS = new Set(['__screenshots__', '__tests__']);
+/**
+ * The Windows installer's builder opens every file by its full path, and a
+ * path stops at 260 characters there. GitHub's runner puts the stage about 60
+ * characters deep, so no staged path may be longer than this.
+ */
+const LONGEST = 180;
+
+/**
+ * Takes out every test folder, where the longest names live (layerchart's
+ * screenshots run past 200 characters), then fails on any path still too
+ * long, here rather than in the installer.
+ */
+function prune(dir: string, rel = ''): void {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    const r = rel ? `${rel}/${name}` : name;
+    if (statSync(path).isDirectory()) {
+      if (TEST_DIRS.has(name)) rmSync(path, { recursive: true, force: true });
+      else prune(path, r);
+    } else if (r.length > LONGEST)
+      throw new Error(`stage/${r} is ${r.length} characters, too long for the Windows installer`);
+  }
+}
+
 function stageOffice(): void {
   const office = join(STAGE, 'apps', 'office');
   cpSync(join(ROOT, 'apps', 'office', 'build'), join(office, 'build'), { recursive: true });
@@ -241,6 +270,7 @@ writeFileSync(
 npm(['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], STAGE);
 for (const p of PACKAGES) stagePackage(p);
 stageOffice();
+prune(STAGE);
 await fetchNode();
 console.log(`Staged the server in ${STAGE}.`);
 if (process.argv.includes('--smoke')) await smoke();
