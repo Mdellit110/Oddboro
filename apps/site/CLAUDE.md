@@ -253,6 +253,13 @@ looping GIF from `scripts/release-art.ts`, with a still of the last frame.
 names the art, and the page shows the pair for the visitor's theme, the
 still under reduced motion (the 2026-11-03 site ruling). A new animation goes
 in `release-art.ts`, so it gets both themes with no extra work.
+
+The newest release's art is also `/releases/`'s link preview:
+`<name>-share.png`, one frame at 1200 by 630 on ink, from the night set.
+Each animation names its frame as `share` in `release-art.ts`, and `npm run
+art` fails without one. The owner picks the frame: when making a release's
+art, show the owner the frames and ask which one. `releases.ts` describes that
+frame as `shareAlt`.
 `scripts/gif.ts` writes the GIFs, with no dependency: median cut to 256
 colours, then LZW.
 

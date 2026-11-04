@@ -29,6 +29,8 @@
   title="Releases · {SITE.name}"
   description="Every release of {SITE.name}, and every build of the newest one: the Mac app and the Linux AppImages."
   path="/releases/"
+  image={latest.art ? `/art/releases/${latest.art.name}-share.png` : undefined}
+  imageAlt={latest.art?.shareAlt}
 />
 
 <article class="mx-auto max-w-7xl px-4 pt-14 pb-24 sm:px-6 lg:px-8">

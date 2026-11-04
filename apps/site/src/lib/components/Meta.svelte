@@ -7,7 +7,9 @@
     description = SITE.description,
     ogTitle = title,
     ogDescription = description,
-    path = '/'
+    path = '/',
+    image = SITE.ogImage,
+    imageAlt = 'The front of a pixel-art office at night, lamps on'
   }: {
     title?: string;
     description?: string;
@@ -15,10 +17,13 @@
     ogTitle?: string;
     ogDescription?: string;
     path?: string;
+    /** The link preview's picture, 1200 by 630, from the site's root. */
+    image?: string;
+    imageAlt?: string;
   } = $props();
 
   const canonical = $derived(`${SITE.url}${path}`);
-  const image = $derived(`${SITE.url}${SITE.ogImage}`);
+  const imageUrl = $derived(`${SITE.url}${image}`);
 </script>
 
 <svelte:head>
@@ -30,12 +35,13 @@
   <meta property="og:title" content={ogTitle} />
   <meta property="og:description" content={ogDescription} />
   <meta property="og:url" content={canonical} />
-  <meta property="og:image" content={image} />
+  <meta property="og:image" content={imageUrl} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="The front of a pixel-art office at night, lamps on" />
+  <meta property="og:image:alt" content={imageAlt} />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={ogTitle} />
   <meta name="twitter:description" content={ogDescription} />
-  <meta name="twitter:image" content={image} />
+  <meta name="twitter:image" content={imageUrl} />
+  <meta name="twitter:image:alt" content={imageAlt} />
 </svelte:head>

@@ -2,7 +2,9 @@
 // draft on GitHub is published, with the same version as its tag. A release
 // may carry art: a name from scripts/release-art.ts, whose looping GIF and
 // still `npm run art` writes for night (static/art/releases/) and for day
-// (static/art/day/releases/). The page shows the theme's pair.
+// (static/art/day/releases/). The page shows the theme's pair. The newest
+// release's art is also the page's link preview, from the frame named as
+// `share` in release-art.ts.
 import type { BuildId } from '#lib/downloads.svelte.ts';
 
 export type Release = {
@@ -14,7 +16,12 @@ export type Release = {
   notes: string[];
   /** The builds this release carries. */
   builds: BuildId[];
-  art?: { name: string; alt: string };
+  art?: {
+    name: string;
+    alt: string;
+    /** What the link preview's frame shows. */
+    shareAlt: string;
+  };
 };
 
 export const RELEASES: Release[] = [
@@ -31,7 +38,8 @@ export const RELEASES: Release[] = [
     builds: ['mac', 'linux-x86_64', 'linux-aarch64'],
     art: {
       name: 'linux',
-      alt: 'An Odd types at a desk. A penguin jumps out of the monitor, arcs over the desk and lands on the floor.'
+      alt: 'An Odd types at a desk. A penguin jumps out of the monitor, arcs over the desk and lands on the floor.',
+      shareAlt: 'A pixel-art penguin stands on the office floor beside an Odd typing at its desk.'
     }
   },
   {
@@ -49,7 +57,8 @@ export const RELEASES: Release[] = [
     builds: ['mac'],
     art: {
       name: 'hello-world',
-      alt: 'An Odd types at a desk, and a speech bubble above it spells out "Hello, world!" one letter at a time.'
+      alt: 'An Odd types at a desk, and a speech bubble above it spells out "Hello, world!" one letter at a time.',
+      shareAlt: 'An Odd types at a desk under a speech bubble that says "Hello, world!"'
     }
   }
 ];

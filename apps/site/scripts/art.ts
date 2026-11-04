@@ -592,7 +592,8 @@ function renderSet(hour: number, dir: string): Image {
           }),
           shade: (img) => shade(img, 1)
         },
-        join(ART, dir, 'releases')
+        join(ART, dir, 'releases'),
+        dir === 'day' ? 'day' : 'night'
       );
     // The prop's frames, lit, as a strip of only the pixels each frame
     // changes against the room: frame 0 is empty, so the room shows through.

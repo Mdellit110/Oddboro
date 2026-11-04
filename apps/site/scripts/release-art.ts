@@ -11,7 +11,7 @@
 //                 the desk and lands on the floor (the Linux release)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { createImage, drawImage, encodePng, type Image } from '@oddboro/sprites/png';
+import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
 import { hexToRgba } from '@oddboro/sprites/px';
 import { encodeGif, type GifFrame } from './gif.ts';
 
@@ -197,16 +197,47 @@ function linux(layers: DeskLayers): GifFrame[] {
   return frames;
 }
 
-/** Writes <name>.gif and its still, <name>.png, into `dir`, for one theme. */
-export function writeReleaseArt(layers: DeskLayers, dir: string): void {
+/**
+ * Every release's art. `share` is the GIF frame, counted from 0, that becomes
+ * the link preview while that release is the newest one. The owner picks it
+ * when the art is made; there is no default.
+ */
+const ART: { name: string; frames: (layers: DeskLayers) => GifFrame[]; share: number }[] = [
+  // The whole hello in its bubble.
+  { name: 'hello-world', frames: helloWorld, share: 30 },
+  // The penguin standing on the floor.
+  { name: 'linux', frames: linux, share: 30 }
+];
+
+// The link preview's size, and the ink it sits on.
+const CARD = { w: 1200, h: 630 };
+
+/** One frame, scaled up by whole pixels and centred on ink, at the preview's size. */
+function shareCard(img: Image): Image {
+  const scale = Math.min(Math.floor(CARD.w / img.width), Math.floor(CARD.h / img.height));
+  const card = createImage(CARD.w, CARD.h);
+  const ink = hexToRgba(PALETTE.k.hex);
+  for (let p = 0; p < CARD.w * CARD.h; p++) card.data.set(ink, p * 4);
+  const big = scaleImage(img, scale);
+  drawImage(card, big, (CARD.w - big.width) >> 1, (CARD.h - big.height) >> 1);
+  return card;
+}
+
+/**
+ * Writes <name>.gif and its still, <name>.png, into `dir`, for one theme. At
+ * night it also writes <name>-share.png, the link preview.
+ */
+export function writeReleaseArt(layers: DeskLayers, dir: string, theme: 'night' | 'day'): void {
   mkdirSync(dir, { recursive: true });
-  for (const [name, frames] of [
-    ['hello-world', helloWorld(layers)],
-    ['linux', linux(layers)]
-  ] as const) {
-    const still = frames.at(-1)!;
-    writeFileSync(join(dir, `${name}.gif`), encodeGif(frames.slice(0, -1)));
-    writeFileSync(join(dir, `${name}.png`), encodePng(still.image));
-    console.log(`${relative(process.cwd(), join(dir, name))}.gif: ${frames.length - 1} frames`);
+  for (const art of ART) {
+    const frames = art.frames(layers);
+    const gif = frames.slice(0, -1);
+    if (!Number.isInteger(art.share) || art.share < 0 || art.share >= gif.length)
+      throw new Error(`${art.name}: share frame ${art.share} is not one of its ${gif.length}`);
+    writeFileSync(join(dir, `${art.name}.gif`), encodeGif(gif));
+    writeFileSync(join(dir, `${art.name}.png`), encodePng(frames.at(-1)!.image));
+    if (theme === 'night')
+      writeFileSync(join(dir, `${art.name}-share.png`), encodePng(shareCard(gif[art.share].image)));
+    console.log(`${relative(process.cwd(), join(dir, art.name))}.gif: ${gif.length} frames`);
   }
 }
