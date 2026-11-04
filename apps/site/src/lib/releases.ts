@@ -26,6 +26,21 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.0.4',
+    date: '2026-11-04',
+    title: 'We closed a gap that could let other websites reach your office.',
+    summary:
+      'A page open in your browser could send your office requests, like approving an ask. That was our mistake. Now the office takes changes only from its own window.',
+    notes: [],
+    builds: ['mac', 'linux-x86_64', 'linux-aarch64'],
+    art: {
+      name: 'locked-door',
+      alt: 'The office front door stands open. An Odd walks up, its two doors slide shut together, and it locks them with a CLICK, then steps back, a padlock on the door, and turns to face the street.',
+      shareAlt:
+        'An Odd stands on the sidewalk facing out, beside the shut front door of a pixel-art office with a padlock on it.'
+    }
+  },
+  {
     version: '0.0.3',
     date: '2026-11-03',
     title: 'Oddboro runs on Linux.',

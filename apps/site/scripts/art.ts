@@ -485,7 +485,8 @@ function renderSet(hour: number, dir: string): Image {
     if (a) pieces.data.set([lit.data[i * 4], lit.data[i * 4 + 1], lit.data[i * 4 + 2], a], i * 4);
   }
   write('pieces.png', cropTo(pieces, crop), dir);
-  write('door-open.png', cropTo(light(paint(openDraws, true), world, openDraws), doorRect), dir);
+  const doorOpen = cropTo(light(paint(openDraws, true), world, openDraws), doorRect);
+  write('door-open.png', doorOpen, dir);
 
   for (const s of STAFF) {
     const def = sprites.get(s.sprite)!;
@@ -636,7 +637,8 @@ function renderSet(hour: number, dir: string): Image {
   // The releases page's art, once per theme like the rest: night in
   // static/art/releases/, day in static/art/day/releases/. The desk comes from
   // the vignettes; the front door is the hero building's own, shut, with the
-  // sidewalk below it, and Ada (the desk's Odd) to walk into it.
+  // sidewalk below it, the same door open, and Ada (the desk's Odd) to walk
+  // up to it.
   if (!desk) throw new Error('the releases art needs the desk vignette');
   const doorAt: Rect = {
     x: Math.round(doorRect.x + doorRect.w / 2 - 64),
@@ -651,6 +653,7 @@ function renderSet(hour: number, dir: string): Image {
       door: {
         room: cropTo(lit, doorAt),
         door: { ...doorRect, x: doorRect.x - doorAt.x, y: doorRect.y - doorAt.y },
+        open: doorOpen,
         odd: (frame) => {
           const src = frameImage(sprites.get(ada.sprite)!, frame, ada.variant);
           const img = createImage(src.width, src.height);

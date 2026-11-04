@@ -11,6 +11,10 @@
 //                 and wonders why (0.0.2, the stuck sign-in fix)
 //   linux         the screen flashes and a penguin jumps out of it, arcs over
 //                 the desk and lands on the floor (0.0.3)
+//   locked-door   the open front door's two leaves slide shut together in
+//                 front of Ada, she locks it, CLICK, steps back with a
+//                 padlock on it and faces the street (0.0.4, the office
+//                 takes actions only from its own page)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
@@ -38,6 +42,8 @@ export type DoorLayers = {
   room: Image;
   /** The door, in the room's pixels. */
   door: { x: number; y: number; w: number; h: number };
+  /** The door open, lit, the size of `door`, to draw over the shut one. */
+  open: Image;
   /** Ada in one sprite frame, like `walk-up-2`, lit, 16 by 32. */
   odd: (frame: string) => Image;
 };
@@ -93,6 +99,9 @@ const GLYPHS: Record<string, string[]> = {
   ',': ['.', '.', '.', 'x', 'x'],
   '!': ['x', 'x', 'x', '.', 'x'],
   '?': ['xx.', '..x', '.x.', '...', '.x.'],
+  C: ['.xx', 'x..', 'x..', 'x..', '.xx'],
+  I: ['xxx', '.x.', '.x.', '.x.', 'xxx'],
+  K: ['x.x', 'x.x', 'xx.', 'x.x', 'x.x'],
   ' ': ['..', '..', '..', '..', '..']
 };
 const HELLO = 'HELLO, WORLD!';
@@ -262,6 +271,138 @@ function stuckSignIn({ room, door, odd }: DoorLayers): GifFrame[] {
   return frames;
 }
 
+// The padlock, hung through both brass pulls: an amber body with a keyhole,
+// outlined in ink so it shows on the lit glass by night and by day.
+const PADLOCK = sprite([
+  '.kkkk.',
+  '.k..k.',
+  '.k..k.',
+  'kkkkkk',
+  'kYYYYk',
+  'kYkkYk',
+  'kYYYYk',
+  'kkkkkk'
+]);
+
+// The two leaves of the front door, in the door sprite's pixels: the full
+// height of the doorway, rows 13 to 30, inside the jamb from column 11 to 36,
+// meeting in the middle. Each is 13 columns wide.
+const LEAF = { top: 13, bottom: 30, left: 11, right: 36, w: 13 };
+
+// The sprite's doorway has a transom, two panes and a bar over shorter
+// leaves (rows 13 to 17). Here the leaves run its full height instead: each
+// row listed copies another row of the sprite's own, already lit, between its
+// frame's columns 8 and 39. Shut, the leaf's top rail moves up under the frame
+// and the glass grows, with the pulls where they were. Open, the dark
+// doorway does the same. Rows not listed stay as they are.
+const FULL_HEIGHT = {
+  shut: { 13: 18, 14: 19, 15: 20, 16: 21, 17: 21, 18: 21, 19: 21, 20: 21 },
+  open: { 13: 18, 14: 19, 15: 20, 16: 20, 17: 20, 18: 20, 19: 20 }
+} satisfies Record<string, Record<number, number>>;
+
+/** The door's pixels from `src` at (x, y), with its rows moved as `rows` says. */
+function fullHeight(src: Image, x: number, y: number, rows: Record<number, number>): Image {
+  const w = 48;
+  const h = 32;
+  const img = createImage(w, h);
+  const at = (r: number, c: number) => ((y + r) * src.width + x + c) * 4;
+  for (let r = 0; r < h; r++) {
+    const from = rows[r as keyof typeof rows] ?? r;
+    for (let c = 0; c < w; c++) {
+      const s = at(c >= 8 && c <= 39 ? from : r, c);
+      img.data.set(src.data.subarray(s, s + 4), (r * w + c) * 4);
+    }
+  }
+  return img;
+}
+
+function lockedDoor({ room, door, open, odd }: DoorLayers): GifFrame[] {
+  const x = Math.round(door.x + door.w / 2 - 8);
+  // Ada's sprite top: at the door, half a step back where she waits while it
+  // shuts, a step back where the padlock shows over her head, and where she
+  // starts, a tile and a half back on the sidewalk.
+  const at = door.y + door.h - 16;
+  const near = at + 8;
+  const back = at + 12;
+  const start = at + 24;
+  // The pulls sit in the door's columns 21 and 26, rows 22 to 24.
+  const lock = { x: door.x + 21, y: door.y + 19 };
+  const frames: GifFrame[] = [];
+  // The door shut and open, its leaves the doorway's full height.
+  const shut = fullHeight(room, door.x, door.y, FULL_HEIGHT.shut);
+  const opened = fullHeight(open, 0, 0, FULL_HEIGHT.open);
+  // How far the leaves have slid shut, 0 open to 1 shut.
+  let slid = 0;
+  let locked = false;
+  const scene = (pose: string, y: number, extra?: (img: Image) => void) => {
+    const img = createImage(room.width, room.height);
+    drawImage(img, room, 0, 0);
+    drawImage(img, slid < 1 ? leaves() : shut, door.x, door.y);
+    if (locked) drawImage(img, PADLOCK, lock.x, lock.y);
+    drawImage(img, odd(pose), x, y);
+    extra?.(img);
+    return img;
+  };
+  const add = (pose: string, y: number, extra?: (img: Image) => void) =>
+    frames.push({ image: scene(pose, y, extra), delay: DELAY });
+  const walk = (from: number, to: number) => {
+    const steps = Math.ceil(Math.abs(to - from) / 2);
+    for (let i = 1; i <= steps; i++)
+      add(`walk-up-${Math.floor(i / 2) % 4}`, Math.round(from + ((to - from) * i) / steps));
+  };
+  const click = bubble(6, 'CLICK!');
+  const over = (b: Image, y: number) => (img: Image) => drawImage(img, b, x + 4, y - b.height + 2);
+
+  /**
+   * The door part way shut, over the open doorway: each leaf, whole and full
+   * height, slid in from its side of the jamb. The part still in the wall
+   * does not show.
+   */
+  function leaves(): Image {
+    const img = createImage(opened.width, opened.height);
+    drawImage(img, opened, 0, 0);
+    const off = Math.round(LEAF.w * (1 - slid));
+    for (let i = 0; i < LEAF.w - off; i++) {
+      // The leaf's inner edge leads: column i from the jamb shows the shut
+      // leaf's column i + off.
+      for (const [dx, sx] of [
+        [LEAF.left + i, LEAF.left + i + off],
+        [LEAF.right - i, LEAF.right - i - off]
+      ])
+        for (let y = LEAF.top; y <= LEAF.bottom; y++) {
+          const src = (y * shut.width + sx) * 4;
+          img.data.set(shut.data.subarray(src, src + 4), (y * img.width + dx) * 4);
+        }
+    }
+    return img;
+  }
+
+  for (let i = 0; i < 6; i++) add('idle-up-0', start);
+  walk(start, near);
+  for (let i = 0; i < 2; i++) add('idle-up-0', near);
+  // Both leaves slide together and meet in the middle, quick at first and
+  // slowing as they meet.
+  for (const s of [0.15, 0.35, 0.55, 0.72, 0.86, 0.95, 1]) {
+    slid = s;
+    add('idle-up-0', near);
+  }
+  for (let i = 0; i < 2; i++) add('idle-up-0', near);
+  // She steps up and turns the key.
+  walk(near, at);
+  add('idle-up-0', at);
+  locked = true;
+  for (let i = 0; i < 8; i++) add('idle-up-0', at, over(click, at));
+  // A step back, still facing the door, so the padlock shows.
+  walk(at, back);
+  for (let i = 0; i < 4; i++) add('idle-up-0', back);
+  // Then she turns to face the street and stands by the locked door.
+  add('idle-side-0', back);
+  for (let i = 0; i < 24; i++) add(`idle-down-${Math.floor(i / 3) % 4}`, back);
+  // The still: the door locked, Ada facing the street.
+  frames.push({ image: scene('idle-down-0', back), delay: 0 });
+  return frames;
+}
+
 /**
  * Every release's art. `share` is the GIF frame, counted from 0, that becomes
  * the link preview while that release is the newest one, and `shareLight` is
@@ -279,7 +420,9 @@ const ART: {
   // Ada backed off on the sidewalk, wondering.
   { name: 'stuck-sign-in', frames: (l) => stuckSignIn(l.door), share: 55, shareLight: 'night' },
   // The penguin standing on the floor, by day, where his ink shows.
-  { name: 'linux', frames: (l) => linux(l.desk), share: 30, shareLight: 'day' }
+  { name: 'linux', frames: (l) => linux(l.desk), share: 30, shareLight: 'day' },
+  // Ada facing the street beside the locked door, by night, where the glass glows.
+  { name: 'locked-door', frames: (l) => lockedDoor(l.door), share: 60, shareLight: 'night' }
 ];
 
 // The link preview's size, and the ink it sits on.
