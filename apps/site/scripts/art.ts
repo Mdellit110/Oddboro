@@ -660,7 +660,8 @@ function renderSet(hour: number, dir: string): Image {
       }
     },
     join(ART, dir, 'releases'),
-    dir === 'day' ? 'day' : 'night'
+    dir === 'day' ? 'day' : 'night',
+    join(ART, 'releases')
   );
   return lit;
 }

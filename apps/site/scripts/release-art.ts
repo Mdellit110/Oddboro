@@ -264,16 +264,22 @@ function stuckSignIn({ room, door, odd }: DoorLayers): GifFrame[] {
 
 /**
  * Every release's art. `share` is the GIF frame, counted from 0, that becomes
- * the link preview while that release is the newest one. The owner picks it
- * when the art is made; there is no default.
+ * the link preview while that release is the newest one, and `shareLight` is
+ * whether that frame is drawn by night or by day. The owner picks both when
+ * the art is made; there is no default.
  */
-const ART: { name: string; frames: (layers: Layers) => GifFrame[]; share: number }[] = [
+const ART: {
+  name: string;
+  frames: (layers: Layers) => GifFrame[];
+  share: number;
+  shareLight: 'night' | 'day';
+}[] = [
   // The whole hello in its bubble.
-  { name: 'hello-world', frames: (l) => helloWorld(l.desk), share: 30 },
+  { name: 'hello-world', frames: (l) => helloWorld(l.desk), share: 30, shareLight: 'night' },
   // Ada backed off on the sidewalk, wondering.
-  { name: 'stuck-sign-in', frames: (l) => stuckSignIn(l.door), share: 55 },
-  // The penguin standing on the floor.
-  { name: 'linux', frames: (l) => linux(l.desk), share: 30 }
+  { name: 'stuck-sign-in', frames: (l) => stuckSignIn(l.door), share: 55, shareLight: 'night' },
+  // The penguin standing on the floor, by day, where his ink shows.
+  { name: 'linux', frames: (l) => linux(l.desk), share: 30, shareLight: 'day' }
 ];
 
 // The link preview's size, and the ink it sits on.
@@ -291,10 +297,16 @@ function shareCard(img: Image): Image {
 }
 
 /**
- * Writes <name>.gif and its still, <name>.png, into `dir`, for one theme. At
- * night it also writes <name>-share.png, the link preview.
+ * Writes <name>.gif and its still, <name>.png, into `dir`, for one theme. In
+ * the light an animation picks for its link preview, it also writes
+ * <name>-share.png into `shareDir`, the same folder in both themes.
  */
-export function writeReleaseArt(layers: Layers, dir: string, theme: 'night' | 'day'): void {
+export function writeReleaseArt(
+  layers: Layers,
+  dir: string,
+  theme: 'night' | 'day',
+  shareDir: string
+): void {
   mkdirSync(dir, { recursive: true });
   for (const art of ART) {
     const frames = art.frames(layers);
@@ -303,8 +315,13 @@ export function writeReleaseArt(layers: Layers, dir: string, theme: 'night' | 'd
       throw new Error(`${art.name}: share frame ${art.share} is not one of its ${gif.length}`);
     writeFileSync(join(dir, `${art.name}.gif`), encodeGif(gif));
     writeFileSync(join(dir, `${art.name}.png`), encodePng(frames.at(-1)!.image));
-    if (theme === 'night')
-      writeFileSync(join(dir, `${art.name}-share.png`), encodePng(shareCard(gif[art.share].image)));
+    if (theme === art.shareLight) {
+      mkdirSync(shareDir, { recursive: true });
+      writeFileSync(
+        join(shareDir, `${art.name}-share.png`),
+        encodePng(shareCard(gif[art.share].image))
+      );
+    }
     console.log(`${relative(process.cwd(), join(dir, art.name))}.gif: ${gif.length} frames`);
   }
 }
