@@ -111,10 +111,15 @@ export function launchdPlist(s: Service): string {
   return lines.join('\n');
 }
 
+// A user unit started from default.target runs before the desktop exists, so
+// it never learns WAYLAND_DISPLAY or DISPLAY, and nothing it runs can open a
+// window (Claude Code's sign-in among them). Starting with the graphical
+// session gives it the desktop's environment, as launchd does on a Mac.
 export function systemdUnit(s: Service): string {
   const lines = [
     '[Unit]',
     `Description=Oddboro (${s.label})`,
+    'After=graphical-session.target',
     '',
     '[Service]',
     `ExecStart=${s.args.map(quoted).join(' ')}`
@@ -129,7 +134,7 @@ export function systemdUnit(s: Service): string {
     `StandardError=append:${s.log}`,
     '',
     '[Install]',
-    'WantedBy=default.target',
+    'WantedBy=graphical-session.target',
     ''
   );
   return lines.join('\n');
@@ -164,7 +169,9 @@ const systemd: ServiceManager = {
     mkdirSync(join(unitFile(s.label), '..'), { recursive: true });
     writeFileSync(unitFile(s.label), systemdUnit(s));
     await run('systemctl', ['--user', 'daemon-reload']);
-    return run('systemctl', ['--user', 'enable', '--now', `${s.label}.service`]);
+    // reenable drops a link an older unit left under default.target.
+    await run('systemctl', ['--user', 'reenable', `${s.label}.service`]);
+    return run('systemctl', ['--user', 'restart', `${s.label}.service`]);
   },
   async remove(label) {
     await run('systemctl', ['--user', 'disable', '--now', `${label}.service`]);

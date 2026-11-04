@@ -408,7 +408,8 @@ address when it answers and is trusted.
 
 1. `npm run service:install -w apps/office` installs a login service
    (`scripts/office-service.ts`, label `com.oddboro.office`): launchd on a
-   Mac, a systemd user unit on Linux (`@oddboro/ledger/platform`). On a Mac it
+   Mac, a systemd user unit on Linux (`@oddboro/ledger/platform`). On Linux it
+   starts with the desktop session, so what it runs can open windows. On a Mac it
    runs the office under `caffeinate -s`, so the Mac stays awake on power.
    Either way it restarts the office if it stops. Logs go to
    `~/Library/Logs/oddboro-office.log` on a Mac and
