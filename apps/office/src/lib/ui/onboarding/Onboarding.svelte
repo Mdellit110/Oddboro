@@ -30,13 +30,18 @@
 <script lang="ts">
   import { setZone } from '@oddboro/ledger/time';
   import type { StaffProfile } from '../../staff/roster.ts';
+  import { AgentTools } from '../agent-tools.svelte.ts';
   import { call, follow } from '../api.ts';
   import ClaudeCard from './ClaudeCard.svelte';
   import MacCard, { type Setup } from './MacCard.svelte';
   import ManagerCard, { type Custom, type Preset } from './ManagerCard.svelte';
   import SpaceCard from './SpaceCard.svelte';
+  import ToolsCard from './ToolsCard.svelte';
+  import { selectOnFocus } from '../select-on-focus.ts';
+  import { offersOtherTools } from '../tool-action.ts';
 
-  // A new owner's first visit, over the live floor: six cards, then the office
+  // A new owner's first visit, over the live floor: seven cards (Other AI tools
+  // only where this system offers a tool besides Claude Code), then the office
   // going up on their lot and their manager arriving by bus. The slow parts
   // start the moment their inputs exist: the office draws from when the owner
   // leaves "Your space", and a described manager from when they leave theirs.
@@ -44,12 +49,13 @@
   type Props = { stage: Stage; sample?: World };
   let { stage, sample }: Props = $props();
 
-  const STEPS = ['mac', 'you', 'claude', 'manager', 'space', 'go'] as const;
+  const STEPS = ['mac', 'you', 'claude', 'tools', 'manager', 'space', 'go'] as const;
   type Step = (typeof STEPS)[number];
   const TITLE: Record<Step, string> = {
     mac: 'Your computer',
     you: 'You',
     claude: 'Your Claude',
+    tools: 'Other AI tools',
     manager: 'Your office manager',
     space: 'Your space',
     go: 'Open the office'
@@ -58,12 +64,19 @@
   let backward = $state(false);
   let wantKey = $state(false);
 
+  // Other AI tools, read from the first card on, so the step is known by the time it comes.
+  const agentTools = new AgentTools();
+  /** The cards this owner sees: Other AI tools only where this system offers one to sign in to. */
+  const steps: readonly Step[] = $derived(
+    offersOtherTools(agentTools.tools) ? STEPS : STEPS.filter((s) => s !== 'tools')
+  );
+
   function go(to: Step) {
-    backward = STEPS.indexOf(to) < STEPS.indexOf(step);
+    backward = steps.indexOf(to) < steps.indexOf(step);
     step = to;
   }
-  const next = () => go(STEPS[Math.min(STEPS.length - 1, STEPS.indexOf(step) + 1)]);
-  const back = () => go(STEPS[Math.max(0, STEPS.indexOf(step) - 1)]);
+  const next = () => go(steps[Math.min(steps.length - 1, steps.indexOf(step) + 1)]);
+  const back = () => go(steps[Math.max(0, steps.indexOf(step) - 1)]);
 
   // You
   // The Mac's name waits in the field as a suggestion. The lot reads "Your Lot"
@@ -430,6 +443,7 @@
                 autocomplete="given-name"
                 bind:value={name}
                 oninput={() => stage.name(name)}
+                {@attach selectOnFocus}
                 {@attach (n) => n.focus()}
               />
               <div class="mt-4 flex items-center gap-3">
@@ -440,6 +454,8 @@
             </form>
           {:else if step === 'claude'}
             <ClaudeCard onnext={next} onback={back} {wantKey} {onmodel} />
+          {:else if step === 'tools'}
+            <ToolsCard tools={agentTools} onnext={next} onback={back} />
           {:else if step === 'manager'}
             <ManagerCard
               {presets}
