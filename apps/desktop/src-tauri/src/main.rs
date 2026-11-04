@@ -1,6 +1,6 @@
-//! Oddboro for the Mac. A Tauri shell that runs the office server (Node, as a
-//! sidecar) and shows it in a window. What it does, step by step, is in
-//! `apps/desktop/CLAUDE.md`.
+//! Oddboro for the Mac and Linux. A Tauri shell that runs the office server
+//! (Node, as a sidecar) and shows it in a window. What it does, step by step,
+//! is in `apps/desktop/CLAUDE.md`.
 
 mod env;
 mod server;
@@ -24,7 +24,14 @@ const MAIN: &str = "main";
 const LOADING: &str = "loading";
 
 fn main() {
-    let app = tauri::Builder::default()
+    // A version the updater just installed waits for the one it replaced.
+    update::wait_for_old();
+    let builder = tauri::Builder::default();
+    // Linux has no Dock to bring a hidden window back, so opening Oddboro
+    // again shows the one that runs. It goes first, before anything starts.
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)));
+    let app = builder
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             None,
@@ -35,16 +42,26 @@ fn main() {
             let handle = app.handle().clone();
             let quitting = handle.clone();
             server::on_quit_signal(move || quitting.exit(0));
-            tray(&handle)?;
+            // A Linux desktop may have no tray (GNOME without an extension).
+            // The office runs without it, and opening Oddboro again shows it.
+            if let Err(e) = tray(&handle) {
+                server::note(&env::log_file(), &format!("no menu bar item: {e}"));
+            }
             thread::spawn(move || start(&handle));
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing the office hides it. The office keeps running.
+            // Closing the office hides it and the office keeps running, while
+            // the menu bar item can bring it back. With no tray to do that
+            // (GNOME as it ships), closing quits Oddboro instead.
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == MAIN {
                     api.prevent_close();
-                    let _ = window.hide();
+                    if tray_shows() {
+                        let _ = window.hide();
+                    } else {
+                        window.app_handle().exit(0);
+                    }
                 }
             }
         })
@@ -56,6 +73,7 @@ fn main() {
         RunEvent::ExitRequested {
             code: None, api, ..
         } => api.prevent_exit(),
+        #[cfg(target_os = "macos")]
         RunEvent::Reopen {
             has_visible_windows: false,
             ..
@@ -143,17 +161,18 @@ fn start(app: &AppHandle) {
     }
 }
 
-/// Node sits beside the shell in `Contents/MacOS`. A debug build without the
-/// bundle falls back to the copy the stage script leaves in `binaries/`.
+/// Node sits beside the shell: in `Contents/MacOS` on a Mac, in `usr/bin`
+/// inside the AppImage. A debug build without the bundle falls back to the
+/// copy the stage script leaves in `binaries/`, named for this target.
 fn node_binary() -> Option<PathBuf> {
     let beside = std::env::current_exe().ok()?.parent()?.join("node");
     if beside.is_file() {
         return Some(beside);
     }
-    dev_path("binaries/node-aarch64-apple-darwin")
+    dev_path(concat!("binaries/node-", env!("ODDBORO_TARGET")))
 }
 
-/// The staged server sits in `Contents/Resources/server`. A debug build
+/// The staged server sits in the bundle's resources, `server/`. A debug build
 /// without the bundle falls back to `apps/desktop/stage`.
 fn server_code(app: &AppHandle) -> Option<PathBuf> {
     if let Ok(resources) = app.path().resource_dir() {
@@ -256,7 +275,12 @@ fn open_in_browser(url: &Url) {
     if !matches!(url.scheme(), "http" | "https" | "mailto" | "tel") {
         return;
     }
-    let spawned = Command::new("/usr/bin/open")
+    let opener = if cfg!(target_os = "macos") {
+        "/usr/bin/open"
+    } else {
+        "xdg-open"
+    };
+    let spawned = Command::new(opener)
         .arg(url.as_str())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -279,7 +303,33 @@ fn show(app: &AppHandle) {
     }
 }
 
-/// The menu bar item: Open Oddboro, Open at login, Quit Oddboro.
+/// The Mac always shows the menu bar item.
+#[cfg(not(target_os = "linux"))]
+fn tray_shows() -> bool {
+    true
+}
+
+/// Whether the desktop shows tray items now: something owns the
+/// StatusNotifierWatcher name on the session bus (KDE, most tiling setups,
+/// GNOME with the AppIndicator extension).
+#[cfg(target_os = "linux")]
+fn tray_shows() -> bool {
+    let Ok(bus) = zbus::blocking::Connection::session() else {
+        return false;
+    };
+    bus.call_method(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus"),
+        "NameHasOwner",
+        &("org.kde.StatusNotifierWatcher",),
+    )
+    .ok()
+    .and_then(|reply| reply.body().deserialize::<bool>().ok())
+    .unwrap_or(false)
+}
+
+/// The menu bar item (the tray on Linux): Open Oddboro, Open at login, Quit Oddboro.
 fn tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Oddboro", true, None::<&str>)?;
     let at_login = app.autolaunch().is_enabled().unwrap_or(false);
@@ -303,7 +353,8 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Flips the LaunchAgent, then shows what macOS actually has.
+/// Flips the LaunchAgent (an autostart entry on Linux), then shows what the
+/// system actually has.
 fn toggle_open_at_login(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
     let launcher = app.autolaunch();
     let _ = if launcher.is_enabled().unwrap_or(false) {

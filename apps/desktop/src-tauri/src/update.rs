@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::OnceLock;
 use std::thread::{self, sleep};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Url};
@@ -31,6 +31,10 @@ const CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const EVERY: Duration = Duration::from_secs(4 * 60 * 60);
 const ASK_EVERY: Duration = Duration::from_secs(30);
+/// Set on a version the updater opens on Linux: the pid of the one it replaces.
+const RELAUNCH_FROM: &str = "ODDBORO_RELAUNCH_FROM";
+/// The longest a new version waits for the old one to quit.
+const OLD_QUITS_WITHIN: Duration = Duration::from_secs(30);
 
 static CHECK_NOW: OnceLock<Sender<()>> = OnceLock::new();
 
@@ -199,6 +203,7 @@ fn install(update: &Update, bytes: &[u8]) -> Result<(), String> {
 /// Opens the bundle at this app's path (the new version, once installed) and
 /// quits this one. `open -n` hands it to launchd, which drops this process's
 /// environment, so the ODDBORO_ settings go along with `--env`.
+#[cfg(target_os = "macos")]
 fn relaunch(app: &AppHandle) {
     let bundle = std::env::current_exe()
         .ok()
@@ -220,6 +225,40 @@ fn relaunch(app: &AppHandle) {
             .status();
     }
     app.exit(0);
+}
+
+/// Opens the AppImage at this app's path (the updater replaced the file in
+/// place) and quits this one. The new one keeps this environment, and waits
+/// for this one to go before it claims the single instance.
+#[cfg(not(target_os = "macos"))]
+fn relaunch(app: &AppHandle) {
+    if let Some(appimage) = std::env::var_os("APPIMAGE") {
+        let _ = Command::new(appimage)
+            .env(RELAUNCH_FROM, std::process::id().to_string())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
+    }
+    app.exit(0);
+}
+
+/// In a version the updater just opened, waits up to 30 seconds for the old
+/// one to quit, so the two never hold the single instance or the port at once.
+pub fn wait_for_old() {
+    let Some(pid) = std::env::var(RELAUNCH_FROM)
+        .ok()
+        .and_then(|p| p.parse::<i32>().ok())
+    else {
+        return;
+    };
+    // Not for any version this one opens later.
+    std::env::remove_var(RELAUNCH_FROM);
+    let deadline = Instant::now() + OLD_QUITS_WITHIN;
+    // SAFETY: kill with signal 0 only asks whether the process exists.
+    while Instant::now() < deadline && unsafe { libc::kill(pid, 0) } == 0 {
+        sleep(Duration::from_millis(100));
+    }
 }
 
 /// One request to the server's `/api/update`, with the token that marks it as

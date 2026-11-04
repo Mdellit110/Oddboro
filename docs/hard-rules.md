@@ -55,11 +55,11 @@ The office will grow for years. If a new room needed engine code, every room
 would carry risk. A stamp and a plan in JSON can be added, moved and removed
 without touching the engine.
 
-## 9. Family data stays on the Mac.
+## 9. Family data stays on the owner's computer.
 
 The office holds the owner's family data: names, birthdays, schedules. It
-stays in the gitignored `data/` folder on the owner's Mac. Moving any of it
-off the Mac is its own decision.
+stays in the gitignored `data/` folder on the owner's computer. Moving any of
+it off that computer is its own decision.
 
 ## 10. Every `CLAUDE.md` is named in its nearest ancestor.
 
@@ -80,7 +80,7 @@ next to it.
 
 ## 13. The simplest, lightest approach wins.
 
-The office runs all day on the owner's Mac beside their real work, so it has to cost
+The office runs all day on the owner's computer beside their real work, so it has to cost
 close to nothing when they are not looking at it. Complexity costs twice: once
 to build and again every time someone has to read it. On 2026-10-29 the floor
 redrew all 10,464 sprites 60 times a second and an Odd's card looped a shine

@@ -1,39 +1,53 @@
-# Every merge to main builds a release of Oddboro for the Mac: the next patch
-# version, signed, notarized and stapled, in a DRAFT release on the merge
-# commit. The owner publishes it by hand. A draft is invisible to
-# releases/latest, so installed apps update only after that. The secrets it
-# needs, and how to make each, are in apps/desktop/CLAUDE.md.
+# Every merge to main that changes the app builds the next release of
+# Oddboro: for the Mac (signed, notarized and stapled) and for Linux on x86_64
+# and arm64 (AppImages), in one DRAFT release on the merge commit. The next
+# version is the newest PUBLISHED release plus one patch, and each build
+# replaces the draft before it, so a version is spent only when the owner
+# publishes. A draft is invisible to releases/latest, so installed apps update
+# only after that. A merge that touches only the site or the docs builds
+# nothing; run this by hand for a change it misses, like a lockfile-only
+# update. The secrets it needs, and how to make each, are in
+# apps/desktop/CLAUDE.md.
 name: Release
 
 on:
   push:
     branches: [main]
+    # What goes into the app: the shell, the office it carries, the packages
+    # the office uses, the Node it bundles, and this workflow.
+    paths:
+      - apps/desktop/**
+      - apps/office/**
+      - packages/**
+      - .nvmrc
+      - .github/workflows/release.yml
+      - '!**/CLAUDE.md'
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# One at a time, so two merges never take the same version.
+# One at a time, so two builds never race for the same draft.
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  mac:
-    runs-on: macos-15
-    # The signing keys live in the release environment, which only main may
-    # use, so a run from any other branch never sees them.
-    environment: release
-    timeout-minutes: 90
+  version:
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      notes: ${{ steps.notes.outputs.notes }}
     steps:
-      - uses: actions/checkout@v5
-
+      # Published releases only: a draft keeps its number until it is
+      # published or the next build replaces it.
       - name: Pick the version
         id: version
         run: |
-          last=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq '.[].tag_name' \
+          last=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq '.[] | select(.draft | not) | .tag_name' \
             | sed -n 's/^v\([0-9]*\.[0-9]*\.[0-9]*\)$/\1/p' \
             | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
           if [ -z "$last" ]; then
@@ -42,8 +56,30 @@ jobs:
             IFS=. read -r major minor patch <<< "$last"
             next="$major.$minor.$((patch + 1))"
           fi
-          echo "Building $next (the highest release so far: ${last:-none})"
+          echo "Building $next (the highest published release: ${last:-none})"
           echo "version=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Write the release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          {
+            echo 'notes<<ODDBORO_NOTES_END'
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+              -f tag_name="v$VERSION" -f target_commitish="$GITHUB_SHA" --jq .body
+            echo 'ODDBORO_NOTES_END'
+          } >> "$GITHUB_OUTPUT"
+
+  mac:
+    needs: version
+    runs-on: macos-15
+    # The signing keys live in the release environment, which only main may
+    # use, so a run from any other branch never sees them.
+    environment: release
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
@@ -91,17 +127,10 @@ jobs:
           fi
           echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
 
-      - name: Write the release notes
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-            -f tag_name="v$VERSION" -f target_commitish="$GITHUB_SHA" \
-            --jq .body > "$RUNNER_TEMP/notes.md"
-
       - name: Build, sign and notarize
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
           APPLE_API_KEY_CONTENTS: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -111,26 +140,127 @@ jobs:
           export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
           printf '%s' "$APPLE_API_KEY_CONTENTS" > "$APPLE_API_KEY_PATH"
           unset APPLE_API_KEY_CONTENTS
-          ODDBORO_RELEASE_NOTES="$(cat "$RUNNER_TEMP/notes.md")" \
+          ODDBORO_RELEASE_NOTES="$NOTES" \
           ODDBORO_RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" \
             node apps/desktop/scripts/release.ts --version "$VERSION"
           rm -f "$APPLE_API_KEY_PATH"
 
-      - name: Draft the release
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          out=apps/desktop/release
-          gh release create "v$VERSION" --draft --target "$GITHUB_SHA" \
-            --title "Oddboro $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
-            "$out/Oddboro.dmg" \
-            "$out/Oddboro_${VERSION}_aarch64.dmg" \
-            "$out/Oddboro_${VERSION}_aarch64.app.tar.gz" \
-            "$out/Oddboro_${VERSION}_aarch64.app.tar.gz.sig" \
-            "$out/latest.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: apps/desktop/release/
+          if-no-files-found: error
 
       - name: Remove the keychain
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/oddboro.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/cert.p12"
+
+  linux:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          # 22.04, the oldest supported Ubuntu, so the AppImages run on
+          # systems with an older glibc too.
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    environment: release
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # GStreamer's plugins go into the AppImage as they are installed here:
+      # libav decodes the office's AAC music, and PulseAudio and PipeWire
+      # play it.
+      - name: Install the libraries Tauri builds against
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxdo-dev \
+            libssl-dev patchelf file build-essential \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav \
+            gstreamer1.0-pulseaudio gstreamer1.0-pipewire
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: cargo-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ matrix.arch }}-
+
+      - run: npm ci --no-audit --no-fund
+
+      - name: Build the AppImage
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          ODDBORO_RELEASE_NOTES="$NOTES" \
+          ODDBORO_RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" \
+            node apps/desktop/scripts/release.ts --version "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: apps/desktop/release/
+          if-no-files-found: error
+
+  draft:
+    needs: [version, mac, linux]
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: built
+
+      - name: Draft the release
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
+        run: |
+          # One latest.json for every machine: each build wrote its own.
+          jq -s '.[0] + { platforms: (map(.platforms) | add) }' \
+            built/mac/latest.json built/linux-x86_64/latest.json built/linux-aarch64/latest.json \
+            > latest.json
+          printf '%s\n' "$NOTES" > notes.md
+          # The draft this one replaces. A draft has no tag yet, so only the
+          # release goes; the old builds stay until the new ones are ready.
+          gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.draft and .tag_name == \"v$VERSION\") | .id" \
+            | while read -r id; do
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+              done
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
+            --title "Oddboro $VERSION" --notes-file notes.md \
+            built/mac/Oddboro.dmg \
+            "built/mac/Oddboro_${VERSION}_aarch64.dmg" \
+            "built/mac/Oddboro_${VERSION}_aarch64.app.tar.gz" \
+            "built/mac/Oddboro_${VERSION}_aarch64.app.tar.gz.sig" \
+            built/linux-x86_64/Oddboro-x86_64.AppImage \
+            "built/linux-x86_64/Oddboro_${VERSION}_x86_64.AppImage" \
+            "built/linux-x86_64/Oddboro_${VERSION}_x86_64.AppImage.sig" \
+            built/linux-aarch64/Oddboro-aarch64.AppImage \
+            "built/linux-aarch64/Oddboro_${VERSION}_aarch64.AppImage" \
+            "built/linux-aarch64/Oddboro_${VERSION}_aarch64.AppImage.sig" \
+            latest.json

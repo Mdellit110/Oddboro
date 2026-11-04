@@ -29,7 +29,15 @@ import { join } from 'node:path';
 const ROOT = new URL('../../..', import.meta.url).pathname;
 const DESKTOP = join(ROOT, 'apps', 'desktop');
 const STAGE = join(DESKTOP, 'stage');
-const NODE_BIN = join(DESKTOP, 'src-tauri', 'binaries', 'node-aarch64-apple-darwin');
+/** This machine as Rust names it (the sidecar's suffix) and as nodejs.org does. */
+const MACHINES: Record<string, { triple: string; dist: string }> = {
+  'darwin-arm64': { triple: 'aarch64-apple-darwin', dist: 'darwin-arm64' },
+  'linux-x64': { triple: 'x86_64-unknown-linux-gnu', dist: 'linux-x64' },
+  'linux-arm64': { triple: 'aarch64-unknown-linux-gnu', dist: 'linux-arm64' }
+};
+const MACHINE = MACHINES[`${process.platform}-${process.arch}`];
+if (!MACHINE) throw new Error(`Oddboro does not build on ${process.platform}-${process.arch}`);
+const NODE_BIN = join(DESKTOP, 'src-tauri', 'binaries', `node-${MACHINE.triple}`);
 const PACKAGES = ['ledger', 'sprites', 'world'];
 /** What a package needs at runtime. Everything else in it stays behind. */
 const LEAVE_OUT = new Set([
@@ -113,7 +121,7 @@ function stageOffice(): void {
   );
 }
 
-/** The Node the app carries: this machine's version, for Apple Silicon, checked against its sum. */
+/** The Node the app carries: this machine's version and system, checked against its sum. */
 async function fetchNode(): Promise<void> {
   const version = process.version;
   const have = existsSync(NODE_BIN)
@@ -121,7 +129,7 @@ async function fetchNode(): Promise<void> {
     : '';
   if (have === version) return;
   const base = `https://nodejs.org/dist/${version}`;
-  const tarball = `node-${version}-darwin-arm64.tar.gz`;
+  const tarball = `node-${version}-${MACHINE.dist}.tar.gz`;
   const sums = await (await fetch(`${base}/SHASUMS256.txt`)).text();
   const want = sums
     .split('\n')

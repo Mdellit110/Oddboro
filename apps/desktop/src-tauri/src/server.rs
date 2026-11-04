@@ -276,6 +276,7 @@ fn signal(pid: i32, sig: libc::c_int) {
 }
 
 fn mark_gone() {
+    let_sleep();
     let _guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
     NODE_PID.store(0, SeqCst);
     GONE.1.notify_all();
@@ -292,6 +293,7 @@ fn wait_gone(timeout: Duration) -> bool {
 
 /// Keeps the Mac awake on AC power for as long as Node runs, like
 /// `caffeinate -s`. caffeinate exits by itself when Node does.
+#[cfg(target_os = "macos")]
 fn keep_awake(pid: u32) {
     let spawned = Command::new("/usr/bin/caffeinate")
         .args(["-s", "-w", &pid.to_string()])
@@ -304,7 +306,47 @@ fn keep_awake(pid: u32) {
     }
 }
 
-/// Node's stdout: a notification request goes to macOS as Oddboro's own, a
+/// caffeinate lets go by itself when Node exits.
+#[cfg(target_os = "macos")]
+fn let_sleep() {}
+
+/// The sleep lock while Node runs on Linux: `systemd-inhibit` holding `cat`,
+/// whose stdin is a pipe this shell holds. Dropping it, or the shell dying by
+/// any means, ends `cat` and with it the lock.
+#[cfg(not(target_os = "macos"))]
+static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
+
+/// Keeps the computer from sleeping on its own while Node runs. Closing a
+/// laptop's lid still suspends it: logind ignores this lock for the lid.
+#[cfg(not(target_os = "macos"))]
+fn keep_awake(_pid: u32) {
+    let spawned = Command::new("systemd-inhibit")
+        .args([
+            "--what=sleep",
+            "--mode=block",
+            "--who=Oddboro",
+            "--why=The office is running",
+            "cat",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    if let Ok(child) = spawned {
+        *AWAKE.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn let_sleep() {
+    let held = AWAKE.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if let Some(mut inhibit) = held {
+        drop(inhibit.stdin.take());
+        let _ = inhibit.wait();
+    }
+}
+
+/// Node's stdout: a notification request goes to the system as Oddboro's own, a
 /// Check now to the update watcher, everything else to the log.
 fn relay(out: impl Read, mut log: File) {
     for line in BufReader::new(out).lines().map_while(Result::ok) {
@@ -325,6 +367,7 @@ fn relay(out: impl Read, mut log: File) {
 }
 
 /// Show a notification as Oddboro's, with the Glass sound the office used before.
+#[cfg(target_os = "macos")]
 fn notify(title: &str, text: &str) {
     use mac_notification_sys::{send_notification, set_application, Notification};
     static ONCE: std::sync::Once = std::sync::Once::new();
@@ -332,6 +375,21 @@ fn notify(title: &str, text: &str) {
         let _ = set_application("com.newaltitude.oddboro");
     });
     let _ = send_notification(title, None, text, Some(Notification::new().sound("Glass")));
+}
+
+/// Show a notification as Oddboro's through the desktop's notification
+/// service, the way the office's own login service does.
+#[cfg(not(target_os = "macos"))]
+fn notify(title: &str, text: &str) {
+    let spawned = Command::new("notify-send")
+        .args(["--app-name=Oddboro", "--", title, text])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    if let Ok(mut child) = spawned {
+        thread::spawn(move || child.wait());
+    }
 }
 
 fn open_log(path: &Path) -> io::Result<File> {

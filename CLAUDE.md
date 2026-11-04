@@ -33,7 +33,7 @@ Each rule's reason is in `docs/hard-rules.md`, under the same heading.
    in `apps/office/src/app.css`.
 8. **Spaces are data.** A room is a JSON stamp and an office is a JSON floor
    plan. Adding a space never needs engine code.
-9. **Family data stays on the Mac.** People and family schedules live in the
+9. **Family data stays on the owner's computer.** People and family schedules live in the
    gitignored `data/` folder and never reach a tracked file or a cloud
    service until a decision says otherwise.
 10. **Every `CLAUDE.md` is named in its nearest ancestor `CLAUDE.md`.**
@@ -52,9 +52,9 @@ Each rule's reason is in `docs/hard-rules.md`, under the same heading.
 
 ```
 apps/
-  office/       The floor. SvelteKit, port 4500. Main Street runs here on the owner's Mac.
+  office/       The floor. SvelteKit, port 4500. Main Street runs here on the owner's computer.
   site/         The public site, oddboro.com. SvelteKit, port 4501, prerendered to static files.
-  desktop/      Oddboro for the Mac. A Tauri shell in Rust around the office, on a bundled Node.
+  desktop/      Oddboro for the Mac and Linux. A Tauri shell in Rust around the office, on a bundled Node.
 packages/
   sprites/      Every piece of art as .px text, the palette, and the compiler.
   world/        Room stamps, floor plans, and the code that turns them into a world.
@@ -63,13 +63,13 @@ scripts/        The lint guards. Plain Node, no dependencies.
 docs/           Decisions, hard rules, the office design, and the backlog.
 data/           Gitignored. People and family data. Never tracked.
 docker-compose.yml  Postgres 17 with pgvector, on 127.0.0.1 only.
-.github/workflows/release.yml  Every merge to main drafts a release of the Mac app.
+.github/workflows/release.yml  Every merge to main that changes the app redrafts the next release, Mac and Linux.
 ```
 
 ## Commands
 
 ```sh
-npm run setup               # check this Mac, start the office, open it in the browser
+npm run setup               # check this computer, start the office, open it in the browser
 npm run setup -- --check    # check everything, change nothing
 npm run reset               # start over: move the office aside into ~/.oddboro/backups
 npm run db:up               # Postgres in Docker, when .env names it instead of the office's own

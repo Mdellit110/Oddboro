@@ -1,9 +1,16 @@
 # apps/desktop
 
-Oddboro for the Mac. A Tauri v2 shell in Rust that runs the office server
-(`apps/office`, built with adapter-node) on a bundled Node and shows it in a
-window. Apple Silicon only, macOS 13 or later. No UI framework: the only page
-of its own is `loading/index.html`.
+Oddboro for the Mac and Linux. A Tauri v2 shell in Rust that runs the office
+server (`apps/office`, built with adapter-node) on a bundled Node and shows it
+in a window. On a Mac: Apple Silicon, macOS 13 or later, a signed and
+notarized `.app` in a `.dmg`. On Linux: an AppImage for x86_64 or arm64, on a
+systemd desktop with a Secret Service keyring and a notification service. No
+UI framework: the only page of its own is `loading/index.html`.
+
+What differs between the two is in `#[cfg(target_os = ...)]` pairs, one per
+function: the log folder (`env.rs`), keeping the computer awake and
+notifications (`server.rs`), opening links and closing the window
+(`main.rs`), and reopening after an update (`update.rs`).
 
 ## What the shell does
 
@@ -15,23 +22,36 @@ of its own is `loading/index.html`.
 2. Checks the port. If anything answers on it, shows "another office is
    already running" and quits. It never attaches to that office.
 3. Reads the owner's login-shell PATH once (`$SHELL -l -c`, 5 second
-   timeout), then adds `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`
+   timeout; `/bin/zsh` on a Mac and `/bin/sh` on Linux when `SHELL` is
+   unset), then adds `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`
    and `~/.claude/local` if missing.
 4. Starts Node, shows the small loading window, and asks `GET /` every half
    second for up to 90 seconds. When it answers, the main window opens the
    office and the loading window closes. On timeout, a dialog shows the last
    lines of the log and the app quits.
-5. Writes Node's stdout and stderr to `~/Library/Logs/Oddboro/office.log`,
-   with its own lines prefixed `oddboro:`. Past 10 MB the log moves to
-   `office.log.1` when Node next starts.
+5. Writes Node's stdout and stderr to `~/Library/Logs/Oddboro/office.log` on
+   a Mac and `~/.local/state/oddboro/office.log` on Linux (`XDG_STATE_HOME`
+   wins when set), with its own lines prefixed `oddboro:`. Past 10 MB the log
+   moves to `office.log.1` when Node next starts.
 6. Restarts Node when it dies: after 1s, 5s, then 30s, at most 5 times in 10
    minutes. Then it shows the log tail and quits. After a restart the main
    window reloads.
-7. Runs `/usr/bin/caffeinate -s -w <node pid>` beside Node, so the Mac stays
-   awake on AC power while the office runs.
+7. Keeps the computer awake while Node runs. On a Mac,
+   `/usr/bin/caffeinate -s -w <node pid>`, on AC power only. On Linux,
+   `systemd-inhibit --what=sleep --mode=block cat`, with `cat`'s stdin a pipe
+   the shell holds: it lets go when Node stops or the shell dies. It holds on
+   battery too, and closing a laptop's lid still suspends it (logind ignores
+   inhibitors for the lid by default).
 8. Closing the main window hides it. The Dock icon and the menu bar item
    (Open Oddboro, Open at login, Quit Oddboro) bring it back. Open at login
-   uses `tauri-plugin-autostart` in LaunchAgent mode.
+   uses `tauri-plugin-autostart`: a LaunchAgent on a Mac, an entry in
+   `~/.config/autostart` naming the AppImage on Linux. On Linux the tray shows
+   only where something owns `org.kde.StatusNotifierWatcher` on the session
+   bus (KDE, most tiling setups, GNOME with the AppIndicator extension). With
+   none, as on GNOME when it ships, closing the window quits Oddboro, since
+   nothing could bring it back. Opening Oddboro again while it runs shows its
+   window (`tauri-plugin-single-instance`, Linux only; the Mac does this
+   itself).
 9. On quit, sends Node SIGTERM, waits up to 10 seconds, then SIGKILL. A
    SIGTERM, SIGINT or SIGHUP to the shell itself quits the same way. A second
    one kills the shell at once.
@@ -46,8 +66,11 @@ never get IPC without one.
 
 - Entry: `<resources>/server/apps/office/build/index.js`, run with cwd
   `<resources>/server/apps/office`.
-- Node: the sidecar `Contents/MacOS/node`, from
-  `src-tauri/binaries/node-aarch64-apple-darwin`.
+- Node: the sidecar beside the shell, `Contents/MacOS/node` on a Mac and
+  `usr/bin/node` in the AppImage, from `src-tauri/binaries/node-<target>`
+  (`aarch64-apple-darwin`, `x86_64-unknown-linux-gnu` or
+  `aarch64-unknown-linux-gnu`). `build.rs` passes the target to the code as
+  `ODDBORO_TARGET`, so a debug build finds its copy.
 - Env Node gets:
 
 | Variable               | Value                                                     |
@@ -68,9 +91,10 @@ never get IPC without one.
   also has no web address: onboarding skips the address step and the office
   never touches Caddy.
 - Node's stdout is a pipe too. A line `oddboro:notify <title>\t<text>` is a
-  notification, which the shell shows as Oddboro's (`mac-notification-sys`,
-  with the Glass sound). A line `oddboro:update-check` is the owner's Check
-  now. Every other line goes to the log.
+  notification, which the shell shows as Oddboro's: `mac-notification-sys`
+  with the Glass sound on a Mac, `notify-send --app-name=Oddboro` on Linux. A
+  line `oddboro:update-check` is the owner's Check now. Every other line goes
+  to the log.
 - Node's stdin is a pipe the shell holds open. It closes when the shell dies
   by any means, Force Quit included, so a force-quit shell never leaves Node
   running on the port.
@@ -99,9 +123,15 @@ Every update is required. `src-tauri/src/update.rs` runs them with
 4. Then it asks `GET /api/update` every 30 seconds. When the answer has
    `install: true` (the server decides, see `apps/office/CLAUDE.md`), it stops
    Node the usual way (`server::stop`), installs, and opens the new version.
-5. It reopens itself with `open -n` and passes every `ODDBORO_*` variable on
-   with `--env`, since launchd drops the old process's environment. Tauri's
-   own `restart()` would lose them.
+5. On a Mac it reopens itself with `open -n` and passes every `ODDBORO_*`
+   variable on with `--env`, since launchd drops the old process's
+   environment. Tauri's own `restart()` would lose them. On Linux the updater
+   replaces the AppImage file in place (the path in `APPIMAGE`), and the shell
+   starts it with its own environment plus `ODDBORO_RELAUNCH_FROM=<its pid>`.
+   The new one waits up to 30 seconds for that pid to go
+   (`update::wait_for_old`) before it claims the single instance and the
+   port. The AppImage must sit somewhere the owner can write, such as
+   `~/Applications`.
 6. The private key that signs updates lives outside the repo, in
    `~/.tauri/oddboro-updater.key` on the owner's Mac, its password in the
    keychain (`security find-generic-password -s oddboro-updater-key -a password -w`),
@@ -112,6 +142,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
 
 - `src-tauri/src/main.rs`. Windows, the menu bar item, links, and the
   startup steps.
+- `src-tauri/build.rs`. Tauri's build, and the target triple as
+  `ODDBORO_TARGET`.
 - `src-tauri/src/server.rs`. Starting, watching, restarting and stopping Node.
 - `src-tauri/src/env.rs`. Port, home, log path and the login-shell PATH.
 - `src-tauri/src/update.rs`. Checking, downloading and installing updates,
@@ -122,7 +154,10 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   `../stage/` to `server/` resource map. `npm run bundle` and `release.ts`
   merge it.
 - `src-tauri/tauri.release.conf.json`. Turns on `createUpdaterArtifacts`.
-  Only `release.ts` merges it, since it needs the updater key.
+  Only `release.ts` merges it, on a Mac, since it needs the updater key.
+- `src-tauri/tauri.linux.conf.json`. Tauri merges it on Linux by itself: the
+  AppImage target, with GStreamer bundled (`bundleMediaFramework`), since the
+  AppImage points GStreamer at its own plugins and the office plays music.
 - `loading/loading.js`. The loading window's words: "Opening the office", or
   "Updating Oddboro to X.Y.Z" when the shell sets `window.oddboroUpdating`.
 - `src-tauri/Entitlements.plist`. `allow-jit` and
@@ -134,8 +169,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   installed in the repo, and the ledger, sprites and world as plain
   JavaScript (types stripped, `.ts` imports rewritten) in
   `node_modules/@oddboro/`, with their files beside them. It fetches the Node
-  binary for this machine's Node version and checks it against nodejs.org's
-  sums. `--smoke` starts the stage on port 4590 with a throwaway home, waits
+  binary for this machine's Node version, system and chip, and checks it
+  against nodejs.org's sums. `--smoke` starts the stage on port 4590 with a throwaway home, waits
   for it to answer, and checks it quits on SIGTERM:
   `node apps/desktop/scripts/stage.ts --smoke`.
 - `stage/` must hold no folder symlinks. The bundler walks it without
@@ -145,31 +180,45 @@ Every update is required. `src-tauri/src/update.rs` runs them with
 
 ## Releases come from GitHub only
 
-Public releases are built, signed and notarized on GitHub's Mac runners, never
-on a developer's Mac: Tauri writes the source folder's full path into the app,
-and on a developer's Mac that path names them. `scripts/release.ts` maps Rust's
+Public releases are built on GitHub's runners (Mac, and Ubuntu 22.04 on
+x86_64 and arm64), never on a developer's computer: Tauri writes the source
+folder's full path into the app, and on a developer's computer that path
+names them. The Ubuntu runners are the oldest supported Ubuntu, so the
+AppImages run on systems with an older glibc too. `scripts/release.ts` maps Rust's
 own source paths to neutral ones and refuses to sign a build that still holds
 the builder's home folder. Local builds stay for testing: `npm run bundle`, or
 a signed `tauri build --bundles app` run beside the owner's office on 4510.
 
-`.github/workflows/release.yml` runs on every push to `main` and by hand:
+`.github/workflows/release.yml` runs by hand, and on every push to `main`
+that changes what goes into the app: `apps/desktop`, `apps/office`,
+`packages`, `.nvmrc` or the workflow itself, but not a `CLAUDE.md`. A merge
+that touches only the site or the docs builds nothing. Neither does a
+lockfile-only update, so run it by hand for one that should ship. Four jobs:
 
-1. Picks the next patch version from the highest release tag, drafts
-   included (none gives `0.0.1`). The committed version never changes; the
-   build sets it (`release.ts --version`).
-2. Installs Node from `.nvmrc`, Rust stable with `aarch64-apple-darwin`, and
-   the repo's packages, with caches.
-3. Imports the Developer ID certificate into a temporary keychain.
-4. Runs `release.ts`: build, sign, notarize with the API key, staple, the
-   updater archive and its signature, and `latest.json` pointing at the
-   release's own assets.
-5. Creates a DRAFT release `vX.Y.Z` on the merge commit, with GitHub's
-   generated notes and these assets: `Oddboro.dmg` (the site's Download button
-   links to `releases/latest/download/Oddboro.dmg`, so every release carries
-   that name), `Oddboro_X.Y.Z_aarch64.dmg`, `Oddboro_X.Y.Z_aarch64.app.tar.gz`,
-   its `.sig`, and `latest.json`.
-6. The owner reads the draft and presses Publish. Installed apps pick it up at
-   their next check.
+1. `version` picks the next patch version from the highest PUBLISHED release
+   tag (none gives `0.0.1`), and writes GitHub's generated notes. A draft
+   never takes a number. The committed version never changes; the build sets it
+   (`release.ts --version`).
+2. `mac` installs Node from `.nvmrc`, Rust stable with `aarch64-apple-darwin`
+   and the repo's packages, imports the Developer ID certificate into a
+   temporary keychain, and runs `release.ts`: build, sign, notarize with the
+   API key, staple, the updater archive and its signature, and a
+   `latest.json` for `darwin-aarch64`.
+3. `linux`, once on x86_64 and once on arm64, installs the libraries Tauri
+   builds against and runs `release.ts`: the AppImage, its signature, a copy
+   under the site's name, and a `latest.json` for `linux-x86_64` or
+   `linux-aarch64`. Only the updater key is needed.
+4. `draft` merges the three `latest.json` files into one, deletes any draft
+   of the same version, and creates a DRAFT release `vX.Y.Z` on the merge
+   commit, with the notes and these assets:
+   `Oddboro.dmg`, `Oddboro-x86_64.AppImage` and `Oddboro-aarch64.AppImage`
+   (the site's Download buttons link to `releases/latest/download/` under
+   these names, so every release carries them), the versioned `.dmg`, the
+   Mac updater archive and its `.sig`, each versioned AppImage and its
+   `.sig`, and `latest.json`.
+5. The owner reads the draft and presses Publish. Installed apps pick it up at
+   their next check, and the next build takes the next version. Until then,
+   each merge replaces the draft, so it always holds the newest `main`.
 
 The repo must be public for installed apps to reach the release. While it is
 private, `latest.json` answers 404 to them.
@@ -189,15 +238,15 @@ release`. Never commit a value.
 | `APPLE_API_KEY`                      | The App Store Connect API key, the `.p8` file's contents    | App Store Connect, Users and Access, Integrations, Team Keys, a key with Developer access. Download `AuthKey_<id>.p8`, then `pbcopy < AuthKey_<id>.p8` |
 | `APPLE_API_KEY_ID`                   | That key's ID                                               | The Key ID column on the same page                                                                                                                     |
 | `APPLE_API_ISSUER`                   | The team's issuer ID                                        | The Issuer ID above the keys on the same page                                                                                                          |
-| `TAURI_SIGNING_PRIVATE_KEY`          | The updater signing key                                     | `pbcopy < ~/.tauri/oddboro-updater.key`                                                                                                                |
+| `TAURI_SIGNING_PRIVATE_KEY`          | The updater signing key, for every build                    | `pbcopy < ~/.tauri/oddboro-updater.key`                                                                                                                |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password                                                | `security find-generic-password -s oddboro-updater-key -a password -w \| pbcopy`                                                                       |
 | `KEYCHAIN_PASSWORD`                  | Any random string, for the runner's temporary keychain      | `openssl rand -hex 24 \| pbcopy`                                                                                                                       |
 
-### A test build on this Mac
+### A test build
 
-`release.ts --test` signs with the Developer ID in this keychain, skips
-notarizing, and lets the app take an `http://` `ODDBORO_UPDATE_URL`. Never ship
-one.
+`release.ts --test` lets the app take an `http://` `ODDBORO_UPDATE_URL`. On a
+Mac it signs with the Developer ID in this keychain and skips notarizing. Never
+ship one.
 
 ```sh
 export TAURI_SIGNING_PRIVATE_KEY=~/.tauri/oddboro-updater.key
@@ -223,26 +272,41 @@ Run from the repo root.
 
 ```sh
 npm run shell -w @oddboro/desktop     # tauri dev against ODDBORO_SERVER_URL, default http://127.0.0.1:4500
-npm run bundle -w @oddboro/desktop    # tauri build: Oddboro.app and the .dmg, aarch64
+npm run bundle -w @oddboro/desktop    # tauri build for this machine: the .app and .dmg, or the AppImage
 npm run check-types -w @oddboro/desktop   # cargo check
 npm run lint -w @oddboro/desktop      # cargo clippy -D warnings, cargo fmt --check, prettier
 ```
 
-`npm run bundle` writes to `src-tauri/target/aarch64-apple-darwin/release/bundle/`.
+`npm run bundle` writes to `src-tauri/target/release/bundle/`.
+
+To build on Linux, install Rust and the libraries Tauri builds against first.
+On Fedora:
+
+```sh
+sudo dnf install webkit2gtk4.1-devel openssl-devel libappindicator-gtk3-devel librsvg2-devel libxdo-devel gcc gcc-c++ patchelf
+```
+
+The AppImage bundles the GStreamer plugins installed on the build machine.
+Its bundler looks in Debian's folders, so on Fedora name them before
+`npm run bundle` (`release.ts` does this by itself):
+
+```sh
+export GSTREAMER_PLUGINS_DIR=/usr/lib64/gstreamer-1.0 GSTREAMER_HELPERS_DIR=/usr/libexec/gstreamer-1.0
+```
 
 `shell` and `bundle` are not named `dev` and `build`, so the root
 `npm run dev` and `npm run build` never start a Rust build or a window.
 Bundling needs `stage/` and the Node binary first.
 
 A debug binary (`cargo build` in `src-tauri/`) has no bundle. It falls back
-to `src-tauri/binaries/node-aarch64-apple-darwin` and `stage/`. Its error
+to `src-tauri/binaries/node-<target>` and `stage/`. On a Mac its error
 dialogs never show: without a parent window they go through
 `CFUserNotification`, which needs a bundle. To run it beside the owner's
 office:
 
 ```sh
 ODDBORO_PORT=4510 ODDBORO_DB_PORT=54510 ODDBORO_HOME=/tmp/oddboro-test-home \
-  src-tauri/target/aarch64-apple-darwin/debug/oddboro
+  src-tauri/target/debug/oddboro
 ```
 
 ## Pinned versions
@@ -252,4 +316,6 @@ ODDBORO_PORT=4510 ODDBORO_DB_PORT=54510 ODDBORO_HOME=/tmp/oddboro-test-home \
 - `tauri-plugin-autostart` 2.7.0, `tauri-plugin-dialog` 2.8.4
 - `tauri-plugin-updater` 2.14.1, `serde_json` 1.0.154
 - `libc` 0.2.191
-- `mac-notification-sys` 0.6.15
+- `mac-notification-sys` 0.6.15 (Mac only)
+- `tauri-plugin-single-instance` 2.5.3, `zbus` 5.19.0 (Linux only; the
+  plugin brings the same zbus)

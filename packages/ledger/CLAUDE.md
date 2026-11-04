@@ -59,7 +59,7 @@ window, the hold, the install decision and a poke's grace.
 | `src/tools.ts`         | The office tools in plain words, which every Odd has, and the starters                                                                                                       |
 | `src/capabilities.ts`  | What an Odd can do: its level, office tools, and each outside tool with whether a run gets it. Runs, `my_access`, `office_report` and the Access tab read it                 |
 | `src/registry.ts`      | Finding servers in the catalog and the public MCP Registry                                                                                                                   |
-| `src/embed.ts`         | Vectors from Ollama's `nomic-embed-text`, on this Mac                                                                                                                        |
+| `src/embed.ts`         | Vectors from Ollama's `nomic-embed-text`, on this computer                                                                                                                   |
 | `src/time.ts`          | The office's time zone (`OFFICE_TIME_ZONE`), and a schedule's next run                                                                                                       |
 | `src/checks.ts`        | What an install needs, one check each. Imports no db.ts, so it runs before a database exists                                                                                 |
 | `src/setup.ts`         | `npm run setup`: asks nothing. Checks the computer, starts the office service, opens the browser                                                                             |

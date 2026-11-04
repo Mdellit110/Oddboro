@@ -30,13 +30,24 @@ pub fn office_home() -> PathBuf {
     env::var_os("ODDBORO_HOME").map_or_else(|| home().join(".oddboro"), PathBuf::from)
 }
 
-/// Where Node's output goes.
+/// Where Node's output goes: `~/Library/Logs/Oddboro` on a Mac, and on Linux
+/// the folder the office's own login service logs to
+/// (`packages/ledger/src/platform.ts`).
+#[cfg(target_os = "macos")]
 pub fn log_file() -> PathBuf {
     home().join("Library/Logs/Oddboro/office.log")
 }
 
-/// The PATH the owner's Terminal would have. An app opened from the Finder
-/// starts with `/usr/bin:/bin:/usr/sbin:/sbin`, and the server spawns
+#[cfg(not(target_os = "macos"))]
+pub fn log_file() -> PathBuf {
+    let state = env::var_os("XDG_STATE_HOME")
+        .filter(|s| !s.is_empty())
+        .map_or_else(|| home().join(".local/state"), PathBuf::from);
+    state.join("oddboro/office.log")
+}
+
+/// The PATH the owner's Terminal would have. An app opened from the Finder or
+/// a Linux launcher starts with a short system PATH, and the server spawns
 /// `claude`, `git` and `uvx`, so ask the login shell once and then add the
 /// usual install folders it may have missed.
 pub fn login_path() -> String {
@@ -68,7 +79,12 @@ pub fn login_path() -> String {
 /// Runs `$SHELL -l -c 'printf %s "$PATH"'` with a timeout. A profile that
 /// prints its own text first is fine: the PATH is the last line.
 fn read_login_path() -> Option<String> {
-    let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let fallback = if cfg!(target_os = "macos") {
+        "/bin/zsh"
+    } else {
+        "/bin/sh"
+    };
+    let shell = env::var("SHELL").unwrap_or_else(|_| fallback.to_string());
     let mut child = Command::new(shell)
         .args(["-l", "-c", "printf %s \"$PATH\""])
         .stdin(Stdio::null())
