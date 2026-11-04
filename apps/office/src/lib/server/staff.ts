@@ -21,7 +21,7 @@ import {
   writeFileSync
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import {
   DATABASE_URL,
   goalsFor,
@@ -61,7 +61,9 @@ import {
   zone,
   zoneName,
   STAFF_SERVER,
-  home
+  home,
+  rulePath,
+  toolCommand
 } from '@oddboro/ledger';
 import { emit } from './events.ts';
 import type { Work } from '../staff/work.ts';
@@ -310,7 +312,7 @@ async function access(who: StaffRow) {
     servers[c.id] =
       c.kind === 'http'
         ? { type: 'http', url: c.config.url, headers }
-        : { command: c.config.command, args: c.config.args, env };
+        : { ...toolCommand(c.config.command!, c.config.args ?? []), env };
     if (a.level === 'act') allowed.push(`mcp__${c.id}`);
     else allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
   }
@@ -482,7 +484,8 @@ function unreadable(id: string, dir: string): string[] {
     }
   };
   // Secret stores in the home folder, including the sign-ins other apps on this
-  // Mac keep there, like the Google Workspace MCP server's.
+  // computer keep there, like the Google Workspace MCP server's. AppData is
+  // where Windows apps keep theirs.
   const paths = [
     ...[
       '.ssh',
@@ -490,6 +493,7 @@ function unreadable(id: string, dir: string): string[] {
       '.gnupg',
       '.config',
       'Library',
+      'AppData',
       '.claude.json',
       '.google_workspace_mcp'
     ].map((p) => join(homedir(), p)),
@@ -499,8 +503,8 @@ function unreadable(id: string, dir: string): string[] {
     ...besides(join(claude, 'projects'), [sessionsOf(dir)])
   ];
   // Never deny a folder a staffer must read, such as an office kept under ~/Library.
-  const covers = (p: string) => reads.some((r) => r === p || r.startsWith(`${p}/`));
-  return [...new Set(paths)].filter((p) => !covers(p)).map((p) => `Read(/${p})`);
+  const covers = (p: string) => reads.some((r) => r === p || r.startsWith(`${p}${sep}`));
+  return [...new Set(paths)].filter((p) => !covers(p)).map((p) => `Read(${rulePath(p)})`);
 }
 
 /** One headless Claude Code run. `session` resumes a saved session file, or starts fresh. */
@@ -549,16 +553,16 @@ async function run(
     '--tools',
     'Read,Glob,Grep,Write,Edit',
     '--allowedTools',
-    ...readable(dir).map((p) => `Read(/${p}/**)`),
+    ...readable(dir).map((p) => `Read(${rulePath(p)}/**)`),
     // Edit rules cover every file-writing tool; Claude Code ignores Write(path).
-    `Edit(/${dir}/**)`,
+    `Edit(${rulePath(dir)}/**)`,
     ...allowed,
     '--disallowedTools',
     ...unreadable(who.id, dir),
     // Claude Code loads these on every run: a staffer may not rewrite its own instructions or hooks.
     ...['CLAUDE.md', 'CLAUDE.local.md', '.claude/**'].flatMap((f) => [
-      `Edit(/${dir}/${f})`,
-      `Edit(/${dir}/**/${f})`
+      `Edit(${rulePath(dir)}/${f})`,
+      `Edit(${rulePath(dir)}/**/${f})`
     ]),
     '--permission-mode',
     'dontAsk',

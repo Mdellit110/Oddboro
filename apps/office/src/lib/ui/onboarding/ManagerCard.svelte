@@ -40,8 +40,8 @@
 </script>
 
 <p class="text-sm text-muted">
-  This is your office. It runs on this Mac and works while the Mac is on. Every office has a
-  manager: they run the floor, write your daily report, and help you hire the rest. Pick yours.
+  This is your office. It runs on this computer and works while the computer is on. Every office has
+  a manager: they run the floor, write your daily report, and help you hire the rest. Pick yours.
 </p>
 
 <!-- One list, in two brackets: the quick way first, then your own. -->

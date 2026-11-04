@@ -52,9 +52,19 @@ canvas {
 
 .glass {
   background: var(--color-panel);
-  backdrop-filter: blur(14px) saturate(1.2);
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   box-shadow: var(--shadow-float);
+}
+
+/* The blur, for engines without WebKit's own -webkit-backdrop-filter:
+   Chromium, which draws the Windows app. WebKit (the Mac and Linux apps)
+   keeps only its own line, as it always has. Written as one rule for both,
+   the build kept only the -webkit- line, and the Windows panels lost their
+   blur. */
+@supports not (-webkit-backdrop-filter: none) {
+  .glass {
+    backdrop-filter: blur(14px) saturate(1.2);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

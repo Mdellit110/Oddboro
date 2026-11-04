@@ -314,7 +314,9 @@
           {:else if mac === 'missing'}
             <ol class="mt-2 list-decimal space-y-1 ps-4 text-xs text-muted">
               <li>
-                In System Settings, open Notifications.
+                {system === 'windows'
+                  ? 'In Settings, open System, then Notifications.'
+                  : 'In System Settings, open Notifications.'}
                 <button class="link" onclick={openSettings}>Open it</button>
               </li>
               {#if app}

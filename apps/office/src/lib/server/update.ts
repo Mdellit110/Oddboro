@@ -108,7 +108,7 @@ export async function setWindow(start: string, end: string): Promise<void> {
 
 /** Ask the shell to check now. It reads this line from the server's stdout. */
 export function askShellToCheck(): void {
-  if (!MANAGED) throw new Error('Only the Mac app checks for updates');
+  if (!MANAGED) throw new Error('Only the desktop app checks for updates');
   state.asked = new Date().toISOString();
   process.stdout.write('oddboro:update-check\n');
   emit({ type: 'change', table: 'app_update' });

@@ -6,7 +6,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering::SeqCst};
 use std::sync::{Condvar, Mutex};
 use std::thread::{self, sleep};
@@ -33,7 +33,11 @@ static QUITTING: AtomicBool = AtomicBool::new(false);
 /// Held while Node starts or the shell begins to quit, so the two never race.
 /// The supervisor notifies it when Node is gone.
 static GONE: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
+/// Node's stdin while it runs. The server quits when it closes, so closing it
+/// is how the shell asks Node to go on Windows, which has no SIGTERM.
+static NODE_STDIN: Mutex<Option<ChildStdin>> = Mutex::new(None);
 /// The write end of the pipe a quit signal wakes. -1 until it exists.
+#[cfg(unix)]
 static SIGNAL_PIPE: AtomicI32 = AtomicI32::new(-1);
 
 pub struct Server {
@@ -76,10 +80,10 @@ impl Server {
                     .map_err(|e| format!("Oddboro could not start its server: {e}"))?
             };
             note(&self.log, &format!("started node, pid {}", child.id()));
-            // Hold Node's stdin here, open until this loop moves on:
-            // `Child::wait` closes a stdin it still holds, and the server
-            // quits when its stdin closes.
-            let _stdin = child.stdin.take();
+            // Hold Node's stdin apart, open until Node is gone: `Child::wait`
+            // closes a stdin it still holds, and the server quits when its
+            // stdin closes.
+            *NODE_STDIN.lock().unwrap_or_else(|e| e.into_inner()) = child.stdin.take();
 
             let status = match wait_ready(&mut child, self.port) {
                 Ready::Answered => {
@@ -120,7 +124,8 @@ impl Server {
     fn spawn(&self) -> io::Result<Child> {
         let log = open_log(&self.log)?;
         let port = self.port.to_string();
-        let mut child = Command::new(&self.node)
+        let mut command = Command::new(&self.node);
+        command
             .arg(self.code.join(ENTRY))
             .current_dir(self.code.join("apps/office"))
             .env("PORT", &port)
@@ -144,8 +149,12 @@ impl Server {
             .envs(
                 (!self.update_token.is_empty())
                     .then_some(("ODDBORO_UPDATE_TOKEN", self.update_token.as_str())),
-            )
-            .spawn()?;
+            );
+        // Node is a console program. Without this, Windows opens a console
+        // window for it, and for every program it starts.
+        #[cfg(windows)]
+        std::os::windows::process::CommandExt::creation_flags(&mut command, CREATE_NO_WINDOW);
+        let mut child = command.spawn()?;
         if let Some(out) = child.stdout.take() {
             thread::spawn(move || relay(out, log));
         }
@@ -169,8 +178,8 @@ pub fn port_taken(port: u16) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
 }
 
-/// Asks the shell to quit: SIGTERM to Node, up to 10 seconds to go, then
-/// SIGKILL. Blocks until Node is gone.
+/// Asks the shell to quit: Node is asked to go, gets up to 10 seconds, and is
+/// then killed. Blocks until Node is gone.
 pub fn stop() {
     let pid = {
         let _guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
@@ -180,9 +189,9 @@ pub fn stop() {
     if pid <= 0 {
         return;
     }
-    signal(pid, libc::SIGTERM);
+    ask_to_quit(pid);
     if !wait_gone(STOP_TIMEOUT) {
-        signal(pid, libc::SIGKILL);
+        kill_now(pid);
         wait_gone(Duration::from_secs(2));
     }
 }
@@ -191,6 +200,7 @@ pub fn stop() {
 /// thread, so a `kill` or a Ctrl-C quits the same way the menu does and Node
 /// gets its 10 seconds and then SIGKILL. A second signal kills the shell
 /// outright.
+#[cfg(unix)]
 pub fn on_quit_signal(quit: impl FnOnce() + Send + 'static) {
     extern "C" fn on_signal(sig: libc::c_int) {
         let fd = SIGNAL_PIPE.load(SeqCst);
@@ -225,6 +235,11 @@ pub fn on_quit_signal(quit: impl FnOnce() + Send + 'static) {
     }
 }
 
+/// Windows sends a windowed app no such signals: it closes the app through its
+/// windows, and logging off ends it like any other.
+#[cfg(windows)]
+pub fn on_quit_signal(_quit: impl FnOnce() + Send + 'static) {}
+
 fn wait_ready(child: &mut Child, port: u16) -> Ready {
     let deadline = Instant::now() + READY_TIMEOUT;
     while Instant::now() < deadline {
@@ -254,9 +269,9 @@ fn answers_http(port: u16) -> bool {
         && &head == b"HTTP/"
 }
 
-/// SIGTERM, up to 10 seconds, then SIGKILL, for a child this thread owns.
+/// Asked to go, up to 10 seconds, then killed, for a child this thread owns.
 fn terminate(child: &mut Child) {
-    signal(child.id() as i32, libc::SIGTERM);
+    ask_to_quit(child.id() as i32);
     let deadline = Instant::now() + STOP_TIMEOUT;
     while Instant::now() < deadline {
         if let Ok(Some(_)) = child.try_wait() {
@@ -268,15 +283,49 @@ fn terminate(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn signal(pid: i32, sig: libc::c_int) {
+/// SIGTERM, which the server takes as "quit".
+#[cfg(unix)]
+fn ask_to_quit(pid: i32) {
     // SAFETY: kill has no memory-safety preconditions.
     unsafe {
-        libc::kill(pid, sig);
+        libc::kill(pid, libc::SIGTERM);
     }
 }
 
+/// Closes Node's stdin, which the server takes as "quit".
+#[cfg(windows)]
+fn ask_to_quit(_pid: i32) {
+    drop(NODE_STDIN.lock().unwrap_or_else(|e| e.into_inner()).take());
+}
+
+#[cfg(unix)]
+fn kill_now(pid: i32) {
+    // SAFETY: kill has no memory-safety preconditions.
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+}
+
+#[cfg(windows)]
+fn kill_now(pid: i32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    // SAFETY: the handle is checked before use and closed once.
+    unsafe {
+        let process = OpenProcess(PROCESS_TERMINATE, 0, pid as u32);
+        if !process.is_null() {
+            TerminateProcess(process, 1);
+            CloseHandle(process);
+        }
+    }
+}
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 fn mark_gone() {
     let_sleep();
+    drop(NODE_STDIN.lock().unwrap_or_else(|e| e.into_inner()).take());
     let _guard = GONE.0.lock().unwrap_or_else(|e| e.into_inner());
     NODE_PID.store(0, SeqCst);
     GONE.1.notify_all();
@@ -313,12 +362,12 @@ fn let_sleep() {}
 /// The sleep lock while Node runs on Linux: `systemd-inhibit` holding `cat`,
 /// whose stdin is a pipe this shell holds. Dropping it, or the shell dying by
 /// any means, ends `cat` and with it the lock.
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 static AWAKE: Mutex<Option<Child>> = Mutex::new(None);
 
 /// Keeps the computer from sleeping on its own while Node runs. Closing a
 /// laptop's lid still suspends it: logind ignores this lock for the lid.
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn keep_awake(_pid: u32) {
     let spawned = Command::new("systemd-inhibit")
         .args([
@@ -337,13 +386,43 @@ fn keep_awake(_pid: u32) {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn let_sleep() {
     let held = AWAKE.lock().unwrap_or_else(|e| e.into_inner()).take();
     if let Some(mut inhibit) = held {
         drop(inhibit.stdin.take());
         let _ = inhibit.wait();
     }
+}
+
+/// The sleep lock while Node runs on Windows: a thread that asked Windows to
+/// stay awake and waits. Windows holds the request for as long as that thread
+/// lives, so dropping this ends the thread, and the shell dying ends it too.
+#[cfg(windows)]
+static AWAKE: Mutex<Option<std::sync::mpsc::Sender<()>>> = Mutex::new(None);
+
+/// Keeps the computer from sleeping on its own while Node runs. Closing a
+/// laptop's lid still sleeps it, as the lid's own setting says.
+#[cfg(windows)]
+fn keep_awake(_pid: u32) {
+    use windows_sys::Win32::System::Power::{
+        SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED,
+    };
+    let (held, released) = std::sync::mpsc::channel::<()>();
+    thread::spawn(move || {
+        // SAFETY: SetThreadExecutionState takes flags and touches no memory.
+        unsafe { SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED) };
+        // Returns when the sender drops.
+        let _ = released.recv();
+        // SAFETY: as above.
+        unsafe { SetThreadExecutionState(ES_CONTINUOUS) };
+    });
+    *AWAKE.lock().unwrap_or_else(|e| e.into_inner()) = Some(held);
+}
+
+#[cfg(windows)]
+fn let_sleep() {
+    drop(AWAKE.lock().unwrap_or_else(|e| e.into_inner()).take());
 }
 
 /// Node's stdout: a notification request goes to the system as Oddboro's own, a
@@ -379,7 +458,7 @@ fn notify(title: &str, text: &str) {
 
 /// Show a notification as Oddboro's through the desktop's notification
 /// service, the way the office's own login service does.
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn notify(title: &str, text: &str) {
     let spawned = Command::new("notify-send")
         .args(["--app-name=Oddboro", "--", title, text])
@@ -390,6 +469,18 @@ fn notify(title: &str, text: &str) {
     if let Ok(mut child) = spawned {
         thread::spawn(move || child.wait());
     }
+}
+
+/// Show a notification as Oddboro's. Windows finds the app by the id the
+/// installer gave its Start menu shortcut, the app's identifier.
+#[cfg(windows)]
+fn notify(title: &str, text: &str) {
+    use tauri_winrt_notification::{Sound, Toast};
+    let _ = Toast::new("com.newaltitude.oddboro")
+        .title(title)
+        .text1(text)
+        .sound(Some(Sound::Default))
+        .show();
 }
 
 fn open_log(path: &Path) -> io::Result<File> {

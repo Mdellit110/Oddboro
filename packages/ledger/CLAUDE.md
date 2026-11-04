@@ -64,7 +64,7 @@ window, the hold, the install decision and a poke's grace.
 | `src/checks.ts`        | What an install needs, one check each. Imports no db.ts, so it runs before a database exists                                                                                 |
 | `src/setup.ts`         | `npm run setup`: asks nothing. Checks the computer, starts the office service, opens the browser                                                                             |
 | `src/platform.ts`      | What differs between systems: log folder, login service (launchd, systemd), opening a URL                                                                                    |
-| `src/secrets.ts`       | Secrets in the system's own store, one entry per system: `security` (Mac), `secret-tool` (Linux)                                                                             |
+| `src/secrets.ts`       | Secrets in the system's own store, one entry per system: `security` (Mac), `secret-tool` (Linux), the Credential Manager through `@napi-rs/keyring` (Windows)                |
 | `src/env.ts`           | `.env` read and written a key at a time, by setup and by the office                                                                                                          |
 | `src/local-db.ts`      | The office's own Postgres (PGlite), its socket, and NOTIFY from other processes                                                                                              |
 | `src/upgrade.ts`       | Brings the tables up to date: pgvector, then migrations. `markBaseline()` moves an install made before the baseline onto it, once, and takes out the Google connector it had |
@@ -142,4 +142,6 @@ window, the hold, the install decision and a poke's grace.
   write a name into the code or the docs.
 - Secrets never land here. A connector names its secrets; the values live in
   the system's own secret store (`src/secrets.ts`): the Keychain on a Mac, the
-  Secret Service keyring on Linux through secret-tool.
+  Secret Service keyring on Linux through secret-tool, and the Credential
+  Manager on Windows through `@napi-rs/keyring`, in pieces of 2,048 bytes,
+  since one credential holds at most 2,560.

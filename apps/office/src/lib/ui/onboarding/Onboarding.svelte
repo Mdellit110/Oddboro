@@ -486,7 +486,7 @@
               </dd>
               <dt class="text-muted">Clock</dt>
               <dd>
-                {zoneLabel(zone)}{zone === here ? ", your Mac's" : ''}.
+                {zoneLabel(zone)}{zone === here ? ", your computer's" : ''}.
                 <button class="link" onclick={() => (zoneOpen = !zoneOpen)}>Change</button>
               </dd>
             </dl>

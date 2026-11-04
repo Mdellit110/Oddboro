@@ -31,6 +31,7 @@
     "@electric-sql/pglite-pgvector": "0.0.14",
     "@electric-sql/pglite-socket": "0.2.16",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@napi-rs/keyring": "2.1.2",
     "@oddboro/sprites": "*",
     "@oddboro/world": "*",
     "drizzle-orm": "^0.45.4",

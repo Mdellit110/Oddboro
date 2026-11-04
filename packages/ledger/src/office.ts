@@ -633,7 +633,7 @@ function connectSteps(conn: ConnectorRow, again = false): Step[] {
         ]
       : []),
     ...[...(conn.config.secrets ?? []), ...(conn.config.headers ?? [])].map((name) => ({
-      text: `Paste ${name === 'Authorization' ? `your ${conn.name} key` : `the ${name} value for ${conn.name}`} below. It goes in your Mac's keychain, never the database.`,
+      text: `Paste ${name === 'Authorization' ? `your ${conn.name} key` : `the ${name} value for ${conn.name}`} below. It goes in this computer's password store, never the database.`,
       done: false,
       action: { kind: 'secret' as const, connector: conn.id, name }
     })),
