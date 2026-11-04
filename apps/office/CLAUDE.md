@@ -411,6 +411,30 @@ browser shows notifications only on a secure page. Firefox keeps its own trusted
 list, and the card says so to Firefox users. `npm run setup` opens the secure
 address when it answers and is trusted.
 
+## Who the office answers
+
+Other pages open in the owner's browser can send requests to the office too,
+so `guardOffice` (`src/lib/server/owner-page.ts`, the server's `handle` in
+`hooks.server.ts`) checks every route and API request before the route sees
+it, in every mode. SvelteKit's own check covers form posts only. Files built
+into the page (scripts, styles, images) are served before the check.
+
+1. The Host must be one of the office's names, whatever the port: 127.0.0.1,
+   [::1], localhost, the addresses through Caddy (`HOSTS` in
+   `src/lib/server/address.ts`) and the app's `ORIGIN`. A site that points its
+   own name at 127.0.0.1 looks same-origin to the browser, so only the name
+   gives it away. A route asked by any other name gets 403.
+2. Anything but GET, HEAD and OPTIONS must come from the owner's page
+   (`fromOwnerPage`): Sec-Fetch-Site says same-origin, or, with none, the
+   Origin names the Host asked, whatever the scheme, since through Caddy the
+   page is https and the office http. With neither, 403.
+3. The one other client is the app's shell, which reports updates to
+   `/api/update` with the token it passed the server (`fromShell` in
+   `src/lib/server/update.ts`).
+4. Vite's dev server has its own route, `/__open-in-editor`, that opens a file
+   in an editor and runs before the handle. `noEditorLaunch` in
+   `vite.config.ts` refuses it with 403, always: nothing in the office uses it.
+
 ## Running it always
 
 1. `npm run service:install -w apps/office` installs a login service

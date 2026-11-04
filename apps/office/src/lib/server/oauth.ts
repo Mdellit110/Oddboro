@@ -49,7 +49,12 @@ const pending = new Map<string, string>();
 
 class KeychainProvider implements OAuthClientProvider {
   url: URL | undefined;
-  constructor(readonly id: string) {}
+  // Not a parameter property: Node's type stripping, which the office's tests
+  // run on, cannot load one.
+  readonly id: string;
+  constructor(id: string) {
+    this.id = id;
+  }
 
   private load(): Saved {
     try {

@@ -22,11 +22,13 @@ import { backUpForNewVersion } from './backup.ts';
 import { LOCAL_DATABASE_DIR, LOCAL_DATABASE_PORT } from './db.ts';
 
 type Listener = (channel: string, payload: string) => void;
-type Local = { ready: Promise<void>; listeners: Set<Listener> };
+/** Closes the socket and the database. Only a test needs it: the office's own ends with its process. */
+type Stop = () => Promise<void>;
+type Local = { ready: Promise<Stop>; listeners: Set<Listener> };
 const g = globalThis as unknown as { localDatabase?: Local };
 
 /** Start the local database once per process, even when Vite reloads this module. */
-export function startLocalDatabase(): Promise<void> {
+export function startLocalDatabase(): Promise<Stop> {
   g.localDatabase ??= { ready: open(), listeners: new Set() };
   return g.localDatabase.ready;
 }
@@ -38,7 +40,7 @@ export function listenLocal(channel: string, fn: (payload: string) => void): voi
   });
 }
 
-async function open(): Promise<void> {
+async function open(): Promise<Stop> {
   // A new version's first start copies the database aside before it opens it.
   backUpForNewVersion();
   mkdirSync(LOCAL_DATABASE_DIR, { recursive: true });
@@ -55,6 +57,10 @@ async function open(): Promise<void> {
   });
   oneAtATime(server, db);
   await server.start();
+  return async () => {
+    await server.stop();
+    await db.close();
+  };
 }
 
 // pglite-socket 0.2.16's queue, which the version pin in package.json holds still.

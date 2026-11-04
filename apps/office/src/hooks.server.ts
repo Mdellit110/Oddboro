@@ -6,6 +6,9 @@
 // In the app (ODDBORO_APP) it also quits when the app does: on SIGTERM, once
 // the HTTP server has closed, and when the app's stdin pipe closes, which
 // happens however the app ends, Force Quit included.
+// Every route and API request passes `guardOffice` first: the office's own
+// names, and actions only from the owner's page (`#lib/server/owner-page.ts`).
+// Files built into the page (scripts, styles, images) are served before it.
 import type { ServerInit } from '@sveltejs/kit/hooks';
 import { LOCAL } from '@oddboro/ledger';
 import { startLocalDatabase } from '@oddboro/ledger/local-db';
@@ -14,6 +17,8 @@ import { keepAddress } from '#lib/server/address.ts';
 import { startFollowUps } from '#lib/server/follow-ups.ts';
 import { startClock } from '#lib/server/jobs.ts';
 import { loadUpdate } from '#lib/server/update.ts';
+
+export { guardOffice as handle } from '#lib/server/owner-page.ts';
 
 if (process.env.ODDBORO_APP) {
   process.on('sveltekit:shutdown', () => process.exit(0));
