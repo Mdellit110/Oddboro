@@ -57,6 +57,7 @@ window, the hold, the install decision and a poke's grace.
 | `src/offices.ts`       | Office layouts: save one, move in or back, where each Odd works in each, and the art drawn for them                                                                          |
 | `src/mcp.ts`           | The office MCP server an Odd runs with: ledger, asks, tasks, access                                                                                                          |
 | `src/tools.ts`         | The office tools in plain words, which every Odd has, and the starters                                                                                                       |
+| `src/capabilities.ts`  | What an Odd can do: its level, office tools, and each outside tool with whether a run gets it. Runs, `my_access`, `office_report` and the Access tab read it                 |
 | `src/registry.ts`      | Finding servers in the catalog and the public MCP Registry                                                                                                                   |
 | `src/embed.ts`         | Vectors from Ollama's `nomic-embed-text`, on this computer                                                                                                                   |
 | `src/time.ts`          | The office's time zone (`OFFICE_TIME_ZONE`), and a schedule's next run                                                                                                       |

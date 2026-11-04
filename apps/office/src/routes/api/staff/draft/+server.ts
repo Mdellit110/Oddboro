@@ -28,8 +28,9 @@ Use these sections, in this order:
 1. A title line: "# <Name>, <Role>".
 2. Who they work for: {owner}, in a sentence or two.
 3. What they are for, as a numbered list.
-4. What they may do, and what they never do. Nothing leaves the office
-   without {owner}'s yes on that exact action.
+4. What they may do, and what they never do, in this job. Leave out what
+   may leave the office and when to ask first: every run states that rule
+   from the Odd's level at the time, and a job description outlives a level.
 5. Which asks and tasks they bring to {owner}'s desk, and when.
 6. How they write to {owner}: the answer first, active voice, plain words,
    short numbered steps, no em-dashes.
