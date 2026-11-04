@@ -89,11 +89,13 @@
           </p>
           <h2 class="font-pixel text-ink mt-2 text-3xl leading-tight font-semibold">{r.title}</h2>
           <p class="text-muted mt-3 text-[15px] leading-relaxed">{r.summary}</p>
-          <ul class="text-muted mt-4 list-disc space-y-1.5 ps-5 text-[15px] leading-relaxed">
-            {#each r.notes as n (n)}
-              <li>{n}</li>
-            {/each}
-          </ul>
+          {#if r.notes.length}
+            <ul class="text-muted mt-4 list-disc space-y-1.5 ps-5 text-[15px] leading-relaxed">
+              {#each r.notes as n (n)}
+                <li>{n}</li>
+              {/each}
+            </ul>
+          {/if}
           <p class="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-sm">
             {#each builds(r.builds) as b (b.id)}
               <a href={versionHref(b, r.version)} class="text-sea underline underline-offset-2"

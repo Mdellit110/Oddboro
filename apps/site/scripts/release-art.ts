@@ -1,14 +1,16 @@
 // The art on /releases/: one looping GIF per release that has one, built on
-// the desk vignette (an Odd typing at its desk), and a still of its last
-// frame for visitors who ask for reduced motion. art.ts calls this once per
+// the desk vignette (an Odd typing at its desk) or the office's front door,
+// and a still of its last frame for visitors who ask for reduced motion. art.ts calls this once per
 // theme, with the vignette's layers lit for night or for day, so every
 // animation added here comes in both. Every colour added here is the house
 // palette's, and `shade` lights it the way the room is lit.
 //
 //   hello-world   the screen answers the Odd's typing: "HELLO, WORLD!" fills
 //                 a speech bubble one letter at a time (0.0.1)
+//   stuck-sign-in Ada walks into the shut front door, three times, backs off
+//                 and wonders why (0.0.2, the stuck sign-in fix)
 //   linux         the screen flashes and a penguin jumps out of it, arcs over
-//                 the desk and lands on the floor (the Linux release)
+//                 the desk and lands on the floor (0.0.3)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
@@ -29,6 +31,18 @@ export type DeskLayers = {
 const PALETTE = JSON.parse(
   readFileSync(new URL('../../../packages/sprites/src/palette.json', import.meta.url), 'utf8')
 ).colors as Record<string, { hex: string }>;
+
+/** The office's front door, shut, and the sidewalk below it. */
+export type DoorLayers = {
+  /** The street and the building's front, lit, with no Odd. */
+  room: Image;
+  /** The door, in the room's pixels. */
+  door: { x: number; y: number; w: number; h: number };
+  /** Ada in one sprite frame, like `walk-up-2`, lit, 16 by 32. */
+  odd: (frame: string) => Image;
+};
+
+export type Layers = { desk: DeskLayers; door: DoorLayers };
 
 /** A sprite drawn in palette keys, one character per pixel, `.` see-through. */
 function sprite(rows: string[]): Image {
@@ -78,6 +92,7 @@ const GLYPHS: Record<string, string[]> = {
   D: ['xx.', 'x.x', 'x.x', 'x.x', 'xx.'],
   ',': ['.', '.', '.', 'x', 'x'],
   '!': ['x', 'x', 'x', '.', 'x'],
+  '?': ['xx.', '..x', '.x.', '...', '.x.'],
   ' ': ['..', '..', '..', '..', '..']
 };
 const HELLO = 'HELLO, WORLD!';
@@ -85,9 +100,9 @@ const HELLO = 'HELLO, WORLD!';
 const width = (text: string) =>
   [...text].reduce((w, ch, i) => w + GLYPHS[ch][0].length + (i ? 1 : 0), 0);
 
-/** The bubble with the first `shown` letters, its tail down toward the screen. */
-function bubble(shown: number): Image {
-  const w = width(HELLO) + 6;
+/** A bubble with the first `shown` letters of `text`, its tail down at its start. */
+function bubble(shown: number, text = HELLO): Image {
+  const w = width(text) + 6;
   const h = 11;
   const rows: string[] = [];
   for (let y = 0; y < h + 3; y++) {
@@ -107,7 +122,7 @@ function bubble(shown: number): Image {
   rows[h - 1] = rows[h - 1].slice(0, 4) + '==' + rows[h - 1].slice(6);
   const img = sprite(rows);
   let x = 3;
-  [...HELLO].slice(0, shown).forEach((ch) => {
+  [...text].slice(0, shown).forEach((ch) => {
     const glyph = GLYPHS[ch];
     glyph.forEach((row, gy) =>
       [...row].forEach((on, gx) => {
@@ -197,16 +212,68 @@ function linux(layers: DeskLayers): GifFrame[] {
   return frames;
 }
 
+// The bonk: a paper burst, outlined in ink so it shows on a lit door by
+// night and on a sunny one by day.
+const BONK = sprite(['...k...', '.k.=.k.', '..k=k..', 'k==.==k', '..k=k..', '.k.=.k.', '...k...']);
+
+function stuckSignIn({ room, door, odd }: DoorLayers): GifFrame[] {
+  const x = Math.round(door.x + door.w / 2 - 8);
+  // Ada's sprite top: at the door, standing on the row below it, and where
+  // she starts and ends, a tile and a half back on the sidewalk.
+  const at = door.y + door.h - 16;
+  const start = at + 24;
+  const frames: GifFrame[] = [];
+  const add = (pose: string, y: number, extra?: (img: Image) => void) => {
+    const img = createImage(room.width, room.height);
+    drawImage(img, room, 0, 0);
+    drawImage(img, odd(pose), x, y);
+    extra?.(img);
+    frames.push({ image: img, delay: DELAY });
+  };
+  const walk = (from: number, to: number) => {
+    const steps = Math.ceil(Math.abs(to - from) / 2);
+    for (let i = 1; i <= steps; i++)
+      add(`walk-up-${Math.floor(i / 2) % 4}`, Math.round(from + ((to - from) * i) / steps));
+  };
+  const ouch = bubble(1, '!');
+  const huh = bubble(1, '?');
+  const over = (b: Image, y: number) => (img: Image) => drawImage(img, b, x + 4, y - b.height + 2);
+  const bonk = () => {
+    add('idle-up-0', at + 4, (img) => drawImage(img, BONK, x + 5, at + 1));
+    for (let i = 0; i < 4; i++) add('idle-up-0', at + 4, over(ouch, at + 4));
+  };
+
+  for (let i = 0; i < 6; i++) add('idle-up-0', start);
+  walk(start, at);
+  bonk();
+  walk(at + 4, at);
+  bonk();
+  walk(at + 4, at);
+  bonk();
+  // Backing off, still facing the door, to where she began.
+  walk(at + 4, start);
+  for (let i = 0; i < 12; i++) add('idle-up-0', start, over(huh, start));
+  // The still: Ada on the sidewalk, wondering.
+  const still = createImage(room.width, room.height);
+  drawImage(still, room, 0, 0);
+  drawImage(still, odd('idle-up-0'), x, start);
+  over(huh, start)(still);
+  frames.push({ image: still, delay: 0 });
+  return frames;
+}
+
 /**
  * Every release's art. `share` is the GIF frame, counted from 0, that becomes
  * the link preview while that release is the newest one. The owner picks it
  * when the art is made; there is no default.
  */
-const ART: { name: string; frames: (layers: DeskLayers) => GifFrame[]; share: number }[] = [
+const ART: { name: string; frames: (layers: Layers) => GifFrame[]; share: number }[] = [
   // The whole hello in its bubble.
-  { name: 'hello-world', frames: helloWorld, share: 30 },
+  { name: 'hello-world', frames: (l) => helloWorld(l.desk), share: 30 },
+  // Ada backed off on the sidewalk, wondering.
+  { name: 'stuck-sign-in', frames: (l) => stuckSignIn(l.door), share: 55 },
   // The penguin standing on the floor.
-  { name: 'linux', frames: linux, share: 30 }
+  { name: 'linux', frames: (l) => linux(l.desk), share: 30 }
 ];
 
 // The link preview's size, and the ink it sits on.
@@ -227,7 +294,7 @@ function shareCard(img: Image): Image {
  * Writes <name>.gif and its still, <name>.png, into `dir`, for one theme. At
  * night it also writes <name>-share.png, the link preview.
  */
-export function writeReleaseArt(layers: DeskLayers, dir: string, theme: 'night' | 'day'): void {
+export function writeReleaseArt(layers: Layers, dir: string, theme: 'night' | 'day'): void {
   mkdirSync(dir, { recursive: true });
   for (const art of ART) {
     const frames = art.frames(layers);

@@ -26,7 +26,7 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
-    version: '0.0.2',
+    version: '0.0.3',
     date: '2026-11-04',
     title: 'Oddboro runs on Linux.',
     summary:
@@ -40,6 +40,21 @@ export const RELEASES: Release[] = [
       name: 'linux',
       alt: 'An Odd types at a desk. A penguin jumps out of the monitor, arcs over the desk and lands on the floor.',
       shareAlt: 'A pixel-art penguin stands on the office floor beside an Odd typing at its desk.'
+    }
+  },
+  {
+    version: '0.0.2',
+    date: '2026-11-03',
+    title: 'A stuck sign-in starts over.',
+    summary:
+      'If you close the Claude sign-in page too soon, open it again or cancel. You no longer wait five minutes to try again.',
+    notes: [],
+    builds: ['mac'],
+    art: {
+      name: 'stuck-sign-in',
+      alt: 'An Odd walks up to the office front door and bumps into it, three times, then backs away with a question mark over its head.',
+      shareAlt:
+        'An Odd stands outside the shut front door of a pixel-art office with a question mark over its head.'
     }
   },
   {
