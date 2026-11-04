@@ -5,7 +5,8 @@
   // piece comes in both themes, and CSS shows the one that matches
   // data-theme. Both images load lazily, so the hidden one never loads.
   // Marshall points at the build for this computer: the Mac build until the
-  // browser says it runs Linux, the same pick as every download button.
+  // browser says it runs Windows or Linux, the same pick as every download
+  // button.
   import { onMount } from 'svelte';
   import Meta from '#lib/components/Meta.svelte';
   import { BUILDS, detectBuild, download, latestHref, versionHref } from '#lib/downloads.svelte.ts';
@@ -32,7 +33,7 @@
 
 <Meta
   title="Releases · {SITE.name}"
-  description="Every release of {SITE.name}, and every build of the newest one: the Mac app and the Linux AppImages."
+  description="Every release of {SITE.name}, and every build of the newest one: the Mac app, the Windows installers and the Linux AppImages."
   path="/releases/"
   image={latest.art ? `/art/releases/${latest.art.name}-share.png` : undefined}
   imageAlt={latest.art?.shareAlt}

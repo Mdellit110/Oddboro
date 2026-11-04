@@ -20,7 +20,7 @@
     },
     {
       q: 'Does it run on Windows or Linux?',
-      a: 'Linux, yes: an AppImage for x86_64 and arm64, on a desktop with systemd, a keyring and notifications. Windows, no. It is not on the list today.'
+      a: 'Yes, both. Windows: an installer for Windows 10 and 11, on x64 and arm64. Linux: an AppImage for x86_64 and arm64, on a desktop with systemd, a keyring and notifications.'
     },
     {
       q: 'What leaves my computer?',
@@ -40,7 +40,7 @@
     },
     {
       q: 'How do I start over, or remove it?',
-      a: 'On a Mac, turn off Open at login in the menu bar, quit Oddboro, and move it to the Trash. On Linux, turn off Open at login in the tray (or delete `~/.config/autostart/Oddboro.desktop`), quit Oddboro, and delete the AppImage. Either way, your office stays in `~/.oddboro/` until you delete that folder. From source, `npm run reset` starts the office over: it moves the old one into `~/.oddboro/backups/` and deletes nothing. To remove a source install, run `npm run service:uninstall -w apps/office`, then delete the folder.'
+      a: 'On a Mac, turn off Open at login in the menu bar, quit Oddboro, and move it to the Trash. On Windows, turn off Open at login in the tray, quit Oddboro, and uninstall it in Settings, Apps. On Linux, turn off Open at login in the tray (or delete `~/.config/autostart/Oddboro.desktop`), quit Oddboro, and delete the AppImage. Every way, your office stays in the `.oddboro` folder in your home folder until you delete it. From source, `npm run reset` starts the office over: it moves the old one into `~/.oddboro/backups/` and deletes nothing. To remove a source install, run `npm run service:uninstall -w apps/office`, then delete the folder.'
     },
     {
       q: 'Who makes it?',

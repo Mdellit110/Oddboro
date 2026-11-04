@@ -1,13 +1,15 @@
 // The builds Oddboro ships, and which one this visitor's computer wants. The
 // page renders the Mac build first, so it is whole with no script; in the
-// browser, `detectBuild` switches to the Linux build on Linux. The answer
-// stays in this page and goes nowhere.
+// browser, `detectBuild` switches to the Windows or Linux build on those
+// systems. The answer stays in this page and goes nowhere.
 import { SITE } from '#lib/site.ts';
 
-export type BuildId = 'mac' | 'linux-x86_64' | 'linux-aarch64';
+export type BuildId = 'mac' | 'windows-x64' | 'windows-arm64' | 'linux-x86_64' | 'linux-aarch64';
 
 export type Build = {
   id: BuildId;
+  /** Whose mark the download button shows. */
+  mark: 'mac' | 'windows' | 'linux';
   /** What the button says after "Download for". */
   system: string;
   /** Who Get started's heading names: "Download Oddboro for ...". */
@@ -25,6 +27,7 @@ export type Build = {
 export const BUILDS: Build[] = [
   {
     id: 'mac',
+    mark: 'mac',
     system: 'Mac',
     audience: 'your Mac',
     label: 'Mac, Apple silicon',
@@ -42,7 +45,38 @@ export const BUILDS: Build[] = [
     ]
   },
   {
+    id: 'windows-x64',
+    mark: 'windows',
+    system: 'Windows',
+    audience: 'Windows',
+    label: 'Windows, x64',
+    file: 'Oddboro-x64-setup.exe',
+    versioned: (v) => `Oddboro_${v}_x64-setup.exe`,
+    requirements: ['Windows 10 or 11 on x64', 'A Claude plan, or an Anthropic API key'],
+    install: [
+      'Open Oddboro-x64-setup.exe.',
+      'If Windows says it protected your PC, select More info, then Run anyway.',
+      'Open Oddboro from the Start menu.'
+    ]
+  },
+  {
+    id: 'windows-arm64',
+    mark: 'windows',
+    system: 'Windows',
+    audience: 'Windows',
+    label: 'Windows, arm64',
+    file: 'Oddboro-arm64-setup.exe',
+    versioned: (v) => `Oddboro_${v}_arm64-setup.exe`,
+    requirements: ['Windows 11 on arm64', 'A Claude plan, or an Anthropic API key'],
+    install: [
+      'Open Oddboro-arm64-setup.exe.',
+      'If Windows says it protected your PC, select More info, then Run anyway.',
+      'Open Oddboro from the Start menu.'
+    ]
+  },
+  {
     id: 'linux-x86_64',
+    mark: 'linux',
     system: 'Linux',
     audience: 'Linux',
     label: 'Linux, x86_64',
@@ -61,6 +95,7 @@ export const BUILDS: Build[] = [
   },
   {
     id: 'linux-aarch64',
+    mark: 'linux',
     system: 'Linux',
     audience: 'Linux',
     label: 'Linux, arm64',
@@ -99,10 +134,12 @@ type UAData = {
 };
 
 /**
- * Picks the build for this computer, once per page load. Linux gets an
- * AppImage for its chip; anything else keeps the Mac build, and the list of
- * every build is one link away. Chromium reports x86_64 in its user agent on
- * every Linux machine, so its own hint decides the chip there.
+ * Picks the build for this computer, once per page load. Windows gets an
+ * installer and Linux an AppImage, each for its chip; anything else keeps the
+ * Mac build, and the list of every build is one link away. Browsers report an
+ * x64 chip in the user agent on arm64 Windows and Linux too, so Chromium's
+ * own hint decides the chip where it gives one. Without it, arm64 Windows
+ * gets the x64 installer, which it runs.
  */
 export async function detectBuild(): Promise<void> {
   if (detected || typeof navigator === 'undefined') return;
@@ -110,8 +147,10 @@ export async function detectBuild(): Promise<void> {
   const ua = navigator.userAgent;
   const data = (navigator as Navigator & { userAgentData?: UAData }).userAgentData;
   const platform = data?.platform ?? navigator.platform ?? '';
-  const linux = /linux/i.test(platform) || (/linux|x11/i.test(ua) && !/android/i.test(ua));
-  if (!linux || /android|cros/i.test(ua)) return;
+  const windows = /^win/i.test(platform) || /windows nt/i.test(ua);
+  const linux =
+    !windows && (/linux/i.test(platform) || (/linux|x11/i.test(ua) && !/android/i.test(ua)));
+  if (!(windows || linux) || /android|cros/i.test(ua)) return;
   let arm = /aarch64|arm64|armv8/i.test(`${ua} ${platform}`);
   try {
     const hints = await data?.getHighEntropyValues?.(['architecture']);
@@ -119,5 +158,6 @@ export async function detectBuild(): Promise<void> {
   } catch {
     // No hint: the user agent's answer stands.
   }
-  download.build = byId(arm ? 'linux-aarch64' : 'linux-x86_64');
+  if (windows) download.build = byId(arm ? 'windows-arm64' : 'windows-x64');
+  else download.build = byId(arm ? 'linux-aarch64' : 'linux-x86_64');
 }

@@ -101,7 +101,7 @@
 <SectionHeader
   eyebrow="On your computer"
   title="Your office lives on your computer."
-  lede="The office is a program on your Mac or Linux computer with its own database. There is no Oddboro server. Your Odds, your goals, your decisions and the people in your life stay on the machine in front of you."
+  lede="The office is a program on your Mac, Windows or Linux computer with its own database. There is no Oddboro server. Your Odds, your goals, your decisions and the people in your life stay on the machine in front of you."
 />
 
 <div

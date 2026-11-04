@@ -1,6 +1,6 @@
 // The art on /releases/: one looping GIF per release that has one, built on
-// the desk vignette (an Odd typing at its desk) or the office's front door,
-// and a still of its last frame for visitors who ask for reduced motion. art.ts calls this once per
+// the desk vignette (an Odd typing at its desk), the office's front door or a
+// hallway, and a still of its last frame for visitors who ask for reduced motion. art.ts calls this once per
 // theme, with the vignette's layers lit for night or for day, so every
 // animation added here comes in both. Every colour added here is the house
 // palette's, and `shade` lights it the way the room is lit.
@@ -15,6 +15,10 @@
 //                 front of Ada, she locks it, CLICK, steps back with a
 //                 padlock on it and faces the street (0.0.4, the office
 //                 takes actions only from its own page)
+//   windows       Ada walks an endless hallway, a window in every other
+//                 tile: windows, on Windows, on Windows (0.0.5, the Windows
+//                 app). The loop has no start: its last frame leads into its
+//                 first.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
@@ -48,7 +52,18 @@ export type DoorLayers = {
   odd: (frame: string) => Image;
 };
 
-export type Layers = { desk: DeskLayers; door: DoorLayers };
+/** A hallway that repeats, to walk along forever. */
+export type HallLayers = {
+  /** The hall, lit, wider than the view on both sides, repeating every `period` pixels. */
+  room: Image;
+  period: number;
+  /** The view's size. It starts one period in. */
+  view: { w: number; h: number };
+  /** Ada in one sprite frame, like `walk-side-2`, lit, 16 by 32. */
+  odd: (frame: string) => Image;
+};
+
+export type Layers = { desk: DeskLayers; door: DoorLayers; hall: HallLayers };
 
 /** A sprite drawn in palette keys, one character per pixel, `.` see-through. */
 function sprite(rows: string[]): Image {
@@ -404,6 +419,33 @@ function lockedDoor({ room, door, open, odd }: DoorLayers): GifFrame[] {
 }
 
 /**
+ * Ada walks along the hallway and the hall slides by: two pixels a frame, a
+ * new step every second frame. One period of the hall (two windows, two
+ * walls, one lamp) passes in period / 2 frames, a whole number of her walk's
+ * cycles, so frame 0 follows the last and the loop runs on with no seam.
+ */
+function windows({ room, period, view, odd }: HallLayers): GifFrame[] {
+  const SPEED = 2;
+  const count = period / SPEED;
+  if (!Number.isInteger(count) || count % 8)
+    throw new Error('windows: the loop must end on a whole step');
+  // Ada mid-view, her feet on the middle row of oak.
+  const x = Math.round(view.w / 2 - 8);
+  const y = view.h - 2 * 16 - 8;
+  const shot = (t: number) => {
+    const img = createImage(view.w, view.h);
+    drawImage(img, room, -(period + t * SPEED), 0);
+    drawImage(img, odd(`walk-side-${Math.floor(t / 2) % 4}`), x, y);
+    return img;
+  };
+  const frames: GifFrame[] = [];
+  for (let t = 0; t < count; t++) frames.push({ image: shot(t), delay: DELAY });
+  // The still: Ada mid-stride in the hall.
+  frames.push({ image: shot(0), delay: 0 });
+  return frames;
+}
+
+/**
  * Every release's art. `share` is the GIF frame, counted from 0, that becomes
  * the link preview while that release is the newest one, and `shareLight` is
  * whether that frame is drawn by night or by day. The owner picks both when
@@ -422,7 +464,9 @@ const ART: {
   // The penguin standing on the floor, by day, where his ink shows.
   { name: 'linux', frames: (l) => linux(l.desk), share: 30, shareLight: 'day' },
   // Ada facing the street beside the locked door, by night, where the glass glows.
-  { name: 'locked-door', frames: (l) => lockedDoor(l.door), share: 60, shareLight: 'night' }
+  { name: 'locked-door', frames: (l) => lockedDoor(l.door), share: 60, shareLight: 'night' },
+  // Ada mid-hall among the windows, by day, where the sky shows.
+  { name: 'windows', frames: (l) => windows(l.hall), share: 0, shareLight: 'day' }
 ];
 
 // The link preview's size, and the ink it sits on.
