@@ -4,11 +4,16 @@
   // gets the last frame as a still instead (the 2026-11-03 site ruling). Each
   // piece comes in both themes, and CSS shows the one that matches
   // data-theme. Both images load lazily, so the hidden one never loads.
+  // Marshall points at the build for this computer: the Mac build until the
+  // browser says it runs Linux, the same pick as every download button.
+  import { onMount } from 'svelte';
   import Meta from '#lib/components/Meta.svelte';
-  import { BUILDS, latestHref, versionHref } from '#lib/downloads.svelte.ts';
+  import { BUILDS, detectBuild, download, latestHref, versionHref } from '#lib/downloads.svelte.ts';
   import { reveal } from '#lib/motion/index.ts';
   import { RELEASES } from '#lib/releases.ts';
   import { SITE } from '#lib/site.ts';
+
+  onMount(() => void detectBuild());
 
   const latest = RELEASES[0];
   const THEMES = [
@@ -42,20 +47,40 @@
     </h1>
   </header>
 
-  <ul use:reveal class="mt-8 grid max-w-3xl gap-3 sm:grid-cols-3" aria-label="Every build">
+  <ul use:reveal class="mt-8 grid max-w-4xl gap-3 lg:grid-cols-3" aria-label="Every build">
     {#each BUILDS as b (b.id)}
+      {@const yours = b.id === download.build.id}
       <li>
         <a
           href={latestHref(b)}
-          class="border-hairline bg-raise hover:border-sea flex h-full flex-col rounded-lg border px-4 py-3"
+          class="hover:border-sea flex h-full items-center gap-3 rounded-lg border px-4 py-3 {yours
+            ? 'border-sea bg-sea-deep/40'
+            : 'border-hairline bg-raise'}"
         >
-          <span class="text-ink text-sm font-semibold">{b.label}</span>
-          <span class="text-faint mt-1 font-mono text-xs break-all">{b.file}</span>
+          {#if yours}
+            <img
+              src="/art/point-marshall.png"
+              alt=""
+              width="32"
+              height="64"
+              class="pixel shrink-0 self-end"
+            />
+          {/if}
+          <span class="flex min-w-0 flex-col">
+            {#if yours}
+              <span
+                class="tip text-ink mb-2 self-start rounded-full border px-2.5 py-1 text-xs whitespace-nowrap"
+                >You probably want this one.</span
+              >
+            {/if}
+            <span class="text-ink text-sm font-semibold">{b.label}</span>
+            <span class="text-faint mt-1 font-mono text-xs break-all">{b.file}</span>
+          </span>
         </a>
       </li>
     {/each}
   </ul>
-  <p class="text-faint mt-4 max-w-3xl text-sm">
+  <p class="text-faint mt-4 max-w-4xl text-sm">
     Every file is also on
     <a href={SITE.releases} rel="noopener" class="hover:text-ink underline underline-offset-2"
       >GitHub</a
@@ -115,6 +140,21 @@
 </article>
 
 <style>
+  /* Marshall's speech bubble, its tail on the left toward his head. */
+  .tip {
+    position: relative;
+    border-color: var(--color-hairline);
+    background: var(--color-night);
+  }
+  .tip::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 100%;
+    margin-top: -4px;
+    border: 4px solid transparent;
+    border-inline-end-color: var(--color-hairline);
+  }
   /* One theme's art at a time. The night set is the default, as on <html>. */
   :global(html[data-theme='day']) [data-art-theme='night'],
   :global(html:not([data-theme='day'])) [data-art-theme='day'] {

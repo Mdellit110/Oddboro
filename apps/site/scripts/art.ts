@@ -971,6 +971,27 @@ for (const who of ['marshall', 'ada', 'theo', 'juno'])
     renderFrame(def, { ...f, rows: blinkRows(f.rows, 'marshall') }, palette)
   );
 }
+// Marshall pointing, for the build /releases/ picks for this computer: his
+// side frame from the staff sprite, facing right, with the near arm raised
+// straight out from the shoulder in place of hanging at his side.
+{
+  const def = sprites.get('staff')!;
+  const f = def.frames.find((x) => x.name === 'idle-side-0')!;
+  const arm = [
+    '.....kzzzzzk....',
+    '....kzzzzzzzkkk.',
+    '....kzzzzzzzzzfk',
+    '....kzzzzzzzkkk.',
+    '....kzzzzzZzk...',
+    '....kZzzzzZzk...',
+    '....kZZzzZZZk...',
+    '....kZZZZZZZk...',
+    '....kkkkkkkkk...'
+  ];
+  const rows = [...f.rows.slice(0, 15), ...arm, ...f.rows.slice(15 + arm.length)];
+  const marshall = def.variants.find((v) => v.name === 'marshall')!.map;
+  write('point-marshall.png', renderFrame(def, { ...f, rows }, palette, marshall));
+}
 // The Odds blink too, in Access's mock tab (Juno) and on Hire's job card.
 for (const [who, skin] of [
   ['ada', 'd'],

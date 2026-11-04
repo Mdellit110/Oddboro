@@ -9,7 +9,7 @@ import type { BuildId } from '#lib/downloads.svelte.ts';
 
 export type Release = {
   version: string;
-  /** The day it was published, as YYYY-MM-DD. */
+  /** The day it was published on GitHub, in Pacific time, as YYYY-MM-DD. */
   date: string;
   title: string;
   summary: string;
@@ -27,7 +27,7 @@ export type Release = {
 export const RELEASES: Release[] = [
   {
     version: '0.0.3',
-    date: '2026-11-04',
+    date: '2026-11-03',
     title: 'Oddboro runs on Linux.',
     summary:
       'Download the AppImage for your chip, x86_64 or arm64, and open it. It does what the Mac app does.',
@@ -59,7 +59,7 @@ export const RELEASES: Release[] = [
   },
   {
     version: '0.0.1',
-    date: '2026-11-03',
+    date: '2026-11-02',
     title: 'Hello, world.',
     summary:
       'The first Oddboro: a pixel office on your Mac, where AI workers called Odds take jobs off your hands.',
