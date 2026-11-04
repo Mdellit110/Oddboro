@@ -2,7 +2,7 @@
 
 Effective date: November 3, 2026
 
-> **The short version.** Oddboro is open source software that runs on your own computer, a Mac or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that receives, stores or processes your data, and the software sends us no telemetry, analytics or crash reports. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today we hold no personal data about you. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
+> **The short version.** Oddboro is open source software that runs on your own computer: a Mac, Windows or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that receives, stores or processes your data, and the software sends us no telemetry, analytics or crash reports. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today we hold no personal data about you. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
 
 ## 1. Who we are
 
@@ -53,15 +53,15 @@ Everything Oddboro stores, it stores on the computer you run it on. We verified 
 
 ### Where your data lives
 
-| Data                                                                                                                                       | Where it is                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| The ledger: your name, Odds and their job descriptions, chats, asks, tasks, reports, decisions, goals, access grants, per-run token counts | A Postgres database on your computer. By default it runs inside the office at `~/.oddboro/db`.                                     |
-| Each Odd's working files                                                                                                                   | `~/.oddboro/staff/<id>/`                                                                                                           |
-| Each Odd's Claude Code transcripts: the chats and runs Claude Code keeps so it can pick up where it left off                               | `~/.claude/projects/`, in a folder named after the Odd's folder                                                                    |
-| Your Anthropic API key (if you use one) and sign-ins for other hosted tools                                                                | Your system's secret store, under the service name `oddboro`: the Keychain on a Mac, the desktop keyring (Secret Service) on Linux |
-| Family and people data (names, birthdays, schedules)                                                                                       | The `data/` folder in your copy of the repository. Git ignores it, so it never enters a commit.                                    |
-| Office settings (which model, plan or key, time zone)                                                                                      | The `.env` file in your copy of the repository. Git ignores it.                                                                    |
-| Backups made by `npm run reset`                                                                                                            | `~/.oddboro/backups/<date>/`                                                                                                       |
+| Data                                                                                                                                       | Where it is                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The ledger: your name, Odds and their job descriptions, chats, asks, tasks, reports, decisions, goals, access grants, per-run token counts | A Postgres database on your computer. By default it runs inside the office at `~/.oddboro/db`.                                                                        |
+| Each Odd's working files                                                                                                                   | `~/.oddboro/staff/<id>/`                                                                                                                                              |
+| Each Odd's Claude Code transcripts: the chats and runs Claude Code keeps so it can pick up where it left off                               | `~/.claude/projects/`, in a folder named after the Odd's folder                                                                                                       |
+| Your Anthropic API key (if you use one) and sign-ins for other hosted tools                                                                | Your system's secret store, under the service name `oddboro`: the Keychain on a Mac, the Credential Manager on Windows, the desktop keyring (Secret Service) on Linux |
+| Family and people data (names, birthdays, schedules)                                                                                       | The `data/` folder in your copy of the repository. Git ignores it, so it never enters a commit.                                                                       |
+| Office settings (which model, plan or key, time zone)                                                                                      | The `.env` file in your copy of the repository. Git ignores it.                                                                                                       |
+| Backups made by `npm run reset`                                                                                                            | `~/.oddboro/backups/<date>/`                                                                                                                                          |
 
 You may point the office at a different Postgres database by setting `DATABASE_URL` in `.env`. If you choose a database hosted by someone else, your ledger goes to that provider under your agreement with them. That is your choice, and we are not part of it.
 
@@ -78,9 +78,9 @@ If you install [Ollama](https://ollama.com) and the `nomic-embed-text` model, th
 
 ### System features the software uses
 
-- **Notifications.** An Odd can ping you with a system notification. The software asks macOS, or your Linux desktop's notification service, to show it. Nothing leaves your computer.
-- **Secret store.** Secrets go in the Keychain on a Mac or the desktop keyring on Linux, never in a file or the database.
-- **Login item.** Setup registers the office so it starts when you log in: with `launchd` on a Mac, as a systemd user service on Linux. `npm run service:uninstall -w apps/office` removes it. In the app, Open at login does the same with a login item on a Mac or an autostart entry on Linux, and turning it off removes it.
+- **Notifications.** An Odd can ping you with a system notification. The software asks macOS, Windows, or your Linux desktop's notification service, to show it. Nothing leaves your computer.
+- **Secret store.** Secrets go in the Keychain on a Mac, the Credential Manager on Windows or the desktop keyring on Linux, never in a file or the database.
+- **Login item.** Setup registers the office so it starts when you log in: with `launchd` on a Mac, as a systemd user service on Linux. `npm run service:uninstall -w apps/office` removes it. In the app, Open at login does the same with a login item on a Mac, an entry in the registry's Run list on Windows or an autostart entry on Linux, and turning it off removes it.
 
 ### Fonts in the office interface
 
@@ -99,7 +99,7 @@ What goes to Anthropic in a run:
 - Your message, the Odd's job description, your name and time zone, the goals the Odd serves, and the office's standing instructions.
 - Whatever the Odd reads to do the work: ledger search results, the items it pulls from tools you connected, files you attach to an ask or task, and the Odd's own working files.
 - A headshot, if you give one when hiring an Odd, so Claude can draw a likeness. The photo goes to that drawing run only. The office never stores it, or Claude's notes on the face.
-- Setup also runs `npm install -g @anthropic-ai/claude-code`, which downloads Claude Code from the npm registry, and `claude auth login`, which sends you to Anthropic to sign in.
+- Setup also runs `npm install -g @anthropic-ai/claude-code`, which downloads Claude Code from the npm registry (on Windows, Claude Code's own installer from `claude.ai`), and `claude auth login`, which sends you to Anthropic to sign in.
 
 Anthropic processes all of this under your agreement with Anthropic: its [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) and [Privacy Policy](https://www.anthropic.com/legal/privacy) for a Claude plan, or its [Commercial Terms](https://www.anthropic.com/legal/commercial-terms) for an API key. Anthropic's retention and training rules are Anthropic's, and your settings there control them. New Altitude never sees any of it.
 
@@ -145,7 +145,7 @@ To delete everything the software stores:
 2. Delete the `~/.oddboro` folder. This removes the database, Odd folders, working copies and backups.
 3. Delete the folders in `~/.claude/projects/` whose names contain `oddboro-staff`. These are the Odds' Claude Code transcripts.
 4. Delete the `data/` folder and the `.env` file in your copy of the repository, or delete the whole repository folder.
-5. On a Mac, open Keychain Access, search for `oddboro`, and delete the items you find. On Linux, run `secret-tool clear service oddboro`. These are your Anthropic API key (if you gave one) and sign-ins for hosted tools.
+5. On a Mac, open Keychain Access, search for `oddboro`, and delete the items you find. On Windows, open Credential Manager, select Windows Credentials, and remove each entry whose name contains `oddboro`. On Linux, run `secret-tool clear service oddboro`. These are your Anthropic API key (if you gave one) and sign-ins for hosted tools.
 6. If you named your own `DATABASE_URL`, delete that database yourself. The reset command leaves it alone.
 
 Anything an Odd sent to Anthropic or another service during a run is held by that service under its own retention rules. Delete it there.
@@ -155,7 +155,7 @@ Anything an Odd sent to Anthropic or another service during a run is held by tha
 We designed the software so that the easiest path is also the safe one. These are the measures in the code today:
 
 - The office and its database listen on `127.0.0.1` only. Nothing on your network can connect to them.
-- Secrets (your API key, hosted tool sign-ins) live in the system's secret store (the Keychain on a Mac, the desktop keyring on Linux), never in a file or the database.
+- Secrets (your API key, hosted tool sign-ins) live in the system's secret store (the Keychain on a Mac, the Credential Manager on Windows, the desktop keyring on Linux), never in a file or the database.
 - Each Odd runs through Claude Code's permission system with a narrow tool list: it reads only its own folder, the `data/` folder and its own Claude Code transcripts, writes only inside its own folder, and uses the office's own tool server and the connections you granted. Everything else is denied, including other Odds' folders, your sign-ins and folders like `~/.ssh`.
 - The software is open source. Anyone can read it, audit it and report a problem.
 

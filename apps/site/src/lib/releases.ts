@@ -26,6 +26,24 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.0.5',
+    date: '2026-11-04',
+    title: 'Windows, on Windows, on Windows.',
+    summary: 'Oddboro runs on Windows. Download the installer for your chip, x64 or arm64.',
+    notes: [
+      'Windows warns before the installer runs while it is not signed. Select More info, then Run anyway. This will be solved as soon as we get our Notarization Approval.',
+      'Closing the window pauses the music. Opening it again plays on.',
+      'The volume slider works on Linux.'
+    ],
+    builds: ['mac', 'windows-x64', 'windows-arm64', 'linux-x86_64', 'linux-aarch64'],
+    art: {
+      name: 'windows',
+      alt: 'An Odd walks along an endless office hallway, past a window in every other square of the wall and a lamp now and then, and the hallway never ends.',
+      shareAlt:
+        'An Odd walks along a pixel-art office hallway with a window in every other square of the wall.'
+    }
+  },
+  {
     version: '0.0.4',
     date: '2026-11-04',
     title: 'We closed a gap that could let other websites reach your office.',

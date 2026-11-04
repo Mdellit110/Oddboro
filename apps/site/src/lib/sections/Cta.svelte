@@ -21,8 +21,8 @@
       Hire Odds.
     </h2>
     <p class="text-muted mt-5 max-w-xl text-lg text-pretty">
-      Hand off the jobs you don't have time for. Oddboro is open source, runs on a Mac or Linux, and
-      lets each Odd do only what you allow.
+      Hand off the jobs you don't have time for. Oddboro is open source, runs on a Mac, Windows or
+      Linux, and lets each Odd do only what you allow.
     </p>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
       <DownloadButton

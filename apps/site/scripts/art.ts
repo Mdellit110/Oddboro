@@ -25,7 +25,7 @@ import {
   type SpriteDef
 } from '@oddboro/sprites/px';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
-import { writeReleaseArt, type DeskLayers } from './release-art.ts';
+import { writeReleaseArt, type DeskLayers, type HallLayers } from './release-art.ts';
 import {
   loadLibrary,
   lookFrame,
@@ -287,6 +287,39 @@ const bus = sprites.get('street-bus')!;
 const doorDraw = world.draws.find((d) => d.sprite === 'street-front-door')!;
 const openDraws = world.draws.map((d) => (d === doorDraw ? { ...d, frame: 'open' } : d));
 const doorRect = rectOf(doorDraw);
+
+/**
+ * The hallway in 0.0.5's release art: a plaster wall with a window in every
+ * other tile and a wall light on every other wall between, over three rows of
+ * oak, drawn the way the vignette office draws its walls (cap, then face,
+ * then the wall's shadow on the first row of floor). It repeats every four
+ * tiles. The art slides an eight-tile view along it, from one period in, so
+ * twenty tiles leave every light that reaches the view (64 pixels at most)
+ * in the strip, and the light repeats as the walls do.
+ */
+const HALL = { w: 20 * TILE, h: 6 * TILE, period: 4 * TILE, view: { w: 8 * TILE, h: 6 * TILE } };
+const OAK = [
+  ['0', '1'],
+  ['2', '0'],
+  ['1', '3']
+];
+const hallDraws: DrawCmd[] = [];
+const hallLights: World['lights'] = [];
+for (let t = 0; t < HALL.w / TILE; t++) {
+  const x = t * TILE;
+  const at = (sprite: string, frame: string, y: number, pass: DrawCmd['pass']) =>
+    hallDraws.push({ sprite, frame, x, y, z: y, pass });
+  OAK.forEach((row, r) => at('floor-oak', row[t % 2], 3 * TILE + r * TILE, 0));
+  at('fx-wall-shadow', '0', 3 * TILE, 0);
+  at('wall-plaster-cap', 'm10', 0, 1);
+  at(t % 2 ? 'wall-plaster-face' : 'wall-plaster-window', '0', TILE, 1);
+  if (t % 4 === 1) {
+    const y = TILE + 6;
+    at('gym-wall-light', '0', y, 2);
+    for (const l of catalog['gym-wall-light'].lights)
+      hallLights.push({ ...l, x: x + l.x, y: y + l.y, clip: { x: 0, y: 0, w: HALL.w, h: HALL.h } });
+  }
+}
 
 // The floor states, as vignettes cut from a second office that has a mail
 // room: an Odd at a desk, at the sorting table, in an armchair, at the
@@ -638,7 +671,7 @@ function renderSet(hour: number, dir: string): Image {
   // static/art/releases/, day in static/art/day/releases/. The desk comes from
   // the vignettes; the front door is the hero building's own, shut, with the
   // sidewalk below it, the same door open, and Ada (the desk's Odd) to walk
-  // up to it.
+  // up to it. The hallway is HALL, lit here for the hour.
   if (!desk) throw new Error('the releases art needs the desk vignette');
   const doorAt: Rect = {
     x: Math.round(doorRect.x + doorRect.w / 2 - 64),
@@ -647,19 +680,31 @@ function renderSet(hour: number, dir: string): Image {
     h: 96
   };
   const ada = STAFF[1];
+  const adaFrame = (frame: string) => {
+    const src = frameImage(sprites.get(ada.sprite)!, frame, ada.variant);
+    const img = createImage(src.width, src.height);
+    drawImage(img, src, 0, 0);
+    return shade(img, 1);
+  };
+  const hall: HallLayers = {
+    room: light(
+      paint(hallDraws, true, HALL.w, HALL.h),
+      { ...vWorld, lights: hallLights },
+      hallDraws
+    ),
+    period: HALL.period,
+    view: HALL.view,
+    odd: adaFrame
+  };
   writeReleaseArt(
     {
       desk,
+      hall,
       door: {
         room: cropTo(lit, doorAt),
         door: { ...doorRect, x: doorRect.x - doorAt.x, y: doorRect.y - doorAt.y },
         open: doorOpen,
-        odd: (frame) => {
-          const src = frameImage(sprites.get(ada.sprite)!, frame, ada.variant);
-          const img = createImage(src.width, src.height);
-          drawImage(img, src, 0, 0);
-          return shade(img, 1);
-        }
+        odd: adaFrame
       }
     },
     join(ART, dir, 'releases'),
