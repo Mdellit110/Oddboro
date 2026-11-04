@@ -64,6 +64,7 @@ docs/           Decisions, hard rules, the office design, and the backlog.
 data/           Gitignored. People and family data. Never tracked.
 docker-compose.yml  Postgres 17 with pgvector, on 127.0.0.1 only.
 .github/workflows/release.yml  Every merge to main that changes the app redrafts the next release, Mac and Linux.
+.github/workflows/codeql.yml   Code scanning, for only the languages a change touches.
 ```
 
 ## Commands
