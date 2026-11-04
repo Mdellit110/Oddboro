@@ -1,6 +1,7 @@
 # Every merge to main that changes the app builds the next release of
-# Oddboro: for the Mac (signed, notarized and stapled) and for Linux on x86_64
-# and arm64 (AppImages), in one DRAFT release on the merge commit. The next
+# Oddboro: for the Mac (signed, notarized and stapled), for Linux on x86_64
+# and arm64 (AppImages) and for Windows on x64 and arm64 (installers), in one
+# DRAFT release on the merge commit. The next
 # version is the newest PUBLISHED release plus one patch, and each build
 # replaces the draft before it, so a version is spent only when the owner
 # publishes. A draft is invisible to releases/latest, so installed apps update
@@ -224,8 +225,93 @@ jobs:
           path: apps/desktop/release/
           if-no-files-found: error
 
+  windows:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+            target: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    environment: release
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # The x64 runner comes with rustup; the arm64 one may not.
+      - name: Install Rust
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl -sSf -o "$RUNNER_TEMP/rustup-init.exe" \
+              "https://static.rust-lang.org/rustup/dist/${{ matrix.target }}/rustup-init.exe"
+            "$RUNNER_TEMP/rustup-init.exe" -y --profile minimal --default-toolchain none
+            echo "$USERPROFILE/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$USERPROFILE/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install stable --profile minimal --target ${{ matrix.target }}
+          rustup default stable
+
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/src-tauri/target
+          key: cargo-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-${{ matrix.arch }}-
+
+      - run: npm ci --no-audit --no-fund
+
+      # On arm64 Windows the registry sends Rust's build to a Windows Kits
+      # folder with no rc.exe, which puts the icon in the app, and ring's C
+      # code needs clang. Name both where the runner has them.
+      - name: Point the build at the SDK's tools
+        if: matrix.arch == 'arm64'
+        run: |
+          rc=$(find "/c/Program Files (x86)/Windows Kits/10/bin" -ipath '*/arm64/rc.exe' 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$rc" ]; then
+            echo "RC=$(cygpath -w "$rc")" >> "$GITHUB_ENV"
+          fi
+          if ! command -v clang >/dev/null; then
+            vs=$("/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe" \
+              -latest -products '*' -property installationPath | tr -d '\r')
+            llvm="$(cygpath -u "$vs")/VC/Tools/Llvm/ARM64/bin"
+            if [ -d "$llvm" ]; then
+              cygpath -w "$llvm" >> "$GITHUB_PATH"
+            fi
+          fi
+
+      - name: Build the installer
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          NOTES: ${{ needs.version.outputs.notes }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          ODDBORO_RELEASE_NOTES="$NOTES" \
+          ODDBORO_RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" \
+            node apps/desktop/scripts/release.ts --version "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: apps/desktop/release/
+          if-no-files-found: error
+
   draft:
-    needs: [version, mac, linux]
+    needs: [version, mac, linux, windows]
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
@@ -242,6 +328,7 @@ jobs:
           # One latest.json for every machine: each build wrote its own.
           jq -s '.[0] + { platforms: (map(.platforms) | add) }' \
             built/mac/latest.json built/linux-x86_64/latest.json built/linux-aarch64/latest.json \
+            built/windows-x64/latest.json built/windows-arm64/latest.json \
             > latest.json
           printf '%s\n' "$NOTES" > notes.md
           # The draft this one replaces. A draft has no tag yet, so only the
@@ -263,4 +350,10 @@ jobs:
             built/linux-aarch64/Oddboro-aarch64.AppImage \
             "built/linux-aarch64/Oddboro_${VERSION}_aarch64.AppImage" \
             "built/linux-aarch64/Oddboro_${VERSION}_aarch64.AppImage.sig" \
+            built/windows-x64/Oddboro-x64-setup.exe \
+            "built/windows-x64/Oddboro_${VERSION}_x64-setup.exe" \
+            "built/windows-x64/Oddboro_${VERSION}_x64-setup.exe.sig" \
+            built/windows-arm64/Oddboro-arm64-setup.exe \
+            "built/windows-arm64/Oddboro_${VERSION}_arm64-setup.exe" \
+            "built/windows-arm64/Oddboro_${VERSION}_arm64-setup.exe.sig" \
             latest.json

@@ -973,7 +973,7 @@
           >
         </div>
         <div class="text-xs text-muted max-sm:hidden" class:hidden={firstRun}>
-          Your Mac ·
+          {data.computer} ·
           <button class="underline underline-offset-2 hover:text-ink" onclick={openSetup}
             >Setup</button
           >

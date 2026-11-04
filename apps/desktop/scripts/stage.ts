@@ -9,7 +9,7 @@
 // It also fetches the Node binary the app carries, checked against nodejs.org's
 // published sums. `--smoke` then starts the staged office on a spare port and
 // home, and stops it once it answers.
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -24,20 +24,29 @@ import {
 } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = new URL('../../..', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const DESKTOP = join(ROOT, 'apps', 'desktop');
 const STAGE = join(DESKTOP, 'stage');
 /** This machine as Rust names it (the sidecar's suffix) and as nodejs.org does. */
 const MACHINES: Record<string, { triple: string; dist: string }> = {
   'darwin-arm64': { triple: 'aarch64-apple-darwin', dist: 'darwin-arm64' },
   'linux-x64': { triple: 'x86_64-unknown-linux-gnu', dist: 'linux-x64' },
-  'linux-arm64': { triple: 'aarch64-unknown-linux-gnu', dist: 'linux-arm64' }
+  'linux-arm64': { triple: 'aarch64-unknown-linux-gnu', dist: 'linux-arm64' },
+  'win32-x64': { triple: 'x86_64-pc-windows-msvc', dist: 'win-x64' },
+  'win32-arm64': { triple: 'aarch64-pc-windows-msvc', dist: 'win-arm64' }
 };
 const MACHINE = MACHINES[`${process.platform}-${process.arch}`];
 if (!MACHINE) throw new Error(`Oddboro does not build on ${process.platform}-${process.arch}`);
-const NODE_BIN = join(DESKTOP, 'src-tauri', 'binaries', `node-${MACHINE.triple}`);
+const WINDOWS = process.platform === 'win32';
+const NODE_BIN = join(
+  DESKTOP,
+  'src-tauri',
+  'binaries',
+  `node-${MACHINE.triple}${WINDOWS ? '.exe' : ''}`
+);
 const PACKAGES = ['ledger', 'sprites', 'world'];
 /** What a package needs at runtime. Everything else in it stays behind. */
 const LEAVE_OUT = new Set([
@@ -51,11 +60,19 @@ const LEAVE_OUT = new Set([
 
 const run = (cmd: string, args: string[], cwd = ROOT) =>
   execFileSync(cmd, args, { cwd, stdio: 'inherit' });
+/**
+ * npm. On Windows it is a batch file, which only a shell can run, so it goes
+ * as one command line; its arguments here are plain words.
+ */
+const npm = (args: string[], cwd = ROOT) =>
+  WINDOWS
+    ? execSync(['npm', ...args].join(' '), { cwd, stdio: 'inherit' })
+    : execFileSync('npm', args, { cwd, stdio: 'inherit' });
 const readJson = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
 
 function build(): void {
-  run('npm', ['run', 'sprites']);
-  run('npm', ['run', 'build', '-w', '@oddboro/office']);
+  npm(['run', 'sprites']);
+  npm(['run', 'build', '-w', '@oddboro/office']);
 }
 
 /** Every third-party runtime dependency, pinned to the version installed here. */
@@ -94,8 +111,8 @@ function stagePackage(name: string): void {
   cpSync(from, to, {
     recursive: true,
     filter: (src) => {
-      const rel = src.slice(from.length + 1).split('/')[0];
-      return !LEAVE_OUT.has(rel) && !(rel.endsWith('.md') && !src.includes('/src/'));
+      const rel = src.slice(from.length + 1).split(sep)[0];
+      return !LEAVE_OUT.has(rel) && !(rel.endsWith('.md') && !src.includes(`${sep}src${sep}`));
     }
   });
   compileAll(join(to, 'src'));
@@ -129,7 +146,10 @@ async function fetchNode(): Promise<void> {
     : '';
   if (have === version) return;
   const base = `https://nodejs.org/dist/${version}`;
-  const tarball = `node-${version}-${MACHINE.dist}.tar.gz`;
+  // Windows builds come as a zip, with node.exe at the top; the rest as a
+  // tarball, with node in bin/.
+  const folder = `node-${version}-${MACHINE.dist}`;
+  const tarball = `${folder}${WINDOWS ? '.zip' : '.tar.gz'}`;
   const sums = await (await fetch(`${base}/SHASUMS256.txt`)).text();
   const want = sums
     .split('\n')
@@ -142,9 +162,14 @@ async function fetchNode(): Promise<void> {
   const tmp = join(tmpdir(), `oddboro-node-${version}`);
   mkdirSync(tmp, { recursive: true });
   writeFileSync(join(tmp, tarball), body);
-  run('tar', ['-xzf', tarball], tmp);
+  // Windows's own tar reads zips. Git for Windows puts a GNU tar earlier on
+  // the PATH that does not, so name the system's.
+  const tar = WINDOWS
+    ? join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
+  run(tar, ['-xf', tarball], tmp);
   mkdirSync(join(DESKTOP, 'src-tauri', 'binaries'), { recursive: true });
-  cpSync(join(tmp, tarball.replace('.tar.gz', ''), 'bin', 'node'), NODE_BIN);
+  cpSync(join(tmp, folder, ...(WINDOWS ? ['node.exe'] : ['bin', 'node'])), NODE_BIN);
   chmodSync(NODE_BIN, 0o755);
   rmSync(tmp, { recursive: true, force: true });
 }
@@ -165,7 +190,7 @@ async function smoke(): Promise<void> {
       ODDBORO_DB_PORT: '54590',
       ODDBORO_HOME: home,
       ODDBORO_CODE: STAGE,
-      // As in the app: the server quits on SIGTERM, and a versioned first
+      // As in the app: the server quits when asked, and a versioned first
       // start in an empty home makes its folder and records the version.
       ODDBORO_APP: '1',
       ODDBORO_VERSION: '0.0.0-smoke'
@@ -187,16 +212,18 @@ async function smoke(): Promise<void> {
     }
     throw new Error('The staged office never answered');
   } finally {
-    child.kill('SIGTERM');
+    // As the app asks: SIGTERM, or on Windows, which has none, by closing stdin.
+    if (WINDOWS) child.stdin?.end();
+    else child.kill('SIGTERM');
     const quit = await new Promise((r) => {
       child.once('exit', () => r(true));
       setTimeout(() => r(false), 10_000);
     });
     if (!quit) {
       child.kill('SIGKILL');
-      throw new Error('The staged office ignored SIGTERM');
+      throw new Error('The staged office did not quit when asked');
     }
-    console.log('Smoke: it quit on SIGTERM.');
+    console.log('Smoke: it quit when asked.');
   }
 }
 
@@ -211,7 +238,7 @@ writeFileSync(
     2
   ) + '\n'
 );
-run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], STAGE);
+npm(['install', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], STAGE);
 for (const p of PACKAGES) stagePackage(p);
 stageOffice();
 await fetchNode();

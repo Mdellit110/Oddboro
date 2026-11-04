@@ -75,7 +75,7 @@
     <div class="font-pixel text-lg leading-none">{welcomed ? 'Setup' : 'Welcome'}</div>
     <div class="mt-1 text-xs text-muted">
       {welcomed
-        ? 'Your name, your office, and what this Mac has.'
+        ? 'Your name, your office, and what this computer has.'
         : 'Three things, and the office is yours.'}
     </div>
   </header>
@@ -149,7 +149,7 @@
 
     <section class="flex flex-col gap-2">
       <div class="flex items-center">
-        <h3 class="flex-1 text-xs tracking-[0.16em] text-sea uppercase">This Mac</h3>
+        <h3 class="flex-1 text-xs tracking-[0.16em] text-sea uppercase">This computer</h3>
         <button
           class="text-xs text-sea underline underline-offset-2 disabled:opacity-40"
           disabled={checking}

@@ -3,10 +3,12 @@
 // through the tool it ships with: the Keychain on a Mac through `security`,
 // and on Linux the desktop keyring through `secret-tool` (libsecret), which
 // talks to any keyring that speaks the Secret Service (GNOME Keyring,
-// KWallet, KeePassXC). Windows has none yet: its entry is the place to add
-// the Credential Manager. Every secret sits under the service "oddboro",
-// named "<connector>:<NAME>".
+// KWallet, KeePassXC). Windows ships no command that reads a secret back, so
+// there the office keeps them in the Credential Manager through the keyring
+// package, loaded only on Windows. Every secret sits under the service
+// "oddboro", named "<connector>:<NAME>".
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { SYSTEM, type System } from './platform.ts';
 
 const SERVICE = 'oddboro';
@@ -53,12 +55,72 @@ const secretService: Store = {
   check: () => quiet('secret-tool', ['search', 'service', SERVICE])
 };
 
-const STORES: Record<System, Store | undefined> = {
-  mac: keychain,
-  linux: secretService,
-  windows: undefined
+type Entry = {
+  setSecret(secret: Uint8Array): void;
+  getSecret(): number[] | null;
+  deletePassword(): boolean;
 };
-const store = SYSTEM && STORES[SYSTEM];
+type Keyring = { Entry: new (service: string, account: string) => Entry };
+
+/**
+ * The Credential Manager holds at most 2,560 bytes in one credential, and a
+ * sign-in's saved JSON can run longer. So a value goes in as UTF-8 in pieces:
+ * the first credential holds how many pieces there are, a line break, then
+ * the first piece; the rest follow as "<account>#1", "#2" and on.
+ */
+const PIECE = 2048;
+function credentialManager(): Store {
+  const { Entry } = createRequire(import.meta.url)('@napi-rs/keyring') as Keyring;
+  const entry = (account: string, i: number) => new Entry(SERVICE, i ? `${account}#${i}` : account);
+  const read = (account: string, i: number) => {
+    const bytes = entry(account, i).getSecret();
+    if (!bytes) throw new Error(`No secret named ${account}`);
+    return Buffer.from(bytes);
+  };
+  /** Removes pieces from `from` on, until one is missing. */
+  const drop = (account: string, from: number) => {
+    for (let i = from; entry(account, i).deletePassword(); i++);
+  };
+  return {
+    set(account, value) {
+      const bytes = Buffer.from(value, 'utf8');
+      const count = Math.max(1, Math.ceil(bytes.length / PIECE));
+      for (let i = count - 1; i >= 0; i--) {
+        const piece = bytes.subarray(i * PIECE, (i + 1) * PIECE);
+        entry(account, i).setSecret(i ? piece : Buffer.concat([Buffer.from(`${count}\n`), piece]));
+      }
+      drop(account, count);
+    },
+    get(account) {
+      const first = read(account, 0);
+      const nl = first.indexOf(10);
+      const count = Number(first.subarray(0, nl));
+      const pieces = [first.subarray(nl + 1)];
+      for (let i = 1; i < count; i++) pieces.push(read(account, i));
+      return Buffer.concat(pieces).toString('utf8');
+    },
+    remove(account) {
+      read(account, 0);
+      drop(account, 0);
+    },
+    // Reading a name that is not there answers null; a store that cannot be reached throws.
+    check: () => void entry('check', 0).getSecret()
+  };
+}
+
+const STORES: Record<System, (() => Store) | undefined> = {
+  mac: () => keychain,
+  linux: () => secretService,
+  windows: credentialManager
+};
+/** This system's store, or none when it has none or it would not load. */
+const store = ((): Store | undefined => {
+  try {
+    return SYSTEM ? STORES[SYSTEM]?.() : undefined;
+  } catch {
+    return undefined;
+  }
+})();
 
 export function setSecret(connector: string, name: string, value: string): void {
   if (!store) throw new Error('This system has no secret store the office can use yet.');
@@ -85,7 +147,7 @@ export function deleteSecret(connector: string, name: string): boolean {
 
 /** Whether this computer has a secret store the office can use, and why not when it has none. */
 export function secretStore(): { ok: true } | { ok: false; problem: string } {
-  if (!store) return { ok: false, problem: 'Windows is not ready yet' };
+  if (!store) return { ok: false, problem: 'not found on this system' };
   try {
     store.check();
     return { ok: true };

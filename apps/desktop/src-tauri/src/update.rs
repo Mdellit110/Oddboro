@@ -6,6 +6,9 @@
 //! when it installs (`/api/update`, asked every 30 seconds), and the shell
 //! stops the server, installs it and opens the new version. Offline, or any
 //! error: it logs the problem and carries on. Release builds only.
+//!
+//! On Windows the updater runs the new version's installer and ends this app
+//! itself, and the installer opens the new version when it is done.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -31,7 +34,8 @@ const CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const EVERY: Duration = Duration::from_secs(4 * 60 * 60);
 const ASK_EVERY: Duration = Duration::from_secs(30);
-/// Set on a version the updater opens on Linux: the pid of the one it replaces.
+/// Set on a version the shell opens itself (Linux, or Windows after a failed
+/// install): the pid of the one it replaces.
 const RELAUNCH_FROM: &str = "ODDBORO_RELAUNCH_FROM";
 /// The longest a new version waits for the old one to quit.
 const OLD_QUITS_WITHIN: Duration = Duration::from_secs(30);
@@ -227,13 +231,19 @@ fn relaunch(app: &AppHandle) {
     app.exit(0);
 }
 
-/// Opens the AppImage at this app's path (the updater replaced the file in
-/// place) and quits this one. The new one keeps this environment, and waits
-/// for this one to go before it claims the single instance.
+/// Opens this app again and quits this one: on Linux the AppImage, which the
+/// updater replaced in place. On Windows a successful install never gets
+/// here (see the top of this file), so this reopens the same version after a
+/// failed one. The new one keeps this environment, and waits for this one to
+/// go before it claims the single instance.
 #[cfg(not(target_os = "macos"))]
 fn relaunch(app: &AppHandle) {
-    if let Some(appimage) = std::env::var_os("APPIMAGE") {
-        let _ = Command::new(appimage)
+    #[cfg(target_os = "linux")]
+    let program = std::env::var_os("APPIMAGE");
+    #[cfg(windows)]
+    let program = std::env::current_exe().ok();
+    if let Some(program) = program {
+        let _ = Command::new(program)
             .env(RELAUNCH_FROM, std::process::id().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -248,16 +258,39 @@ fn relaunch(app: &AppHandle) {
 pub fn wait_for_old() {
     let Some(pid) = std::env::var(RELAUNCH_FROM)
         .ok()
-        .and_then(|p| p.parse::<i32>().ok())
+        .and_then(|p| p.parse::<u32>().ok())
     else {
         return;
     };
     // Not for any version this one opens later.
     std::env::remove_var(RELAUNCH_FROM);
     let deadline = Instant::now() + OLD_QUITS_WITHIN;
-    // SAFETY: kill with signal 0 only asks whether the process exists.
-    while Instant::now() < deadline && unsafe { libc::kill(pid, 0) } == 0 {
+    while Instant::now() < deadline && running(pid) {
         sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(unix)]
+fn running(pid: u32) -> bool {
+    // SAFETY: kill with signal 0 only asks whether the process exists.
+    unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+#[cfg(windows)]
+fn running(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_TIMEOUT};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE,
+    };
+    // SAFETY: the handle is checked before use and closed once.
+    unsafe {
+        let process = OpenProcess(PROCESS_SYNCHRONIZE, 0, pid);
+        if process.is_null() {
+            return false;
+        }
+        let alive = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+        CloseHandle(process);
+        alive
     }
 }
 
@@ -280,11 +313,13 @@ fn ask(port: u16, token: &str, method: &str, body: Option<&Value>) -> Option<Val
     serde_json::from_str(json).ok()
 }
 
-/// A fresh secret for this run, so only this shell can tell the server an update is ready.
+/// A fresh secret for this run, so only this shell can tell the server an
+/// update is ready. Empty if the system has no randomness to give: the server
+/// then takes no update requests at all.
 pub fn token() -> String {
     let mut bytes = [0u8; 16];
-    if let Ok(mut random) = std::fs::File::open("/dev/urandom") {
-        let _ = random.read_exact(&mut bytes);
+    if getrandom::fill(&mut bytes).is_err() {
+        return String::new();
     }
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }

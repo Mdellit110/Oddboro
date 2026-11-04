@@ -211,22 +211,27 @@
         </button>
         {#if volOpen}
           <div class="absolute inset-x-0 bottom-full z-20 mb-2 flex justify-center">
+            <!-- Solid, not glass: it opens on the blurred panel, and a blur
+                 inside a blur makes newer WebKitGTK (the Linux app) drop the
+                 panel's own. -->
             <div
               id="floor-volume-pop"
-              class="glass flex flex-col items-center gap-1.5 rounded-xl px-1 py-2"
+              class="flex flex-col items-center gap-1.5 rounded-xl bg-panel-solid px-1 py-2 shadow-float"
             >
               <label class="sr-only" for="floor-volume">Music volume</label>
-              <input
-                id="floor-volume"
-                class="range vertical"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                aria-orientation="vertical"
-                value={music.volume}
-                oninput={(e) => setVolume(Number(e.currentTarget.value))}
-              />
+              <div class="upright">
+                <input
+                  id="floor-volume"
+                  class="range"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  aria-orientation="vertical"
+                  value={music.volume}
+                  oninput={(e) => setVolume(Number(e.currentTarget.value))}
+                />
+              </div>
               <button
                 class="ctl"
                 aria-pressed={music.volume === 0}
@@ -331,11 +336,21 @@
   .range:disabled {
     opacity: 0.4;
   }
-  /* Bottom to top: quiet at the bottom. */
-  .vertical {
-    writing-mode: vertical-lr;
-    direction: rtl;
-    width: 1.25rem;
-    height: 6rem;
+  /* Bottom to top: quiet at the bottom. A plain slider turned upright, since
+     WebKitGTK (the Linux app) draws a vertical writing-mode slider as an empty
+     box that does not drag. The box holds the upright space. The slider is as
+     long as the box is tall, and its margins centre it on the box, since
+     WebKitGTK lines up an item wider than its grid cell at the start. */
+  .upright {
+    display: grid;
+    inline-size: 1.25rem;
+    block-size: 6rem;
+    place-content: center;
+  }
+  .upright input {
+    inline-size: 6rem;
+    block-size: 1.25rem;
+    margin-inline: calc((1.25rem - 6rem) / 2);
+    rotate: -90deg;
   }
 </style>

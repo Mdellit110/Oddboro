@@ -39,6 +39,8 @@ let choice: string | null = null;
 let lastVolume = 0.6;
 /** The tracks played before this one, oldest first. */
 const history: string[] = [];
+/** Paused because the app's window went to the tray, so it plays again when the window comes back. */
+let hushed = false;
 
 function ids(raw: string | null): string[] {
   try {
@@ -128,6 +130,26 @@ function mediaKeys(): void {
 }
 
 /**
+ * The desktop app says when its window goes to the tray and when it comes
+ * back (`oddboro:hidden`, `oddboro:shown`, from apps/desktop/src-tauri/src/main.rs).
+ * With the window gone there is no control to stop the music, so it pauses,
+ * and it picks up again when the window returns. The owner's on or off stays
+ * as it was. A browser tab never hears either.
+ */
+function hushWhileHidden(): void {
+  window.addEventListener('oddboro:hidden', () => {
+    if (!music.playing) return;
+    hushed = true;
+    music.audio?.pause();
+  });
+  window.addEventListener('oddboro:shown', () => {
+    if (!hushed) return;
+    hushed = false;
+    play();
+  });
+}
+
+/**
  * On page load: a first visit plays the opening track, a later one plays if
  * the owner left the music on. Now if the browser lets it, else at the first
  * click or key.
@@ -135,6 +157,7 @@ function mediaKeys(): void {
 export function startMusic(firstRun: boolean): void {
   if (!music.audio) return;
   mediaKeys();
+  hushWhileHidden();
   if (choice === 'off' || (!firstRun && choice !== 'on')) return;
   load(firstRun && !music.passed.includes(OPENING) ? OPENING : pick());
   play();
@@ -146,6 +169,7 @@ export function startMusic(firstRun: boolean): void {
 }
 
 export function togglePlay(): void {
+  hushed = false;
   if (music.playing) {
     music.audio?.pause();
     choose(false);

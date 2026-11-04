@@ -204,7 +204,7 @@
         {settings?.auth === 'key' ? 'Replace your key' : 'Anthropic API key'}
       </label>
       {#if settings?.auth === 'key'}
-        <p class="mt-1 text-sm">Your Odds run on the key in this Mac's keychain.</p>
+        <p class="mt-1 text-sm">Your Odds run on the key in this computer's password store.</p>
       {/if}
       <div class="mt-2 flex gap-2">
         <input
@@ -221,8 +221,8 @@
         >
       </div>
       <p class="mt-2 text-xs text-faint">
-        The office tries the key once, then keeps it in this Mac's keychain, never in a file. Usage
-        bills to the key's Anthropic Console account.
+        The office tries the key once, then keeps it in this computer's password store, never in a
+        file. Usage bills to the key's Anthropic Console account.
       </p>
     </form>
     {@render models()}

@@ -12,6 +12,7 @@
 // Claude Code half installed.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { error, json } from '@sveltejs/kit';
+import { WINDOWS } from '@oddboro/ledger';
 import {
   claudeAccount,
   claudeSettings,
@@ -46,13 +47,27 @@ export const PUT: RequestHandler = async ({ request }) => {
   return json(await withAccount());
 };
 
-const COMMANDS = {
-  install: ['npm', ['install', '-g', '@anthropic-ai/claude-code']],
+type Action = 'install' | 'sign-in';
+
+const COMMANDS: Record<Action, readonly [string, readonly string[]]> = {
+  // Windows rarely has Node, so it gets Claude Code's own installer, the one
+  // its docs give there. It puts claude.exe in ~/.local/bin, which the app's
+  // PATH already names (apps/desktop/src-tauri/src/env.rs).
+  install: WINDOWS
+    ? [
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          'irm https://claude.ai/install.ps1 | iex'
+        ]
+      ]
+    : ['npm', ['install', '-g', '@anthropic-ai/claude-code']],
   // Opens the sign-in page in the browser; the command ends when the owner finishes there.
   'sign-in': ['claude', ['auth', 'login', '--claudeai']]
-} as const;
-
-type Action = keyof typeof COMMANDS;
+};
 
 /** The command running now, with the way to end its answer. */
 let current:

@@ -50,6 +50,24 @@ export function openUrl(url: string): Promise<boolean> {
   return run('xdg-open', [url]);
 }
 
+/**
+ * An absolute path as Claude Code's permission rules write one: `//` and the
+ * path in POSIX form. On Windows, C:\Users\ada becomes //c/Users/ada.
+ */
+export function rulePath(path: string): string {
+  return `/${path.replaceAll('\\', '/').replace(/^([A-Za-z]):/, (_, d: string) => `/${d.toLowerCase()}`)}`;
+}
+
+/**
+ * How Claude Code starts a tool server's command. On Windows `npx` is a batch
+ * file, which only cmd can run, so it goes through `cmd /c` there.
+ */
+export function toolCommand(command: string, args: string[]): { command: string; args: string[] } {
+  return WINDOWS && command === 'npx'
+    ? { command: 'cmd', args: ['/c', command, ...args] }
+    : { command, args };
+}
+
 /** A program kept running at login, with its output in one log file. */
 export type Service = {
   label: string;

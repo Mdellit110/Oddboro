@@ -1,6 +1,9 @@
-//! Oddboro for the Mac and Linux. A Tauri shell that runs the office server
-//! (Node, as a sidecar) and shows it in a window. What it does, step by step,
-//! is in `apps/desktop/CLAUDE.md`.
+//! Oddboro for the Mac, Linux and Windows. A Tauri shell that runs the office
+//! server (Node, as a sidecar) and shows it in a window. What it does, step by
+//! step, is in `apps/desktop/CLAUDE.md`.
+
+// A release on Windows is a windowed app, with no console window of its own.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod env;
 mod server;
@@ -27,9 +30,10 @@ fn main() {
     // A version the updater just installed waits for the one it replaced.
     update::wait_for_old();
     let builder = tauri::Builder::default();
-    // Linux has no Dock to bring a hidden window back, so opening Oddboro
-    // again shows the one that runs. It goes first, before anything starts.
-    #[cfg(target_os = "linux")]
+    // Linux and Windows have no Dock to bring a hidden window back, so
+    // opening Oddboro again shows the one that runs. It goes first, before
+    // anything starts.
+    #[cfg(not(target_os = "macos"))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)));
     let app = builder
         .plugin(tauri_plugin_autostart::init(
@@ -59,6 +63,7 @@ fn main() {
                     api.prevent_close();
                     if tray_shows() {
                         let _ = window.hide();
+                        tell_page(window.app_handle(), "oddboro:hidden");
                     } else {
                         window.app_handle().exit(0);
                     }
@@ -162,14 +167,19 @@ fn start(app: &AppHandle) {
 }
 
 /// Node sits beside the shell: in `Contents/MacOS` on a Mac, in `usr/bin`
-/// inside the AppImage. A debug build without the bundle falls back to the
-/// copy the stage script leaves in `binaries/`, named for this target.
+/// inside the AppImage, in the install folder on Windows. A debug build
+/// without the bundle falls back to the copy the stage script leaves in
+/// `binaries/`, named for this target.
 fn node_binary() -> Option<PathBuf> {
-    let beside = std::env::current_exe().ok()?.parent()?.join("node");
+    let exe = std::env::consts::EXE_SUFFIX;
+    let beside = std::env::current_exe()
+        .ok()?
+        .parent()?
+        .join(format!("node{exe}"));
     if beside.is_file() {
         return Some(beside);
     }
-    dev_path(concat!("binaries/node-", env!("ODDBORO_TARGET")))
+    dev_path(&format!("binaries/node-{}{exe}", env!("ODDBORO_TARGET")))
 }
 
 /// The staged server sits in the bundle's resources, `server/`. A debug build
@@ -275,12 +285,9 @@ fn open_in_browser(url: &Url) {
     if !matches!(url.scheme(), "http" | "https" | "mailto" | "tel") {
         return;
     }
-    let opener = if cfg!(target_os = "macos") {
-        "/usr/bin/open"
-    } else {
-        "xdg-open"
-    };
+    let (opener, first) = OPENER;
     let spawned = Command::new(opener)
+        .args(first)
         .arg(url.as_str())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -290,6 +297,16 @@ fn open_in_browser(url: &Url) {
         thread::spawn(move || open.wait());
     }
 }
+
+/// The system's own way to open a link in the default browser or mail app.
+/// Windows goes through rundll32, not `cmd /c start`, so cmd never reads the
+/// link's & as a command.
+#[cfg(target_os = "macos")]
+const OPENER: (&str, &[&str]) = ("/usr/bin/open", &[]);
+#[cfg(target_os = "linux")]
+const OPENER: (&str, &[&str]) = ("xdg-open", &[]);
+#[cfg(windows)]
+const OPENER: (&str, &[&str]) = ("rundll32", &["url.dll,FileProtocolHandler"]);
 
 /// Brings the office forward, or the loading window while it starts.
 fn show(app: &AppHandle) {
@@ -301,9 +318,19 @@ fn show(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+    tell_page(app, "oddboro:shown");
 }
 
-/// The Mac always shows the menu bar item.
+/// Tells the office page its window went to the tray or came back. Hidden,
+/// the music pauses, since no control is in sight to stop it, and shown it
+/// plays on (`apps/office/src/lib/ui/music.svelte.ts`).
+fn tell_page(app: &AppHandle, event: &str) {
+    if let Some(main) = app.get_webview_window(MAIN) {
+        let _ = main.eval(format!("window.dispatchEvent(new Event('{event}'))"));
+    }
+}
+
+/// The Mac always shows the menu bar item, and Windows the tray icon.
 #[cfg(not(target_os = "linux"))]
 fn tray_shows() -> bool {
     true
@@ -329,7 +356,8 @@ fn tray_shows() -> bool {
     .unwrap_or(false)
 }
 
-/// The menu bar item (the tray on Linux): Open Oddboro, Open at login, Quit Oddboro.
+/// The menu bar item (the tray on Linux and Windows): Open Oddboro, Open at
+/// login, Quit Oddboro.
 fn tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Open Oddboro", true, None::<&str>)?;
     let at_login = app.autolaunch().is_enabled().unwrap_or(false);
@@ -339,7 +367,7 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&open, &login, &separator, &quit])?;
     TrayIconBuilder::with_id("oddboro")
-        .icon(Image::from_bytes(include_bytes!("../icons/tray.png"))?)
+        .icon(Image::from_bytes(TRAY_ICON)?)
         .icon_as_template(true)
         .tooltip("Oddboro")
         .menu(&menu)
@@ -353,8 +381,16 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Flips the LaunchAgent (an autostart entry on Linux), then shows what the
-/// system actually has.
+/// The Mac draws the black outline in the menu bar's own colour. Windows shows
+/// a tray icon as drawn, so it gets the app's coloured icon, which shows on a
+/// dark taskbar and a light one.
+#[cfg(not(windows))]
+const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
+#[cfg(windows)]
+const TRAY_ICON: &[u8] = include_bytes!("../icons/32x32.png");
+
+/// Flips the LaunchAgent (an autostart entry on Linux, a Run entry in the
+/// registry on Windows), then shows what the system actually has.
 fn toggle_open_at_login(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
     let launcher = app.autolaunch();
     let _ = if launcher.is_enabled().unwrap_or(false) {

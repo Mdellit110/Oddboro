@@ -54,7 +54,7 @@ Each rule's reason is in `docs/hard-rules.md`, under the same heading.
 apps/
   office/       The floor. SvelteKit, port 4500. Main Street runs here on the owner's computer.
   site/         The public site, oddboro.com. SvelteKit, port 4501, prerendered to static files.
-  desktop/      Oddboro for the Mac and Linux. A Tauri shell in Rust around the office, on a bundled Node.
+  desktop/      Oddboro for the Mac, Linux and Windows. A Tauri shell in Rust around the office, on a bundled Node.
 packages/
   sprites/      Every piece of art as .px text, the palette, and the compiler.
   world/        Room stamps, floor plans, and the code that turns them into a world.
@@ -63,7 +63,7 @@ scripts/        The lint guards. Plain Node, no dependencies.
 docs/           Decisions, hard rules, the office design, and the backlog.
 data/           Gitignored. People and family data. Never tracked.
 docker-compose.yml  Postgres 17 with pgvector, on 127.0.0.1 only.
-.github/workflows/release.yml  Every merge to main that changes the app redrafts the next release, Mac and Linux.
+.github/workflows/release.yml  Every merge to main that changes the app redrafts the next release, Mac, Linux and Windows.
 .github/workflows/codeql.yml   Code scanning, for only the languages a change touches.
 ```
 

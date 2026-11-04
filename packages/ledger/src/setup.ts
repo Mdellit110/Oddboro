@@ -10,12 +10,13 @@
 //   npm run setup -- --check       check everything, change nothing
 //   npm run setup -- --env <file>  check against a different .env, to try one out
 import { execFile, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { checkDatabase, checkMachine, type Check } from './checks.ts';
 import { OFFICE_LOG, openUrl, restartService, serviceInstalled } from './platform.ts';
 import { ENV_FILE, readEnv } from './env.ts';
 import { OFFICE_PORT, OFFICE_URL } from './home.ts';
 
-const REPO = new URL('../../../', import.meta.url).pathname;
+const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const args = process.argv.slice(2);
 const CHECK_ONLY = args.includes('--check');
 const ENV = args.includes('--env') ? args[args.indexOf('--env') + 1] : ENV_FILE;

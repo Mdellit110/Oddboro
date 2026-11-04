@@ -1,5 +1,6 @@
 import {
   desk,
+  MAC,
   roomNamesFor,
   roster,
   switchedOffIn,
@@ -28,6 +29,8 @@ export const load: PageServerLoad = async () => {
     switchedOff: await switchedOffIn(office.id),
     messages: await unreadPokes(),
     zone: zone(),
+    /** What the header calls this computer. */
+    computer: MAC ? 'Your Mac' : 'Your computer',
     welcomed: !first
   };
 };

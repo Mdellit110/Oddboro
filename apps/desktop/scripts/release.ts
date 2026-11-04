@@ -9,7 +9,12 @@
 // On Linux (x86_64 or arm64): an AppImage, which is also the updater's
 // payload, its signature, a copy under the name the site links to
 // (Oddboro-x86_64.AppImage or Oddboro-aarch64.AppImage), and a latest.json
-// for this one machine. GitHub merges the three latest.json files into one.
+// for this one machine.
+//
+// On Windows (x64 or arm64): the installer, which is also the updater's
+// payload, its signature, a copy under the name the site links to
+// (Oddboro-x64-setup.exe or Oddboro-arm64-setup.exe), and a latest.json for
+// this one machine. GitHub merges every machine's latest.json into one.
 //
 // Signing uses APPLE_SIGNING_IDENTITY, else the Developer ID in this Mac's
 // keychain. Notarizing uses an App Store Connect API key when
@@ -19,7 +24,8 @@
 // signed with TAURI_SIGNING_PRIVATE_KEY (the key or its path) and
 // TAURI_SIGNING_PRIVATE_KEY_PASSWORD. latest.json points at
 // ODDBORO_RELEASE_URL (the release's download folder) and carries
-// ODDBORO_RELEASE_NOTES. Signing and notarizing are Mac only.
+// ODDBORO_RELEASE_NOTES. Signing and notarizing are Mac only: the Windows
+// installer is not code-signed yet, so Windows warns before it runs.
 //
 //   node apps/desktop/scripts/release.ts [--version 0.0.2] [--out <dir>] [--test]
 //
@@ -40,10 +46,12 @@ import {
   writeFileSync
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const RELEASES = 'https://github.com/New-Altitude/Oddboro/releases';
-const DESKTOP = new URL('..', import.meta.url).pathname;
+const DESKTOP = fileURLToPath(new URL('..', import.meta.url));
 const TAURI = join(DESKTOP, 'src-tauri');
 const args = process.argv.slice(2);
 const flag = (name: string) => {
@@ -68,7 +76,13 @@ const RUSTFLAGS = [
 const MACHINES: Record<string, { target: string; arch: string; platform: string }> = {
   'darwin-arm64': { target: 'aarch64-apple-darwin', arch: 'aarch64', platform: 'darwin-aarch64' },
   'linux-x64': { target: 'x86_64-unknown-linux-gnu', arch: 'x86_64', platform: 'linux-x86_64' },
-  'linux-arm64': { target: 'aarch64-unknown-linux-gnu', arch: 'aarch64', platform: 'linux-aarch64' }
+  'linux-arm64': {
+    target: 'aarch64-unknown-linux-gnu',
+    arch: 'aarch64',
+    platform: 'linux-aarch64'
+  },
+  'win32-x64': { target: 'x86_64-pc-windows-msvc', arch: 'x64', platform: 'windows-x86_64' },
+  'win32-arm64': { target: 'aarch64-pc-windows-msvc', arch: 'arm64', platform: 'windows-aarch64' }
 };
 const MACHINE = MACHINES[`${process.platform}-${process.arch}`];
 if (!MACHINE) throw new Error(`Oddboro does not build on ${process.platform}-${process.arch}`);
@@ -96,6 +110,14 @@ const run = (cmd: string, argv: string[], env: Record<string, string | undefined
 };
 const read = (cmd: string, argv: string[]) =>
   execFileSync(cmd, argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+/** The Tauri CLI, run by this Node: `npx` is a batch file on Windows, which only a shell runs. */
+const CLI = join(
+  dirname(createRequire(import.meta.url).resolve('@tauri-apps/cli/package.json')),
+  'tauri.js'
+);
+const tauri = (argv: string[], env: Record<string, string | undefined> = {}) =>
+  run(process.execPath, [CLI, ...argv], env);
+const stage = () => run(process.execPath, [join(DESKTOP, 'scripts', 'stage.ts'), '--smoke']);
 
 const KEY = process.env.TAURI_SIGNING_PRIVATE_KEY;
 if (!KEY) throw new Error('Set TAURI_SIGNING_PRIVATE_KEY to sign the updater archive');
@@ -145,7 +167,7 @@ function writeLatest(version: string, file: string): void {
 
 /** Fails when the shell's binary still names the home folder of whoever built it. */
 function checkNoHome(binary: string): void {
-  if (read('strings', ['-a', binary]).includes(homedir()))
+  if (readFileSync(binary).includes(homedir()))
     throw new Error("The app binary still names this machine's home folder");
 }
 
@@ -164,13 +186,11 @@ function gstreamerDirs(): Record<string, string> {
 
 /** The AppImage: built, checked, signed for the updater, and named for the site. */
 function buildLinux(version: string): void {
-  run('node', [join(DESKTOP, 'scripts', 'stage.ts'), '--smoke']);
+  stage();
   const configs = ['src-tauri/tauri.bundle.conf.json'];
   if (TEST) configs.push('{"plugins":{"updater":{"dangerousInsecureTransportProtocol":true}}}');
-  run(
-    'npx',
+  tauri(
     [
-      'tauri',
       'build',
       '--target',
       TARGET,
@@ -192,7 +212,7 @@ function buildLinux(version: string): void {
   copyFileSync(join(built, appimage), join(OUT, file));
   chmodSync(join(OUT, file), 0o755);
   // The signature names the version, and the app refuses one that names another.
-  run('npx', ['tauri', 'signer', 'sign', '--app-version', version, join(OUT, file)]);
+  tauri(['signer', 'sign', '--app-version', version, join(OUT, file)]);
   writeLatest(version, file);
   // The site's Download button links to releases/latest/download/ under this name.
   copyFileSync(join(OUT, file), join(OUT, `Oddboro-${MACHINE.arch}.AppImage`));
@@ -201,25 +221,47 @@ function buildLinux(version: string): void {
   );
 }
 
+/**
+ * The installer: built, checked, signed for the updater, and named for the
+ * site. Tauri's updater runs the installer itself, so one file serves both.
+ */
+function buildWindows(version: string): void {
+  stage();
+  const configs = ['src-tauri/tauri.bundle.conf.json'];
+  if (TEST) configs.push('{"plugins":{"updater":{"dangerousInsecureTransportProtocol":true}}}');
+  tauri(
+    ['build', '--target', TARGET, '--bundles', 'nsis', ...configs.flatMap((c) => ['--config', c])],
+    { RUSTFLAGS }
+  );
+  checkNoHome(join(RELEASE, 'oddboro.exe'));
+  const built = join(RELEASE, 'bundle', 'nsis');
+  const setup = readdirSync(built).find((f) => f.endsWith('-setup.exe'));
+  if (!setup) throw new Error(`No installer in ${built}`);
+
+  rmSync(OUT, { recursive: true, force: true });
+  mkdirSync(OUT, { recursive: true });
+  const file = `Oddboro_${version}_${MACHINE.arch}-setup.exe`;
+  copyFileSync(join(built, setup), join(OUT, file));
+  // The signature names the version, and the app refuses one that names another.
+  tauri(['signer', 'sign', '--app-version', version, join(OUT, file)]);
+  writeLatest(version, file);
+  // The site's Download button links to releases/latest/download/ under this name.
+  copyFileSync(join(OUT, file), join(OUT, `Oddboro-${MACHINE.arch}-setup.exe`));
+  console.log(
+    `Released ${version} for ${MACHINE.platform}${TEST ? ' (test build)' : ''} in ${OUT}`
+  );
+}
+
 function buildMac(version: string): void {
   // 1. The server, staged and smoke-tested.
-  run('node', [join(DESKTOP, 'scripts', 'stage.ts'), '--smoke']);
+  stage();
 
   // 2. The app, signed by Tauri: the app, its Node sidecar, the hardened
   //    runtime and Entitlements.plist on both, and the updater archive.
   const configs = ['src-tauri/tauri.bundle.conf.json', 'src-tauri/tauri.release.conf.json'];
   if (TEST) configs.push('{"plugins":{"updater":{"dangerousInsecureTransportProtocol":true}}}');
-  run(
-    'npx',
-    [
-      'tauri',
-      'build',
-      '--target',
-      TARGET,
-      '--bundles',
-      'app',
-      ...configs.flatMap((c) => ['--config', c])
-    ],
+  tauri(
+    ['build', '--target', TARGET, '--bundles', 'app', ...configs.flatMap((c) => ['--config', c])],
     // Tauri would notarize by itself with these. release.ts does it after the checks.
     { APPLE_SIGNING_IDENTITY: IDENTITY, RUSTFLAGS, APPLE_API_KEY: undefined, APPLE_ID: undefined }
   );
@@ -250,7 +292,7 @@ function buildMac(version: string): void {
   const archive = `Oddboro_${version}_aarch64.app.tar.gz`;
   run('tar', ['-czf', join(OUT, archive), '-C', BUNDLE, 'Oddboro.app'], { COPYFILE_DISABLE: '1' });
   // The signature names the version, and the app refuses one that names another.
-  run('npx', ['tauri', 'signer', 'sign', '--app-version', version, join(OUT, archive)]);
+  tauri(['signer', 'sign', '--app-version', version, join(OUT, archive)]);
   writeLatest(version, archive);
 
   // 5. The .dmg: the stapled app beside a link to Applications, signed,
@@ -300,6 +342,7 @@ const restore = wanted ? setVersion(wanted) : () => {};
 try {
   const version = wanted ?? (JSON.parse(readFileSync(CONF, 'utf8')) as { version: string }).version;
   if (process.platform === 'darwin') buildMac(version);
+  else if (process.platform === 'win32') buildWindows(version);
   else buildLinux(version);
 } finally {
   restore();
