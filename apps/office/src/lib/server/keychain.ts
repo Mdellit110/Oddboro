@@ -1,34 +1,9 @@
-// Connector secrets live in the macOS keychain, never in Postgres or a file.
-// Each is a generic password under the service "oddboro", named
-// "<connector>:<NAME>".
-import { execFileSync } from 'node:child_process';
+// Connector secrets, kept in the system's own secret store
+// (@oddboro/ledger/secrets): the Keychain on a Mac, the desktop keyring on
+// Linux. Never in Postgres or a file.
+import { getSecret } from '@oddboro/ledger/secrets';
 
-const SERVICE = 'oddboro';
-
-export function setSecret(connector: string, name: string, value: string): void {
-  execFileSync('security', [
-    'add-generic-password',
-    '-U',
-    '-s',
-    SERVICE,
-    '-a',
-    `${connector}:${name}`,
-    '-w',
-    value
-  ]);
-}
-
-export function getSecret(connector: string, name: string): string | undefined {
-  try {
-    return execFileSync(
-      'security',
-      ['find-generic-password', '-s', SERVICE, '-a', `${connector}:${name}`, '-w'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
-    ).trimEnd();
-  } catch {
-    return undefined;
-  }
-}
+export { deleteSecret, getSecret, setSecret } from '@oddboro/ledger/secrets';
 
 /**
  * A secret as the header it goes in. An Authorization value pasted without its

@@ -6,8 +6,8 @@ Mac, and its first Odd is the Office Manager you pick.
 
 ## Get started
 
-You need a Mac, [Node](https://nodejs.org) 24 or later, and a Claude plan or an
-Anthropic API key.
+You need a Mac or Linux, [Node](https://nodejs.org) 24 or later, and a Claude
+plan or an Anthropic API key.
 
 1. Clone the repo:
 

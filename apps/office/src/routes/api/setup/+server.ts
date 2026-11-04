@@ -2,27 +2,32 @@
 // window: the same checks `npm run setup` runs, with the owner's name and zone.
 // POST finishes the welcome under the name the owner gives.
 import { execFile } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { error, json } from '@sveltejs/kit';
 import {
   activeOffice,
   DATABASE_URL,
   finishWelcome,
   IN_APP,
+  LINUX,
   LOCAL,
+  MAC,
   ownerName,
   roster,
   welcomed,
   zone,
+  SYSTEM,
   zoneName
 } from '@oddboro/ledger';
 import { checkDatabase, checkMachine, type Check } from '@oddboro/ledger/checks';
+import { CAN_NOTIFY } from '#lib/server/notify.ts';
 import type { RequestHandler } from './$types';
 
 const BUILT_IN: Check = {
   id: 'database',
   name: 'Database',
   state: 'ok',
-  found: 'Postgres, on this Mac'
+  found: 'Postgres, built into the office'
 };
 
 export const GET: RequestHandler = async () => {
@@ -33,12 +38,27 @@ export const GET: RequestHandler = async () => {
     LOCAL ? { checks: [BUILT_IN] } : checkDatabase(DATABASE_URL)
   ]);
   const name = await ownerName();
-  // The Mac's own name for its owner, to offer before they type one.
+  // The computer's own name for its owner, to offer before they type one: the
+  // Mac's full name, or the real-name field of the account on Linux.
   const full = await new Promise<string>((done) =>
-    execFile('id', ['-F'], (_e, out) => done(String(out ?? '').trim()))
+    MAC
+      ? execFile('id', ['-F'], (_e, out) => done(String(out ?? '').trim()))
+      : LINUX
+        ? execFile('getent', ['passwd', userInfo().username], (_e, out) =>
+            done(
+              String(out ?? '')
+                .split(':')[4]
+                ?.split(',')[0]
+                ?.trim() ?? ''
+            )
+          )
+        : done('')
   );
   return json({
     app: IN_APP,
+    system: SYSTEM,
+    /** Whether the office can show its own notifications here. */
+    notify: CAN_NOTIFY,
     suggested: full.split(' ')[0] ?? '',
     checks: [...machine.filter((c) => c.id !== 'docker'), ...database.checks],
     owner: name === 'the owner' ? '' : name,

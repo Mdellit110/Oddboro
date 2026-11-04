@@ -1,9 +1,12 @@
-// What an install needs, checked one thing at a time: this Mac, Claude Code,
+// What an install needs, checked one thing at a time: this computer, Claude Code,
 // the database and the optional helpers. `npm run setup` walks the owner
 // through these, and the office's Setup window shows them again. Nothing here
 // imports db.ts, so it runs before there is a database to connect to.
 import { execFile } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import postgres from 'postgres';
+import { LINUX, MAC, SYSTEM, WINDOWS, serviceInstalled } from './platform.ts';
+import { secretStore } from './secrets.ts';
 
 export type Check = {
   id: string;
@@ -23,17 +26,57 @@ const run = (cmd: string, args: string[], timeout = 8000) =>
     )
   );
 
+/**
+ * The system the office runs on. It keeps its id "mac" because the setup card
+ * and older installs look for that id. Windows is known but not ready: it has
+ * no login service or office address yet.
+ */
 export async function checkMac(): Promise<Check> {
-  if (process.platform !== 'darwin')
+  if (MAC) {
+    const v = await run('sw_vers', ['-productVersion']);
+    return { id: 'mac', name: 'macOS', state: 'ok', found: `macOS ${v.out || 'found'}` };
+  }
+  if (LINUX) {
+    let name = 'Linux';
+    try {
+      name = /^PRETTY_NAME="?([^"\n]+)/m.exec(readFileSync('/etc/os-release', 'utf8'))?.[1] ?? name;
+    } catch {
+      // No os-release: plain Linux is enough.
+    }
+    return { id: 'mac', name: 'Linux', state: 'ok', found: name };
+  }
+  return {
+    id: 'mac',
+    name: WINDOWS ? 'Windows' : 'System',
+    state: 'missing',
+    found: SYSTEM ? 'Windows is not ready yet' : `This is ${process.platform}`,
+    fix: 'Oddboro runs on a Mac or Linux for now.'
+  };
+}
+
+/**
+ * The secret store that holds the keys and sign-ins the owner connects: the
+ * Keychain on a Mac, the desktop keyring on Linux. Windows has none yet.
+ */
+export function checkKeyring(): Check {
+  const r = secretStore();
+  if (r.ok)
     return {
-      id: 'mac',
-      name: 'macOS',
-      state: 'missing',
-      found: `This is ${process.platform}`,
-      fix: 'Oddboro runs on a Mac for now.'
+      id: 'keyring',
+      name: 'Keyring',
+      state: 'ok',
+      found: MAC ? 'The Mac keychain' : 'The desktop keyring, through secret-tool'
     };
-  const v = await run('sw_vers', ['-productVersion']);
-  return { id: 'mac', name: 'macOS', state: 'ok', found: `macOS ${v.out || 'found'}` };
+  return {
+    id: 'keyring',
+    name: 'Keyring',
+    state: 'optional',
+    found:
+      LINUX && r.problem === 'not installed' ? 'secret-tool not installed' : `Keyring ${r.problem}`,
+    fix: LINUX
+      ? 'Install libsecret (it brings secret-tool) and run a keyring that speaks the Secret Service, such as GNOME Keyring, KWallet or KeePassXC. Until then, tools that need a key cannot connect.'
+      : 'Until the secret store answers, tools that need a key cannot connect.'
+  };
 }
 
 export function checkNode(): Check {
@@ -129,7 +172,9 @@ export async function checkUv(): Promise<Check> {
         name: 'uv',
         state: 'optional',
         found: 'Not installed',
-        fix: 'Install it with `brew install uv` to connect tools that come from PyPI.'
+        fix: MAC
+          ? 'Install it with `brew install uv` to connect tools that come from PyPI.'
+          : 'Install uv (docs.astral.sh/uv) to connect tools that come from PyPI.'
       };
 }
 
@@ -157,9 +202,7 @@ export async function checkDocker(): Promise<Check> {
 
 /** The login service that keeps the office running with no terminal open. */
 export async function checkService(): Promise<Check> {
-  const uid = process.getuid?.() ?? 501;
-  const r = await run('launchctl', ['print', `gui/${uid}/com.oddboro.office`]);
-  return r.ok
+  return (await serviceInstalled('com.oddboro.office'))
     ? { id: 'service', name: 'Login service', state: 'ok', found: 'The office starts at login' }
     : {
         id: 'service',
@@ -355,6 +398,7 @@ export async function checkMachine(): Promise<Check[]> {
     checkDocker(),
     checkOllama(),
     checkUv(),
-    checkService()
+    checkService(),
+    checkKeyring()
   ]);
 }

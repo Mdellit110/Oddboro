@@ -20,14 +20,19 @@
 // authority. No public authority can vouch for a name that points at
 // 127.0.0.1. This Mac trusts that authority once, with the owner's password in
 // the macOS dialog. Until then the plain http:// address works.
+//
+// Linux works the same way, with three differences: the office's own Caddy
+// runs as a systemd user unit, the owner's password comes through pkexec's
+// dialog, and binding ports 80 and 443 needs a kernel that lets ordinary users
+// do it (net.ipv4.ip_unprivileged_port_start at 80 or lower).
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:https';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { IN_APP, OFFICE_PORT, home } from '@oddboro/ledger';
+import { IN_APP, LINUX, LOGS, MAC, OFFICE_PORT, home, installService } from '@oddboro/ledger';
 import { writeEnv } from '@oddboro/ledger/env';
 
 /** The names Caddy answers to, best first. The first one is served over HTTPS too. */
@@ -43,18 +48,40 @@ const LABEL = 'com.oddboro.caddy';
 const HOME = home();
 const OWN_CADDY = join(HOME, 'bin', 'caddy');
 const CADDYFILE = join(HOME, 'caddy', 'Caddyfile');
-const PLIST = join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
 /** Where a Caddy run by this user keeps its own authority's root certificate. */
-const ROOT = join(
-  homedir(),
-  'Library',
-  'Application Support',
-  'Caddy',
+const OWN_ROOT = join(
+  MAC
+    ? join(homedir(), 'Library', 'Application Support', 'Caddy')
+    : join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'caddy'),
   'pki',
   'authorities',
   'local',
   'root.crt'
 );
+/** A copy of the root certificate, taken from Caddy's admin API when its own file is out of reach. */
+const COPIED_ROOT = join(HOME, 'caddy', 'root.crt');
+/** The system's list of trusted authorities on Linux: Debian and Arch, then Fedora. */
+const LINUX_BUNDLES = ['/etc/ssl/certs/ca-certificates.crt', '/etc/pki/tls/certs/ca-bundle.crt'];
+
+/**
+ * The root certificate of the Caddy serving the office. A Caddy run by this
+ * user keeps it in its own folder. A Caddy run as a system service (as Linux
+ * packages run it) keeps it where this user cannot read, so the office asks
+ * that Caddy's admin API for it and keeps a copy.
+ */
+async function rootCert(): Promise<string | undefined> {
+  if (existsSync(OWN_ROOT)) return OWN_ROOT;
+  const r = await admin('/pki/ca/local');
+  const pem = r?.ok
+    ? ((await r.json().catch(() => ({}))) as { root_certificate?: string }).root_certificate
+    : undefined;
+  if (pem) {
+    mkdirSync(join(HOME, 'caddy'), { recursive: true });
+    writeFileSync(COPIED_ROOT, pem);
+    return COPIED_ROOT;
+  }
+  return existsSync(COPIED_ROOT) ? COPIED_ROOT : undefined;
+}
 
 /** How the address stands, with the name it uses. */
 export type Address = { host: string } & (
@@ -143,9 +170,23 @@ function answersSecurely(name: string): Promise<boolean> {
   });
 }
 
-/** Whether this Mac trusts Caddy's authority, so browsers accept its certificates. */
+/** Whether this computer trusts Caddy's authority, so browsers accept its certificates. */
 async function trusted(): Promise<boolean> {
-  return existsSync(ROOT) && (await run('security', ['verify-cert', '-c', ROOT])).ok;
+  const root = await rootCert();
+  if (!root) return false;
+  if (MAC) return (await run('security', ['verify-cert', '-c', root])).ok;
+  const bundle = LINUX_BUNDLES.find((b) => existsSync(b));
+  return !!bundle && (await run('openssl', ['verify', '-CAfile', bundle, root])).ok;
+}
+
+/** Linux lets ordinary users bind ports below this one; Caddy needs 80 and 443. */
+function lowPortsAllowed(): boolean {
+  if (!LINUX) return true;
+  try {
+    return Number(readFileSync('/proc/sys/net/ipv4/ip_unprivileged_port_start', 'utf8')) <= 80;
+  } catch {
+    return false;
+  }
 }
 
 /** What holds port 80, by program name, if anything. */
@@ -166,6 +207,9 @@ async function caddyBinary(): Promise<string | undefined> {
 
 export async function address(): Promise<Address> {
   const name = await host();
+  // Caddy, its login service and certificate trust are written for a Mac and
+  // Linux; elsewhere the office stays at its port, which needs nothing.
+  if (!MAC && !LINUX) return { host: name, state: 'blocked', holder: 'this system for now' };
   if (await answers(`http://${name}`)) {
     const https = name === SECURE && (await answersSecurely(name));
     const secure = https && (await trusted());
@@ -174,27 +218,29 @@ export async function address(): Promise<Address> {
       state: 'ready',
       url: `${secure ? 'https' : 'http'}://${name}`,
       secure,
-      canSecure: https && !secure && existsSync(ROOT)
+      canSecure: https && !secure && !!(await rootCert())
     };
   }
   const holder = await port80();
+  if (!holder && !lowPortsAllowed())
+    return { host: name, state: 'blocked', holder: 'Linux (ports 80 and 443 need root)' };
   if (!holder) return { host: name, state: 'own', installed: !!(await caddyBinary()) };
   if (holder === 'caddy' && (await admin('/config/'))?.ok) return { host: name, state: 'shared' };
   return { host: name, state: 'blocked', holder };
 }
 
-/** Download the official Caddy for this Mac's chip, checked against its published checksum. */
+/** Download the official Caddy for this computer's system and chip, checked against its published checksum. */
 async function download(): Promise<string> {
   const release = (await (
     await fetch('https://api.github.com/repos/caddyserver/caddy/releases/latest')
   ).json()) as { tag_name: string; assets: { name: string; browser_download_url: string }[] };
   const version = release.tag_name.replace(/^v/, '');
   const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
-  const archive = `caddy_${version}_mac_${arch}.tar.gz`;
+  const archive = `caddy_${version}_${MAC ? 'mac' : 'linux'}_${arch}.tar.gz`;
   const url = (name: string) => release.assets.find((a) => a.name === name)?.browser_download_url;
   const tarUrl = url(archive);
   const sumsUrl = url(`caddy_${version}_checksums.txt`);
-  if (!tarUrl || !sumsUrl) throw new Error(`Caddy ${version} has no download for this Mac.`);
+  if (!tarUrl || !sumsUrl) throw new Error(`Caddy ${version} has no download for this computer.`);
   const tar = Buffer.from(await (await fetch(tarUrl)).arrayBuffer());
   const sums = await (await fetch(sumsUrl)).text();
   const want = sums
@@ -240,32 +286,12 @@ async function startOwn(): Promise<void> {
       ''
     ].join('\n')
   );
-  const log = join(homedir(), 'Library', 'Logs', 'oddboro-caddy.log');
-  writeFileSync(
-    PLIST,
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${caddy}</string><string>run</string>
-    <string>--config</string><string>${CADDYFILE}</string>
-    <string>--adapter</string><string>caddyfile</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>${log}</string>
-  <key>StandardErrorPath</key><string>${log}</string>
-</dict>
-</plist>
-`
-  );
-  const uid = process.getuid?.();
-  await run('launchctl', ['bootout', `gui/${uid}/${LABEL}`]);
-  if (!(await run('launchctl', ['bootstrap', `gui/${uid}`, PLIST])).ok)
-    throw new Error('Caddy would not start as a login service.');
+  const started = await installService({
+    label: LABEL,
+    args: [caddy, 'run', '--config', CADDYFILE, '--adapter', 'caddyfile'],
+    log: join(LOGS, MAC ? 'oddboro-caddy.log' : 'caddy.log')
+  });
+  if (!started) throw new Error('Caddy would not start as a login service.');
 }
 
 type Servers = Record<string, { listen?: string[] }>;
@@ -355,18 +381,26 @@ export async function setUpAddress(): Promise<Address> {
  * certificate. macOS asks for the owner's password in its own dialog.
  */
 export async function secureAddress(): Promise<Address> {
-  if (!existsSync(ROOT))
-    throw new Error('Caddy has not made its certificate yet. Try again in a moment.');
-  const command = `security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain '${ROOT.replaceAll("'", "'\\''")}'`;
-  const r = await run('osascript', [
-    '-e',
-    'on run argv',
-    '-e',
-    'do shell script (item 1 of argv) with prompt "Oddboro wants to trust its own certificate, so your browser opens the office securely." with administrator privileges',
-    '-e',
-    'end run',
-    command
-  ]);
+  const root = await rootCert();
+  if (!root) throw new Error('Caddy has not made its certificate yet. Try again in a moment.');
+  const q = (p: string) => `'${p.replaceAll("'", "'\\''")}'`;
+  const r = MAC
+    ? await run('osascript', [
+        '-e',
+        'on run argv',
+        '-e',
+        'do shell script (item 1 of argv) with prompt "Oddboro wants to trust its own certificate, so your browser opens the office securely." with administrator privileges',
+        '-e',
+        'end run',
+        `security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ${q(root)}`
+      ])
+    : // pkexec shows the desktop's own password dialog. p11-kit's trust (Arch,
+      // Fedora) adds it to the system list; Debian and Ubuntu use update-ca-certificates.
+      await run('pkexec', [
+        'sh',
+        '-c',
+        `if command -v trust >/dev/null; then trust anchor --store ${q(root)}; else cp ${q(root)} /usr/local/share/ca-certificates/oddboro-caddy.crt && update-ca-certificates; fi`
+      ]);
   if (!r.ok)
     throw new Error('The certificate was not trusted. Try again, and enter your password.');
   return address();

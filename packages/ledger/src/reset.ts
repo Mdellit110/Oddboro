@@ -7,12 +7,12 @@
 // before it moves anything.
 //
 //   npm run reset
-import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { ENV_FILE, readEnv, writeEnv } from './env.ts';
 import { home } from './home.ts';
+import { stopServiceSync } from './platform.ts';
 
 const HOME = home();
 const MOVED = ['db', 'staff', 'office'].filter((d) => existsSync(join(HOME, d)));
@@ -45,12 +45,7 @@ if (answer.trim() !== 'reset') {
 }
 
 // The office server holds its database open, so it stops first.
-const uid = process.getuid?.();
-try {
-  execFileSync('launchctl', ['bootout', `gui/${uid}/com.oddboro.office`], { stdio: 'ignore' });
-} catch {
-  // Not running.
-}
+stopServiceSync('com.oddboro.office');
 mkdirSync(BACKUP, { recursive: true });
 for (const d of MOVED) renameSync(join(HOME, d), join(BACKUP, d));
 if (existsSync(ENV_FILE)) copyFileSync(ENV_FILE, join(BACKUP, '.env'));
