@@ -176,8 +176,11 @@ private, `latest.json` answers 404 to them.
 
 ### Secrets
 
-Set each in the repo's Settings, Secrets and variables, Actions. Never commit
-a value.
+Set each as a secret of the `release` environment (the repo's Settings,
+Environments, release), never as a repo secret. Only `main` may use that
+environment, so a workflow run from any other branch, or a pull request, never
+sees the keys. Set one with `gh secret set <NAME> -R New-Altitude/Oddboro --env
+release`. Never commit a value.
 
 | Secret                               | What it is                                                  | How to make it                                                                                                                                         |
 | ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
