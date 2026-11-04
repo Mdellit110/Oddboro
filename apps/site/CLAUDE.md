@@ -241,10 +241,15 @@ the Linux build on Linux, reading the user agent and, in Chromium, its
 architecture hint (Chromium says x86_64 on every Linux machine). The answer
 stays on the page. "All downloads" goes to `/releases/`.
 
-`/releases/` lists every build of the newest release, then every release,
+`/releases/` lists every build of the newest release, with the visitor's
+own (the same pick as the download buttons) outlined and Marshall pointing at
+it: "You probably want this one." His pose is his side frame from the staff
+sprite with one arm raised, made in `scripts/art.ts` as `point-marshall.png`,
+so the shared sprites (and the app build) stay untouched. Then every release,
 newest first, from `src/lib/releases.ts`. Add a release there after its draft
 on GitHub is published, with the same version as its tag and the day it was
-published: until then its links answer 404. The order is: merge the app's
+published in Pacific time (GitHub shows UTC, which runs a day ahead in the
+evening): until then its links answer 404. The order is: merge the app's
 changes, publish the draft, then merge the site's entry and its art (which
 builds no app) and deploy the site by hand. A release's art is a
 looping GIF from `scripts/release-art.ts`, with a still of the last frame.
