@@ -10,7 +10,6 @@
 // tasks, the ledger), plus whatever access the owner granted: servers at read
 // level (the tools the owner ticked as read-only) or at write level (every
 // tool). Hosted servers get a fresh OAuth token per run.
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   appendFileSync,
@@ -69,7 +68,7 @@ import { emit } from './events.ts';
 import type { Work } from '../staff/work.ts';
 import { getSecret, headerSecret } from './keychain.ts';
 import { bearer } from './oauth.ts';
-import { apiKey, claudeSettings, cleanEnv, modelArgs } from './claude.ts';
+import { apiKey, claudeSettings, cleanEnv, modelArgs, spawnClaude } from './claude.ts';
 import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
 
@@ -583,7 +582,7 @@ async function run(
   ];
 
   return new Promise((done) => {
-    const child = spawn('claude', args, { cwd: dir, env: staffEnv() });
+    const child = spawnClaude(args, { cwd: dir, env: staffEnv() });
     let buffer = '';
     let reply = '';
     let session: string | undefined;

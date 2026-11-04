@@ -63,7 +63,7 @@ window, the hold, the install decision and a poke's grace.
 | `src/time.ts`          | The office's time zone (`OFFICE_TIME_ZONE`), and a schedule's next run                                                                                                       |
 | `src/checks.ts`        | What an install needs, one check each. Imports no db.ts, so it runs before a database exists                                                                                 |
 | `src/setup.ts`         | `npm run setup`: asks nothing. Checks the computer, starts the office service, opens the browser                                                                             |
-| `src/platform.ts`      | What differs between systems: log folder, login service (launchd, systemd), opening a URL                                                                                    |
+| `src/platform.ts`      | What differs between systems: log folder, login service (launchd, systemd, Task Scheduler), opening a URL, finding Claude Code, and Windows PowerShell for Windows           |
 | `src/secrets.ts`       | Secrets in the system's own store, one entry per system: `security` (Mac), `secret-tool` (Linux), the Credential Manager through `@napi-rs/keyring` (Windows)                |
 | `src/env.ts`           | `.env` read and written a key at a time, by setup and by the office                                                                                                          |
 | `src/local-db.ts`      | The office's own Postgres (PGlite), its socket, and NOTIFY from other processes                                                                                              |
@@ -145,3 +145,9 @@ window, the hold, the install decision and a poke's grace.
   Secret Service keyring on Linux through secret-tool, and the Credential
   Manager on Windows through `@napi-rs/keyring`, in pieces of 2,048 bytes,
   since one credential holds at most 2,560.
+- Start Claude Code through `claudeCommand()` in `src/platform.ts`, never as
+  a bare `claude`: on Windows an npm install is a `.cmd` Node will not start,
+  so the shim's script runs under this Node instead.
+- On Windows, reach the system through `powershell()` or `powershellSync()`
+  with values passed as `env`, never pasted into the script, so nothing needs
+  quoting.
