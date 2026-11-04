@@ -95,6 +95,18 @@ const lock = (path: string): void => {
 };
 const own = (path: string) => join(L.home('staff', 'paige'), path);
 const onThread = (id: number, path: string, staff = 'paige') => join(L.threadPart(id, staff), path);
+// What the owner reads of a rendered reply. Tags come off until the text stops
+// changing, the form CodeQL's check on multi-character sanitising accepts. With
+// this pattern one pass already settles, so the loop changes no answer.
+const visibleText = (html: string): string => {
+  let text = html;
+  let before: string;
+  do {
+    before = text;
+    text = text.replace(/<[^>]+>/g, '');
+  } while (text !== before);
+  return text.trim();
+};
 mkdirSync(own(''), { recursive: true });
 
 // The routes take a SvelteKit request event; these handlers read only its request or url.
@@ -158,7 +170,7 @@ test('a file named in a reply that the Odd wrote in two goal folders links by it
   );
   assert.ok(link, html);
   assert.deepEqual(link.slice(1), ['paige:plan.md', 'Open plan.md', 'plan.md']);
-  const visible = html.replace(/<[^>]+>/g, '').trim();
+  const visible = visibleText(html);
   assert.equal(visible, 'The plan is in plan.md, ready for you.');
   assert.doesNotMatch(html, /thread|\/[37]\//i, 'no thread, number or folder in the page');
 
@@ -345,7 +357,7 @@ test('a page named in a reply links to the viewer with an Open in browser button
     /<a href="#" data-file="paige:board\.html" title="Open board\.html"><code>board\.html<\/code><\/a><button type="button" data-page="paige:board\.html" class="open-page">Open in browser<\/button>/
   );
   assert.equal(html.match(/<button/g)?.length, 1, 'only the page gets a button');
-  const visible = html.replace(/<[^>]+>/g, '').trim();
+  const visible = visibleText(html);
   assert.equal(visible, 'Play board.htmlOpen in browser, rules in board-notes.md.');
   ownerWords(visible);
 });
@@ -434,7 +446,7 @@ test('a result task with a page a colleague built in the goal folder shows Open 
   const reply = `Play \`${name}\`.`;
   await askAbout(renderMarkdown(reply, 'lena').unknown);
   const { html } = renderMarkdown(reply, 'lena');
-  assert.equal(html.replace(/<[^>]+>/g, '').trim(), 'Play index.htmlOpen in browser.');
+  assert.equal(visibleText(html), 'Play index.htmlOpen in browser.');
   assert.doesNotMatch(html.replace(/data-(file|page)="[^"]*"/g, ''), /threads|\/\d+\//);
 
   const { mtime } = await open(`${file.staff}:${file.path}`);
