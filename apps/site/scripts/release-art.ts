@@ -1,0 +1,212 @@
+// The art on /releases/: one looping GIF per release that has one, built on
+// the desk vignette (an Odd typing at its desk), and a still of its last
+// frame for visitors who ask for reduced motion. art.ts calls this once per
+// theme, with the vignette's layers lit for night or for day, so every
+// animation added here comes in both. Every colour added here is the house
+// palette's, and `shade` lights it the way the room is lit.
+//
+//   hello-world   the screen answers the Odd's typing: "HELLO, WORLD!" fills
+//                 a speech bubble one letter at a time (0.0.1)
+//   linux         the screen flashes and a penguin jumps out of it, arcs over
+//                 the desk and lands on the floor (the Linux release)
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { createImage, drawImage, encodePng, type Image } from '@oddboro/sprites/png';
+import { hexToRgba } from '@oddboro/sprites/px';
+import { encodeGif, type GifFrame } from './gif.ts';
+
+export type DeskLayers = {
+  /** The room, lit, without the Odd. */
+  room: Image;
+  /** What stands in front of the Odd. */
+  front: Image;
+  /** The Odd typing, one image per frame, already lit and placed. */
+  odd: Image[];
+  /** Lights an added sprite the way the room's lamp lights the Odd. */
+  shade: (img: Image) => Image;
+};
+
+const PALETTE = JSON.parse(
+  readFileSync(new URL('../../../packages/sprites/src/palette.json', import.meta.url), 'utf8')
+).colors as Record<string, { hex: string }>;
+
+/** A sprite drawn in palette keys, one character per pixel, `.` see-through. */
+function sprite(rows: string[]): Image {
+  const img = createImage(rows[0].length, rows.length);
+  rows.forEach((row, y) =>
+    [...row].forEach((key, x) => {
+      if (key !== '.') img.data.set(hexToRgba(PALETTE[key].hex), (y * img.width + x) * 4);
+    })
+  );
+  return img;
+}
+
+// The penguin: ink body, paper belly and eyes, amber beak and feet. Wings up
+// in the air, at its sides on the ground, and its eyes shut for a blink.
+const PENGUIN = [
+  '...kkkk...',
+  '..kkkkkk..',
+  '..k=kk=k..',
+  '..kkkkkk..',
+  '..kkyykk..',
+  '.kk=yy=kk.',
+  '.k======k.',
+  'kk======kk',
+  'kk======kk',
+  '.k======k.',
+  '.kk====kk.',
+  '..kkkkkk..',
+  '.yyy..yyy.'
+];
+const PENGUIN_FLY = PENGUIN.map((r, y) =>
+  y === 5 ? 'kkk=yy=kkk' : y === 7 || y === 8 ? '.k======k.' : r
+);
+const PENGUIN_BLINK = PENGUIN.map((r, y) => (y === 2 ? '..kkkkkk..' : r));
+
+// The screen of the left desk's monitor, in the vignette's pixels.
+const SCREEN = { x: 58, y: 22, w: 10, h: 6 };
+const FLASH = 'g';
+
+/** A 5-pixel-high capital font, enough for the hello. */
+const GLYPHS: Record<string, string[]> = {
+  H: ['x.x', 'x.x', 'xxx', 'x.x', 'x.x'],
+  E: ['xxx', 'x..', 'xx.', 'x..', 'xxx'],
+  L: ['x..', 'x..', 'x..', 'x..', 'xxx'],
+  O: ['.x.', 'x.x', 'x.x', 'x.x', '.x.'],
+  W: ['x...x', 'x...x', 'x.x.x', 'x.x.x', '.x.x.'],
+  R: ['xx.', 'x.x', 'xx.', 'x.x', 'x.x'],
+  D: ['xx.', 'x.x', 'x.x', 'x.x', 'xx.'],
+  ',': ['.', '.', '.', 'x', 'x'],
+  '!': ['x', 'x', 'x', '.', 'x'],
+  ' ': ['..', '..', '..', '..', '..']
+};
+const HELLO = 'HELLO, WORLD!';
+
+const width = (text: string) =>
+  [...text].reduce((w, ch, i) => w + GLYPHS[ch][0].length + (i ? 1 : 0), 0);
+
+/** The bubble with the first `shown` letters, its tail down toward the screen. */
+function bubble(shown: number): Image {
+  const w = width(HELLO) + 6;
+  const h = 11;
+  const rows: string[] = [];
+  for (let y = 0; y < h + 3; y++) {
+    let row = '';
+    for (let x = 0; x < w; x++) {
+      const corner = (x === 0 || x === w - 1) && (y === 0 || y === h - 1);
+      const edge = x === 0 || x === w - 1 || y === 0 || y === h - 1;
+      if (y < h) row += corner ? '.' : edge ? 'k' : '=';
+      // The tail: three rows narrowing toward the bubble's start.
+      else if (y === h) row += x === 3 ? 'k' : x === 4 || x === 5 ? '=' : x === 6 ? 'k' : '.';
+      else if (y === h + 1) row += x === 3 ? 'k' : x === 4 ? '=' : x === 5 ? 'k' : '.';
+      else row += x === 3 || x === 4 ? 'k' : '.';
+    }
+    rows.push(row);
+  }
+  // Opening the bubble's bottom edge over the tail.
+  rows[h - 1] = rows[h - 1].slice(0, 4) + '==' + rows[h - 1].slice(6);
+  const img = sprite(rows);
+  let x = 3;
+  [...HELLO].slice(0, shown).forEach((ch) => {
+    const glyph = GLYPHS[ch];
+    glyph.forEach((row, gy) =>
+      [...row].forEach((on, gx) => {
+        if (on === 'x') img.data.set(hexToRgba(PALETTE.k.hex), ((3 + gy) * img.width + x + gx) * 4);
+      })
+    );
+    x += glyph[0].length + 1;
+  });
+  return img;
+}
+
+/** One frame: the room, the Odd at frame `t`, what stands in front, then `extra` on top. */
+function frame(layers: DeskLayers, t: number, extra: (img: Image) => void): Image {
+  const img = createImage(layers.room.width, layers.room.height);
+  drawImage(img, layers.room, 0, 0);
+  // The Odd types at about 3.7 frames a second: a new pose every third GIF frame.
+  drawImage(img, layers.odd[Math.floor(t / 3) % layers.odd.length], 0, 0);
+  drawImage(img, layers.front, 0, 0);
+  extra(img);
+  return img;
+}
+
+const DELAY = 9;
+
+function helloWorld(layers: DeskLayers): GifFrame[] {
+  const tip = bubble(0);
+  const at = { x: SCREEN.x - 2, y: SCREEN.y - tip.height - 1 };
+  const frames: GifFrame[] = [];
+  // Typing, then a letter a frame, a long hold, and a pause before it loops.
+  const shown = [
+    ...Array(8).fill(-1),
+    ...[...HELLO].map((_, i) => i + 1),
+    ...Array(26).fill(HELLO.length),
+    ...Array(6).fill(-1)
+  ];
+  shown.forEach((n, t) =>
+    frames.push({
+      image: frame(layers, t, (img) => {
+        if (n >= 0) drawImage(img, bubble(n), at.x, at.y);
+      }),
+      delay: DELAY
+    })
+  );
+  // The still: the whole hello.
+  frames.push({
+    image: frame(layers, 0, (img) => drawImage(img, bubble(HELLO.length), at.x, at.y)),
+    delay: 0
+  });
+  return frames;
+}
+
+function linux(layers: DeskLayers): GifFrame[] {
+  const stand = layers.shade(sprite(PENGUIN));
+  const fly = layers.shade(sprite(PENGUIN_FLY));
+  const blink = layers.shade(sprite(PENGUIN_BLINK));
+  const flash = sprite(Array(SCREEN.h).fill(FLASH.repeat(SCREEN.w)));
+  const from = { x: SCREEN.x, y: SCREEN.y - 4 };
+  const to = { x: 80, y: 64 };
+  const frames: GifFrame[] = [];
+  let t = 0;
+  const add = (extra: (img: Image) => void, delay = DELAY) =>
+    frames.push({ image: frame(layers, t++, extra), delay });
+
+  for (let i = 0; i < 9; i++) add(() => {});
+  // The screen flashes twice.
+  for (const on of [true, false, true])
+    add((img) => on && drawImage(img, flash, SCREEN.x, SCREEN.y));
+  // Out of the screen, up, and over: a parabola from the screen to the floor.
+  const STEPS = 11;
+  for (let i = 1; i <= STEPS; i++) {
+    const s = i / STEPS;
+    const x = Math.round(from.x + (to.x - from.x) * s);
+    const y = Math.round(from.y + (to.y - from.y) * s - 28 * Math.sin(Math.PI * s));
+    add((img) => {
+      if (i === 1) drawImage(img, flash, SCREEN.x, SCREEN.y);
+      drawImage(img, i % 2 ? fly : stand, x, y);
+    });
+  }
+  // The landing: a squash for a frame, then standing, with one blink.
+  const squash = createImage(stand.width, stand.height);
+  drawImage(squash, stand, 0, 1);
+  add((img) => drawImage(img, squash, to.x, to.y));
+  for (let i = 0; i < 28; i++)
+    add((img) => drawImage(img, i === 12 || i === 13 ? blink : stand, to.x, to.y));
+  // The still: the penguin on the floor beside the desk.
+  frames.push({ image: frame(layers, 0, (img) => drawImage(img, stand, to.x, to.y)), delay: 0 });
+  return frames;
+}
+
+/** Writes <name>.gif and its still, <name>.png, into `dir`, for one theme. */
+export function writeReleaseArt(layers: DeskLayers, dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  for (const [name, frames] of [
+    ['hello-world', helloWorld(layers)],
+    ['linux', linux(layers)]
+  ] as const) {
+    const still = frames.at(-1)!;
+    writeFileSync(join(dir, `${name}.gif`), encodeGif(frames.slice(0, -1)));
+    writeFileSync(join(dir, `${name}.png`), encodePng(still.image));
+    console.log(`${relative(process.cwd(), join(dir, name))}.gif: ${frames.length - 1} frames`);
+  }
+}

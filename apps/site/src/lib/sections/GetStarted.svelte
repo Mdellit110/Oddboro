@@ -1,22 +1,15 @@
 <script lang="ts">
-  // The download first: one button, the requirements above it, and the three
-  // things a person does with the disk image. Building from source stays for
+  // The download first: one button for this visitor's computer, its
+  // requirements above it, and the three things a person does with the file.
+  // Every other build is one link away. Building from source stays for
   // developers, folded under the download: three commands in a terminal card,
   // each with a copy button. Then what happens once Oddboro opens.
+  import DownloadButton from '#lib/components/DownloadButton.svelte';
   import SectionHeader from '#lib/components/SectionHeader.svelte';
+  import { download } from '#lib/downloads.svelte.ts';
   import { reducedMotion, reveal, stagger, visible } from '#lib/motion/index.ts';
-  import { SITE } from '#lib/site.ts';
 
-  const requirements = [
-    'A Mac with Apple silicon',
-    'macOS 13 or later',
-    'A Claude plan, or an Anthropic API key'
-  ];
-  const install = [
-    'Open Oddboro.dmg.',
-    'Drag Oddboro to Applications.',
-    'Open Oddboro from Applications.'
-  ];
+  const build = $derived(download.build);
   const steps = [
     {
       label: 'Clone the repo.',
@@ -57,10 +50,14 @@
 
 <svelte:document onvisibilitychange={busUpdate} />
 
-<SectionHeader eyebrow="Get started" title="Download Oddboro for your Mac." align="center" />
+<SectionHeader
+  eyebrow="Get started"
+  title="Download Oddboro for {build.audience}."
+  align="center"
+/>
 
 <ul use:stagger class="mt-8 flex flex-wrap justify-center gap-2" aria-label="Requirements">
-  {#each requirements as r (r)}
+  {#each build.requirements as r (r)}
     <li class="border-hairline bg-raise text-muted rounded-full border px-3.5 py-1.5 text-sm">
       {r}
     </li>
@@ -69,22 +66,18 @@
 
 <div use:reveal={{ delay: 120 }} class="mx-auto mt-10 flex max-w-3xl flex-col items-center">
   <div class="flex flex-wrap items-center justify-center gap-3">
-    <a
-      href={SITE.download}
+    <DownloadButton
       class="bg-sea text-night rounded-md px-6 py-3.5 text-base font-semibold transition-opacity hover:opacity-90"
-    >
-      Download for Mac
-    </a>
+    />
     <a
-      href={SITE.releases}
-      rel="noopener"
+      href="/releases/"
       class="border-hairline text-ink hover:bg-raise rounded-md border px-6 py-3.5 text-base font-medium"
     >
-      Release notes
+      All downloads
     </a>
   </div>
   <ol class="mt-8 grid w-full gap-3 sm:grid-cols-3">
-    {#each install as step, i (step)}
+    {#each build.install as step, i (step)}
       <li class="border-hairline bg-raise flex items-center gap-3 rounded-lg border px-4 py-3">
         <span
           class="font-pixel text-sea border-hairline flex size-8 shrink-0 items-center justify-center rounded-md border text-sm font-semibold"
@@ -161,9 +154,7 @@
   <div>
     <h3 class="text-ink font-semibold">What happens next</h3>
     <p class="text-muted mt-1 text-[15px] leading-relaxed">
-      Oddboro opens straight into your office. You give it your name, connect your Claude account,
-      and pick your Office Manager and your space. Then you watch the office go up and your manager
-      step off the bus.
+      Your office goes up, and your manager steps off the bus.
     </p>
   </div>
 </div>

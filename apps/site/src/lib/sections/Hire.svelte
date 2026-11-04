@@ -34,7 +34,7 @@
       does: [
         'Writes a plan for the week around the goal you set.',
         'Pokes you in chat before each session.',
-        'Plans next week from your training log, if you keep one on your Mac.'
+        'Plans next week from your training log, if you keep one on your computer.'
       ],
       level: 'read',
       tools: [],
@@ -48,7 +48,7 @@
       line: 'Makes sure no birthday or anniversary sneaks up on you.',
       portrait: 'ada',
       does: [
-        'Reads the birthdays and anniversaries in your people list, which stays on your Mac.',
+        'Reads the birthdays and anniversaries in your people list, which stays on your computer.',
         'Pokes you in chat a week ahead, and again the day before.',
         'Drafts the note, so it is ready when you are.'
       ],
@@ -100,7 +100,7 @@
       level: 'read',
       tools: [{ name: 'Your tool', can: ['read'] }],
       note: 'Write needs the act level.',
-      you: 'You approve the tool, sign in yourself, and can revoke it from the Access tab.'
+      you: 'You approve the tool, sign in yourself, and can take it back any time.'
     }
   ];
 
@@ -215,7 +215,7 @@
 <SectionHeader
   eyebrow="Hire an Odd"
   title="Hire Odds for everything you want off your plate."
-  lede="Each Odd is an AI worker with one job, using tools you connect for it from the public MCP Registry. Pick a job to see what that Odd does and the access it needs."
+  lede="Each Odd is an AI worker with one job. Pick a job to see what that Odd does and the access it needs."
 />
 
 <div

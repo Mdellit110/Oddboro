@@ -4,6 +4,7 @@
 // generateOffice from a spec.
 //
 //   node scripts/art.ts        writes static/art/*.png (night), static/art/day/*.png,
+//                              static/art/releases/ (release-art.ts),
 //                              src/lib/hero/scene.json and src/lib/vignettes.json
 //
 // The hero stacks the output: the lot, then the building's floors, walls and
@@ -24,6 +25,7 @@ import {
   type SpriteDef
 } from '@oddboro/sprites/px';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
+import { writeReleaseArt } from './release-art.ts';
 import {
   loadLibrary,
   lookFrame,
@@ -575,6 +577,23 @@ function renderSet(hour: number, dir: string): Image {
       drawImage(staffAnim, shade(frameImage(def, f, v.staff.variant), 1), i * V.w + v.at.x, v.at.y)
     );
     write(`vignette-${v.id}-staff-anim.png`, staffAnim, dir);
+    // The releases page builds its art on the desk, once per theme like the
+    // rest of the art: night in static/art/releases/, day in
+    // static/art/day/releases/.
+    if (v.id === 'desk')
+      writeReleaseArt(
+        {
+          room: cropTo(vLit, v.r),
+          front,
+          odd: v.frames.map((f) => {
+            const img = createImage(V.w, V.h);
+            drawImage(img, shade(frameImage(def, f, v.staff.variant), 1), v.at.x, v.at.y);
+            return img;
+          }),
+          shade: (img) => shade(img, 1)
+        },
+        join(ART, dir, 'releases')
+      );
     // The prop's frames, lit, as a strip of only the pixels each frame
     // changes against the room: frame 0 is empty, so the room shows through.
     if (v.animProp) {

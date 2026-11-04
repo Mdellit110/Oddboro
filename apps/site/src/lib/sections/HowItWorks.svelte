@@ -96,7 +96,7 @@
 <SectionHeader
   eyebrow="How it works"
   title="Watch your AI work."
-  lede="Most AI works where you can't see it. Odds work on a floor in front of you, and each one walks to the spot that matches its task. One glance tells you what the whole office is doing. Click any Odd to chat with it."
+  lede="Most AI works where you can't see it. Odds work on a floor in front of you, and each one walks to the spot that matches its task. One glance tells you what the whole office is doing."
 />
 
 <svelte:document onvisibilitychange={update} />

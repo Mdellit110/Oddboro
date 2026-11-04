@@ -1,8 +1,8 @@
 # Terms of Use
 
-Effective date: November 2, 2026
+Effective date: November 3, 2026
 
-> **The short version.** Oddboro is open source software from New Altitude, Inc. The Apache License 2.0 governs the code, and nothing here takes away what that license gives you. These terms govern this website, the project's services, and how you use the software with other people's services. You run the software on your own Mac, under your own Claude account, and you are responsible for what you approve or allow your Odds to do. AI output can be wrong, so check it before you rely on it. The Oddboro name and logo belong to New Altitude, so a fork needs its own name. The software comes as is, without warranty, and our liability is limited. A licensed attorney should read these terms with you if anything turns on them.
+> **The short version.** Oddboro is open source software from New Altitude, Inc. The Apache License 2.0 governs the code, and nothing here takes away what that license gives you. These terms govern this website, the project's services, and how you use the software with other people's services. You run the software on your own computer, under your own Claude account, and you are responsible for what you approve or allow your Odds to do. AI output can be wrong, so check it before you rely on it. The Oddboro name and logo belong to New Altitude, so a fork needs its own name. The software comes as is, without warranty, and our liability is limited. A licensed attorney should read these terms with you if anything turns on them.
 
 ## 1. Acceptance
 
@@ -18,9 +18,9 @@ You must be old enough to form a binding contract where you live, and at least 1
 
 ## 2. What Oddboro is
 
-Oddboro is a virtual office for one person. Its AI workers, called Odds, work on a pixel-art floor on your Mac, and where each one stands tells you what it is doing. The Software runs entirely on your own computer, keeps its records in a database on your computer, and reaches other services (Anthropic and the tools you connect) only when you set that up and only under your own accounts. Our [Privacy Policy](/privacy) explains where data goes, and it is part of these Terms.
+Oddboro is a virtual office for one person. Its AI workers, called Odds, work on a pixel-art floor on your computer, and where each one stands tells you what it is doing. The Software runs entirely on your own computer, keeps its records in a database on your computer, and reaches other services (Anthropic and the tools you connect) only when you set that up and only under your own accounts. Our [Privacy Policy](/privacy) explains where data goes, and it is part of these Terms.
 
-New Altitude publishes the Software. We do not operate it for you, host it for you, or see what it does on your Mac.
+New Altitude publishes the Software. We do not operate it for you, host it for you, or see what it does on your computer.
 
 ## 3. The open source license
 
@@ -56,7 +56,7 @@ Those terms are between you and those companies. You are responsible for the fee
 
 ### Your computer and your data
 
-You are responsible for the security of your Mac, the accounts signed in on it, the data you put in the office, and the data you let the Software read. Keep backups of anything you cannot afford to lose. The Software stores everything locally, and if your disk fails or you delete `~/.oddboro`, we cannot recover it.
+You are responsible for the security of your computer, the accounts signed in on it, the data you put in the office, and the data you let the Software read. Keep backups of anything you cannot afford to lose. The Software stores everything locally, and if your disk fails or you delete `~/.oddboro`, we cannot recover it.
 
 ## 5. AI output may be wrong
 

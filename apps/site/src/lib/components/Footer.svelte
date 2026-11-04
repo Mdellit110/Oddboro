@@ -19,6 +19,7 @@
     </div>
 
     <nav class="flex flex-wrap items-center gap-x-6 gap-y-2" aria-label="Footer">
+      <a href="/releases/" class={link}>Releases</a>
       <a href="/privacy/" class={link}>Privacy</a>
       <a href="/terms/" class={link}>Terms</a>
       <a href="{SITE.github}/blob/main/LICENSE" class={link} rel="noopener">License</a>

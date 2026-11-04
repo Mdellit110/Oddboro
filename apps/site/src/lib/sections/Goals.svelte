@@ -15,7 +15,7 @@
     },
     {
       title: 'You approve the parts you want.',
-      text: 'Every part comes ticked. Untick any you do not want. Odds start on the rest at once and log their progress.'
+      text: 'Odds start on them at once.'
     }
   ];
   const parts = [
@@ -33,7 +33,7 @@
     <SectionHeader
       eyebrow="Goals"
       title="Start with what you want more of."
-      lede="Time to read, a launch out the door, an hour back in your evening. Your Office Manager turns each goal into a plan and puts it on your desk as one ask. Odds see only the goals they serve, and your daily report gives each goal its own section."
+      lede="Time to read, a launch out the door, an hour back in your evening. Your Office Manager turns each goal into a plan for your yes."
     />
     <div
       use:reveal={{ delay: 120 }}

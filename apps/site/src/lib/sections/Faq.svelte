@@ -16,19 +16,19 @@
     },
     {
       q: 'Which Claude plan do I need?',
-      a: "Any plan that signs in to Claude Code. The office uses that login for every Odd, and each Odd's card shows how much of your plan's 5-hour and weekly windows it has used. If you would rather not use a plan, an Anthropic API key works instead."
+      a: 'Any plan that signs in to Claude Code. Or skip the plan and use an Anthropic API key.'
     },
     {
       q: 'Does it run on Windows or Linux?',
-      a: 'No. Oddboro is Mac only for now. Linux is on the roadmap. Windows is not on the list today.'
+      a: 'Linux, yes: an AppImage for x86_64 and arm64, on a desktop with systemd, a keyring and notifications. Windows, no. It is not on the list today.'
     },
     {
-      q: 'What leaves my Mac?',
+      q: 'What leaves my computer?',
       a: 'Only what the work needs. Odds send their work to Claude under your own account, and an Odd talks to the tools you connected for it. The app checks GitHub for new versions of itself. Nothing goes to New Altitude.'
     },
     {
       q: 'Can an Odd act without asking me?',
-      a: "Yes, within the limits you set. At the act level an Odd does housekeeping inside the office on its own, and uses any tool you gave it write access to. Everything else waits on your desk. Lower the level or revoke a tool from the Odd's Access tab."
+      a: 'Yes, within the limits you set. At the act level an Odd does housekeeping inside the office on its own, and uses any tool you gave it write access to. Everything else waits on your desk.'
     },
     {
       q: 'Can I pick the model?',
@@ -40,7 +40,7 @@
     },
     {
       q: 'How do I start over, or remove it?',
-      a: 'In the Mac app, turn off Open at login in the menu bar, quit Oddboro, and move it to the Trash. Your office stays in `~/.oddboro/` until you delete that folder. From source, `npm run reset` starts the office over: it moves the old one into `~/.oddboro/backups/` and deletes nothing. To remove a source install, run `npm run service:uninstall -w apps/office`, then delete the folder.'
+      a: 'On a Mac, turn off Open at login in the menu bar, quit Oddboro, and move it to the Trash. On Linux, turn off Open at login in the tray (or delete `~/.config/autostart/Oddboro.desktop`), quit Oddboro, and delete the AppImage. Either way, your office stays in `~/.oddboro/` until you delete that folder. From source, `npm run reset` starts the office over: it moves the old one into `~/.oddboro/backups/` and deletes nothing. To remove a source install, run `npm run service:uninstall -w apps/office`, then delete the folder.'
     },
     {
       q: 'Who makes it?',

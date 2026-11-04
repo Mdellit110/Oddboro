@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Where the data lives: your Mac in the middle with the office on its screen,
+  // Where the data lives: your computer in the middle with the office on its screen,
   // Anthropic and the tools you connect at the edges on dashed lines you open,
   // and New Altitude off the map with nothing flowing to it.
   //
@@ -15,9 +15,9 @@
 
   const facts = [
     {
-      title: 'Only your Mac can reach it.',
-      text: 'The office listens at 127.0.0.1, a local address nothing outside your Mac can reach. Turn on Open at login and it starts with your Mac.',
-      shows: 'Highlights your Mac in the diagram.'
+      title: 'Only your computer can reach it.',
+      text: 'The office listens at 127.0.0.1, a local address nothing outside your computer can reach.',
+      shows: 'Highlights your computer in the diagram.'
     },
     {
       title: 'Nothing comes to us.',
@@ -99,9 +99,9 @@
 <svelte:document onvisibilitychange={() => (hidden = document.hidden)} />
 
 <SectionHeader
-  eyebrow="On your Mac"
-  title="Your office lives on your Mac."
-  lede="The office is a program on your Mac with its own database. There is no Oddboro server. Your Odds, your goals, your decisions and the people in your life stay on the machine in front of you."
+  eyebrow="On your computer"
+  title="Your office lives on your computer."
+  lede="The office is a program on your Mac or Linux computer with its own database. There is no Oddboro server. Your Odds, your goals, your decisions and the people in your life stay on the machine in front of you."
 />
 
 <div
@@ -155,7 +155,7 @@
       </div>
       <div class="part below pb-3 sm:pb-0 {level('mac')}">
         <div class="stand mx-auto" aria-hidden="true"></div>
-        <p class="text-ink mt-3 text-center text-sm font-semibold">Your Mac</p>
+        <p class="text-ink mt-3 text-center text-sm font-semibold">Your computer</p>
         <p class="text-muted text-center text-xs">The office and its database, at 127.0.0.1</p>
       </div>
 
