@@ -12,6 +12,7 @@ export {
   zoneShort
 } from './time.ts';
 export * from './tools.ts';
+export * from './capabilities.ts';
 export { searchRegistry, ensureConnector, type Candidate } from './registry.ts';
 export { sql as pg, DATABASE_URL, LOCAL } from './db.ts';
 export * from './home.ts';
