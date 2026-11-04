@@ -387,7 +387,7 @@ moved in, the page keeps the floor it raised (`landing`) rather than reloading o
 
 `https://local.oddboro.com` (a public DNS record points it at 127.0.0.1),
 falling back to `oddboro.localhost` where a network's DNS drops that answer.
-The Mac app (`ODDBORO_APP`) skips all of this: it opens the office in its own
+The desktop app (`ODDBORO_APP`) skips all of this: it opens the office in its own
 window, onboarding shows no address step, and it never touches Caddy.
 
 Caddy takes ports 80 and 443 and hands everything to the office on 4500

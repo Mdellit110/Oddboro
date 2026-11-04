@@ -2,11 +2,13 @@
 
 A virtual office for one person, the owner. AI workers called Odds work on a
 pixel-art floor, and where each one stands tells you what it is doing. The office runs on your
-Mac, and its first Odd is the Office Manager you pick.
+computer, a Mac or Linux, and its first Odd is the Office Manager you pick.
 
 ## Get started
 
-You need a Mac or Linux, [Node](https://nodejs.org) 24 or later, and a Claude
+The quickest way is the app: the Mac app or the Linux AppImage from
+[oddboro.com/releases](https://oddboro.com/releases/). To run it from source
+instead, you need a Mac or Linux, [Node](https://nodejs.org) 24 or later, and a Claude
 plan or an Anthropic API key.
 
 1. Clone the repo:
@@ -34,7 +36,7 @@ Manager, the office you want, and its time zone. Then the office goes up in
 front of you.
 
 The office lives at `https://local.oddboro.com`. Setup offers to put it there
-through [Caddy](https://caddyserver.com), and downloads Caddy if your Mac has
+through [Caddy](https://caddyserver.com), and downloads Caddy if your computer has
 none. Without it, the office is at `http://oddboro.localhost:4500`.
 
 ## Day to day
