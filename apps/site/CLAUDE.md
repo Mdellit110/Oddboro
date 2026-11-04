@@ -260,10 +260,11 @@ still under reduced motion (the 2026-11-03 site ruling). A new animation goes
 in `release-art.ts`, so it gets both themes with no extra work.
 
 The newest release's art is also `/releases/`'s link preview:
-`<name>-share.png`, one frame at 1200 by 630 on ink, from the night set.
-Each animation names its frame as `share` in `release-art.ts`, and `npm run
-art` fails without one. The owner picks the frame: when making a release's
-art, show the owner the frames and ask which one. `releases.ts` describes that
+`<name>-share.png`, one frame at 1200 by 630 on ink, in `static/art/releases/`.
+Each animation names its frame as `share` and its light, night or day, as
+`shareLight` in `release-art.ts`, and `npm run art` fails without a frame. The
+owner picks both: when making a release's art, show the owner the frames in
+both lights and ask which one. `releases.ts` describes that
 frame as `shareAlt`.
 `scripts/gif.ts` writes the GIFs, with no dependency: median cut to 256
 colours, then LZW.
