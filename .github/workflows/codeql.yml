@@ -1,0 +1,86 @@
+# Code scanning, for only the languages a change touches: a site or office
+# change scans the TypeScript, a change to the desktop shell scans the Rust,
+# and a workflow change scans the workflows. A docs-only change scans nothing.
+# Once a week, and when run by hand, it scans all three.
+#
+# This replaces GitHub's default setup, which scans every language on every
+# change. The default setup must stay off (Settings, Code security, CodeQL
+# analysis), or GitHub refuses these results.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      languages: ${{ steps.pick.outputs.languages }}
+    steps:
+      - name: Pick the languages this change touches
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          all='["actions","javascript-typescript","rust"]'
+          case "$EVENT" in
+            pull_request)
+              files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename') ;;
+            push)
+              if [ -z "$BEFORE" ] || [ "$BEFORE" = 0000000000000000000000000000000000000000 ]; then
+                echo "languages=$all" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$GITHUB_SHA" --jq '.files[].filename') ;;
+            *)
+              echo "languages=$all" >> "$GITHUB_OUTPUT"
+              exit 0 ;;
+          esac
+          printf 'Changed:\n%s\n' "$files"
+          languages=$(printf '%s\n' "$files" | jq -R -s -c '
+            split("\n") | map(select(length > 0)) as $f
+            | [ (if any($f[]; test("^\\.github/(workflows|actions)/")) then "actions" else empty end),
+                (if any($f[]; (test("\\.(ts|tsx|js|mjs|cjs|svelte|html)$")
+                               and (test("^apps/desktop/src-tauri/") | not))) then "javascript-typescript" else empty end),
+                (if any($f[]; test("^apps/desktop/src-tauri/")) then "rust" else empty end) ]')
+          echo "Scanning: $languages"
+          echo "languages=$languages" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    needs: changes
+    if: needs.changes.outputs.languages != '[]'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.changes.outputs.languages) }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
