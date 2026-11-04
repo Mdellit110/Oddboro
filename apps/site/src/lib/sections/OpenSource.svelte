@@ -19,7 +19,7 @@
   <div class="lg:col-start-1 lg:row-start-2">
     <SectionHeader
       title="Read every line that runs your office."
-      lede="Oddboro is open source under Apache 2.0. Change what you like, or fork it and take it somewhere new. The code lives on GitHub, and every contribution carries a Developer Certificate of Origin sign-off."
+      lede="Oddboro is open source under Apache 2.0. Change what you like, or fork it and take it somewhere new."
     />
     <div class="mt-8 flex flex-wrap items-center gap-3">
       <a

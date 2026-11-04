@@ -1,6 +1,7 @@
 <script lang="ts">
   // The last word before the footer: the lit office at twice the size behind
   // the headline and the two buttons, faded into the night at both edges.
+  import DownloadButton from '#lib/components/DownloadButton.svelte';
   import GitHubMark from '#lib/components/GitHubMark.svelte';
   import { reveal } from '#lib/motion/index.ts';
   import { SITE } from '#lib/site.ts';
@@ -20,16 +21,13 @@
       Hire Odds.
     </h2>
     <p class="text-muted mt-5 max-w-xl text-lg text-pretty">
-      Hand off the jobs you don't have time for. Oddboro is open source, runs on your Mac, and lets
-      each Odd do only what you allow.
+      Hand off the jobs you don't have time for. Oddboro is open source, runs on a Mac or Linux, and
+      lets each Odd do only what you allow.
     </p>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-      <a
-        href={SITE.download}
+      <DownloadButton
         class="bg-sea text-night rounded-md px-5 py-3 text-base font-semibold transition-opacity hover:opacity-90"
-      >
-        Download for Mac
-      </a>
+      />
       <a
         href={SITE.github}
         rel="noopener"

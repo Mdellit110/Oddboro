@@ -4,6 +4,7 @@
 // generateOffice from a spec.
 //
 //   node scripts/art.ts        writes static/art/*.png (night), static/art/day/*.png,
+//                              static/art/releases/ (release-art.ts),
 //                              src/lib/hero/scene.json and src/lib/vignettes.json
 //
 // The hero stacks the output: the lot, then the building's floors, walls and
@@ -24,6 +25,7 @@ import {
   type SpriteDef
 } from '@oddboro/sprites/px';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
+import { writeReleaseArt, type DeskLayers } from './release-art.ts';
 import {
   loadLibrary,
   lookFrame,
@@ -534,6 +536,7 @@ function renderSet(hour: number, dir: string): Image {
   write('bus-wheels.png', busWheels, dir);
 
   const vLit = light(paint(vWorld.draws, true, VW, VH), vWorld, vWorld.draws);
+  let desk: DeskLayers | undefined;
   for (const v of vignettes) {
     const [tx, ty] = v.tile;
     const def = sprites.get(v.staff.sprite)!;
@@ -575,6 +578,18 @@ function renderSet(hour: number, dir: string): Image {
       drawImage(staffAnim, shade(frameImage(def, f, v.staff.variant), 1), i * V.w + v.at.x, v.at.y)
     );
     write(`vignette-${v.id}-staff-anim.png`, staffAnim, dir);
+    // The releases page builds art on the desk.
+    if (v.id === 'desk')
+      desk = {
+        room: cropTo(vLit, v.r),
+        front,
+        odd: v.frames.map((f) => {
+          const img = createImage(V.w, V.h);
+          drawImage(img, shade(frameImage(def, f, v.staff.variant), 1), v.at.x, v.at.y);
+          return img;
+        }),
+        shade: (img) => shade(img, 1)
+      };
     // The prop's frames, lit, as a strip of only the pixels each frame
     // changes against the room: frame 0 is empty, so the room shows through.
     if (v.animProp) {
@@ -617,6 +632,36 @@ function renderSet(hour: number, dir: string): Image {
       write(`vignette-${v.id}-dust.png`, dust, dir);
     }
   }
+
+  // The releases page's art, once per theme like the rest: night in
+  // static/art/releases/, day in static/art/day/releases/. The desk comes from
+  // the vignettes; the front door is the hero building's own, shut, with the
+  // sidewalk below it, and Ada (the desk's Odd) to walk into it.
+  if (!desk) throw new Error('the releases art needs the desk vignette');
+  const doorAt: Rect = {
+    x: Math.round(doorRect.x + doorRect.w / 2 - 64),
+    y: doorRect.y + doorRect.h + 48 - 96,
+    w: 128,
+    h: 96
+  };
+  const ada = STAFF[1];
+  writeReleaseArt(
+    {
+      desk,
+      door: {
+        room: cropTo(lit, doorAt),
+        door: { ...doorRect, x: doorRect.x - doorAt.x, y: doorRect.y - doorAt.y },
+        odd: (frame) => {
+          const src = frameImage(sprites.get(ada.sprite)!, frame, ada.variant);
+          const img = createImage(src.width, src.height);
+          drawImage(img, src, 0, 0);
+          return shade(img, 1);
+        }
+      }
+    },
+    join(ART, dir, 'releases'),
+    dir === 'day' ? 'day' : 'night'
+  );
   return lit;
 }
 

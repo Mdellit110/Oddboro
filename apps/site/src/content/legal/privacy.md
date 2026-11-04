@@ -1,8 +1,8 @@
 # Privacy Policy
 
-Effective date: November 2, 2026
+Effective date: November 3, 2026
 
-> **The short version.** Oddboro is open source software that runs on your own Mac. Its database lives on your Mac. New Altitude, Inc. operates no server that receives, stores or processes your data, and the software sends us no telemetry, analytics or crash reports. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today we hold no personal data about you. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
+> **The short version.** Oddboro is open source software that runs on your own computer, a Mac or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that receives, stores or processes your data, and the software sends us no telemetry, analytics or crash reports. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today we hold no personal data about you. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
 
 ## 1. Who we are
 
@@ -18,7 +18,7 @@ You can reach us about privacy at:
 This policy covers two things, and they work differently.
 
 1. **The website** at oddboro.com and its subdomains. We publish it. Section 3 explains what it collects.
-2. **The software**, Oddboro, which you download and run on your own Mac. We publish the code. You run it. Sections 4 through 7 explain what it does with your data and where that data can go.
+2. **The software**, Oddboro, which you download and run on your own computer. We publish the code. You run it. Sections 4 through 7 explain what it does with your data and where that data can go.
 
 It does not cover:
 
@@ -47,21 +47,21 @@ This website is a set of static files. We built it to collect nothing.
 
 **Links.** The site links to GitHub, Anthropic, Ollama and others. Once you follow a link, the site you land on governs.
 
-## 4. The software runs on your Mac
+## 4. The software runs on your computer
 
-Everything Oddboro stores, it stores on the Mac you run it on. We verified this against the code, and because the code is open, you can too.
+Everything Oddboro stores, it stores on the computer you run it on. We verified this against the code, and because the code is open, you can too.
 
 ### Where your data lives
 
-| Data                                                                                                                                       | Where it is                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| The ledger: your name, Odds and their job descriptions, chats, asks, tasks, reports, decisions, goals, access grants, per-run token counts | A Postgres database on your Mac. By default it runs inside the office at `~/.oddboro/db`.       |
-| Each Odd's working files                                                                                                                   | `~/.oddboro/staff/<id>/`                                                                        |
-| Each Odd's Claude Code transcripts: the chats and runs Claude Code keeps so it can pick up where it left off                               | `~/.claude/projects/`, in a folder named after the Odd's folder                                 |
-| Your Anthropic API key (if you use one) and sign-ins for other hosted tools                                                                | The macOS Keychain, under the service name `oddboro`                                            |
-| Family and people data (names, birthdays, schedules)                                                                                       | The `data/` folder in your copy of the repository. Git ignores it, so it never enters a commit. |
-| Office settings (which model, plan or key, time zone)                                                                                      | The `.env` file in your copy of the repository. Git ignores it.                                 |
-| Backups made by `npm run reset`                                                                                                            | `~/.oddboro/backups/<date>/`                                                                    |
+| Data                                                                                                                                       | Where it is                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| The ledger: your name, Odds and their job descriptions, chats, asks, tasks, reports, decisions, goals, access grants, per-run token counts | A Postgres database on your computer. By default it runs inside the office at `~/.oddboro/db`.                                     |
+| Each Odd's working files                                                                                                                   | `~/.oddboro/staff/<id>/`                                                                                                           |
+| Each Odd's Claude Code transcripts: the chats and runs Claude Code keeps so it can pick up where it left off                               | `~/.claude/projects/`, in a folder named after the Odd's folder                                                                    |
+| Your Anthropic API key (if you use one) and sign-ins for other hosted tools                                                                | Your system's secret store, under the service name `oddboro`: the Keychain on a Mac, the desktop keyring (Secret Service) on Linux |
+| Family and people data (names, birthdays, schedules)                                                                                       | The `data/` folder in your copy of the repository. Git ignores it, so it never enters a commit.                                    |
+| Office settings (which model, plan or key, time zone)                                                                                      | The `.env` file in your copy of the repository. Git ignores it.                                                                    |
+| Backups made by `npm run reset`                                                                                                            | `~/.oddboro/backups/<date>/`                                                                                                       |
 
 You may point the office at a different Postgres database by setting `DATABASE_URL` in `.env`. If you choose a database hosted by someone else, your ledger goes to that provider under your agreement with them. That is your choice, and we are not part of it.
 
@@ -69,18 +69,18 @@ You may point the office at a different Postgres database by setting `DATABASE_U
 
 - **No telemetry.** The software contains no analytics, crash reporting, usage reporting or "phone home" code. We checked for it. There is none.
 - **No New Altitude server.** We run no service that your office connects to. There is no account with us, no sync, no cloud copy.
-- **No remote access.** The office listens on `127.0.0.1` only, so nothing outside your Mac can reach it. Its built-in database does the same. If you choose the `https://local.oddboro.com` address during setup, the Caddy proxy that serves it listens on ports 80 and 443 and answers only for that name, which resolves to `127.0.0.1`.
+- **No remote access.** The office listens on `127.0.0.1` only, so nothing outside your computer can reach it. Its built-in database does the same. If you choose the `https://local.oddboro.com` address during setup, the Caddy proxy that serves it listens on ports 80 and 443 and answers only for that name, which resolves to `127.0.0.1`.
 - **No sale or sharing.** We never receive your data, so we cannot sell it, share it, rent it or use it to train anything.
 
 ### Local search embeddings
 
-If you install [Ollama](https://ollama.com) and the `nomic-embed-text` model, the office turns ledger text into vectors so Odds can search decisions by meaning. That request goes to Ollama at `127.0.0.1:11434` on your Mac and nowhere else. Without Ollama, search works by words only and nothing changes about where data lives.
+If you install [Ollama](https://ollama.com) and the `nomic-embed-text` model, the office turns ledger text into vectors so Odds can search decisions by meaning. That request goes to Ollama at `127.0.0.1:11434` on your computer and nowhere else. Without Ollama, search works by words only and nothing changes about where data lives.
 
-### macOS features the software uses
+### System features the software uses
 
-- **Notifications.** An Odd can ping you with a macOS notification. The software asks macOS to show it. Nothing leaves the Mac.
-- **Keychain.** Secrets go in your Keychain, never in a file or the database.
-- **Login item.** Setup registers the office with `launchd` so it starts when you log in. `npm run service:uninstall -w apps/office` removes it.
+- **Notifications.** An Odd can ping you with a system notification. The software asks macOS, or your Linux desktop's notification service, to show it. Nothing leaves your computer.
+- **Secret store.** Secrets go in the Keychain on a Mac or the desktop keyring on Linux, never in a file or the database.
+- **Login item.** Setup registers the office so it starts when you log in: with `launchd` on a Mac, as a systemd user service on Linux. `npm run service:uninstall -w apps/office` removes it. In the app, Open at login does the same with a login item on a Mac or an autostart entry on Linux, and turning it off removes it.
 
 ### Fonts in the office interface
 
@@ -92,7 +92,7 @@ Oddboro is useful because it connects your Odds to the tools you already use. Ev
 
 ### Anthropic (Claude)
 
-Your Odds think by running Claude Code, Anthropic's command line tool, on your Mac. Each chat message and each scheduled job becomes a Claude Code run under either your Claude plan sign-in or an Anthropic API key you give the office. The office stores an API key in your Keychain.
+Your Odds think by running Claude Code, Anthropic's command line tool, on your computer. Each chat message and each scheduled job becomes a Claude Code run under either your Claude plan sign-in or an Anthropic API key you give the office. The office stores an API key in your system's secret store.
 
 What goes to Anthropic in a run:
 
@@ -109,7 +109,7 @@ Local only. See section 4.
 
 ### GitHub
 
-You clone the software from GitHub. If you choose the `https://local.oddboro.com` address during setup and your Mac has no [Caddy](https://caddyserver.com), the office downloads the official Caddy release from GitHub (`api.github.com` and GitHub's release files) and checks it against the published checksum. GitHub sees those download requests.
+You clone the software from GitHub. If you choose the `https://local.oddboro.com` address during setup and your computer has no [Caddy](https://caddyserver.com), the office downloads the official Caddy release from GitHub (`api.github.com` and GitHub's release files) and checks it against the published checksum. GitHub sees those download requests.
 
 ### npm and PyPI
 
@@ -117,11 +117,11 @@ Setup installs the software's dependencies from the npm registry. When an Odd as
 
 ### The MCP Registry
 
-When an Odd looks for a tool it does not have, the office searches its own catalog first, then the public MCP Registry at `registry.modelcontextprotocol.io`. Only the search words leave your Mac.
+When an Odd looks for a tool it does not have, the office searches its own catalog first, then the public MCP Registry at `registry.modelcontextprotocol.io`. Only the search words leave your computer.
 
 ### Other tools you connect
 
-An Odd may ask for a hosted tool (a service reached over the network). You approve or deny every connection, and you sign in to the service yourself. The office keeps the sign-in tokens in your Keychain and refreshes them before each run. Data the Odd reads from or writes to that service goes to that service under its own terms. Each Odd gets only the access you give it: a tool connects read only, or with write while the Odd holds the Act level. A write-level grant to one Odd for one tool is your standing permission for that Odd to use that tool without asking each time. You can lower the Odd's level, which pauses the grant, or revoke the grant from the Odd's Access tab at any time.
+An Odd may ask for a hosted tool (a service reached over the network). You approve or deny every connection, and you sign in to the service yourself. The office keeps the sign-in tokens in your system's secret store and refreshes them before each run. Data the Odd reads from or writes to that service goes to that service under its own terms. Each Odd gets only the access you give it: a tool connects read only, or with write while the Odd holds the Act level. A write-level grant to one Odd for one tool is your standing permission for that Odd to use that tool without asking each time. You can lower the Odd's level, which pauses the grant, or revoke the grant from the Odd's Access tab at any time.
 
 ## 6. Data retention and deletion
 
@@ -129,7 +129,7 @@ An Odd may ask for a hosted tool (a service reached over the network). You appro
 
 New Altitude keeps no personal data about users of the software, because none reaches us. We keep no account records, because there are no accounts. The only data that can exist about your visit to this site is the hosting provider's server log described in section 3.
 
-### What is on your Mac, and how to delete it
+### What is on your computer, and how to delete it
 
 Everything in the table in section 4 stays until you remove it. You control retention entirely.
 
@@ -145,7 +145,7 @@ To delete everything the software stores:
 2. Delete the `~/.oddboro` folder. This removes the database, Odd folders, working copies and backups.
 3. Delete the folders in `~/.claude/projects/` whose names contain `oddboro-staff`. These are the Odds' Claude Code transcripts.
 4. Delete the `data/` folder and the `.env` file in your copy of the repository, or delete the whole repository folder.
-5. Open Keychain Access, search for `oddboro`, and delete the items you find. These are your Anthropic API key (if you gave one) and sign-ins for hosted tools.
+5. On a Mac, open Keychain Access, search for `oddboro`, and delete the items you find. On Linux, run `secret-tool clear service oddboro`. These are your Anthropic API key (if you gave one) and sign-ins for hosted tools.
 6. If you named your own `DATABASE_URL`, delete that database yourself. The reset command leaves it alone.
 
 Anything an Odd sent to Anthropic or another service during a run is held by that service under its own retention rules. Delete it there.
@@ -155,11 +155,11 @@ Anything an Odd sent to Anthropic or another service during a run is held by tha
 We designed the software so that the easiest path is also the safe one. These are the measures in the code today:
 
 - The office and its database listen on `127.0.0.1` only. Nothing on your network can connect to them.
-- Secrets (your API key, hosted tool sign-ins) live in the macOS Keychain, never in a file or the database.
+- Secrets (your API key, hosted tool sign-ins) live in the system's secret store (the Keychain on a Mac, the desktop keyring on Linux), never in a file or the database.
 - Each Odd runs through Claude Code's permission system with a narrow tool list: it reads only its own folder, the `data/` folder and its own Claude Code transcripts, writes only inside its own folder, and uses the office's own tool server and the connections you granted. Everything else is denied, including other Odds' folders, your sign-ins and folders like `~/.ssh`.
 - The software is open source. Anyone can read it, audit it and report a problem.
 
-No software is perfectly secure. Your Mac's own security (its login, disk encryption, updates and the people who can sit at it) is the outer wall around everything above, and it is yours. If you find a security problem in Oddboro, email privacy@oddboro.com.
+No software is perfectly secure. Your computer's own security (its login, disk encryption, updates and the people who can sit at it) is the outer wall around everything above, and it is yours. If you find a security problem in Oddboro, email privacy@oddboro.com.
 
 ## 8. Children
 
@@ -167,7 +167,7 @@ Oddboro and this website are not directed to children. We do not knowingly colle
 
 ## 9. International users
 
-New Altitude is a company in the United States. This website is static files served by a hosting provider, which may serve them from locations around the world. The software runs on your Mac in whatever country you are in, and we move nothing from it. If you connect the software to Anthropic or another service, that service's own policy explains where it processes data and on what legal basis.
+New Altitude is a company in the United States. This website is static files served by a hosting provider, which may serve them from locations around the world. The software runs on your computer in whatever country you are in, and we move nothing from it. If you connect the software to Anthropic or another service, that service's own policy explains where it processes data and on what legal basis.
 
 If you are in the European Economic Area, the United Kingdom or Switzerland: when you run the software, you decide what data goes in and where it goes, so you are the controller of that data (or you use it for purely personal or household purposes, which the GDPR does not cover). New Altitude is neither a controller nor a processor of it. For the website, the only processing is the hosting provider's server log, which rests on legitimate interest in keeping the site secure and running (GDPR Article 6(1)(f)).
 
@@ -181,7 +181,7 @@ We respect all of these. Honestly stated, here is how they apply:
 - **We do not sell personal information, we do not share it for cross-context behavioral advertising, and we do not use it for targeted advertising or profiling.** We have not done so in the preceding twelve months. There is no opt-out to exercise because there is nothing to opt out of.
 - **We do not collect sensitive personal information** as those laws define it.
 - **We do not discriminate** against anyone for exercising a privacy right.
-- **Data on your Mac** is under your control, and section 6 explains how to delete it.
+- **Data on your computer** is under your control, and section 6 explains how to delete it.
 - **Data at Anthropic or another service** is held by that service. Exercise your rights with them directly.
 
 To make a request anyway, email privacy@oddboro.com. We will answer within the time the applicable law allows (45 days under the CCPA, one month under the GDPR), and we will not ask you to verify more than we need to answer, which for a company holding no data is usually nothing. An authorized agent may make a request on your behalf with written permission from you.

@@ -10,15 +10,15 @@
   const points = [
     {
       title: 'One level per Odd.',
-      text: "Every Odd holds one level: read, draft or act. A new Odd starts at read with no outside tools. Only you raise it, from the Odd's Access tab, and the ledger records each move."
+      text: 'Every Odd holds one level: read, draft or act. A new Odd starts at read with no outside tools. Only you raise it.'
     },
     {
       title: 'An Odd asks. You connect.',
-      text: 'An Odd finds a tool in the office catalog or the public MCP Registry and asks you for it. Your yes puts numbered steps on your desk, and you sign in yourself.'
+      text: 'An Odd finds the tool it needs and asks you for it. You sign in yourself.'
     },
     {
       title: 'Read only, or read and write.',
-      text: 'You connect each tool read only, or with write while the Odd holds act. A write grant lets that one Odd use that one tool without asking each time. Lower the level and the grant waits. Revoke it and it is gone.'
+      text: 'You connect each tool read only, or with write while the Odd holds act. With write, that one Odd uses that one tool without asking. Lower the level and the grant waits. Revoke it and it is gone.'
     },
     {
       title: 'Drafts still come to you.',

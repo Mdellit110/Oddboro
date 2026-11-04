@@ -18,8 +18,13 @@ and `preview`, fixed.
   title, the hero headline, the first section's title and the closing band.
   The supporting lines are "Too much on your plate? Hire Odds." and "Hire
   Odds for everything you want off your plate."
+- Say what an Odd does for the visitor, not how the app works. Leave out
+  what they find by using it: updates, which tab or button does what, what
+  the first launch asks. Requirements, privacy and safety limits stay.
+- Release notes say what changed for someone using Oddboro, answer first, in
+  short active sentences. Leave out how we built it and what never shipped.
 - The legal pages and the FAQ quote the product's own paths (`~/.oddboro/`,
-  the `oddboro` Keychain service, `local.oddboro.com`). Keep them in step
+  the `oddboro` secret store service, `local.oddboro.com`). Keep them in step
   with the app.
 
 ## Least access, never a yes for everything
@@ -35,9 +40,9 @@ access its job needs, and every claim rests on the office's real rules:
 | An Odd asks, the owner approves and connects it                       | `grantAccess` and the 2026-10-30 access ruling                            |
 | A tool connects read only, or with write only while the Odd is act    | `grantAccess` refuses a grant above the level; `access()` in `staff.ts`   |
 | A lowered level makes a grant above it wait                           | `access()` skips it; `setPermission`'s comment                            |
-| A write grant uses that one tool without asking; revoke on Access tab | `revoke` in `office.ts`; the Access tab in `apps/office`                  |
+| A write grant uses that one tool without asking; the owner revokes it | `revoke` in `office.ts`; the Access tab in `apps/office`                  |
 | An Odd pokes the owner in chat at a time it sets                      | `poke_owner` in `packages/ledger/src/mcp.ts`                              |
-| Every Odd reads the people list, which stays on the Mac               | `readable` in `staff.ts`; hard rule 9                                     |
+| Every Odd reads the people list, which stays on the owner's computer  | `readable` in `staff.ts`; hard rule 9                                     |
 
 An Odd has no web search of its own: Claude Code runs with Read, Glob, Grep,
 Write and Edit only. Copy that searches the web says it uses a search tool the
@@ -203,18 +208,18 @@ line draws down with the scroll, and an answer or a reply pops in once.
 `src/lib/sections/`, then ends with the call-to-action band. Each section has
 its own composition; none is a row of identical cards.
 
-| Section        | Component    | The idea                                                                     |
-| -------------- | ------------ | ---------------------------------------------------------------------------- |
-| `hire`         | `Hire`       | "Hire an Odd for ..." as a list you pick from, and the pick as a job card    |
-| `how-it-works` | `HowItWorks` | Six floor states as vignettes cut from a real office, Odd in                 |
-| `managers`     | `Managers`   | Character cards with portraits, a walk on hover, pick one; describe your own |
-| `access`       | `Access`     | Least access: an Odd's Access tab as a working mock, level and tool grants   |
-| `goals`        | `Goals`      | A sample goal beside its three-step plan, the line drawing in on scroll      |
-| `on-your-mac`  | `OnYourMac`  | A map of where the data lives: the Mac in the middle, edges on dashed lines  |
-| `open-source`  | `OpenSource` | The license as a terminal block, the GitHub link, the music note             |
-| `get-started`  | `GetStarted` | Three commands in a terminal with copy buttons, requirements, what next      |
-| `faq`          | `Faq`        | Native `<details>` disclosures, answers fading in once                       |
-| (band)         | `Cta`        | The lit office at twice the size behind the headline and the buttons         |
+| Section        | Component    | The idea                                                                         |
+| -------------- | ------------ | -------------------------------------------------------------------------------- |
+| `hire`         | `Hire`       | "Hire an Odd for ..." as a list you pick from, and the pick as a job card        |
+| `how-it-works` | `HowItWorks` | Six floor states as vignettes cut from a real office, Odd in                     |
+| `managers`     | `Managers`   | Character cards with portraits, a walk on hover, pick one; describe your own     |
+| `access`       | `Access`     | Least access: an Odd's Access tab as a working mock, level and tool grants       |
+| `goals`        | `Goals`      | A sample goal beside its three-step plan, the line drawing in on scroll          |
+| `on-your-mac`  | `OnYourMac`  | A map of where the data lives: the computer in the middle, edges on dashed lines |
+| `open-source`  | `OpenSource` | The license as a terminal block, the GitHub link, the music note                 |
+| `get-started`  | `GetStarted` | The download for this computer, its requirements and steps, source folded under  |
+| `faq`          | `Faq`        | Native `<details>` disclosures, answers fading in once                           |
+| (band)         | `Cta`        | The lit office at twice the size behind the headline and the buttons             |
 
 The job card in `Hire` names, for each job, what the Odd does with the tools
 the office really gives it, the least level that takes, and the owner's part.
@@ -224,22 +229,59 @@ Revoke, and what the Odd can do now. The job picker, the Access mock and the
 copy buttons keep their state on the page. Nothing is sent anywhere, and the
 clipboard write is the only browser API they touch.
 
+## Downloads and releases
+
+Oddboro ships for the Mac (`Oddboro.dmg`) and for Linux on x86_64 and arm64
+(`Oddboro-x86_64.AppImage`, `Oddboro-aarch64.AppImage`). Every release carries
+those names, so `releases/latest/download/<name>` is the newest one.
+`src/lib/downloads.svelte.ts` holds the builds with their requirements and
+install steps. The page renders the Mac build, so it is whole with no script;
+in the browser `detectBuild` switches every `DownloadButton` and Get started to
+the Linux build on Linux, reading the user agent and, in Chromium, its
+architecture hint (Chromium says x86_64 on every Linux machine). The answer
+stays on the page. "All downloads" goes to `/releases/`.
+
+`/releases/` lists every build of the newest release, then every release,
+newest first, from `src/lib/releases.ts`. Add a release there after its draft
+on GitHub is published, with the same version as its tag and the day it was
+published: until then its links answer 404. The order is: merge the app's
+changes, publish the draft, then merge the site's entry and its art (which
+builds no app) and deploy the site by hand. A release's art is a
+looping GIF from `scripts/release-art.ts`, with a still of the last frame.
+`npm run art` renders every one twice, like the rest of the art: night in
+`static/art/releases/`, day in `static/art/day/releases/`. `releases.ts`
+names the art, and the page shows the pair for the visitor's theme, the
+still under reduced motion (the 2026-11-03 site ruling). A new animation goes
+in `release-art.ts`, so it gets both themes with no extra work.
+
+The newest release's art is also `/releases/`'s link preview:
+`<name>-share.png`, one frame at 1200 by 630 on ink, from the night set.
+Each animation names its frame as `share` in `release-art.ts`, and `npm run
+art` fails without one. The owner picks the frame: when making a release's
+art, show the owner the frames and ask which one. `releases.ts` describes that
+frame as `shareAlt`.
+`scripts/gif.ts` writes the GIFs, with no dependency: median cut to 256
+colours, then LZW.
+
 ## Layout
 
 ```
 scripts/art.ts               The art generator. hero-office.json, vignette-office.json and manager-looks.json are its specs.
+scripts/release-art.ts       The releases page's GIFs, on the desk vignette. gif.ts encodes them.
 src/app.css                  The tokens (night, and the day overrides), the --art-* variables, the fonts, the motion classes.
 src/lib/theme.svelte.ts      The theme: the pick, localStorage, data-theme on <html>, following the system on Auto.
 src/lib/site.ts              The site's facts: address, titles, GitHub, the tagline, the section list.
+src/lib/downloads.svelte.ts  The builds, their links, and which one this visitor's computer wants.
+src/lib/releases.ts          Every published release, for /releases/.
 src/lib/managers.ts          The four managers as the cards show them.
 src/lib/vignettes.json       Where each vignette's Odd stands, written by art.ts.
 src/lib/job-icons.ts         The 12 by 12 pixel icon for each job in Hire, compiled to one path each.
-src/lib/components/          Header (with the theme control), Footer, Meta (head tags), SectionHeader, LegalDoc, GitHubMark.
+src/lib/components/          Header (with the theme control), Footer, Meta (head tags), SectionHeader, LegalDoc, GitHubMark, DownloadButton.
 src/lib/sections/            One component per homepage section, and the Cta band.
 src/lib/motion/              The motion helpers above.
 src/lib/hero/                Hero.svelte, HeadlineOdd.svelte, choreo.ts, scene.json.
 src/lib/server/legal.ts      Renders src/content/legal/*.md with markdown-it at prerender.
 src/content/legal/           privacy.md and terms.md. The legal writer owns these.
-src/routes/                  /, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
+src/routes/                  /, /releases/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
 static/                      favicon.svg (a placeholder O roundel until Oddboro has a mark), robots.txt, art/ (night) and art/day/.
 ```

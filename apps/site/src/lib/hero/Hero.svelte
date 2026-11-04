@@ -32,6 +32,7 @@
   import { reducedMotion, reveal, visible } from '#lib/motion/index.ts';
   import { SITE } from '#lib/site.ts';
   import { theme } from '#lib/theme.svelte.ts';
+  import DownloadButton from '#lib/components/DownloadButton.svelte';
   import GitHubMark from '#lib/components/GitHubMark.svelte';
   import HeadlineOdd from './HeadlineOdd.svelte';
 
@@ -650,17 +651,14 @@
         >
       </h1>
       <p class="text-muted mt-6 text-lg leading-relaxed text-pretty">
-        Oddboro is a pixel office on your Mac where AI workers, called Odds, take jobs off your
+        Oddboro is a pixel office on your computer where AI workers, called Odds, take jobs off your
         hands. Watch them work: where an Odd stands shows what it's doing. Each one gets only the
         access its job needs.
       </p>
       <div class="mt-8 flex flex-wrap items-center gap-3">
-        <a
-          href={SITE.download}
+        <DownloadButton
           class="bg-sea text-night rounded-md px-5 py-3 text-base font-semibold transition-opacity hover:opacity-90"
-        >
-          Download for Mac
-        </a>
+        />
         <a
           href={SITE.github}
           rel="noopener"
@@ -671,7 +669,8 @@
         </a>
       </div>
       <p class="text-faint mt-6 text-sm text-pretty">
-        Open source, Apache 2.0. Runs on your Mac, with your Claude plan or an API key.
+        Open source, Apache 2.0. Runs on a Mac or Linux, with your Claude plan or an API key.
+        <a href="/releases/" class="hover:text-ink underline underline-offset-2">All downloads</a>
       </p>
     </div>
 
