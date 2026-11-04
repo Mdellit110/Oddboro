@@ -42,7 +42,7 @@
 <article class="mx-auto max-w-7xl px-4 pt-14 pb-24 sm:px-6 lg:px-8">
   <header use:reveal class="border-hairline max-w-3xl border-b pb-8">
     <p class="text-sea mb-3 text-sm font-semibold tracking-wide uppercase">Releases</p>
-    <h1 class="font-pixel text-ink text-4xl leading-[1.05] font-semibold sm:text-5xl">
+    <h1 class="font-pixel text-ink text-4xl leading-[1.05] sm:text-5xl">
       Download {SITE.name}
       {latest.version}
     </h1>
@@ -110,10 +110,10 @@
           {/each}
         {/if}
         <div>
-          <p class="text-sea font-pixel text-sm font-semibold">
+          <p class="text-sea font-pixel text-sm">
             {r.version} · <time datetime={r.date}>{day(r.date)}</time>
           </p>
-          <h2 class="font-pixel text-ink mt-2 text-3xl leading-tight font-semibold">{r.title}</h2>
+          <h2 class="font-pixel text-ink mt-2 text-3xl leading-tight">{r.title}</h2>
           <p class="text-muted mt-3 text-[15px] leading-relaxed">{r.summary}</p>
           {#if r.notes.length}
             <ul class="text-muted mt-4 list-disc space-y-1.5 ps-5 text-[15px] leading-relaxed">

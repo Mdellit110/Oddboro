@@ -10,7 +10,7 @@
 <article class="mx-auto max-w-7xl px-4 pt-14 pb-24 sm:px-6 lg:px-8">
   <header class="border-hairline max-w-3xl border-b pb-8">
     <p class="text-sea mb-3 text-sm font-semibold tracking-wide uppercase">Legal</p>
-    <h1 class="font-pixel text-ink text-4xl leading-[1.05] font-semibold sm:text-5xl">
+    <h1 class="font-pixel text-ink text-4xl leading-[1.05] sm:text-5xl">
       {doc.title}
     </h1>
   </header>
@@ -59,7 +59,6 @@
     color: var(--color-ink);
     font-family: var(--font-pixel);
     font-size: 1.75rem;
-    font-weight: 600;
     line-height: 1.15;
     margin-block: 2.5rem 1rem;
     scroll-margin-top: 6rem;

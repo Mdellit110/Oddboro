@@ -84,7 +84,7 @@ If you install [Ollama](https://ollama.com) and the `nomic-embed-text` model, th
 
 ### Fonts in the office interface
 
-The office carries its own fonts (Pixelify Sans and Inter). Opening it makes no request to any font service.
+The office carries its own fonts (Geist Pixel and Inter). Opening it makes no request to any font service.
 
 ## 5. Services the software connects to at your direction
 

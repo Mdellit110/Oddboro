@@ -80,7 +80,7 @@
     {#each build.install as step, i (step)}
       <li class="border-hairline bg-raise flex items-center gap-3 rounded-lg border px-4 py-3">
         <span
-          class="font-pixel text-sea border-hairline flex size-8 shrink-0 items-center justify-center rounded-md border text-sm font-semibold"
+          class="font-pixel text-sea border-hairline flex size-8 shrink-0 items-center justify-center rounded-md border text-sm"
           aria-hidden="true">{i + 1}</span
         >
         <span class="text-ink text-sm">{step}</span>
@@ -104,7 +104,7 @@
       {#each steps as s, i (s.cmd)}
         <li class="flex items-center gap-4 px-4 py-4 sm:px-5">
           <span
-            class="font-pixel text-sea border-hairline flex size-8 shrink-0 items-center justify-center rounded-md border text-sm font-semibold"
+            class="font-pixel text-sea border-hairline flex size-8 shrink-0 items-center justify-center rounded-md border text-sm"
             aria-hidden="true">{i + 1}</span
           >
           <div class="min-w-0 flex-1">

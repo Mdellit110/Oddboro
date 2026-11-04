@@ -1,8 +1,7 @@
 @import 'tailwindcss';
 
 /* The fonts ship with the site. No request leaves for them. */
-@import '@fontsource/pixelify-sans/400.css';
-@import '@fontsource/pixelify-sans/600.css';
+@import '@fontsource/geist-pixel/400.css';
 @import '@fontsource-variable/inter';
 
 /* Site tokens. The same night-sky surfaces as the office (apps/office/src/app.css),
@@ -27,12 +26,17 @@
   --color-coral: #ef7a6b;
   --color-moss: #8fc36b;
 
-  --font-pixel: 'Pixelify Sans', ui-monospace, monospace;
+  --font-pixel: 'Geist Pixel', ui-monospace, monospace;
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 14px;
   --shadow-float: 0 18px 50px -12px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
   --shadow-glow: 0 0 80px -20px rgb(47 179 166 / 0.45);
+}
+
+/* Geist Pixel has one weight. Pixel text inside bold text stays as drawn, never a faked bold. */
+.font-pixel {
+  font-synthesis-weight: none;
 }
 
 /* Day. The same brand on warm paper: the palette's own ink, sea as the accent,

@@ -14,10 +14,7 @@
     use:reveal
     class="relative mx-auto flex max-w-3xl flex-col items-center px-4 py-28 text-center sm:px-6 lg:py-36"
   >
-    <h2
-      id="cta-title"
-      class="font-pixel text-ink text-4xl leading-[1.05] font-semibold text-balance sm:text-5xl"
-    >
+    <h2 id="cta-title" class="font-pixel text-ink text-4xl leading-[1.05] text-balance sm:text-5xl">
       Hire Odds.
     </h2>
     <p class="text-muted mt-5 max-w-xl text-lg text-pretty">

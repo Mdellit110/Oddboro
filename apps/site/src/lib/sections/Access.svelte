@@ -123,7 +123,7 @@
       {#each points as p, i (p.title)}
         <li class="flex gap-4">
           <span
-            class="font-pixel text-sea border-hairline bg-raise flex size-9 shrink-0 items-center justify-center rounded-md border text-base font-semibold"
+            class="font-pixel text-sea border-hairline bg-raise flex size-9 shrink-0 items-center justify-center rounded-md border text-base"
             aria-hidden="true">{i + 1}</span
           >
           <div>
