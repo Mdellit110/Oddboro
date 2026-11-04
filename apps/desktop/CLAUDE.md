@@ -195,7 +195,10 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   `stage/`: the office build, production `node_modules` at the versions
   installed in the repo, and the ledger, sprites and world as plain
   JavaScript (types stripped, `.ts` imports rewritten) in
-  `node_modules/@oddboro/`, with their files beside them. It fetches the Node
+  `node_modules/@oddboro/`, with their files beside them. Packages' test
+  folders (`__screenshots__`, `__tests__`) stay out, and a staged path
+  longer than 180 characters fails the stage: the Windows installer's
+  builder stops at 260, and GitHub's runner puts the stage 60 deep. It fetches the Node
   binary for this machine's Node version, system and chip, and checks it
   against nodejs.org's sums (Windows's comes as a zip, unpacked with
   Windows's own `tar`). `--smoke` starts the stage on port 4590 with a
