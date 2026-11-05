@@ -23,6 +23,7 @@ import { join } from 'node:path';
 import { home } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
 import {
+  gitEnv,
   mcpGrant,
   NOT_SIGNED_IN,
   replace,
@@ -78,8 +79,10 @@ const FEATURES_OFF = [
  * sub-agents (`features.multi_agent` alone leaves spawn_agent
  * and the rest of the collaboration tools in the model's list; `agents.enabled`
  * takes them out, measured with `codex debug prompt-input` on 0.166.0), no
- * bundled skills, a shell that inherits only the core variables
- * and is never a login shell, no history, analytics or update check, the
+ * bundled skills, a shell that inherits only the core variables (so
+ * anything a run's shell needs besides them goes in
+ * `shell_environment_policy.set`, never on the codex process's own
+ * environment) and is never a login shell, no history, analytics or update check, the
  * sign-in kept as a file, and instruction files read from the run's folder
  * only (no project root above it).
  */
@@ -201,7 +204,9 @@ function developerReads(): string[] {
  * `codex sandbox` on 0.166.0), so a Codex Odd cannot commit there either. A
  * repository further in (`<w>/sub/.git`) is not covered: Codex takes a glob
  * only as `deny` (it refuses to start on a `read` or `write` one), and a
- * deny would stop git reading its config. A known gap.
+ * deny would stop git reading its config. Like every tool's git walls, these
+ * shut git's usual places only, not every way code in a project can run
+ * later (`REPO_RUNS` in files.ts).
  */
 function filesystem(r: CodexRun, temp: string): Record<string, string> {
   return {
@@ -318,9 +323,9 @@ export function codexSignIn(): { args: string[]; env: NodeJS.ProcessEnv } {
 }
 
 /**
- * Get a Codex run ready: its home, its temp folder, and the arguments,
- * environment and input to start `codex exec` with. `done` removes the temp
- * folder.
+ * Get a Codex run ready: its home, its temp folder with the empty git
+ * template inside (`gitEnv`), and the arguments, environment and input to
+ * start `codex exec` with. `done` removes the temp folder.
  */
 export function codexLaunch(r: CodexRun): CodexLaunch {
   homeReady();
@@ -328,6 +333,8 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   sweep(TEMPS, '', r.key);
   const temp = join(TEMPS, r.key);
   mkdirSync(temp, { mode: 0o700 });
+  const git = gitEnv(temp);
+  mkdirSync(git.GIT_TEMPLATE_DIR, { mode: 0o700 });
   const set = (key: string, value: Toml) => ['-c', `${key}=${toml(value)}`];
   const model = process.env.OFFICE_CODEX_MODEL;
   const args = [
@@ -339,6 +346,8 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     '--strict-config',
     '--ignore-rules',
     ...Object.entries(SWITCHES).flatMap(([k, v]) => set(k, v)),
+    // Here, not in `env`: the shell inherits only the core variables.
+    ...set('shell_environment_policy.set', git),
     ...set('web_search', r.web ? 'live' : 'disabled'),
     ...set('developer_instructions', r.system),
     ...set('permissions', {

@@ -45,7 +45,7 @@ export type CliRun = {
   part?: string;
   /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
-  /** The folders the owner gave the Odd to change, some of `writes`, empty if none: only there is a repository's hooks, config and submodules never written (`repoRunPaths`). */
+  /** The folders the owner gave the Odd to change, some of `writes`, empty if none: only there are git's usual places never written (`repoRunPaths`). */
   granted: string[];
   /** The owner's Browse the web switch: the tool's own web search and fetch. */
   web: boolean;

@@ -53,17 +53,22 @@ export const INSTRUCTIONS = [
 ];
 
 /**
- * Paths in a git repository that run code the next time the owner's git runs
- * there: hooks, settings that name a program, and a submodule's own hooks and
- * settings, which `git status` in the repository above runs too. A run never
- * writes them in a folder the owner gave it to change, but reads them, since
- * git cannot run without reading `.git/config`. So they are never shut both
- * ways like `INSTRUCTIONS`. All of `.git/modules` is shut to writes, so an Odd
- * cannot update a submodule there either: its objects sit in the same folder.
+ * git's usual places for code that runs the next time git runs in a
+ * repository: its hooks, its config file, which can name a program, and the
+ * copies of both a submodule keeps in `.git/modules`, which `git status` in
+ * the repository above runs too. A run never writes them in a folder the
+ * owner gave it to change, but reads them, since git cannot run without
+ * reading `.git/config`. So they are never shut both ways like
+ * `INSTRUCTIONS`. All of `.git/modules` is shut to writes, so an Odd cannot
+ * update a submodule there either: its objects sit in the same folder.
  * Claude Code, Grok and Gemini take them as write refusals. Codex gets none:
  * it keeps each write folder's own `.git` read only by itself, and a
  * repository further in is not covered for Codex, since it takes a glob only
  * as `deny`, which would stop git reading (`filesystem` in codex.ts).
+ * They do not stop every way code in a project can run later: a `.git`
+ * pointer file or `.git/commondir` can name a config elsewhere, and code
+ * sits in project files such as package scripts, a Makefile or tests. The
+ * owner looks at what an Odd changed before running that project's tools.
  */
 export const REPO_RUNS = ['.git/hooks', '.git/config', '.git/modules'];
 
@@ -326,11 +331,13 @@ export function instructionPaths(writes: string[]): string[] {
 }
 
 /**
- * Every git hook and config (`REPO_RUNS`) in the folders the owner gave a run
- * to change (`granted`), as path globs, at the top and in any repository
- * further in. Only those, as the owner ruled: the Odd's own folder and its
- * part of a thread are the office's, not the owner's projects, and an Odd may
- * make and use a repository of its own there.
+ * git's usual places (`REPO_RUNS`: hooks, the config file, submodules'
+ * copies) in the folders the owner gave a run to change (`granted`), as path
+ * globs, at the top and in any repository further in; not every way code
+ * there can run later (`REPO_RUNS` says which). Only those folders, as the
+ * owner ruled: the Odd's own folder and its part of a thread are the
+ * office's, not the owner's projects, and an Odd may make and use a
+ * repository of its own there (Claude Code's `allowGitConfig` in staff.ts).
  */
 export function repoRunPaths(granted: string[]): string[] {
   return REPO_RUNS.flatMap((p) => granted.flatMap((w) => [`${w}/${p}`, `${w}/**/${p}`]));

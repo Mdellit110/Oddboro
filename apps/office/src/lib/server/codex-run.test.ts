@@ -75,7 +75,8 @@ const plainPaths = (fs: Record<string, string>) =>
 /** The `-c` values too long to compare whole, as stand-ins. */
 const hideSets = (args: string[]) =>
   args.map((a, i) =>
-    args[i - 1] === '-c' && /^(developer_instructions|permissions|mcp_servers)=/.test(a)
+    args[i - 1] === '-c' &&
+    /^(developer_instructions|permissions|mcp_servers|shell_environment_policy\.set)=/.test(a)
       ? `${a.slice(0, a.indexOf('='))}=<…>`
       : a
   );
@@ -132,6 +133,7 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
         'tool_suggest',
         'sleep_tool'
       ].map((f) => `features.${f}=false`),
+      'shell_environment_policy.set=<…>',
       // Browse the web is off for a new Odd.
       'web_search="disabled"',
       'developer_instructions=<…>',
@@ -241,6 +243,26 @@ test("a Codex run's environment has the office's Codex home and the run's own te
     TMPDIR: join(folder, 'codex-tmp', run.env.RUN_KEY)
   });
   assert.equal(run.temp, true, 'the temp folder was not there while the run went');
+});
+
+test("a Codex run's shell gets the office's git settings through shell_environment_policy.set, never on codex's own environment, with an empty git template in its temp folder", async () => {
+  const run = await chatOf('cody');
+  const temp = join(folder, 'codex-tmp', run.env.RUN_KEY);
+  assert.deepEqual(run.git, {
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_TEMPLATE_DIR: join(temp, 'git-template'),
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.excludesFile',
+    GIT_CONFIG_VALUE_0: '/dev/null',
+    GIT_CONFIG_KEY_1: 'core.attributesFile',
+    GIT_CONFIG_VALUE_1: '/dev/null'
+  });
+  assert.equal(run.gitTemplate, true, 'the git template was missing or not empty as the run went');
+  // The shell inherits only the core variables, so one set on codex itself never reaches it.
+  assert.deepEqual(
+    Object.keys(run.codexEnv ?? {}).filter((k) => k.startsWith('GIT_')),
+    []
+  );
 });
 
 test("a Codex run's temp folder goes when it ends, and one a run that died with the office left goes at the next run", async () => {

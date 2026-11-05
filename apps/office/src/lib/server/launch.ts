@@ -2,7 +2,8 @@
 // same way as it starts: files replaced in one step, files a run that died
 // with the office left behind cleared away, an environment with nothing of the
 // office's own keys or node options in it, TOML values, and the MCP grants
-// read from access()'s names. What run() in staff.ts takes from a tool's own
+// read from access()'s names. The git environment of every run with a shell,
+// Claude Code's too. What run() in staff.ts takes from a tool's own
 // stream, how a run with a shell stops, and where a run refused for its
 // sign-in points the owner. Server only.
 import { execFileSync } from 'node:child_process';
@@ -94,6 +95,35 @@ export function vendorEnv(prefixes: readonly string[]): NodeJS.ProcessEnv {
   delete env.NODE_OPTIONS;
   for (const k of Object.keys(env)) if (prefixes.some((p) => k.startsWith(p))) delete env[k];
   return env;
+}
+
+/**
+ * The git environment of every run with a shell (Claude Code's launch env,
+ * Codex's `shell_environment_policy.set`), from this one place so the two
+ * cannot drift. The owner's git settings never shape an Odd's git: the
+ * sandbox shuts the home they sit in, and git that cannot read
+ * `~/.gitconfig` exits 128. So no global config, and the two files git
+ * otherwise reads under `~/.config/git` (`ignore`, `attributes`) point at
+ * nothing, which leaves no "unable to access" warning. These are env config,
+ * which outranks a repository's own, so a repository's `core.excludesFile`
+ * is ignored for Odds; its `.gitignore` still works. No `XDG_CONFIG_HOME`:
+ * Claude Code reads its own config from there, and `GIT_CONFIG_GLOBAL`
+ * already keeps git from `$XDG_CONFIG_HOME/git/config`. `GIT_TEMPLATE_DIR` is
+ * an empty folder in the run's own temp folder (`temp`), which the caller
+ * makes before the run and removes with that folder, so `git init` copies no
+ * sample hooks: Claude Code's sandbox refuses every write under a
+ * `.git/hooks`, and git stops when it cannot copy one.
+ */
+export function gitEnv(temp: string): Record<string, string> {
+  return {
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_TEMPLATE_DIR: join(temp, 'git-template'),
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.excludesFile',
+    GIT_CONFIG_VALUE_0: '/dev/null',
+    GIT_CONFIG_KEY_1: 'core.attributesFile',
+    GIT_CONFIG_VALUE_1: '/dev/null'
+  };
 }
 
 /**

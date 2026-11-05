@@ -9,9 +9,9 @@
 // folders the owner gave it (see `readable`), may write only inside the
 // staffer's own folder, its own part of that thread's and the folders the
 // owner gave it to change, except its tools' own instructions (`INSTRUCTIONS`
-// in files.ts), a repository's git hooks, config and submodules in a folder
-// the owner gave it (`REPO_RUNS`) and, reading the owner's edit, that file
-// (`deniedEdits`),
+// in files.ts), git's usual places in a folder the owner gave it (hooks, the
+// config file, submodules' copies: `REPO_RUNS`, which says what they do not
+// stop) and, reading the owner's edit, that file (`deniedEdits`),
 // loads no project settings, skills or plugins, and is denied anything not
 // pre-approved. It always gets the office server (asks,
 // tasks, the ledger), plus whatever access the owner granted: servers at read
@@ -123,7 +123,7 @@ import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, ownToolsLine, streamTools, type Launch } from './cli.ts';
-import { stopGroups } from './launch.ts';
+import { gitEnv, stopGroups } from './launch.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
 
@@ -388,6 +388,8 @@ export function staffEnv(): NodeJS.ProcessEnv {
 
 /** A variable's name that says it may hold a secret. */
 const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE)/i;
+/** The office's own git settings (`gitEnv`), by name; the folder they name does not matter here. */
+const OFFICE_GIT = new Set(Object.keys(gitEnv('')));
 
 /**
  * The variables of a run's environment (`env`) that its sandboxed commands
@@ -395,10 +397,16 @@ const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE)/i
  * it may hold a secret. Claude Code itself and its MCP servers keep them: the
  * office's tool server needs `DATABASE_URL`, and a key sign-in the key.
  * `CLAUDE_CODE_MESSAGING_TOKEN` is named too: Claude Code sets it itself, so
- * it is never in `env`, and a walk saw it in Bash's `env`.
+ * it is never in `env`, and a walk saw it in Bash's `env`. The office's own
+ * git settings pass by exact name (`OFFICE_GIT`): `GIT_CONFIG_KEY_0` and
+ * `_1` say key, and git with one of them hidden or empty stops every command
+ * with exit 128. Never by a `GIT_` prefix, so an owner's own `GIT_..._TOKEN`
+ * stays hidden like every other name that looks like a secret.
  */
 function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
-  const names = Object.keys(env).filter((n) => SECRET_NAME.test(n) || n === 'DATABASE_URL');
+  const names = Object.keys(env).filter(
+    (n) => !OFFICE_GIT.has(n) && (SECRET_NAME.test(n) || n === 'DATABASE_URL')
+  );
   return [...new Set(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_MESSAGING_TOKEN', ...names])];
 }
 
@@ -858,6 +866,11 @@ async function run(
       failIfUnavailable: true,
       allowUnsandboxedCommands: false,
       filesystem: {
+        // Claude Code denies every `**/.git/config` without this (2.1.318),
+        // so `git init` stopped with exit 128 even in the Odd's own folder,
+        // where an Odd may make a repository. The folders the owner gave it
+        // keep theirs unwritable through `denyWrite` (`repoRunPaths`).
+        allowGitConfig: true,
         // Every home folder and every other disk, not only the owner's home.
         denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
         allowRead: [
@@ -917,16 +930,17 @@ async function run(
     ];
   }
   const input = preface + say(message);
-  /** A Claude Code run; with commands, their temp folder, made now and removed when the run ends. */
+  /** A Claude Code run; with commands, their temp folder and the git template in it, made now and removed when the run ends. */
   function claudeLaunch(): Launch {
     const env = staffEnv();
     if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: () => {} };
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
-    // As measured working: no global git settings, since the owner's sit in
-    // the home the sandbox shuts, and none of the office's own node options,
-    // which every node a command starts would take as its own.
+    const git = gitEnv(tmp);
+    mkdirSync(git.GIT_TEMPLATE_DIR, { mode: 0o700 });
+    // The office's git settings (`gitEnv`), and none of the office's own node
+    // options, which every node a command starts would take as its own.
     delete env.NODE_OPTIONS;
-    Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, GIT_CONFIG_GLOBAL: '/dev/null' });
+    Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, ...git });
     return {
       args: claudeArgs(env),
       env,

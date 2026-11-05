@@ -103,7 +103,7 @@ type GeminiRun = {
   reads: string[];
   /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
-  /** The folders the owner gave the Odd to change, some of `writes`, empty if none: only there is a repository's hooks, config and submodules never written. */
+  /** The folders the owner gave the Odd to change, some of `writes`, empty if none: only there are git's usual places (`REPO_RUNS`) never written. */
   granted: string[];
   /** The file the owner edited, inside `dir`, which a run reading that edit may read and not write. */
   edited?: string;
@@ -143,9 +143,9 @@ export function geminiRules(
     );
   return [
     write(REFUSE, 'deny', NOT_PLAIN),
-    // An instruction file or folder in any folder the run writes, and a
-    // repository's hooks, config and submodules (`REPO_RUNS`), though read,
-    // in a folder the owner gave it to change.
+    // An instruction file or folder in any folder the run writes, and git's
+    // usual places (`REPO_RUNS`, which says what they do not stop), though
+    // read, in a folder the owner gave it to change.
     ...r.writes.map((w) => anywhereIn(w, INSTRUCTIONS)),
     ...r.granted.map((w) => anywhereIn(w, REPO_RUNS)),
     ...(r.edited

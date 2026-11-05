@@ -27,6 +27,7 @@ import {
 
 // After the office under test set its home, as the office's own imports are.
 const { deniedEdits } = await import('./files.ts');
+const { gitEnv } = await import('./launch.ts');
 
 await L.pg`insert into staff ${L.pg([
   odd('otto', 'Otto'),
@@ -68,7 +69,12 @@ function listAfter(args: string[], flag: string): string[] {
   return args.slice(from, end);
 }
 type Sandbox = {
-  filesystem: { denyRead: string[]; allowRead: string[]; denyWrite: string[] };
+  filesystem: {
+    allowGitConfig: boolean;
+    denyRead: string[];
+    allowRead: string[];
+    denyWrite: string[];
+  };
   credentials: { envVars: { name: string; mode: string }[] };
   [k: string]: unknown;
 };
@@ -108,7 +114,6 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
   const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
   assert.match(run.tmpdir ?? '', /^\/private\/tmp\/ob-[0-9a-f]{8}$/);
   assert.equal(run.tmpdir, tmp);
-  assert.equal(run.gitConfig, '/dev/null');
   assert.equal(run.nodeOptions, null, "the office's node options reached the run");
   assert.ok(!existsSync(tmp), "the commands' temp folder outlived the run");
   const dir = staffDir('otto');
@@ -125,6 +130,7 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
     failIfUnavailable: true,
     allowUnsandboxedCommands: false,
     filesystem: {
+      allowGitConfig: true,
       denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
       // No data folder: there is none to read.
       allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
@@ -133,6 +139,62 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
     network: { allowedDomains: [] }
   });
 });
+
+test(
+  "a Claude run with Run commands gets the office's git settings from gitEnv, an empty git template in its temp folder, and its sandbox lets git write a config",
+  onMac,
+  async () => {
+    await setOwn('otto', { commands: true });
+    const run = await chatOf('otto');
+    const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
+    const expected = {
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_TEMPLATE_DIR: join(tmp, 'git-template'),
+      GIT_CONFIG_COUNT: '2',
+      GIT_CONFIG_KEY_0: 'core.excludesFile',
+      GIT_CONFIG_VALUE_0: '/dev/null',
+      GIT_CONFIG_KEY_1: 'core.attributesFile',
+      GIT_CONFIG_VALUE_1: '/dev/null'
+    };
+    assert.deepEqual(gitEnv(tmp), expected);
+    assert.deepEqual(run.git, gitEnv(tmp));
+    assert.equal(
+      run.gitTemplate,
+      true,
+      'the git template was missing or not empty as the run went'
+    );
+    // Claude Code reads its own config from XDG_CONFIG_HOME.
+    assert.ok(!('XDG_CONFIG_HOME' in gitEnv(tmp)));
+    assert.equal(settingsOf(run).sandbox?.filesystem.allowGitConfig, true);
+  }
+);
+
+test(
+  "with Run commands, Bash keeps every git setting gitEnv gives it, by name: an owner's GIT_..._TOKEN is still hidden",
+  onMac,
+  async () => {
+    const before = process.env.GIT_ASKPASS_TOKEN;
+    process.env.GIT_ASKPASS_TOKEN = 'planted';
+    try {
+      await setOwn('otto', { commands: true });
+      const run = await chatOf('otto');
+      const denied = (settingsOf(run).sandbox?.credentials.envVars ?? []).map((v) => v.name);
+      const git = Object.keys(gitEnv('/t'));
+      assert.ok(
+        git.every((n) => run.git?.[n]),
+        'a git setting did not reach the run'
+      );
+      assert.deepEqual(
+        git.filter((n) => denied.includes(n)),
+        []
+      );
+      assert.ok(denied.includes('GIT_ASKPASS_TOKEN'), JSON.stringify(denied));
+    } finally {
+      if (before === undefined) delete process.env.GIT_ASKPASS_TOKEN;
+      else process.env.GIT_ASKPASS_TOKEN = before;
+    }
+  }
+);
 
 test(
   "with Run commands, Bash sees none of the run's secrets, and Claude Code and the office's tool server keep theirs",

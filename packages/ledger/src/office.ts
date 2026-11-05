@@ -247,8 +247,19 @@ export const FOLDER_REFUSED = {
   home: 'Pick a folder inside your home, not the whole home.',
   secrets: 'That folder holds your keys or sign-ins.',
   code: "That folder holds Oddboro's own code.",
-  nested: 'That folder is inside one this Odd already has, or holds one.'
+  nested: 'That folder is inside one this Odd already has, or holds one.',
+  glob: (char: string) => `That folder's path has a character an Odd's tool can't take: ${char}`
 } as const;
+
+/**
+ * The characters Codex 0.166 refuses in a folder's path, since it reads them
+ * as a glob and takes a glob only to deny; it refuses both ways of escaping
+ * one too (`\\[` and `[[]`), so no Odd's run could start with such a folder.
+ * Refused for every Odd, since an Odd can move to Codex later. `{` and `}`
+ * stay allowed: Codex 0.166 takes them (measured twice), and Claude Code's
+ * sandbox reads `{` as a plain character.
+ */
+const GLOB = /[*?[\]]/;
 
 /**
  * A path by its real one when it exists, so it compares with a real path. The
@@ -276,7 +287,10 @@ export function shownFolder(path: string): string {
  * path when it may. A folder inside the home that holds or sits in none of
  * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
  * code: a deny inside a folder a run reads is not held by every tool, so a
- * folder that holds one is refused at the door.
+ * folder that holds one is refused at the door. A real path with a character
+ * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
+ * what a run is given. Only the folder route calls this, so a folder given
+ * before that rule is not checked again.
  */
 export function checkFolder(path: string): { real: string } | { refused: string } {
   const typed = path.trim();
@@ -290,6 +304,8 @@ export function checkFolder(path: string): { real: string } | { refused: string 
   if ([...SECRET_STORES.map((s) => real(join(h, s))), real(home())].some(either))
     return { refused: FOLDER_REFUSED.secrets };
   if (either(real(CODE))) return { refused: FOLDER_REFUSED.code };
+  const glob = GLOB.exec(p)?.[0];
+  if (glob) return { refused: FOLDER_REFUSED.glob(glob) };
   return { real: p };
 }
 

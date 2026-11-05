@@ -35,7 +35,8 @@ const port = await new Promise<number>((done) => {
 });
 // The stand-in for Claude Code: it reads the message, then reports one tool
 // call and a result that carries what the office gave the run, the variables
-// Run commands sets among it. A message
+// Run commands sets among it, and whether the git template folder those name
+// was there and empty as it ran (`done()` removes it after). A message
 // that says "Hold until <file> exists." keeps the run going until it does.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
@@ -63,6 +64,13 @@ process.stdin.on('end', () => {
   if (!hold) return reply();
   const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), reply()), 20);
 });
+function emptyFolder(p) {
+  try {
+    return fs.readdirSync(p).length === 0;
+  } catch {
+    return false;
+  }
+}
 function reply() {
   const args = process.argv.slice(2);
   const after = (flag) => args[args.indexOf(flag) + 1];
@@ -74,7 +82,8 @@ function reply() {
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
     autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
     tmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
-    gitConfig: process.env.GIT_CONFIG_GLOBAL ?? null,
+    git: Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('GIT_'))),
+    gitTemplate: emptyFolder(process.env.GIT_TEMPLATE_DIR),
     nodeOptions: process.env.NODE_OPTIONS ?? null,
     apiKey: process.env.ANTHROPIC_API_KEY ?? null
   };
@@ -173,8 +182,10 @@ line({ type: 'result', subtype: 'success', result: JSON.stringify(gave) + '\\nOu
 );
 chmodSync(join(bin, 'grok'), 0o755);
 // The stand-in for Codex, which reads the message on stdin: it sends back its
-// arguments, the Codex and key variables it got, and what its `-c` values set
-// (the MCP servers, the permission profile, the instructions), in the item
+// arguments, the Codex, git and key variables it got, what its `-c` values set
+// (the MCP servers, the permission profile, the instructions, its shell's git
+// environment), and whether the git template folder that names was there and
+// empty as it ran (`done()` removes it after), in the item
 // shapes `codex exec --json` prints (exec_events.rs): a shell command, an MCP
 // call, a file change, two messages and the turn's tokens. A message that
 // says "Replay <file>" gets that recorded stream instead, and one that says
@@ -211,6 +222,13 @@ if (args[0] === 'logout') {
   process.exit(0);
 }
 fs.appendFileSync(process.env.CODEX_HOME + '/launches.jsonl', JSON.stringify(args) + '\\n');
+function emptyFolder(p) {
+  try {
+    return fs.readdirSync(p).length === 0;
+  } catch {
+    return false;
+  }
+}
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
@@ -232,8 +250,10 @@ process.stdin.on('end', () => {
   const gave = {
     args,
     codexEnv: Object.fromEntries(
-      Object.entries(process.env).filter(([k]) => /^(CODEX_|OPENAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS)/.test(k))
+      Object.entries(process.env).filter(([k]) => /^(CODEX_|OPENAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
     ),
+    git: set['shell_environment_policy.set'],
+    gitTemplate: emptyFolder(set['shell_environment_policy.set']?.GIT_TEMPLATE_DIR),
     env: set.mcp_servers.office.env,
     servers: set.mcp_servers,
     permissions: set.permissions[set.default_permissions],
@@ -410,6 +430,9 @@ Object.assign(process.env, {
   DEVELOPER_DIR: elsewhere
 });
 delete process.env.OFFICE_AUTH;
+// No git variable of whoever runs the tests (a git hook sets several), so the
+// git variables a run reports are the office's own.
+for (const k of Object.keys(process.env)) if (k.startsWith('GIT_')) delete process.env[k];
 /** The office's Gemini key under test: the shape the page takes, and nothing Google knows. */
 export const OFFICE_GEMINI_KEY = 'the-office-key-for-tests-01';
 /**
@@ -483,10 +506,13 @@ export type Gave = {
   message: string;
   claudeMds: string | null;
   autoMemory: string | null;
-  /** The Claude Code run's CLAUDE_CODE_TMPDIR, GIT_CONFIG_GLOBAL and NODE_OPTIONS, which Run commands sets. */
+  /** The Claude Code run's CLAUDE_CODE_TMPDIR and NODE_OPTIONS, which Run commands sets. */
   tmpdir?: string | null;
-  gitConfig?: string | null;
   nodeOptions?: string | null;
+  /** The git environment a run's shell gets: Claude Code's GIT_ variables, or Codex's `-c shell_environment_policy.set`. */
+  git?: Record<string, string>;
+  /** Whether that environment's GIT_TEMPLATE_DIR was there and empty while the run went. */
+  gitTemplate?: boolean;
   /** The Claude Code run's ANTHROPIC_API_KEY, which only a key sign-in sets. */
   apiKey?: string | null;
   grokEnv?: Record<string, string>;
