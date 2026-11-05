@@ -63,11 +63,16 @@ test('a file outside the folder never opens, by path, through a link, or by bare
 
 test('a run reading the owner edit may not write that file, and no run writes its instructions', () => {
   const home = '/h/ziva';
-  const reading = deniedEdits(home, [home], 'notes/plan.md');
+  const reading = deniedEdits({
+    dir: home,
+    writes: [home],
+    granted: [],
+    edited: 'notes/plan.md'
+  });
   assert.ok(reading.includes('/h/ziva/notes/plan.md'));
   assert.ok(reading.includes('/h/ziva/CLAUDE.md'));
   assert.ok(reading.includes('/h/ziva/**/.claude'));
-  const other = deniedEdits(home, [home]);
+  const other = deniedEdits({ dir: home, writes: [home], granted: [] });
   assert.ok(!other.some((path) => path.includes('plan.md')));
   assert.ok(other.includes('/h/ziva/CLAUDE.md'));
 });

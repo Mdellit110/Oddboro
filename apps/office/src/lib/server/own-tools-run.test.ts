@@ -128,7 +128,7 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
       denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
       // No data folder: there is none to read.
       allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
-      denyWrite: deniedEdits(dir, [dir])
+      denyWrite: deniedEdits({ dir, writes: [dir], granted: [] })
     },
     network: { allowedDomains: [] }
   });
@@ -376,7 +376,7 @@ test("with Run commands, Bash can write only the run's write folders", onMac, as
     const denyWrite = settingsOf(onThread).sandbox?.filesystem.denyWrite ?? [];
     assert.deepEqual(denyWrite, [
       ownerData,
-      ...deniedEdits(dir, [dir, part, sub], undefined, [sub])
+      ...deniedEdits({ dir, writes: [dir, part, sub], granted: [sub] })
     ]);
     for (const open of [thread, p, '/private/tmp'])
       assert.ok(!denyWrite.includes(open), `${open} is denied a write, which beats every allow`);

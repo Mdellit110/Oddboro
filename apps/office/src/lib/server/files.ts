@@ -340,15 +340,23 @@ export function repoRunPaths(granted: string[]): string[] {
  * The paths a run may not write: its tools' own instructions in every folder
  * it writes (`writes`), for a run reading the owner's edit to a file in its
  * folder (`dir`) that file, and a repository's hooks, config and submodules
- * in the folders the owner gave it to change (`granted`, some of `writes`;
- * none when it has none). Each tool turns them into its own rules.
+ * in the folders the owner gave it to change (`granted`, some of `writes`).
+ * `granted` is required, empty when the owner gave none, so a caller that
+ * leaves it out fails the type check rather than protecting nothing; the
+ * argument is named because `writes` and `granted` swapped would type-check.
+ * Each tool turns the paths into its own rules.
  */
-export function deniedEdits(
-  dir: string,
-  writes: string[],
-  edited?: string,
-  granted: string[] = []
-): string[] {
+export function deniedEdits({
+  dir,
+  writes,
+  granted,
+  edited
+}: {
+  dir: string;
+  writes: string[];
+  granted: string[];
+  edited?: string;
+}): string[] {
   return [
     ...instructionPaths(writes),
     ...repoRunPaths(granted),

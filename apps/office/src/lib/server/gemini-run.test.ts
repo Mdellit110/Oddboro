@@ -146,6 +146,7 @@ test('a Gemini run starts as a process group of its own, so its MCP servers stop
     dir,
     reads: [],
     writes: [dir],
+    granted: [],
     system: 'You are Gemma.',
     input: 'Hello.',
     servers: {},

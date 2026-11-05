@@ -823,7 +823,12 @@ async function run(
   const part = opts.threadId ? threadPart(opts.threadId, who.id) : undefined;
   if (part) mkdirSync(part, { recursive: true });
   const writes = [dir, ...(part ? [part] : []), ...extraWrites];
-  const denied = deniedEdits(dir, writes, opts.ownerEdit?.path, extraWrites);
+  const denied = deniedEdits({
+    dir,
+    writes,
+    granted: extraWrites,
+    edited: opts.ownerEdit?.path
+  });
   // Bash writes in every folder Claude Code works in (the cwd and each
   // --add-dir), whatever the Edit rules say. So with commands, only the
   // folders the run writes are added, and the sandbox's denyWrite, which beats
