@@ -46,8 +46,9 @@ import {
   capabilities,
   folderLines,
   handsOff,
+  officeHeldIn,
   outsideLines,
-  ownToolsLine
+  ownToolsSaid
 } from './capabilities.ts';
 import { AGENT_NAMES } from './agents.ts';
 import { levelAtMost, LEVELS } from './access-words.ts';
@@ -1361,7 +1362,10 @@ if (has('office_report'))
             remit: caps.remit,
             level: caps.level,
             runsOn: AGENT_NAMES[caps.agent],
-            ownTools: ownToolsLine(caps.agent, caps.own).replaceAll('{owner}', OWNER),
+            // As the Odd's own my_access says it, the office's held network included.
+            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env))
+              .join(' ')
+              .replaceAll('{owner}', OWNER),
             folders: folderLines(caps.own),
             officeTools: caps.office,
             outsideTools: outsideLines(caps, OWNER)

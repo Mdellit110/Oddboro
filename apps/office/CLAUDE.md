@@ -244,7 +244,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    built on the server (`toProfile` in `src/lib/server/profile.ts`): the
    stored switches and folders, and `reach`, what its runs get now (the
    ledger's `ownTools`, less a network this office holds back:
-   `heldNetwork`). The Odds list shows `reach` as chips beside each Odd's
+   `heldReach`). The Odds list shows `reach` as chips beside each Odd's
    role: Commands, Web and its folder count. Run commands shows
    `reach.commands` and how the Odd's tool takes it (`commandsHow`): a switch
    on Claude Code on a Mac, else checked (Codex) or unchecked and locked,
@@ -274,9 +274,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    switches and folders as its tool takes them from `capabilities()`
    (`caps.own`), less a held network, and passes the given folders still on
    the disk; the prompt lists them under "Where things are", and "What you
-   can do" says what the Odd's own tools reach (`ownToolsLine` in the
-   ledger's `capabilities.ts`), the same line `my_access` and `office_report`
-   give.
+   can do" says what the Odd's own tools reach (`ownToolsSaid` in the
+   ledger's `capabilities.ts`, held network included), the same line
+   `my_access` and `office_report` give.
    `src/lib/server/grok.ts` starts a Grok run from the office's own Grok home,
    `~/.oddboro/grok` (`GROK_HOME`), never the owner's `~/.grok`. The owner signs
    in to it from the office's page (`agent-sign-in.ts`, item 18); a run from a
@@ -460,9 +460,12 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    during a run. A Claude Code that refuses that (`NETWORK_REFUSED`)
    fails the run that met it, which tells the owner so
    (`NETWORK_REFUSED_LINE`), and the office records one Ledger line
-   (`holdNetwork`); from then on its Claude Code runs keep commands off the
-   internet, which the line under Browse the web says, as do the prompt and
-   `my_access` (`NETWORK_HELD`) of a run that would have had it. The hold is
+   (`holdNetwork` in the ledger); from then on its Claude Code runs keep
+   commands off the internet, which the line under Browse the web says, as do
+   the prompt and `my_access` of a run that would have had it, `office_report`
+   for each such Odd, and the Ledger line of a switch that would open it
+   (`heldReach`). Every run's tool server is told the office holds it
+   (`OFFICE_NETWORK_HELD`), whatever the run's own tool. The hold is
    in memory, so a restart tries the open network once more. Bash writes in
    every folder Claude Code works in, so `--add-dir` then names only the data
    folder, the folders the run writes and, last, the run's temp folder:
@@ -947,7 +950,7 @@ into the page (scripts, styles, images) are served before the check.
 | `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat                                                                            |
 | `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain                                                                      |
 | `src/lib/server/profile.ts`       | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                               |
-| `src/lib/server/sandbox.ts`       | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the held network |
+| `src/lib/server/sandbox.ts`       | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the refusal line |
 | `src/routes/api/`                 | One folder per thing the page reads or changes                                                                                       |
 | `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to                                                                     |
 | `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow                                                                               |

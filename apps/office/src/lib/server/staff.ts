@@ -102,9 +102,11 @@ import {
   STAFF_SERVER,
   AGENT_NAMES,
   folderLines,
-  NETWORK_HELD_LINE,
+  heldReach,
+  holdNetwork,
+  networkHeld,
   ownTools,
-  ownToolsLine,
+  ownToolsSaid,
   runsOnLine,
   SECRET_STORES,
   type OwnTools,
@@ -129,13 +131,7 @@ import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
 import { shellEnv, stopGroups } from './launch.ts';
-import {
-  claudeSandbox,
-  heldNetwork,
-  holdNetwork,
-  NETWORK_REFUSED,
-  NETWORK_REFUSED_LINE
-} from './sandbox.ts';
+import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
 
@@ -523,15 +519,15 @@ async function taught(who: StaffRow): Promise<string> {
 /**
  * What this run can do: its level, the tool its runs go through, where it
  * writes, its own tools, and each outside tool it holds or was granted.
- * `networkHeld` says this office keeps the commands off the internet they
- * would have reached, as my_access says it.
+ * `officeHeld` says this office holds the network, which its own tools' line
+ * applies as my_access does (`ownToolsSaid`).
  */
 function canDo(
   caps: Capabilities,
   owner: string,
   agent: Agent,
   own: OwnTools,
-  networkHeld: boolean
+  officeHeld: boolean
 ): string {
   const lines = outsideLines(caps, owner);
   const writes = own.granted.some((f) => f.write)
@@ -549,7 +545,7 @@ function canDo(
     '',
     `- ${levelLine(caps.level, owner)}`,
     `- ${runsOnLine(agent)}`,
-    `- ${[writes, ownToolsLine(agent, own), ...(networkHeld ? [NETWORK_HELD_LINE] : []), beyond].join(' ')}`,
+    `- ${[writes, ...ownToolsSaid(agent, caps.own, officeHeld), beyond].join(' ')}`,
     '- If a brief names tools you do not have, do the work with your own tools.',
     '- Outside tools:',
     ...(lines.length ? lines.map((l) => `  - ${l}`) : ['  - None yet.']),
@@ -578,8 +574,8 @@ async function prompt(
     led: ThreadStory[];
     shown?: number[];
     own: OwnTools;
-    /** Whether this office keeps the commands off the internet they would have reached. */
-    networkHeld: boolean;
+    /** Whether this office holds the network (`networkHeld`), read once as the run starts. */
+    officeHeld: boolean;
     /** Whether the run is told the threads it leads, by the tool server's own rule (`handsOff`). */
     leads: boolean;
   }
@@ -615,7 +611,7 @@ async function prompt(
           .map((l) => `  - ${l}\n`)
           .join('')}`
       : '') +
-    canDo(opts.caps, opts.owner, who.agent, own, opts.networkHeld)
+    canDo(opts.caps, opts.owner, who.agent, own, opts.officeHeld)
   );
 }
 
@@ -786,11 +782,10 @@ async function run(
   const reads = opts.threadId ? [opts.threadId] : led.map((s) => s.thread.id);
   // The owner's switches and folders as this run's tool takes them (the
   // ledger's `ownTools`, which `capabilities` worked out once), less a network
-  // this office holds back after Claude Code refused the open one.
-  const own = heldNetwork(who.agent, caps.own);
-  // Told only when the hold took away a network the run would have had, as
-  // my_access says it (`NETWORK_HELD`).
-  const networkHeld = own.held && caps.own.network;
+  // this office holds back after Claude Code refused the open one. Read once,
+  // so the run, its prompt and its tool server agree.
+  const officeHeld = networkHeld();
+  const own = heldReach(who.agent, caps.own, officeHeld);
   const extraReads = own.granted.map((f) => f.path);
   const extraWrites = own.granted.filter((f) => f.write).map((f) => f.path);
   // From the facts officeEnv hands the tool server, so the prompt lists the
@@ -810,7 +805,7 @@ async function run(
       led,
       shown: opts.shown,
       own,
-      networkHeld,
+      officeHeld,
       leads
     })) + (opts.extra ?? '')
   );
@@ -836,7 +831,9 @@ async function run(
       handOffId: opts.handOffId,
       threadId: opts.threadId,
       lessonRun: !!opts.lessonRun,
-      networkHeld
+      // Every run while held, whatever its own tool or switches: its
+      // office_report speaks of other Odds too.
+      networkHeld: officeHeld
     })
   );
   // On a thread, the run writes only its own part of the thread's folder.

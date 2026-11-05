@@ -134,8 +134,46 @@ test("a switch or a move that opens or closes commands' internet says so in its 
   );
   assert.deepEqual(O.NETWORK_NOTE, {
     on: 'Its commands can reach the internet now.',
-    off: 'Its commands are off the internet now.'
+    off: 'Its commands are off the internet now.',
+    held: 'This version of Claude Code refuses to let commands reach the whole internet. Commands keep working, with no network. Restarting the office lifts this.'
   });
+});
+
+test("while the office holds the network, a change that would open a Claude Code Odd's commands to the internet says the hold's words", async () => {
+  const odd = (id: string, agent: Agent, web: boolean) => ({
+    id,
+    name: id,
+    role: 'r',
+    variant: 'v',
+    portrait: 'p',
+    remit: 'r',
+    desk: 'd',
+    agent,
+    commands: true,
+    web
+  });
+  await db.insert(staff).values([odd('Ivy', 'claude', false), odd('Jude', 'codex', true)]);
+  await onPlatform('darwin', async () => {
+    await O.holdNetwork();
+    try {
+      await O.setOwnTool('Ivy', 'web', true);
+      await O.setAgent('Jude', 'claude');
+      await O.setOwnTool('Ivy', 'web', false);
+    } finally {
+      O.resetHeldNetwork();
+    }
+  });
+  const lines = await sql<{ title: string; body: string }>`
+    select title, body from ledger order by id`;
+  assert.deepEqual(
+    lines.map((l) => [l.title, l.body]),
+    [
+      ["Kept Odds' commands off the internet", O.NETWORK_NOTE.held],
+      ['Let Ivy browse the web', O.NETWORK_NOTE.held],
+      ['Moved Jude from Codex to Claude Code', O.NETWORK_NOTE.held],
+      ['Stopped Ivy browsing the web', O.NETWORK_NOTE.off]
+    ]
+  );
 });
 
 test('setOwnTool and setFolder record one line each', async () => {

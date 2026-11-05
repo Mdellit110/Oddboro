@@ -24,7 +24,7 @@ import {
   type Agent,
   type GrantedFolder
 } from './agents.ts';
-import { grantsFor, type ConnectorRow, type GrantRow, type StaffRow } from './office.ts';
+import { grantsFor, heldReach, type ConnectorRow, type GrantRow, type StaffRow } from './office.ts';
 import { hasTool, OFFICE_TOOLS } from './tools.ts';
 
 /**
@@ -116,16 +116,37 @@ export function capped(caps: Capabilities, ceiling: Level): Capabilities {
   };
 }
 
-/** What the Odd reads when this office keeps its commands off the internet (`NETWORK_HELD`). */
+/** What the Odd reads when this office keeps its commands off the internet (`heldReach`). */
 export const NETWORK_HELD_LINE =
   'This version of Claude Code refuses to let your commands reach the internet, so they have none.';
+
+/**
+ * What the Odd's own tools reach, as it is told: `ownToolsLine` for its reach
+ * while the office holds the network or not (`officeHeld`, through
+ * `heldReach`), then `NETWORK_HELD_LINE` only when the hold took away a
+ * network it would have had, so an Odd is never told of commands it lacks.
+ * The prompt, my_access and office_report all say this, so they agree.
+ */
+export function ownToolsSaid(agent: Agent, own: OwnTools, officeHeld: boolean): string[] {
+  const reach = heldReach(agent, own, officeHeld);
+  return [ownToolsLine(agent, reach), ...(reach.held && own.network ? [NETWORK_HELD_LINE] : [])];
+}
+
+/**
+ * Whether the office held the network as it started this run's tool server
+ * (`OFFICE_NETWORK_HELD`). The hold lives in the office's memory, and the
+ * tool server is a process of its own, so the office passes it to every run.
+ */
+export function officeHeldIn(env: Record<string, string | undefined>): boolean {
+  return env.OFFICE_NETWORK_HELD === '1';
+}
 
 /**
  * What my_access says in one run: the Odd's access as that run holds it. Only
  * the run knows three things, so the office passes them in its environment:
  * its ceiling (`CEILING`), set when it is below the Odd's own level, the
- * sign-ins that ran out (`SIGNED_OUT`), and whether a Claude Code that refused
- * the open network keeps its commands off the internet (`NETWORK_HELD`).
+ * sign-ins that ran out (`SIGNED_OUT`), and whether the office holds the
+ * network (`officeHeldIn`).
  */
 export function accessInRun(
   own: Capabilities,
@@ -134,9 +155,6 @@ export function accessInRun(
 ): string {
   const ceiling = parseLevel(env.CEILING);
   const caps = ceiling ? capped(own, ceiling) : own;
-  // Said only when the hold took away a network the run would have had.
-  const held = env.NETWORK_HELD === '1' && caps.own.network;
-  const tools = held ? { ...caps.own, network: false } : caps.own;
   const folders = folderLines(caps.own);
   const signedOut = (env.SIGNED_OUT ?? '').split(',');
   const outside = caps.outside.map((a) =>
@@ -153,8 +171,9 @@ export function accessInRun(
         ]
       : []),
     runsOnLine(caps.agent),
-    ownToolsLine(caps.agent, tools).replaceAll('{owner}', owner),
-    ...(held ? [NETWORK_HELD_LINE] : []),
+    ...ownToolsSaid(caps.agent, caps.own, officeHeldIn(env)).map((l) =>
+      l.replaceAll('{owner}', owner)
+    ),
     ...(folders.length
       ? [`Folders ${owner} gave you:`, ...folders.map((l) => `- ${l}`)]
       : [`${owner} has given you no folders.`]),

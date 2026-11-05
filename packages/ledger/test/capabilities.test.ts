@@ -187,7 +187,7 @@ test('my_access says the tool, what its own tools reach and each folder, and a h
     '- /Users/Shared/q (read and change)',
     'Sam has connected no outside tools for you yet.'
   ]);
-  const held = said({ NETWORK_HELD: '1' });
+  const held = said({ OFFICE_NETWORK_HELD: '1' });
   assert.equal(
     held[2],
     `Your own tools work on files, plus ${shell}, with no network, and web search and fetch.`
@@ -199,5 +199,11 @@ test('my_access says the tool, what its own tools reach and each folder, and a h
   );
   // A hold takes away only a network the run would have had, so nothing is said without one.
   const offline = { ...own, own: { ...own.own, web: false, network: false } };
-  assert.ok(!accessInRun(offline, 'Sam', { NETWORK_HELD: '1' }).includes(NETWORK_HELD_LINE));
+  assert.ok(!accessInRun(offline, 'Sam', { OFFICE_NETWORK_HELD: '1' }).includes(NETWORK_HELD_LINE));
+  // The refusal is Claude Code's, so a held office leaves another tool's Odd as it is.
+  const codex = { ...own, agent: 'codex' as const };
+  assert.equal(
+    accessInRun(codex, 'Sam', { OFFICE_NETWORK_HELD: '1' }),
+    accessInRun(codex, 'Sam', {})
+  );
 });

@@ -11,7 +11,7 @@ import { onPlatform, ownerHome } from './office-under-test.ts';
 
 // After the office under test set its home, as the office's own imports are.
 const { toProfile } = await import('./profile.ts');
-const { holdNetwork, resetHeldNetwork } = await import('./sandbox.ts');
+const { holdNetwork, resetHeldNetwork } = await import('@oddboro/ledger');
 
 /** A staff row as the ledger returns it; anything not named is off or empty. */
 const row = (o: Partial<StaffRow> = {}): StaffRow => ({
