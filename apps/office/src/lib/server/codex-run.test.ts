@@ -203,12 +203,14 @@ test("a Codex run reads the developer tool folders that exist and never their cr
     const controls = [
       '.volta/tools/image/node/v1.0.0/bin/node',
       '.gradle/wrapper/gradle-wrapper.properties',
-      'go/pkg/mod/cache/vcs/0a1b/HEAD'
+      'go/pkg/mod/cache/vcs/0a1b/HEAD',
+      '.cargo/git/db/dep-0a1b/HEAD'
     ];
     for (const f of [
       '.volta/tools/image/node/v1.0.0/etc/npmrc',
       '.gradle/init.d/proxy.gradle',
       'go/pkg/mod/cache/vcs/0a1b/config',
+      '.cargo/git/db/dep-0a1b/config',
       ...controls
     ]) {
       mkdirSync(dirname(join(h, f)), { recursive: true });
@@ -234,7 +236,8 @@ test("a Codex run reads the developer tool folders that exist and never their cr
       [join(h, '.gradle/init.d'), 'deny'],
       [join(h, '.volta/tools/image/node/v1.0.0/etc/npmrc'), 'deny'],
       [join(h, '.gradle/init.d/proxy.gradle'), 'deny'],
-      [join(h, 'go/pkg/mod/cache/vcs/0a1b/config'), 'deny']
+      [join(h, 'go/pkg/mod/cache/vcs/0a1b/config'), 'deny'],
+      [join(h, '.cargo/git/db/dep-0a1b/config'), 'deny']
     ]);
     for (const f of controls)
       assert.ok(

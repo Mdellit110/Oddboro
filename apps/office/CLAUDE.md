@@ -423,7 +423,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    each node version nvm and Volta keep (`~/.nvm/versions/node/<v>/etc/npmrc`,
    `~/.volta/tools/image/node/<v>/etc/npmrc`), each script in
    `~/.gradle/init.d`, and the `config` of each repository Go keeps in
-   `~/go/pkg/mod/cache/vcs`, whose remote's address can carry a token. For
+   `~/go/pkg/mod/cache/vcs` and Cargo keeps for a git dependency in
+   `~/.cargo/git/db`, whose remote's address can carry a token. For
    Claude Code only (`globDenies`), every `.env`, `.env.*` and `.git/config`
    under each folder, as a `**` glob, and the file in every entry of those
    `EACH_ENTRY` folders by a single `*`, so one made during a run is shut

@@ -240,13 +240,15 @@ export const DEV_SECRETS = [
  * developer tool folder, the folder inside it, and the file inside each
  * entry. npm's global config in each node version nvm and Volta keep, each
  * Gradle init script, and the config of each repository Go keeps for a
- * module fetched from its source, whose remote's address can carry a token.
+ * module fetched from its source and Cargo keeps for a git dependency, whose
+ * remote's address can carry a token.
  */
 const EACH_ENTRY: [folder: string, inside: string[], file: string[]][] = [
   ['.nvm', ['versions', 'node'], ['etc', 'npmrc']],
   ['.volta', ['tools', 'image', 'node'], ['etc', 'npmrc']],
   ['.gradle', ['init.d'], []],
-  ['go', ['pkg', 'mod', 'cache', 'vcs'], ['config']]
+  ['go', ['pkg', 'mod', 'cache', 'vcs'], ['config']],
+  ['.cargo', ['git', 'db'], ['config']]
 ];
 /**
  * What Claude Code's commands never read under every developer tool folder,
