@@ -20,11 +20,13 @@ import {
   sql,
   type SQL
 } from 'drizzle-orm';
-import { rmSync } from 'node:fs';
+import { existsSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isAbsolute, join, sep } from 'node:path';
 import { alias } from 'drizzle-orm/pg-core';
 import { db, sql as pg } from './db.ts';
 import { embed } from './embed.ts';
-import { chatSession } from './home.ts';
+import { chatSession, CODE, home } from './home.ts';
 import {
   answeredAll,
   handBack,
@@ -81,7 +83,7 @@ import {
   type Step,
   type UsageKind
 } from './schema.ts';
-import { AGENT_NAMES, type Agent } from './agents.ts';
+import { AGENT_NAMES, type Agent, type GrantedFolder } from './agents.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
@@ -153,6 +155,129 @@ export async function setTool(id: string, tool: string, on: boolean): Promise<vo
     title: on ? `Gave ${before.name} ${found.name}` : `Took ${found.name} from ${before.name}`,
     body: found.does
   });
+}
+
+/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
+export async function setOwnTool(
+  id: string,
+  which: 'commands' | 'web',
+  on: boolean
+): Promise<void> {
+  const before = await staffer(id);
+  if (!before || before[which] === on) return;
+  await db
+    .update(staff)
+    .set({ [which]: on })
+    .where(eq(staff.id, id));
+  const n = before.name;
+  const title =
+    which === 'commands'
+      ? on
+        ? `Let ${n} run commands`
+        : `Stopped ${n} running commands`
+      : on
+        ? `Let ${n} browse the web`
+        : `Stopped ${n} browsing the web`;
+  await record({ kind: 'access', actor: 'owner', title });
+}
+
+/**
+ * Only the owner gives an Odd a folder outside the office, to read or to read
+ * and change, or takes it back (`access` null). `path` is the real path
+ * `checkFolder` gave, or, to take one back, the path as stored, so a folder
+ * deleted from the disk can still be taken back. Takes effect on the next run.
+ */
+export async function setFolder(
+  id: string,
+  path: string,
+  access: 'read' | 'write' | null
+): Promise<void> {
+  const before = await staffer(id);
+  if (!before) return;
+  const had = before.folders.find((f) => f.path === path);
+  const write = access === 'write';
+  if (access === null ? !had : had?.write === write) return;
+  const rest = before.folders.filter((f) => f.path !== path);
+  const folders = access === null ? rest : [...rest, { path, write }];
+  await db.update(staff).set({ folders }).where(eq(staff.id, id));
+  const shown = shownFolder(path);
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title:
+      access === null
+        ? `Took ${shown} from ${before.name}`
+        : `Let ${before.name} ${write ? 'read and change' : 'read'} ${shown}`
+  });
+}
+
+/**
+ * Secret stores in the home folder, by name: keys, sign-ins and settings,
+ * including those other apps on this computer keep there, like the Google
+ * Workspace MCP server's, and each coding tool's own home. AppData is where
+ * Windows apps keep theirs. No run reads them (`unreadable` in the office's
+ * staff.ts), and no folder given to an Odd holds or sits in one (`checkFolder`).
+ */
+export const SECRET_STORES: string[] = [
+  '.ssh',
+  '.aws',
+  '.gnupg',
+  '.config',
+  'Library',
+  'AppData',
+  '.claude',
+  '.claude.json',
+  '.google_workspace_mcp',
+  '.grok',
+  '.codex',
+  '.gemini'
+];
+
+/** What the owner reads when a folder cannot be given to an Odd. */
+export const FOLDER_REFUSED = {
+  missing: 'No such folder.',
+  home: 'Pick a folder inside your home, not the whole home.',
+  secrets: 'That folder holds your keys or sign-ins.',
+  code: "That folder holds Oddboro's own code."
+} as const;
+
+/** A path by its real one when it exists, so it compares with a real path. */
+const real = (p: string): string => (existsSync(p) ? realpathSync(p) : p);
+
+/** Whether `p` is `parent` or sits inside it. A Windows disk ignores case. */
+function within(p: string, parent: string): boolean {
+  const [a, b] =
+    process.platform === 'win32' ? [p.toLowerCase(), parent.toLowerCase()] : [p, parent];
+  return a === b || a.startsWith(b.endsWith(sep) ? b : b + sep);
+}
+
+/** A path as the owner reads it, the home folder written `~`. */
+export function shownFolder(path: string): string {
+  for (const h of new Set([homedir(), real(homedir())]))
+    if (within(path, h)) return `~${path.slice(h.length)}`;
+  return path;
+}
+
+/**
+ * Whether `path`, as the owner typed it, may be given to an Odd, and its real
+ * path when it may. A folder inside the home that holds or sits in none of
+ * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
+ * code: a deny inside a folder a run reads is not held by every tool, so a
+ * folder that holds one is refused at the door.
+ */
+export function checkFolder(path: string): { real: string } | { refused: string } {
+  const typed = path.trim();
+  const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
+  if (!isAbsolute(expanded) || !existsSync(expanded)) return { refused: FOLDER_REFUSED.missing };
+  const p = realpathSync(expanded);
+  if (!statSync(p).isDirectory()) return { refused: FOLDER_REFUSED.missing };
+  const h = real(homedir());
+  if (p === h || !within(p, h)) return { refused: FOLDER_REFUSED.home };
+  const either = (q: string) => within(p, q) || within(q, p);
+  if ([...SECRET_STORES.map((s) => real(join(h, s))), real(home())].some(either))
+    return { refused: FOLDER_REFUSED.secrets };
+  if (either(real(CODE))) return { refused: FOLDER_REFUSED.code };
+  return { real: p };
 }
 
 export type Hire = Pick<
