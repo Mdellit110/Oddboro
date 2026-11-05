@@ -4,7 +4,7 @@
 // arguments and environment each tool gets, Claude Code's sandbox for
 // commands, and what the Odd is told. Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
@@ -18,7 +18,9 @@ import {
   odd,
   onPlatform,
   ownerData,
+  ownerHome,
   runOf,
+  secrets,
   writeRule,
   type Gave
 } from './office-under-test.ts';
@@ -67,6 +69,7 @@ function listAfter(args: string[], flag: string): string[] {
 }
 type Sandbox = {
   filesystem: { denyRead: string[]; allowRead: string[]; denyWrite: string[] };
+  credentials: { envVars: { name: string; mode: string }[] };
   [k: string]: unknown;
 };
 const settingsOf = (run: Gave) =>
@@ -114,12 +117,15 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
   const sessions = sandbox?.filesystem.allowRead.find((p) => p.includes('/.claude/projects/'));
   assert.equal(dirname(sessions ?? ''), join(homedir(), '.claude', 'projects'));
   const node = dirname(dirname(process.execPath));
-  assert.deepEqual(sandbox, {
+  // The secrets commands never see depend on the test's own environment: the next test holds them.
+  const { credentials, ...rest } = sandbox ?? ({} as Sandbox);
+  assert.ok(credentials.envVars.length > 0);
+  assert.deepEqual(rest, {
     enabled: true,
     failIfUnavailable: true,
     allowUnsandboxedCommands: false,
     filesystem: {
-      denyRead: ['~/', '/private/tmp', '/tmp', '/private/var/folders'],
+      denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
       // No data folder: there is none to read.
       allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
       denyWrite: deniedEdits(dir, [dir])
@@ -127,6 +133,40 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
     network: { allowedDomains: [] }
   });
 });
+
+test(
+  "with Run commands, Bash sees none of the run's secrets, and Claude Code and the office's tool server keep theirs",
+  onMac,
+  async () => {
+    const names = ['OFFICE_AUTH', 'FAKE_TOKEN'] as const;
+    const before = names.map((n) => process.env[n]);
+    Object.assign(process.env, { OFFICE_AUTH: 'key', FAKE_TOKEN: 'planted' });
+    secrets.set('anthropic:API_KEY', 'the-office-anthropic-key-for-tests');
+    try {
+      await setOwn('otto', { commands: true });
+      const run = await chatOf('otto');
+      const denied = settingsOf(run).sandbox?.credentials.envVars ?? [];
+      for (const name of ['ANTHROPIC_API_KEY', 'FAKE_TOKEN', 'DATABASE_URL', 'XAI_API_KEY'])
+        assert.ok(
+          denied.some((v) => v.name === name && v.mode === 'deny'),
+          `${name} reaches Bash: ${JSON.stringify(denied)}`
+        );
+      assert.ok(denied.every((v) => v.mode === 'deny'));
+      assert.ok(
+        !denied.some((v) => v.name === 'PATH' || v.name === 'HOME'),
+        JSON.stringify(denied)
+      );
+      assert.equal(run.apiKey, 'the-office-anthropic-key-for-tests', 'a key sign-in lost its key');
+      assert.ok(run.env.DATABASE_URL, "the office's tool server lost its database");
+    } finally {
+      names.forEach((n, i) => {
+        if (before[i] === undefined) delete process.env[n];
+        else process.env[n] = before[i];
+      });
+      secrets.delete('anthropic:API_KEY');
+    }
+  }
+);
 
 test('a Claude run with Browse the web gets WebSearch and WebFetch', async () => {
   await setOwn('wes', { web: true });
@@ -347,3 +387,112 @@ test("with Run commands, Bash can write only the run's write folders", onMac, as
     if (madeData) rmSync(ownerData, { recursive: true, force: true });
   }
 });
+
+test('a folder given by ~ or through a link is stored by its real path and recorded as the owner reads it', async () => {
+  await setOwn('wes', {});
+  await ownerHome(async (home) => {
+    mkdirSync(join(home, 'garden'));
+    symlinkSync(join(home, 'garden'), join(home, 'shortcut'));
+    const real = realpathSync(join(home, 'garden'));
+    assert.equal((await patch('wes', { folder: '~/garden', access: 'read' })).status, 200);
+    assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: real, write: false }]);
+    assert.ok(await recorded('Let Wes read ~/garden'));
+    assert.equal((await patch('wes', { folder: '~/shortcut', access: 'write' })).status, 200);
+    assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: real, write: true }]);
+    assert.ok(await recorded('Let Wes read and change ~/garden'));
+  });
+});
+
+test('a folder inside or holding one the Odd has is refused; a level change and a removal are not', async () => {
+  await setOwn('wes', {});
+  await ownerHome(async (home) => {
+    for (const p of ['shed/tools', 'barn/loft']) mkdirSync(join(home, p), { recursive: true });
+    const real = (p: string) => realpathSync(join(home, p));
+    const nested = { status: 400, message: L.FOLDER_REFUSED.nested };
+    assert.equal((await patch('wes', { folder: '~/shed', access: 'read' })).status, 200);
+    assert.deepEqual(
+      await refusal(patch('wes', { folder: '~/shed/tools', access: 'write' })),
+      nested
+    );
+    assert.equal((await patch('wes', { folder: '~/barn/loft', access: 'write' })).status, 200);
+    assert.deepEqual(await refusal(patch('wes', { folder: '~/barn', access: 'read' })), nested);
+    // The same folder at another level replaces it.
+    assert.equal((await patch('wes', { folder: '~/shed', access: 'write' })).status, 200);
+    assert.deepEqual((await L.staffer('wes'))?.folders, [
+      { path: real('barn/loft'), write: true },
+      { path: real('shed'), write: true }
+    ]);
+    // Folders that nest from before are each still taken back.
+    await setOwn('wes', {
+      folders: [
+        { path: real('shed'), write: false },
+        { path: real('shed/tools'), write: true }
+      ]
+    });
+    assert.equal((await patch('wes', { folder: real('shed/tools'), access: null })).status, 200);
+    assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: real('shed'), write: false }]);
+  });
+});
+
+test(
+  'on a Mac, a folder stored in another case is the same folder',
+  { skip: process.platform !== 'darwin' && "only a Mac's disk ignores case" },
+  async () => {
+    await ownerHome(async (home) => {
+      mkdirSync(join(home, 'Orchard'));
+      const real = realpathSync(join(home, 'Orchard'));
+      // As a path typed in another case was stored before the real path was the disk's own.
+      await setOwn('wes', { folders: [{ path: join(dirname(real), 'orchard'), write: false }] });
+      assert.equal((await patch('wes', { folder: '~/Orchard', access: 'write' })).status, 200);
+      assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: real, write: true }]);
+    });
+  }
+);
+
+test("a write folder's git hooks and config are read and never written, on every tool", async () => {
+  const w = made('repo');
+  await setOwn('fern', { folders: [{ path: w, write: true }] });
+  await setOwn('gwen', { folders: [{ path: w, write: true }] });
+  await setOwn('cato', { folders: [{ path: w, write: true }] });
+  await setOwn('gem', { folders: [{ path: w, write: true }] });
+  const paths = [
+    `${w}/.git/hooks`,
+    `${w}/**/.git/hooks`,
+    `${w}/.git/config`,
+    `${w}/**/.git/config`
+  ];
+
+  const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
+  for (const p of paths)
+    for (const q of [p, `${p}/**`])
+      assert.ok(claude.includes(`Edit(${L.rulePath(q)})`), `Claude Code may write ${q}`);
+  assert.ok(!claude.some((d) => d.startsWith('Read(') && d.includes('.git')), 'git cannot read');
+
+  const grok = await chatOf('gwen');
+  const grokDenies = each(grok.args, '--deny');
+  for (const p of paths)
+    for (const tool of ['Edit', 'Write'])
+      assert.ok(grokDenies.includes(`${tool}(${p})`), `Grok's ${tool} may write ${p}`);
+  assert.ok(!(grok.profile ?? '').includes('.git/'), 'the kernel shuts git out of its config');
+
+  const codex = (await chatOf('cato')).permissions?.filesystem ?? {};
+  for (const p of paths)
+    for (const q of [p, `${p}/**`]) assert.equal(codex[q], 'read', `Codex may write ${q}`);
+
+  const policy = (await chatOf('gem')).policy ?? '';
+  for (const p of ['.git/hooks/pre-commit', 'lib/.git/config', '.git/config'])
+    assert.ok(writeRule(policy, 'deny', join(w, p)), `Gemini may write ${p}`);
+  assert.ok(writeRule(policy, 'allow', join(w, 'notes.md')));
+});
+
+test(
+  "with Run commands, Bash cannot write a write folder's git hooks or config",
+  onMac,
+  async () => {
+    const w = made('bash-repo');
+    await setOwn('otto', { commands: true, folders: [{ path: w, write: true }] });
+    const denyWrite = settingsOf(await chatOf('otto')).sandbox?.filesystem.denyWrite ?? [];
+    for (const p of ['.git/hooks', '**/.git/hooks', '.git/config', '**/.git/config'])
+      assert.ok(denyWrite.includes(`${w}/${p}`), `Bash may write ${w}/${p}`);
+  }
+);

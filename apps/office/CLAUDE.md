@@ -245,7 +245,10 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `{commands}` for a locked one. A folder is typed as a path and set to Can
    read or Can read and change; `checkFolder` refuses the home folder,
    anything outside it, and one that holds or sits in a secret store, the
-   office's home or Oddboro's code, and its line shows under the field. The
+   office's home or Oddboro's code, comparing real paths as the disk spells
+   them (`realpathSync.native`), and `setFolder` refuses one inside or holding
+   a folder the Odd already has ("That folder is inside one this Odd already
+   has, or holds one."); the line shows under the field. The
    list loads from the staff route's GET, which writes the home folder `~`,
    and reloads when the profile's folders change; a level change or Remove
    sends the path as stored. `run()` works out each switch once per run, as
@@ -365,10 +368,15 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
    With Run commands, `--settings` adds Claude Code's sandbox (`sandbox()` in
-   `run()`): commands read only what the run reads, plus their temp folder and
-   node when it sits in the home folder, write only where the run writes,
-   never the data folder or an instruction file (`denyWrite`), and reach no
-   network. Bash writes in every folder Claude Code works in, so `--add-dir`
+   `run()`): commands read only what the run reads, plus their temp folder,
+   node when it sits in the home folder, and the system's own folders outside
+   `/Users` and `/Volumes` (`denyRead`), write only where the run writes,
+   never the data folder or what `deniedEdits` names (`denyWrite`), reach no
+   network, and see none of the secrets in the run's environment
+   (`credentials.envVars`, `hiddenFromCommands`): `ANTHROPIC_API_KEY`,
+   `DATABASE_URL` and every name that says key, token, secret, password,
+   credential, auth or cookie. Claude Code and the office's tool server keep
+   them. Bash writes in every folder Claude Code works in, so `--add-dir`
    then names only the data folder and the folders the run writes. That run
    gets a temp folder of its own, `/private/tmp/ob-<start of the run key>` as
    `CLAUDE_CODE_TMPDIR`, removed when it ends, `GIT_CONFIG_GLOBAL=/dev/null`,
@@ -377,7 +385,11 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    part of the thread's folder, and the folders the owner gave it to change,
    never an instruction file in any
    (`CLAUDE.md`, `CLAUDE.local.md`, `.claude`, `.grok`, `AGENTS.md`,
-   `.mcp.json`, `AGENTS.override.md`, `.codex`, `.agents`, `GEMINI.md`, `.gemini`; `INSTRUCTIONS` and `deniedEdits` in `files.ts`), nor the file a run
+   `.mcp.json`, `AGENTS.override.md`, `.codex`, `.agents`, `GEMINI.md`, `.gemini`; `INSTRUCTIONS` and `deniedEdits` in `files.ts`), nor a
+   repository's `.git/hooks` or `.git/config` anywhere in a folder it writes
+   (`REPO_RUNS`, `repoRunPaths`), which it still reads, since git cannot run
+   without them (Codex gets them as `read`, Grok as Edit and Write denies
+   only, Gemini as write refusals), nor the file a run
    reading the owner's edit is reading, and gets no skills, no
    plugins, none of the owner's own CLAUDE.md files and no Claude Code
    auto-memory (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with

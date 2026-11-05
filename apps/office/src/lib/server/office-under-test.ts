@@ -75,7 +75,8 @@ function reply() {
     autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
     tmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
     gitConfig: process.env.GIT_CONFIG_GLOBAL ?? null,
-    nodeOptions: process.env.NODE_OPTIONS ?? null
+    nodeOptions: process.env.NODE_OPTIONS ?? null,
+    apiKey: process.env.ANTHROPIC_API_KEY ?? null
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
@@ -486,6 +487,8 @@ export type Gave = {
   tmpdir?: string | null;
   gitConfig?: string | null;
   nodeOptions?: string | null;
+  /** The Claude Code run's ANTHROPIC_API_KEY, which only a key sign-in sets. */
+  apiKey?: string | null;
   grokEnv?: Record<string, string>;
   agentMode?: number;
   profile?: string;
@@ -545,20 +548,35 @@ export async function onPlatform<T>(
     if (real) Object.defineProperty(process, 'platform', real);
   }
 }
-/**
- * `fn`, run with HOME at an empty folder of its own, so the Mac's own
- * ~/.grok/bin, where `grokCommand` also looks, is never found. Only around a
- * test: the office reads HOME as it loads for paths it shuts.
- */
-export async function awayFromHome<T>(fn: (home: string) => T | Promise<T>): Promise<T> {
+/** `fn`, run with HOME at `home`, which is then put back. */
+async function withHome<T>(home: string, fn: (home: string) => T | Promise<T>): Promise<T> {
   const real = process.env.HOME;
-  const home = mkdtempSync(join(folder, 'home-'));
   process.env.HOME = home;
   try {
     return await fn(home);
   } finally {
     if (real === undefined) delete process.env.HOME;
     else process.env.HOME = real;
+  }
+}
+/**
+ * `fn`, run with HOME at an empty folder of its own, so the Mac's own
+ * ~/.grok/bin, where `grokCommand` also looks, is never found. Only around a
+ * test: the office reads HOME as it loads for paths it shuts.
+ */
+export const awayFromHome = <T>(fn: (home: string) => T | Promise<T>): Promise<T> =>
+  withHome(mkdtempSync(join(folder, 'home-')), fn);
+/**
+ * `fn`, run with HOME at an empty folder under the system's temp folder,
+ * removed after. `awayFromHome`'s sits in the office's home, where
+ * `checkFolder` refuses every folder; a folder in this one can be given.
+ */
+export async function ownerHome<T>(fn: (home: string) => T | Promise<T>): Promise<T> {
+  const home = mkdtempSync(join(tmpdir(), 'oddboro-owner-'));
+  try {
+    return await withHome(home, fn);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
   }
 }
 /** No test reached the system's secret store: `security` here is the stand-in, and nothing ran it. */

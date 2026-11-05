@@ -9,7 +9,8 @@
 // folders the owner gave it (see `readable`), may write only inside the
 // staffer's own folder, its own part of that thread's and the folders the
 // owner gave it to change, except its tools' own instructions (`INSTRUCTIONS`
-// in files.ts) and, reading the owner's edit, that file (`deniedEdits`),
+// in files.ts), a repository's git hooks and config (`REPO_RUNS`) and,
+// reading the owner's edit, that file (`deniedEdits`),
 // loads no project settings, skills or plugins, and is denied anything not
 // pre-approved. It always gets the office server (asks,
 // tasks, the ledger), plus whatever access the owner granted: servers at read
@@ -382,6 +383,20 @@ export function staffEnv(): NodeJS.ProcessEnv {
   delete env.ANTHROPIC_API_KEY;
   if (claudeSettings().auth === 'key') env.ANTHROPIC_API_KEY = apiKey();
   return env;
+}
+
+/** A variable's name that says it may hold a secret. */
+const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE)/i;
+
+/**
+ * The variables of a run's environment (`env`) that its sandboxed commands
+ * never see: the API key, the database's address, and every name that says
+ * it may hold a secret. Claude Code itself and its MCP servers keep them: the
+ * office's tool server needs `DATABASE_URL`, and a key sign-in the key.
+ */
+function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
+  const names = Object.keys(env).filter((n) => SECRET_NAME.test(n) || n === 'DATABASE_URL');
+  return [...new Set(['ANTHROPIC_API_KEY', ...names])];
 }
 
 type Server = Record<string, unknown>;
@@ -809,7 +824,7 @@ async function run(
   // Bash writes in every folder Claude Code works in (the cwd and each
   // --add-dir), whatever the Edit rules say. So with commands, only the
   // folders the run writes are added, and the sandbox's denyWrite, which beats
-  // them, holds the data folder and the instruction files: never a folder the
+  // them, holds the data folder and what `deniedEdits` names: never a folder the
   // run only reads, since one may hold a folder it writes (measured on Claude
   // Code 2.1.318). A data folder that is not there is left out: it sits in
   // the office's home, which is neither the cwd nor added, so nothing in the
@@ -822,8 +837,12 @@ async function run(
   // back to the folder every run shares, and spelt /private/tmp, since /tmp
   // broke every command (both measured). Commands are on only on a Mac.
   const tmp = own.commands ? `/private/tmp/ob-${key.slice(0, 8)}` : undefined;
-  /** Claude Code's sandbox for a run's commands: reads only what the run reads, writes as above, no network. */
-  function sandbox() {
+  /**
+   * Claude Code's sandbox for a run's commands: reads only what the run reads
+   * and the system's own folders, writes as above, no network, and none of
+   * the secrets in the run's environment (`env`).
+   */
+  function sandbox(env: NodeJS.ProcessEnv) {
     // Commands run on node, which may be installed under the home folder.
     const node = dirname(dirname(process.execPath));
     return {
@@ -831,7 +850,8 @@ async function run(
       failIfUnavailable: true,
       allowUnsandboxedCommands: false,
       filesystem: {
-        denyRead: ['~/', '/private/tmp', '/tmp', '/private/var/folders'],
+        // Every home folder and every other disk, not only the owner's home.
+        denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
         allowRead: [
           ...readable(dir, reads, extraReads).filter((p) => p !== DATA || data.length),
           tmp,
@@ -839,10 +859,13 @@ async function run(
         ],
         denyWrite: [...data, ...denied]
       },
-      network: { allowedDomains: [] }
+      network: { allowedDomains: [] },
+      credentials: {
+        envVars: hiddenFromCommands(env).map((name) => ({ name, mode: 'deny' }))
+      }
     };
   }
-  function claudeArgs(): string[] {
+  function claudeArgs(env: NodeJS.ProcessEnv): string[] {
     return [
       '-p',
       '--output-format',
@@ -876,7 +899,7 @@ async function run(
       '--settings',
       JSON.stringify({
         enabledPlugins: pluginsOff(),
-        ...(own.commands ? { sandbox: sandbox() } : {})
+        ...(own.commands ? { sandbox: sandbox(env) } : {})
       }),
       ...workIn.flatMap((p) => ['--add-dir', p]),
       ...modelArgs(),
@@ -889,7 +912,7 @@ async function run(
   /** A Claude Code run; with commands, their temp folder, made now and removed when the run ends. */
   function claudeLaunch(): Launch {
     const env = staffEnv();
-    if (!tmp) return { args: claudeArgs(), env, stdin: input, done: () => {} };
+    if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: () => {} };
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
     // As measured working: no global git settings, since the owner's sit in
     // the home the sandbox shuts, and none of the office's own node options,
@@ -897,7 +920,7 @@ async function run(
     delete env.NODE_OPTIONS;
     Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, GIT_CONFIG_GLOBAL: '/dev/null' });
     return {
-      args: claudeArgs(),
+      args: claudeArgs(env),
       env,
       stdin: input,
       done: () => rmSync(tmp, { recursive: true, force: true })

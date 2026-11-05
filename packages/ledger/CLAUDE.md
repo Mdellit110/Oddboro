@@ -10,13 +10,17 @@ Drizzle ORM over the `postgres` driver. Server only, except `./time`,
 
 ## Running it
 
-`src/home.ts` says where everything is. `HOME` is the owner's office
+`src/home.ts` says where everything is. `home()` is the owner's office
 (`ODDBORO_HOME`, else `~/.oddboro`): the database, the Odds' folders, sign-ins,
 and `data/`, the folder every Odd may read. `CODE` is the code
 (`ODDBORO_CODE`, else this repo; the app's `Resources/server` in a release).
 `OFFICE_PORT` and `DATABASE_PORT` come from `ODDBORO_PORT` and
 `ODDBORO_DB_PORT` (4500 and 54329). `STAFF_SERVER` is `mcp.ts` beside it, or
 `mcp.js` in a release. Never write `~/.oddboro` or a port anywhere else.
+Under `node --test` (`NODE_TEST_CONTEXT`), with no `ODDBORO_HOME`, `home()` is
+a folder under the system's temp folder, made on first use and removed at
+exit, and with no `ODDBORO_DB_PORT`, `DATABASE_PORT` is 54399: a test never
+reaches the owner's real office (`test/home.test.ts`).
 
 1. With no `DATABASE_URL` in `.env`, the office keeps its own Postgres:
    PGlite inside the office server, files in `~/.oddboro/db`, with
@@ -202,7 +206,12 @@ hand-off or number, which ledger tests and the office's format test share.
   rewrites it. `checkFolder()` refuses the home itself, a folder outside it,
   and one that holds or sits in a secret store (`SECRET_STORES`, which the
   office's `unreadable` also reads), the office's home or its code, with one
-  line each (`FOLDER_REFUSED`). `test/own-tools.test.ts` holds all three.
+  line each (`FOLDER_REFUSED`). It compares real paths as the disk spells
+  them (`realpathSync.native`), so on a Mac `~/.SSH` is `~/.ssh`, and a link
+  is where it leads. `setFolder()` finds a folder the Odd has by that real
+  path, so a level change replaces it, and refuses a new one inside or
+  holding another the Odd has (`FOLDER_REFUSED.nested`); taking one back is
+  never refused. `test/own-tools.test.ts` holds `checkFolder`.
 - `usage.staff_id` is null for a run as the office (drafting a job
   description, drawing a look). `usage.tokens` is a generated column, the
   row's one token sum, which a staffer's usage (`usageFor`) adds up.

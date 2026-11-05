@@ -68,6 +68,13 @@ const shut = (w: string) =>
       [`${w}/${n}`, `${w}/${n}/**`, `${w}/**/${n}`, `${w}/**/${n}/**`].map((p) => [p, 'deny'])
     )
   );
+/** A repository's git hooks and config in `w`, read only, since git reads them (`REPO_RUNS`). */
+const gitRead = (w: string) =>
+  Object.fromEntries(
+    ['.git/hooks', '.git/config'].flatMap((n) =>
+      [`${w}/${n}`, `${w}/${n}/**`, `${w}/**/${n}`, `${w}/**/${n}/**`].map((p) => [p, 'read'])
+    )
+  );
 /** A profile's paths with this machine's folder and each run's id as stand-ins. */
 const plainPaths = (fs: Record<string, string>) =>
   Object.fromEntries(Object.entries(fs).map(([p, v]) => [plain([p])[0], v]));
@@ -159,7 +166,8 @@ test("a Codex Odd's chat is held by the kernel to its own folder and its own tem
     '<home>/data': 'read',
     '<home>/staff/cody': 'write',
     '<home>/codex-tmp/<id>': 'write',
-    ...shut('<home>/staff/cody')
+    ...shut('<home>/staff/cody'),
+    ...gitRead('<home>/staff/cody')
   });
 });
 

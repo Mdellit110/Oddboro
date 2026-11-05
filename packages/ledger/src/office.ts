@@ -185,19 +185,27 @@ export async function setOwnTool(
  * Only the owner gives an Odd a folder outside the office, to read or to read
  * and change, or takes it back (`access` null). `path` is the real path
  * `checkFolder` gave, or, to take one back, the path as stored, so a folder
- * deleted from the disk can still be taken back. Takes effect on the next run.
+ * deleted from the disk can still be taken back. A folder is the same one
+ * when its real path is (`real`), so a level change replaces it, even one
+ * stored in another case. A new folder inside or holding one the Odd already
+ * has is refused (`FOLDER_REFUSED.nested`): one would carry two levels.
+ * Takes effect on the next run.
  */
 export async function setFolder(
   id: string,
   path: string,
   access: 'read' | 'write' | null
-): Promise<void> {
+): Promise<{ refused: string } | undefined> {
   const before = await staffer(id);
   if (!before) return;
-  const had = before.folders.find((f) => f.path === path);
+  const at = real(path);
+  const same = (f: { path: string }) => real(f.path) === at;
+  const had = before.folders.find(same);
   const write = access === 'write';
   if (access === null ? !had : had?.write === write) return;
-  const rest = before.folders.filter((f) => f.path !== path);
+  const rest = before.folders.filter((f) => !same(f));
+  if (access !== null && rest.some((f) => within(at, real(f.path)) || within(real(f.path), at)))
+    return { refused: FOLDER_REFUSED.nested };
   const folders = access === null ? rest : [...rest, { path, write }];
   await db.update(staff).set({ folders }).where(eq(staff.id, id));
   const shown = shownFolder(path);
@@ -238,11 +246,16 @@ export const FOLDER_REFUSED = {
   missing: 'No such folder.',
   home: 'Pick a folder inside your home, not the whole home.',
   secrets: 'That folder holds your keys or sign-ins.',
-  code: "That folder holds Oddboro's own code."
+  code: "That folder holds Oddboro's own code.",
+  nested: 'That folder is inside one this Odd already has, or holds one.'
 } as const;
 
-/** A path by its real one when it exists, so it compares with a real path. */
-const real = (p: string): string => (existsSync(p) ? realpathSync(p) : p);
+/**
+ * A path by its real one when it exists, so it compares with a real path. The
+ * system's own realpath spells each name as the disk keeps it, so on a Mac's
+ * disk, which ignores case, `~/.SSH` and `~/.ssh` come out the same.
+ */
+const real = (p: string): string => (existsSync(p) ? realpathSync.native(p) : p);
 
 /** Whether `p` is `parent` or sits inside it. A Windows disk ignores case. */
 function within(p: string, parent: string): boolean {
@@ -269,7 +282,7 @@ export function checkFolder(path: string): { real: string } | { refused: string 
   const typed = path.trim();
   const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
   if (!isAbsolute(expanded) || !existsSync(expanded)) return { refused: FOLDER_REFUSED.missing };
-  const p = realpathSync(expanded);
+  const p = real(expanded);
   if (!statSync(p).isDirectory()) return { refused: FOLDER_REFUSED.missing };
   const h = real(homedir());
   if (p === h || !within(p, h)) return { refused: FOLDER_REFUSED.home };

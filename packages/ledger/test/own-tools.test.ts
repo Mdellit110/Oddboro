@@ -2,7 +2,7 @@
 // follows the switch, what each owner change records, and which folders are
 // refused at the door. Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, beforeEach, test } from 'node:test';
@@ -102,7 +102,8 @@ test('checkFolder refuses what holds keys, the home, the office and its code', (
     missing: 'No such folder.',
     home: 'Pick a folder inside your home, not the whole home.',
     secrets: 'That folder holds your keys or sign-ins.',
-    code: "That folder holds Oddboro's own code."
+    code: "That folder holds Oddboro's own code.",
+    nested: 'That folder is inside one this Odd already has, or holds one.'
   });
   const refused = (path: string) => O.checkFolder(path);
   for (const s of O.SECRET_STORES) folder(s);
@@ -127,4 +128,48 @@ test('checkFolder refuses what holds keys, the home, the office and its code', (
   const sshx = folder('.sshx');
   assert.deepEqual(refused('~/.sshx'), { real: sshx });
   assert.deepEqual(refused(' ~/.sshx/ '), { real: sshx });
+});
+
+test('the secret stores are the ones the office keeps shut', () => {
+  assert.deepEqual(O.SECRET_STORES, [
+    '.ssh',
+    '.aws',
+    '.gnupg',
+    '.config',
+    'Library',
+    'AppData',
+    '.claude',
+    '.claude.json',
+    '.google_workspace_mcp',
+    '.grok',
+    '.codex',
+    '.gemini'
+  ]);
+});
+
+test(
+  'on a Mac, checkFolder refuses a secret store or the office typed in another case',
+  { skip: process.platform !== 'darwin' && "only a Mac's disk ignores case" },
+  () => {
+    folder('.ssh');
+    folder('.claude');
+    folder('.oddboro');
+    folder('Library', 'Keychains');
+    for (const typed of ['~/.SSH', '~/LIBRARY', '~/library/Keychains', '~/.CLAUDE', '~/.Oddboro'])
+      assert.deepEqual(O.checkFolder(typed), { refused: O.FOLDER_REFUSED.secrets }, typed);
+  }
+);
+
+test('checkFolder refuses a link into a secret store, and a folder holding where one leads', () => {
+  folder('.ssh');
+  symlinkSync(join(HOME, '.ssh'), join(HOME, 'x'));
+  assert.deepEqual(O.checkFolder('~/x'), { refused: O.FOLDER_REFUSED.secrets });
+  // A secret store that is itself a link, as a dotfiles folder makes one.
+  rmSync(join(HOME, '.gnupg'), { recursive: true, force: true });
+  symlinkSync(folder('dots', 'gnupg'), join(HOME, '.gnupg'));
+  assert.deepEqual(O.checkFolder('~/dots'), { refused: O.FOLDER_REFUSED.secrets });
+  // A folder that only holds a `.ssh` of its own is not a secret store.
+  const project = folder('project');
+  folder('project', '.ssh');
+  assert.deepEqual(O.checkFolder('~/project'), { real: project });
 });

@@ -5,14 +5,19 @@
 // or in the preface when the replay cut it or the session resumed.
 // Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, realpathSync, utimesSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { L, PATCH, chatOf, odd, onPlatform } from './office-under-test.ts';
 
 // After the office under test set its home: replay.ts loads the ledger, which reads it as it loads.
 const { REPLAY_CHARS } = await import('./replay.ts');
 
-await L.pg`insert into staff ${L.pg([odd('rory', 'Rory'), odd('rosa', 'Rosa')])}`;
+await L.pg`insert into staff ${L.pg([
+  odd('rory', 'Rory'),
+  odd('rosa', 'Rosa'),
+  odd('reed', 'Reed'),
+  odd('dell', 'Dell')
+])}`;
 
 const own = (path: string) => L.home('staff', 'rory', path);
 const lines = (entries: object[]) => entries.map((l) => JSON.stringify(l) + '\n').join('');
@@ -112,5 +117,48 @@ test('a told line since the owner last wrote that the replay cut is said once, i
   assert.match(
     run.message,
     /\(Before this, you said to [^:]+ in chat: "I watered the roses\."\.\)/
+  );
+});
+
+/** A new session's chat for `id`, one line from the owner an hour ago, and its own folder's new file. */
+function newChat(id: string): void {
+  const home = (path: string) => L.home('staff', id, path);
+  mkdirSync(home(''), { recursive: true });
+  const hourAgo = new Date(Date.now() - 60 * 60_000).toISOString();
+  writeFileSync(
+    home('chat.jsonl'),
+    lines([{ at: hourAgo, from: 'owner', text: 'Sort the seeds.' }])
+  );
+  writeFileSync(home('seeds.md'), 'Sorted.');
+}
+/** A folder outside the Odd's own, by its real path, with one file changed now. */
+function given(name: string): string {
+  const path = L.home('given-replay', name);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(`${path}/${name}.md`, 'Changed.');
+  return realpathSync(path);
+}
+
+test('the replay walks only the given folders the Odd may change that are still there', async () => {
+  newChat('reed');
+  const write = given('write');
+  const read = given('read');
+  await L.pg`update staff set folders = ${JSON.stringify([
+    { path: write, write: true },
+    { path: read, write: false }
+  ])}::jsonb where id = 'reed'`;
+  const reed = await chatOf('reed', 'Done?');
+  assert.ok(reed.message.includes(`${L.shownFolder(write)}/write.md`), reed.message);
+  assert.ok(!reed.message.includes('read.md'), 'a read-only folder was walked');
+
+  // A write folder deleted since leaves the line about the Odd's own folder alone.
+  newChat('dell');
+  await L.pg`update staff set folders = ${JSON.stringify([
+    { path: L.home('given-replay', 'gone'), write: true }
+  ])}::jsonb where id = 'dell'`;
+  const dell = await chatOf('dell', 'Done?');
+  assert.ok(
+    dell.message.includes('(Files in your folder that changed during it: seeds.md.)'),
+    dell.message
   );
 });

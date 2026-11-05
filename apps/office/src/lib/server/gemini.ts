@@ -21,7 +21,7 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { home, type ModelUsage } from '@oddboro/ledger';
-import { INSTRUCTIONS } from './files.ts';
+import { INSTRUCTIONS, REPO_RUNS } from './files.ts';
 import { deleteSecret, getSecret, setSecret } from './keychain.ts';
 import {
   mcpGrant,
@@ -125,7 +125,8 @@ type Rule = Record<string, Toml>;
 export function geminiRules(
   r: Pick<GeminiRun, 'dir' | 'writes' | 'edited' | 'allowed' | 'web'>
 ): Rule[] {
-  const names = INSTRUCTIONS.map(anyCase).join('|');
+  // A git hook or config is never written either (`REPO_RUNS`), though read.
+  const names = [...INSTRUCTIONS, ...REPO_RUNS].map(anyCase).join('|');
   const write = (priority: number, decision: string, argsPattern: string): Rule => ({
     toolName: WRITE_TOOLS,
     decision,
@@ -134,7 +135,7 @@ export function geminiRules(
   });
   return [
     write(REFUSE, 'deny', NOT_PLAIN),
-    // An instruction file or folder anywhere in a folder the run writes. `(?:...)?`
+    // An instruction file or folder, or a git hook or config, anywhere in a folder the run writes. `(?:...)?`
     // nests a quantifier, which Gemini drops, so "any folders, or none" is `(?:x|)`.
     ...r.writes.map((w) =>
       write(REFUSE, 'deny', `${FILE_PATH}${exact(w)}/(?:[^\\x00]*/|)(?:${names})[/"]`)

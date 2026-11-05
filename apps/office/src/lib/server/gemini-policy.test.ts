@@ -124,6 +124,17 @@ const CASES: [
     'deny'
   ],
   ['a write to CLAUDE.md', edit(`${dir}/CLAUDE.md`), undefined, 'deny'],
+  ['a write to a git hook', write(`${dir}/.git/hooks/pre-commit`), undefined, 'deny'],
+  ['a write to .GIT/Hooks', write(`${dir}/.GIT/Hooks/post-merge`), undefined, 'deny'],
+  ['an edit to a git config', edit(`${dir}/.git/config`), undefined, 'deny'],
+  [
+    'a write to a nested repository’s git config',
+    write(`${part}/lib/vendor/.git/config`),
+    undefined,
+    'deny'
+  ],
+  ['a write elsewhere in .git', write(`${dir}/.git/HEAD`), undefined, 'allow'],
+  ['a write to a folder only named like .git', write(`${dir}/my.git/config`), undefined, 'allow'],
   ['a write to the owner’s data folder', write(`${data}/people.json`), undefined, 'deny'],
   ['a write in the thread folder outside its part', write(`${thread}/plan.md`), undefined, 'deny'],
   ['a write in another Odd’s part', write(`${thread}/gina/plan.md`), undefined, 'deny'],

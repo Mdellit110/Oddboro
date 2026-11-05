@@ -73,7 +73,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     if (b.access !== 'read' && b.access !== 'write') error(400, 'Pick read or write');
     const checked = checkFolder(b.folder);
     if ('refused' in checked) error(400, checked.refused);
-    await setFolder(params.id, checked.real, b.access);
+    const set = await setFolder(params.id, checked.real, b.access);
+    if (set) error(400, set.refused);
     return json({ ok: true });
   }
   if (b.agent !== undefined) {

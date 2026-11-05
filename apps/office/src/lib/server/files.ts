@@ -52,6 +52,14 @@ export const INSTRUCTIONS = [
   '.gemini'
 ];
 
+/**
+ * Paths in a git repository that run code the next time the owner's git runs
+ * there: hooks, and settings that name a program. A run never writes them in
+ * a folder it writes, but reads them, since git cannot run without reading
+ * `.git/config`. So they are never shut both ways like `INSTRUCTIONS`.
+ */
+export const REPO_RUNS = ['.git/hooks', '.git/config'];
+
 export type StaffFile = { staff: string; path: string; content: string; mtime: number };
 export type FileName = { staff: string; path: string };
 
@@ -311,13 +319,25 @@ export function instructionPaths(writes: string[]): string[] {
 }
 
 /**
+ * Every git hook and config (`REPO_RUNS`) in the folders a run writes, as
+ * path globs, at the top and in any repository further in.
+ */
+export function repoRunPaths(writes: string[]): string[] {
+  return REPO_RUNS.flatMap((p) => writes.flatMap((w) => [`${w}/${p}`, `${w}/**/${p}`]));
+}
+
+/**
  * The paths a run may not write in the folders it writes (`writes`): no run
- * writes its tools' own instructions, and a run reading the owner's edit to a
- * file in its folder (`dir`) may not write that file. Each tool turns them
- * into its own rules.
+ * writes its tools' own instructions or a repository's hooks and config, and
+ * a run reading the owner's edit to a file in its folder (`dir`) may not write
+ * that file. Each tool turns them into its own rules.
  */
 export function deniedEdits(dir: string, writes: string[], edited?: string): string[] {
-  return [...instructionPaths(writes), ...(edited ? [join(dir, edited)] : [])];
+  return [
+    ...instructionPaths(writes),
+    ...repoRunPaths(writes),
+    ...(edited ? [join(dir, edited)] : [])
+  ];
 }
 
 /**
