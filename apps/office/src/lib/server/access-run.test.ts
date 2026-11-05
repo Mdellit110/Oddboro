@@ -14,8 +14,8 @@ import {
   symlinkSync,
   writeFileSync
 } from 'node:fs';
-import { homedir, networkInterfaces, tmpdir, type NetworkInterfaceInfo } from 'node:os';
-import { dirname, join } from 'node:path';
+import { homedir, hostname, networkInterfaces, tmpdir, type NetworkInterfaceInfo } from 'node:os';
+import { dirname, join, matchesGlob } from 'node:path';
 import { test } from 'node:test';
 import {
   chat,
@@ -191,8 +191,8 @@ const nic = (family: 'IPv4' | 'IPv6', address: string, internal = false): Networ
     scopeid: 0
   }) as NetworkInterfaceInfo;
 
-test('every address of every interface is denied to commands, IPv6 bare and in brackets, beside the loopback names and the any-address', () => {
-  const cases: [string, ReturnType<typeof networkInterfaces>, string[]][] = [
+test("every address of every interface and this Mac's own names are denied to commands, IPv6 bare and in brackets, beside the loopback names and the any-address", () => {
+  const cases: [string, ReturnType<typeof networkInterfaces>, string, string[]][] = [
     [
       'a Mac on a network',
       {
@@ -208,7 +208,11 @@ test('every address of every interface is denied to commands, IPv6 bare and in b
         ],
         utun0: [nic('IPv6', 'fe80::9abc:def0:1234:5678')]
       },
+      'Ada-MacBook.local',
       [
+        'Ada-MacBook.local',
+        'ada-macbook',
+        'ada-macbook.local',
         '192.168.1.20',
         '2001:db8::20',
         '[2001:db8::20]',
@@ -224,12 +228,18 @@ test('every address of every interface is denied to commands, IPv6 bare and in b
     [
       'a Mac with only loopback up',
       { lo0: [nic('IPv4', '127.0.0.1', true), nic('IPv6', '::1', true)] },
-      []
+      'Ada-MacBook',
+      ['Ada-MacBook', 'ada-macbook', 'ada-macbook.local']
     ],
-    ['no interfaces at all', {}, []]
+    [
+      'no interfaces at all, on a network domain',
+      {},
+      'Ada.example.com',
+      ['Ada.example.com', 'ada', 'ada.local']
+    ]
   ];
-  for (const [name, interfaces, own] of cases) {
-    const denied = macAddresses(interfaces);
+  for (const [name, interfaces, host, own] of cases) {
+    const denied = macAddresses(interfaces, host);
     for (const a of [...MAC_NAMES, ...own])
       assert.ok(denied.includes(a), `${name}: ${a} is not denied`);
     assert.ok(denied.includes('::') && denied.includes('[::]'), `${name}: ${denied.join(' ')}`);
@@ -245,7 +255,7 @@ test(
     const network = sandboxOf(await chatOf('bo'))?.network;
     assert.deepEqual(network?.allowedDomains, ['*']);
     const own = Object.values(networkInterfaces()).flatMap((l) => (l ?? []).map((i) => i.address));
-    for (const a of [...MAC_NAMES, ...own])
+    for (const a of [...MAC_NAMES, ...own, hostname()])
       assert.ok(network?.deniedDomains?.includes(a), `${a} is not denied`);
     // Closed, the network keeps its exact settings: no deny list beside it.
     await setOwn('bo', { commands: true });
@@ -398,6 +408,22 @@ test(
   }
 );
 
+/**
+ * Whether Claude Code's commands read `file` in a sandbox's `fs`: it is in a
+ * folder they read, and no deny inside that folder names it, as a path or a
+ * glob. The broad denies (`~/`, the temp folders) sit outside every folder
+ * read, which overrides them.
+ */
+const commandsRead = (fs: Sandbox['filesystem'], file: string) => {
+  const folders = fs.allowRead.filter((r) => L.within(file, r));
+  return (
+    folders.length > 0 &&
+    !fs.denyRead.some(
+      (d) => folders.some((r) => L.within(d, r)) && (L.within(file, d) || matchesGlob(file, d))
+    )
+  );
+};
+
 test(
   "with Run commands, Claude reads the owner's developer tool folders that exist, never their credential files, and npm caches in the run's temp",
   onMac,
@@ -407,6 +433,27 @@ test(
       const at = (...p: string[]) => join(h, ...p);
       for (const d of ['.npm', '.cargo', '.local/bin', '.nvm/versions/node/v1.0.0/bin'])
         mkdirSync(at(d), { recursive: true });
+      // Each credential file, and a file beside it that commands still read.
+      const files: [string, 'shut' | 'read'][] = [
+        ['.nvm/versions/node/v1.0.0/etc/npmrc', 'shut'],
+        ['.nvm/versions/node/v1.0.0/bin/node', 'read'],
+        ['.volta/tools/image/node/v1.0.0/etc/npmrc', 'shut'],
+        ['.volta/tools/image/node/v1.0.0/bin/node', 'read'],
+        ['.gradle/init.gradle', 'shut'],
+        ['.gradle/init.gradle.kts', 'shut'],
+        ['.gradle/init.d/proxy.gradle', 'shut'],
+        ['.gradle/wrapper/gradle-wrapper.properties', 'read'],
+        ['go/pkg/mod/cache/vcs/0a1b/config', 'shut'],
+        ['go/pkg/mod/cache/vcs/0a1b/HEAD', 'read'],
+        ['go/src/a/.git/config', 'shut'],
+        ['go/.git/config', 'shut'],
+        ['go/src/a/.git/HEAD', 'read'],
+        ['go/src/a/config', 'read']
+      ];
+      for (const [f] of files) {
+        mkdirSync(dirname(at(f)), { recursive: true });
+        writeFileSync(at(f), '');
+      }
       await setOwn('dee', { commands: true });
       const run = await chatOf('dee');
       const fs = sandboxOf(run)?.filesystem;
@@ -419,11 +466,19 @@ test(
         at('.cargo', 'config'),
         at('.cargo', 'config.toml'),
         at('.nvm/versions/node/v1.0.0/etc/npmrc'),
+        at('.volta/tools/image/node/v1.0.0/etc/npmrc'),
+        at('.gradle/init.d'),
+        at('.gradle/init.d/proxy.gradle'),
+        at('go/pkg/mod/cache/vcs/0a1b/config'),
+        at('go/pkg/mod/cache/vcs/*/config'),
+        at('go/**/.git/config'),
         at('.npm', '**/.env'),
         at('.npm', '**/.env.*'),
         at('.local/bin', '**/.env')
       ])
         assert.ok(fs?.denyRead.includes(shut), `${shut} is not shut`);
+      for (const [f, want] of files)
+        assert.equal(fs && commandsRead(fs, at(f)) ? 'read' : 'shut', want, f);
       const tmp = tmpOf(run);
       assert.deepEqual(run.npm, {
         npm_config_cache: join(tmp, 'npm'),
@@ -559,7 +614,7 @@ test(
       const sandbox = sandboxOf(await chatOf('bo'));
       assert.deepEqual(sandbox?.network, {
         allowedDomains: ['*'],
-        deniedDomains: macAddresses(networkInterfaces())
+        deniedDomains: macAddresses(networkInterfaces(), hostname())
       });
       const hidden = sandbox?.credentials.envVars ?? [];
       for (const name of ['FAKE_OWNER_API_TOKEN', 'ANTHROPIC_API_KEY'])

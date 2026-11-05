@@ -19,7 +19,7 @@ import {
   symlinkSync,
   writeFileSync
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -199,18 +199,48 @@ test("a Codex run reads the developer tool folders that exist and never their cr
     link('x', '.local/share/x/bin');
     link('y', '.config/y');
     link('z', '.local/share/z[1]/bin');
+    // A credential file in each folder whose entries Codex has listed one by one, and a file beside it.
+    const controls = [
+      '.volta/tools/image/node/v1.0.0/bin/node',
+      '.gradle/wrapper/gradle-wrapper.properties',
+      'go/pkg/mod/cache/vcs/0a1b/HEAD'
+    ];
+    for (const f of [
+      '.volta/tools/image/node/v1.0.0/etc/npmrc',
+      '.gradle/init.d/proxy.gradle',
+      'go/pkg/mod/cache/vcs/0a1b/config',
+      ...controls
+    ]) {
+      mkdirSync(dirname(join(h, f)), { recursive: true });
+      writeFileSync(join(h, f), '');
+    }
     const profile = (await chatOf('cora')).permissions?.filesystem ?? {};
     const mine = Object.entries(profile).filter(([p]) => p.startsWith(h + '/'));
     assert.deepEqual(mine, [
       [join(h, '.npm'), 'read'],
+      [join(h, '.volta'), 'read'],
       [join(h, '.cargo'), 'read'],
+      [join(h, 'go'), 'read'],
+      [join(h, '.gradle'), 'read'],
       [join(h, '.local/bin'), 'read'],
       [join(h, '.local/share/x/bin/x'), 'read'],
       [join(h, '.cargo/credentials'), 'deny'],
       [join(h, '.cargo/credentials.toml'), 'deny'],
       [join(h, '.cargo/config'), 'deny'],
-      [join(h, '.cargo/config.toml'), 'deny']
+      [join(h, '.cargo/config.toml'), 'deny'],
+      [join(h, '.gradle/gradle.properties'), 'deny'],
+      [join(h, '.gradle/init.gradle'), 'deny'],
+      [join(h, '.gradle/init.gradle.kts'), 'deny'],
+      [join(h, '.gradle/init.d'), 'deny'],
+      [join(h, '.volta/tools/image/node/v1.0.0/etc/npmrc'), 'deny'],
+      [join(h, '.gradle/init.d/proxy.gradle'), 'deny'],
+      [join(h, 'go/pkg/mod/cache/vcs/0a1b/config'), 'deny']
     ]);
+    for (const f of controls)
+      assert.ok(
+        !mine.some(([p, how]) => how === 'deny' && L.within(join(h, f), p)),
+        `${f} is shut`
+      );
   }));
 
 test("every glob in a Codex run's profile is a deny, and it names no repository, since Codex refuses to start on a glob it reads or writes and keeps each write folder's own .git read only itself", async () => {
