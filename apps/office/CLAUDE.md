@@ -252,7 +252,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    one. Under one locked off, when a tool on this system follows the switch
    (`offer`), one click moves the Odd there with Run commands on ("Switch Sam
    to Claude Code?"): one PATCH with `{agent, commands}`, which checks that
-   the tool it moves to follows the switch before it changes anything. Under
+   the tool it moves to follows the switch before it changes anything. A
+   refusal (a 409 while the Odd is replying, or a 400) shows the route's line
+   under that button, not at the tab's foot, until the next click. Under
    Browse the web, one line says what the tool's web does and what its
    commands do with it (`webLine` in the ledger's `agents.ts`), such as
    "Search and read web pages. With Run commands on, its commands can reach
@@ -315,8 +317,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    Claude Code's commands read them) read, their credential files shut, its
    folder, its part of a thread, the given folders it may change and its own temp folder
    (`codex-tmp/<run key>`) written, instruction files and the edited file
-   never, and the internet only with Browse the web on (`network` in the
-   profile, from `commandsOnline`). Codex reads files through that shell, so its Run
+   never, and no network, Browse the web or not (`network` in the profile,
+   from `commandsOnline`: with it on, Codex's commands reached the office's own
+   API and database on this Mac). Codex reads files through that shell, so its Run
    commands shows on and locked. Its own web search is set per run, `live`
    with Browse the web and `disabled` without (`web_search`, not one of
    `SWITCHES`). The run is a process group of its
@@ -412,7 +415,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    secret store, the office's home or Oddboro's code is left out, as
    `checkFolder` refuses one, and so is one whose real path holds a glob
    character (`GLOB`). With Browse the web on too, the sandbox allows every
-   host (`OPEN_NETWORK`). A Claude Code that refuses that (`NETWORK_REFUSED`)
+   host (`OPEN_NETWORK`) but the loopback addresses (`LOOPBACK`), where the
+   office's API and database listen. A Claude Code that refuses that (`NETWORK_REFUSED`)
    fails the run that met it, which tells the owner so
    (`NETWORK_REFUSED_LINE`), and the office records one Ledger line
    (`holdNetwork`); from then on its Claude Code runs keep commands off the
@@ -475,8 +479,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    can do" section, `my_access`, `office_report` and the owner's Access tab all
    read it for the level, what the Odd's own tools reach (`ownTools`: Run
    commands, Browse the web, whether commands reach the internet, and the
-   folders) and each outside tool; `my_access` and `office_report` also name
-   the tool its runs go through. A hosted sign-in that ran out
+   folders) and each outside tool. The prompt, `my_access` and
+   `office_report` also name the tool its runs go through, the prompt and
+   `my_access` in one line (`runsOnLine`). A hosted sign-in that ran out
    shows only to the run, which passes it to its own `my_access` as
    `SIGNED_OUT`; `office_report` and the Access tab still show that tool as
    working. A run below the Odd's own level (a hand-off's, either side, or a

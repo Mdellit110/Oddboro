@@ -37,6 +37,8 @@
   let pick = $state<{ id: string; name: string; kind: string } | undefined>();
   let level = $state<GrantLevel>('read');
   let problem = $state('');
+  /** Why the one-click move was refused. It shows under its button, since the tab's foot is out of sight. */
+  let refused = $state('');
   let done = $state('');
 
   $effect(() => {
@@ -61,7 +63,7 @@
 
   async function grant() {
     if (!pick) return;
-    problem = '';
+    problem = refused = '';
     try {
       await call(`/api/staff/${profile.id}/access`, { connector: pick.id, level });
       done = `A task with the steps to connect ${pick.name} is on your desk.`;
@@ -94,7 +96,7 @@
 
   const GRANTABLE = OFFICE_TOOLS.filter((t) => !t.always);
   async function setTool(tool: string, on: boolean) {
-    problem = '';
+    problem = refused = '';
     try {
       await call(`/api/staff/${profile.id}`, { tool, on }, 'PATCH');
     } catch (e) {
@@ -105,7 +107,7 @@
   /** The page shows how Run commands reaches the Odd's tool and what its runs get; only the server works either out. */
   const how = $derived(profile.commandsHow);
   async function setOwnTool(which: 'commands' | 'web', box: HTMLInputElement) {
-    problem = '';
+    problem = refused = '';
     try {
       await call(`/api/staff/${profile.id}`, { [which]: box.checked }, 'PATCH');
     } catch (e) {
@@ -116,7 +118,7 @@
   }
 
   async function setAgent(select: HTMLSelectElement) {
-    problem = '';
+    problem = refused = '';
     try {
       await call(`/api/staff/${profile.id}`, { agent: select.value }, 'PATCH');
     } catch (e) {
@@ -128,16 +130,16 @@
 
   /** The one click under a switch the Odd's tool cannot follow: the move and the switch, in one PATCH. */
   async function moveFor(offer: Agent) {
-    problem = '';
+    problem = refused = '';
     try {
       await call(`/api/staff/${profile.id}`, { agent: offer, commands: true }, 'PATCH');
     } catch (e) {
-      problem = e instanceof Error ? e.message : String(e);
+      refused = e instanceof Error ? e.message : String(e);
     }
   }
 
   async function setPermission(permission: Level) {
-    problem = '';
+    problem = refused = '';
     try {
       await call(`/api/staff/${profile.id}`, { permission }, 'PATCH');
     } catch (e) {
@@ -197,6 +199,9 @@
               class="mt-0.5 block text-start text-xs text-sea hover:text-ink"
               onclick={() => moveFor(offer)}>Switch {profile.name} to {AGENT_NAMES[offer]}?</button
             >
+            {#if refused}
+              <span class="block text-xs text-muted">{refused}</span>
+            {/if}
           {/if}
         </span>
       </li>

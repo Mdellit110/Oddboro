@@ -65,7 +65,7 @@ test("the page's profile carries what runs reach, each folder's ~ form, the offe
     const codex = row({ agent: 'codex', web: true });
     assert.equal(
       toProfile(codex).webLine,
-      'Search the web. Its commands can reach the internet too.'
+      "Search the web. Codex's commands stay off the internet."
     );
 
     await ownerHome(async (home) => {
@@ -100,13 +100,13 @@ test("the page's profile carries what runs reach, each folder's ~ form, the offe
         held.webLine,
         'Search and read web pages. This version of Claude Code keeps its commands off the internet.'
       );
-      // The refusal is Claude Code's, so a Codex Odd keeps its network and its line.
+      // The refusal is Claude Code's, so a Codex Odd is not held, and keeps its own line.
       const codexHeld = toProfile(codex);
       assert.deepEqual(
         { network: codexHeld.reach.network, held: codexHeld.reach.held },
-        { network: true, held: false }
+        { network: false, held: false }
       );
-      assert.equal(codexHeld.webLine, 'Search the web. Its commands can reach the internet too.');
+      assert.equal(codexHeld.webLine, "Search the web. Codex's commands stay off the internet.");
     } finally {
       resetHeldNetwork();
     }

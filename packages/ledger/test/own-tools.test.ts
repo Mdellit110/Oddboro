@@ -101,7 +101,9 @@ test("a switch or a move that opens or closes commands' internet says so in its 
       odd('Nell', { agent: 'claude', commands: true, web: false }),
       odd('Otis', { agent: 'claude', commands: false, web: false }),
       odd('Gale', { agent: 'grok', commands: true, web: true }),
-      odd('Wren', { agent: 'claude', commands: false, web: true })
+      odd('Wren', { agent: 'claude', commands: false, web: true }),
+      odd('Cass', { agent: 'codex', commands: false, web: false }),
+      odd('Hale', { agent: 'grok', commands: false, web: true })
     ]);
   await onPlatform('darwin', async () => {
     await O.setOwnTool('Nell', 'web', true);
@@ -111,6 +113,9 @@ test("a switch or a move that opens or closes commands' internet says so in its 
     // Run commands, with Browse the web already on, opens the internet too.
     await O.setOwnTool('Wren', 'commands', true);
     await O.setOwnTool('Wren', 'commands', false);
+    // Codex's commands stay off the internet, so neither its web nor a move to it opens it.
+    await O.setOwnTool('Cass', 'web', true);
+    await O.setAgent('Hale', 'codex');
   });
   const lines = await sql<{ title: string; body: string }>`
     select title, body from ledger order by id`;
@@ -122,7 +127,9 @@ test("a switch or a move that opens or closes commands' internet says so in its 
       ['Let Otis browse the web', ''],
       ['Moved Gale from Grok to Claude Code', O.NETWORK_NOTE.on],
       ['Let Wren run commands', O.NETWORK_NOTE.on],
-      ['Stopped Wren running commands', O.NETWORK_NOTE.off]
+      ['Stopped Wren running commands', O.NETWORK_NOTE.off],
+      ['Let Cass browse the web', ''],
+      ['Moved Hale from Grok to Codex', '']
     ]
   );
   assert.deepEqual(O.NETWORK_NOTE, {

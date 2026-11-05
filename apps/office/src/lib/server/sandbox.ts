@@ -24,6 +24,17 @@ import { gitEnv } from './launch.ts';
 /** Every host, for commands when Run commands and Browse the web are both on (measured on Claude Code 2.1.318). */
 export const OPEN_NETWORK: string[] = ['*'];
 /**
+ * The loopback addresses, which commands never reach even with every host
+ * open: the office's API and its database listen there, so a command could
+ * otherwise change the office behind the owner's back. Measured on Claude
+ * Code 2.1.318: its proxy refuses each of these, their `::ffff:` forms, and
+ * any name that resolves to one (`localtest.me`, `127.0.0.1.nip.io`). It
+ * matches exact hosts and resolved addresses, not ranges: `127.0.0.0/8` in
+ * place of `127.0.0.1` let `127.0.0.1` through. Other `127.x` addresses are
+ * not refused; on a Mac nothing answers there unless `lo0` has an alias.
+ */
+export const LOOPBACK: string[] = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'];
+/**
  * Claude Code's words when it refuses that open form, as its binary carries
  * them. 2.1.318 took `*.com` in `--settings` and loaded a page, so how a
  * refusal shows in a run is not yet seen; these are the words to look for.
@@ -98,7 +109,8 @@ export function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
  * (`reads`), the owner's developer tool folders (`devReads`), the commands'
  * own temp folder (`tmp`) and the system's own folders; writes as run() says,
  * never what `denyWrite` names; no network unless Browse the web is on
- * (`network`); and none of the secrets in the run's environment (`env`).
+ * (`network`), and never a loopback address (`LOOPBACK`); and none of
+ * the secrets in the run's environment (`env`).
  */
 export function claudeSandbox(o: {
   reads: string[];
@@ -133,7 +145,9 @@ export function claudeSandbox(o: {
       ],
       denyWrite: o.denyWrite
     },
-    network: { allowedDomains: o.network ? OPEN_NETWORK : [] },
+    network: o.network
+      ? { allowedDomains: OPEN_NETWORK, deniedDomains: LOOPBACK }
+      : { allowedDomains: [] },
     credentials: {
       envVars: hiddenFromCommands(o.env).map((name) => ({ name, mode: 'deny' }))
     }

@@ -25,7 +25,7 @@ import {
 } from './office-under-test.ts';
 
 const { LAUNCHES } = await import('./cli.ts');
-const { DEV_FOLDERS, DEV_SECRETS, NETWORK_REFUSED_LINE, resetHeldNetwork } =
+const { DEV_FOLDERS, DEV_SECRETS, LOOPBACK, NETWORK_REFUSED_LINE, networkHeld, resetHeldNetwork } =
   await import('./sandbox.ts');
 const { shellEnv } = await import('./launch.ts');
 
@@ -34,6 +34,7 @@ await L.pg`insert into staff ${L.pg([
   odd('bo', 'Bo'),
   odd('cy', 'Cy'),
   odd('dee', 'Dee'),
+  odd('eli', 'Eli'),
   { ...odd('kit', 'Kit'), agent: 'grok' },
   { ...odd('cole', 'Cole'), agent: 'codex' }
 ])}`;
@@ -59,7 +60,7 @@ function listAfter(args: string[], flag: string): string[] {
 }
 type Sandbox = {
   filesystem: { denyRead: string[]; allowRead: string[]; denyWrite: string[] };
-  network: { allowedDomains: string[] };
+  network: { allowedDomains: string[]; deniedDomains?: string[] };
   credentials: { envVars: { name: string; mode: string }[] };
 };
 const sandboxOf = (run: Gave) =>
@@ -169,12 +170,20 @@ test(
   }
 );
 
-test("Claude's commands reach the internet only with Browse the web on", onMac, async () => {
-  await setOwn('bo', { commands: true, web: true });
-  assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, { allowedDomains: ['*'] });
-  await setOwn('bo', { commands: true });
-  assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, { allowedDomains: [] });
-});
+test(
+  "Claude's commands reach the internet only with Browse the web on, and never a loopback address",
+  onMac,
+  async () => {
+    await setOwn('bo', { commands: true, web: true });
+    assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, {
+      allowedDomains: ['*'],
+      deniedDomains: ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']
+    });
+    // Closed, the network keeps its exact settings: no deny list beside it.
+    await setOwn('bo', { commands: true });
+    assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, { allowedDomains: [] });
+  }
+);
 
 test(
   'a Claude Code that refuses the open network fails that run in plain words, and later runs keep commands off the internet and say so',
@@ -183,12 +192,26 @@ test(
     const owner = await L.ownerName();
     const title = "Kept Odds' commands off the internet";
     await setOwn('cy', { commands: true, web: true });
+    await setOwn('eli', { commands: true, web: true });
     try {
-      let error = '';
-      await chat('cy', 'Refuse the open network.', (e) => {
-        if (e.type === 'error') error = e.message;
+      // Two runs refused at once, both started before either ended.
+      const release = join(folder, 'release-refusals');
+      const errors: Record<string, string> = {};
+      const refused = ['cy', 'eli'].map((id) =>
+        chat(id, `Hold until ${release} exists. Refuse the open network.`, (e) => {
+          if (e.type === 'error') errors[id] = e.message;
+        })
+      );
+      for (let i = 0; L.runsGoing.size < 2; i++) {
+        assert.ok(i < 500, 'both runs never started');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      writeFileSync(release, '');
+      await Promise.all(refused);
+      assert.deepEqual(errors, {
+        cy: NETWORK_REFUSED_LINE.replaceAll('{name}', 'Cy'),
+        eli: NETWORK_REFUSED_LINE.replaceAll('{name}', 'Eli')
       });
-      assert.equal(error, NETWORK_REFUSED_LINE.replaceAll('{name}', 'Cy'));
       // The Ledger line is written after the run ends, without holding it up.
       let lines: { actor: string }[] = [];
       for (let i = 0; i < 100 && !lines.length; i++) {
@@ -213,9 +236,26 @@ test(
         1,
         'a held network was recorded twice'
       );
+      // An Odd with commands and no web lost no network to the hold, so is told nothing of it.
+      await setOwn('eli', { commands: true });
+      const offline = await chatOf('eli');
+      assert.equal(offline.env.NETWORK_HELD, undefined);
+      assert.ok(!offline.system.includes(L.NETWORK_HELD_LINE), offline.system);
     } finally {
       resetHeldNetwork();
     }
+  }
+);
+
+test(
+  "a run that succeeds and quotes Claude Code's refusal words keeps the network open",
+  onMac,
+  async () => {
+    await setOwn('eli', { commands: true, web: true });
+    const quoted = await chatOf('eli', 'It said: Overly broad patterns like "*" are not allowed.');
+    assert.ok(quoted.message.includes('Overly broad patterns'), quoted.message);
+    assert.equal(networkHeld(), false);
+    assert.deepEqual(sandboxOf(await chatOf('eli'))?.network?.allowedDomains, ['*']);
   }
 );
 
@@ -262,25 +302,33 @@ test(
     })
 );
 
-test("the Odd's prompt and its my_access say the same about its own tools", onMac, async () => {
-  const owner = await L.ownerName();
-  await setOwn('dee', {
-    commands: true,
-    web: true,
-    folders: [
-      { path: made('same', 'read'), write: false },
-      { path: made('same', 'write'), write: true }
-    ]
-  });
-  const run = await chatOf('dee');
-  const told = L.accessInRun(await L.capabilities((await L.staffer('dee'))!), owner, run.env);
-  const lines = told.split('\n');
-  const tools = lines.find((l) => l.startsWith('Your own tools'));
-  assert.ok(tools && run.system.includes(tools), `${tools}\n${run.system}`);
-  const folders = lines.slice(lines.indexOf(`Folders ${owner} gave you:`) + 1, -1);
-  assert.equal(folders.length, 2, told);
-  for (const l of folders) assert.ok(run.system.includes(`  ${l}\n`), `${l}\n${run.system}`);
-});
+test(
+  "the Odd's prompt and its my_access say the same about its own tools and the tool its runs go through",
+  onMac,
+  async () => {
+    const owner = await L.ownerName();
+    await setOwn('dee', {
+      commands: true,
+      web: true,
+      folders: [
+        { path: made('same', 'read'), write: false },
+        { path: made('same', 'write'), write: true }
+      ]
+    });
+    const run = await chatOf('dee');
+    const dee = (await L.staffer('dee'))!;
+    const told = L.accessInRun(await L.capabilities(dee), owner, run.env);
+    const lines = told.split('\n');
+    const runsOn = L.runsOnLine(dee.agent);
+    assert.ok(lines.includes(runsOn), told);
+    assert.ok(run.system.includes(`- ${runsOn}\n`), `${runsOn}\n${run.system}`);
+    const tools = lines.find((l) => l.startsWith('Your own tools'));
+    assert.ok(tools && run.system.includes(tools), `${tools}\n${run.system}`);
+    const folders = lines.slice(lines.indexOf(`Folders ${owner} gave you:`) + 1, -1);
+    assert.equal(folders.length, 2, told);
+    for (const l of folders) assert.ok(run.system.includes(`  ${l}\n`), `${l}\n${run.system}`);
+  }
+);
 
 test("a chat's replay walks the given write folders the profile lists", async () => {
   const gone = made('replay', 'gone');
@@ -342,7 +390,7 @@ test(
     withEnv({ FAKE_OWNER_API_TOKEN: 'x' }, async () => {
       await setOwn('bo', { commands: true, web: true });
       const sandbox = sandboxOf(await chatOf('bo'));
-      assert.deepEqual(sandbox?.network, { allowedDomains: ['*'] });
+      assert.deepEqual(sandbox?.network, { allowedDomains: ['*'], deniedDomains: LOOPBACK });
       const hidden = sandbox?.credentials.envVars ?? [];
       for (const name of ['FAKE_OWNER_API_TOKEN', 'ANTHROPIC_API_KEY'])
         assert.ok(

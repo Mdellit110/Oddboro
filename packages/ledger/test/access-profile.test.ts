@@ -101,16 +101,17 @@ test('ownTools is what a run reaches: the switch as its tool takes it, the web, 
     web: false,
     network: false
   });
+  // Codex's walls did not hold the office's own ports with its network on, so its commands stay off it.
   assert.deepEqual(on(odd('codex', false, true), 'darwin'), {
     commands: true,
     web: true,
-    network: true
+    network: false
   });
-  // A tool whose walls were not measured holding with the network open keeps its commands off it.
+  // The network follows the table: a tool marked as holding its walls open gets it.
   const measured = { ...A.NETWORK_WITH_WEB };
-  A.NETWORK_WITH_WEB.codex = false;
+  A.NETWORK_WITH_WEB.codex = true;
   try {
-    assert.equal(on(odd('codex', false, true), 'darwin').network, false);
+    assert.equal(on(odd('codex', false, true), 'darwin').network, true);
   } finally {
     Object.assign(A.NETWORK_WITH_WEB, measured);
   }
@@ -192,16 +193,16 @@ test('the line under Browse the web says what its commands do with it', () => {
   assert.equal(A.webLine('gemini', 'darwin', false), 'Search and read web pages.');
   assert.equal(
     A.webLine('codex', 'darwin', false),
-    'Search the web. Its commands can reach the internet too.'
+    "Search the web. Codex's commands stay off the internet."
   );
-  // A tool whose walls were not measured open keeps its commands closed, and says so.
+  // The line follows the table, either way.
   const measured = { ...A.NETWORK_WITH_WEB };
-  A.NETWORK_WITH_WEB.codex = false;
+  A.NETWORK_WITH_WEB.codex = true;
   A.NETWORK_WITH_WEB.claude = false;
   try {
     assert.equal(
       A.webLine('codex', 'darwin', false),
-      "Search the web. Codex's commands stay off the internet."
+      'Search the web. Its commands can reach the internet too.'
     );
     assert.equal(
       A.webLine('claude', 'darwin', false),
