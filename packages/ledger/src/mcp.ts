@@ -73,7 +73,7 @@ import {
 } from './threads.ts';
 import { THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
-import { heldTools, lacking } from './sharing.ts';
+import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
 import { ensureConnector, searchRegistry } from './registry.ts';
 import type { GoalPlanItem, HireProposal } from './schema.ts';
 import {
@@ -1088,10 +1088,13 @@ if (HANDS_OFF.tool) {
   const colleagues = (await roster()).filter((s) => s.id !== ME);
   const serving = await goalsFor(ME);
   const held = await heldTools([ME, ...colleagues.map((c) => c.id)]);
+  /** One of this Odd's tools as its colleague line names it: "the web", "your folder ~/x", "your Gmail". */
+  const yours = (t: Tool) =>
+    t.id === WEB ? t.name : t.id.startsWith(FOLDER) ? `your folder ${t.name}` : `your ${t.name}`;
   /** Each colleague's line, with the tools of this Odd's it lacks. */
   const lines = colleagues.map((c) => {
     const lacks = lacking(held, c.id, [ME]);
-    return `- ${c.id}: ${c.name}, ${c.role}. ${c.remit}${lacks.length ? ` Lacks your ${lacks.map((t) => `${t.name} (${t.id})`).join(', ')}.` : ''}`;
+    return `- ${c.id}: ${c.name}, ${c.role}. ${c.remit}${lacks.length ? ` Lacks ${toolNames(lacks.map(yours))}.` : ''}`;
   });
   tool(
     'hand_off',

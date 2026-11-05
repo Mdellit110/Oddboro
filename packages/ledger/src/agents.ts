@@ -58,7 +58,7 @@ export const COMMANDS_WHY: Record<Agent, string> = {
   claude: 'Not tested on this system yet.',
   codex: 'Codex reads files through its commands.',
   // Grok's sandbox blocks a command's network on Linux only, so its sign-in could leave the Mac.
-  grok: "Grok can't keep commands off the network on a Mac.",
+  grok: "Grok can't run commands here: on a Mac they can't be kept off the internet.",
   gemini: 'Not tested with Gemini yet.'
 };
 

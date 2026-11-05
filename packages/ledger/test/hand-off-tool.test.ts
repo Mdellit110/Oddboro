@@ -11,14 +11,16 @@
 // old parameter name does nothing. After every test each goal still has one
 // thread. Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { db, sql, toolServer } from './tool-server.ts';
 import { oneThreadPerGoal } from './one-thread.ts';
 
 const { connectors, goals, grants, staff, threads } = await import('../src/schema.ts');
-const { eq } = await import('drizzle-orm');
+const { eq, inArray } = await import('drizzle-orm');
 const { OFFICE_TOOLS, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
 const { HAND_OFF_LIMIT, LEADS_NONE } = await import('../src/threads.ts');
@@ -423,4 +425,39 @@ test('every office tool refuses a key it does not take, and says which keys it d
   );
   assert.deepEqual(await raisedBy('all'), { asks: [], tasks: [] });
   assert.deepEqual(await db.select().from(threads).where(eq(threads.hubId, 'all')), []);
+});
+
+test("the hand_off tool names what each colleague lacks of the lead's tools once, in plain words", async () => {
+  // The tool server's home, holding the folder Lena gave her Odds, so it is
+  // shown as ~/x and is on the disk for a colleague that has it.
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-lacks-')));
+  const x = join(home, 'x');
+  mkdirSync(x);
+  const folders = [{ path: x, write: false }];
+  await db.update(staff).set({ web: true, folders }).where(eq(staff.id, 'lead'));
+  // Wes has Gmail and the web, so lacks the folder; Fay has Gmail and the folder, so lacks the web.
+  await db.insert(staff).values([
+    { ...odd('wes', 'Wes'), web: true },
+    { ...odd('fay', 'Fay'), folders }
+  ]);
+  await db
+    .insert(grants)
+    .values(
+      ['wes', 'fay'].map((staffId) => ({ staffId, connectorId: 'gmail', level: 'read' as const }))
+    );
+  try {
+    const t = await handOffTool(await toolServer('lead', { RUN_KEY: 'k-lacks', HOME: home }));
+    const lines = (t?.description ?? '').split('\n');
+    for (const line of [
+      '- wes: Wes, Tester. Tests. Lacks your folder ~/x.',
+      '- fay: Fay, Tester. Tests. Lacks the web.',
+      '- paige: Paige, Tester. Tests. Lacks your Gmail, the web, and your folder ~/x.'
+    ])
+      assert.ok(lines.includes(line), `${line}\n${t?.description}`);
+  } finally {
+    await db.delete(grants).where(inArray(grants.staffId, ['wes', 'fay']));
+    await db.delete(staff).where(inArray(staff.id, ['wes', 'fay']));
+    await db.update(staff).set({ web: false, folders: [] }).where(eq(staff.id, 'lead'));
+    rmSync(home, { recursive: true, force: true });
+  }
 });

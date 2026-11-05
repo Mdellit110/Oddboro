@@ -21,7 +21,9 @@ export type Tool = { id: string; name: string };
 export type Held = Tool & { staffId: string; inForce: boolean };
 
 /** A folder's id among held tools: its real path, after this. */
-const FOLDER = 'folder:';
+export const FOLDER = 'folder:';
+/** The web's id among held tools. */
+export const WEB = 'web';
 
 /**
  * Every grant the given Odds hold, in force or not, then the web and each
@@ -49,7 +51,7 @@ export async function heldTools(staffIds: string[], q: Db = db): Promise<Held[]>
     ...odds.flatMap((o) => {
       const own = ownTools(o, process.platform);
       return [
-        ...(o.web ? [{ staffId: o.id, id: 'web', name: 'the web', inForce: own.web }] : []),
+        ...(o.web ? [{ staffId: o.id, id: WEB, name: 'the web', inForce: own.web }] : []),
         ...o.folders.map((f) => ({
           staffId: o.id,
           id: FOLDER + f.path,
