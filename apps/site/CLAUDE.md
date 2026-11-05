@@ -52,7 +52,7 @@ office, change the site in the same change.
 ## The promise
 
 The site makes no third-party request. The fonts ship with it
-(`@fontsource/pixelify-sans`, `@fontsource-variable/inter`), and there are no
+(`@fontsource/geist-pixel`, `@fontsource-variable/inter`), and there are no
 analytics, cookies, trackers, embeds or forms. It holds no secrets and collects
 nothing. The privacy policy says so, so a change that adds a request to another
 host is a change to the policy first.

@@ -643,7 +643,7 @@
       </p>
       <h1
         id="hero-title"
-        class="font-pixel text-ink text-5xl leading-[1.02] font-semibold text-balance sm:text-6xl lg:text-[3.75rem]"
+        class="font-pixel text-ink text-5xl leading-[1.02] text-balance sm:text-6xl lg:text-[3.75rem]"
       >
         Hire
         <span class="inline-flex items-baseline gap-3 whitespace-nowrap"

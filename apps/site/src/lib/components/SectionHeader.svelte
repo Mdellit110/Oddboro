@@ -23,10 +23,7 @@
   {#if eyebrow}
     <p class="text-sea mb-3 text-sm font-semibold tracking-wide uppercase">{eyebrow}</p>
   {/if}
-  <h2
-    {id}
-    class="font-pixel text-ink text-4xl leading-[1.05] font-semibold text-balance sm:text-5xl"
-  >
+  <h2 {id} class="font-pixel text-ink text-4xl leading-[1.05] text-balance sm:text-5xl">
     {title}
   </h2>
   {#if lede}

@@ -40,7 +40,7 @@
       class="goal rounded-card border-hairline bg-panel-solid border p-6 lg:mt-auto"
     >
       <p class="text-ember text-xs font-semibold tracking-wide uppercase">Goal</p>
-      <p class="font-pixel text-ink mt-2 text-2xl font-semibold">More time to read.</p>
+      <p class="font-pixel text-ink mt-2 text-2xl">More time to read.</p>
       <dl class="text-muted mt-8 space-y-2 text-[15px]">
         <div class="flex gap-3">
           <dt class="text-faint w-20 shrink-0 text-xs font-semibold tracking-wide uppercase">
@@ -73,7 +73,7 @@
              on top: those dim until the line reaches them. -->
         <span class="bg-night absolute start-0 top-0 size-9 rounded-full" aria-hidden="true">
           <span
-            class="goal-step font-pixel text-sea border-sea flex size-full items-center justify-center rounded-full border-2 text-base font-semibold"
+            class="goal-step font-pixel text-sea border-sea flex size-full items-center justify-center rounded-full border-2 text-base"
             data-step={i}>{i + 1}</span
           >
         </span>

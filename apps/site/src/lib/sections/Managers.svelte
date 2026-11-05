@@ -64,7 +64,7 @@
             />
           </div>
         </div>
-        <h3 class="font-pixel text-ink mt-4 text-2xl font-semibold">{m.name}</h3>
+        <h3 class="font-pixel text-ink mt-4 text-2xl">{m.name}</h3>
         <p class="text-sea mt-1 text-xs font-semibold tracking-wide uppercase">{m.trait}</p>
         <p class="bubble text-muted mt-4 mb-4 text-[15px] text-pretty leading-relaxed">{m.says}</p>
         <button
@@ -114,7 +114,7 @@
           fill-rule="evenodd"
         />
       </svg>
-      <h3 class="font-pixel text-ink mt-4 text-2xl font-semibold">Describe your own.</h3>
+      <h3 class="font-pixel text-ink mt-4 text-2xl">Describe your own.</h3>
       <p class="text-muted mt-4 text-[15px] leading-relaxed">
         Tell the office how they work and how they look. It writes their job description and draws
         them.
