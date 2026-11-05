@@ -152,7 +152,7 @@ export function accessInRun(
           `This run was started by a colleague or by the office, not by ${owner}'s yes, so it works at ${LEVEL_NAME[ceiling]} at most.`
         ]
       : []),
-    `Your runs go through ${AGENT_NAMES[caps.agent]}.`,
+    runsOnLine(caps.agent),
     ownToolsLine(caps.agent, tools).replaceAll('{owner}', owner),
     ...(held ? [NETWORK_HELD_LINE] : []),
     ...(folders.length
@@ -162,6 +162,11 @@ export function accessInRun(
       ? lines.map((l, i) => `- (id: ${outside[i].connector.id}) ${l}`).join('\n')
       : `${owner} has connected no outside tools for you yet.`
   ].join('\n');
+}
+
+/** The tool the Odd's runs go through, said to the Odd, in its prompt and its my_access alike. */
+export function runsOnLine(agent: Agent): string {
+  return `Your runs go through ${AGENT_NAMES[agent]}.`;
 }
 
 /** How many tools a grant reaches, in words: every tool at write, else the read-only ones. */

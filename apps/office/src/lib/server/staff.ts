@@ -105,6 +105,7 @@ import {
   NETWORK_HELD_LINE,
   ownTools,
   ownToolsLine,
+  runsOnLine,
   SECRET_STORES,
   type OwnTools,
   chatSession,
@@ -520,9 +521,10 @@ async function taught(who: StaffRow): Promise<string> {
 }
 
 /**
- * What this run can do: its level, where it writes, its own tools, and each
- * outside tool it holds or was granted. `networkHeld` says this office keeps
- * the commands off the internet they would have reached, as my_access says it.
+ * What this run can do: its level, the tool its runs go through, where it
+ * writes, its own tools, and each outside tool it holds or was granted.
+ * `networkHeld` says this office keeps the commands off the internet they
+ * would have reached, as my_access says it.
  */
 function canDo(
   caps: Capabilities,
@@ -546,6 +548,7 @@ function canDo(
     '## What you can do',
     '',
     `- ${levelLine(caps.level, owner)}`,
+    `- ${runsOnLine(agent)}`,
     `- ${[writes, ownToolsLine(agent, own), ...(networkHeld ? [NETWORK_HELD_LINE] : []), beyond].join(' ')}`,
     '- If a brief names tools you do not have, do the work with your own tools.',
     '- Outside tools:',

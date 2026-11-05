@@ -171,7 +171,7 @@ test(
 );
 
 test(
-  "Claude's commands reach the internet only with Browse the web on, and never this Mac's own addresses",
+  "Claude's commands reach the internet only with Browse the web on, and never a loopback address",
   onMac,
   async () => {
     await setOwn('bo', { commands: true, web: true });
@@ -302,25 +302,33 @@ test(
     })
 );
 
-test("the Odd's prompt and its my_access say the same about its own tools", onMac, async () => {
-  const owner = await L.ownerName();
-  await setOwn('dee', {
-    commands: true,
-    web: true,
-    folders: [
-      { path: made('same', 'read'), write: false },
-      { path: made('same', 'write'), write: true }
-    ]
-  });
-  const run = await chatOf('dee');
-  const told = L.accessInRun(await L.capabilities((await L.staffer('dee'))!), owner, run.env);
-  const lines = told.split('\n');
-  const tools = lines.find((l) => l.startsWith('Your own tools'));
-  assert.ok(tools && run.system.includes(tools), `${tools}\n${run.system}`);
-  const folders = lines.slice(lines.indexOf(`Folders ${owner} gave you:`) + 1, -1);
-  assert.equal(folders.length, 2, told);
-  for (const l of folders) assert.ok(run.system.includes(`  ${l}\n`), `${l}\n${run.system}`);
-});
+test(
+  "the Odd's prompt and its my_access say the same about its own tools and the tool its runs go through",
+  onMac,
+  async () => {
+    const owner = await L.ownerName();
+    await setOwn('dee', {
+      commands: true,
+      web: true,
+      folders: [
+        { path: made('same', 'read'), write: false },
+        { path: made('same', 'write'), write: true }
+      ]
+    });
+    const run = await chatOf('dee');
+    const dee = (await L.staffer('dee'))!;
+    const told = L.accessInRun(await L.capabilities(dee), owner, run.env);
+    const lines = told.split('\n');
+    const runsOn = L.runsOnLine(dee.agent);
+    assert.ok(lines.includes(runsOn), told);
+    assert.ok(run.system.includes(`- ${runsOn}\n`), `${runsOn}\n${run.system}`);
+    const tools = lines.find((l) => l.startsWith('Your own tools'));
+    assert.ok(tools && run.system.includes(tools), `${tools}\n${run.system}`);
+    const folders = lines.slice(lines.indexOf(`Folders ${owner} gave you:`) + 1, -1);
+    assert.equal(folders.length, 2, told);
+    for (const l of folders) assert.ok(run.system.includes(`  ${l}\n`), `${l}\n${run.system}`);
+  }
+);
 
 test("a chat's replay walks the given write folders the profile lists", async () => {
   const gone = made('replay', 'gone');
