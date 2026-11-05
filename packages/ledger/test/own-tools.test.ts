@@ -53,7 +53,10 @@ test('commandsHow per tool and system', () => {
     for (const platform of ['darwin', 'linux', 'win32'] as const) {
       const how = commandsHow(agent, platform);
       assert.equal(how.state, want[agent][platform], `${agent} on ${platform}`);
-      assert.equal(how.why, how.state === 'switch' ? undefined : COMMANDS_WHY[agent]);
+      assert.equal(
+        'why' in how ? how.why : undefined,
+        how.state === 'switch' ? undefined : COMMANDS_WHY[agent]
+      );
     }
   assert.deepEqual(COMMANDS_WHY, {
     claude: 'Not tested on this system yet.',

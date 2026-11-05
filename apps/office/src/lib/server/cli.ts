@@ -1,7 +1,7 @@
 // What a staffer's run does by the coding tool it runs on, apart from Claude
 // Code's own arguments, which run() in staff.ts builds: how a run on Grok,
 // Codex or Gemini starts (grok.ts, codex.ts, gemini.ts), what each tool's own
-// file tools reach as the run's prompt says it, the tools a line of Claude
+// tools reach as the run's prompt says it, the tools a line of Claude
 // Code's stream names (Grok streams in that shape), and why a run ended
 // early. Server only.
 import { randomUUID } from 'node:crypto';
@@ -39,12 +39,14 @@ export type CliRun = {
   staffId: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
   /** On a thread: the Odd's own part of it. */
   part?: string;
-  /** The folders the run writes: its own, and on a thread its part of it. */
+  /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
+  /** The owner's Browse the web switch: the tool's own web search and fetch. */
+  web: boolean;
   /** The file the owner edited, by its path inside `dir`, which a run reading that edit may not write. */
   edited?: string;
   system: string;
@@ -85,7 +87,8 @@ export const LAUNCHES: Record<
         resume: r.resume,
         newSession: randomUUID(),
         servers: r.servers,
-        allowed: r.allowed
+        allowed: r.allowed,
+        web: r.web
       }),
       // Grok takes its message as an argument and reads no input.
       stdin: ''
@@ -105,7 +108,8 @@ export const LAUNCHES: Record<
         input: r.input,
         resume: r.resume,
         servers: r.servers,
-        allowed: r.allowed
+        allowed: r.allowed,
+        web: r.web
       }),
       read: codexReader(process.env.OFFICE_CODEX_MODEL ?? 'codex'),
       ownGroup: true
@@ -125,7 +129,8 @@ export const LAUNCHES: Record<
         input: r.input,
         resume: r.resume,
         servers: r.servers,
-        allowed: r.allowed
+        allowed: r.allowed,
+        web: r.web
       }),
       read: geminiReader(Object.keys(r.servers)),
       // Its MCP servers are processes of their own, which stop with the run.
@@ -134,20 +139,28 @@ export const LAUNCHES: Record<
   }
 };
 
-const FILES_ONLY = 'Your own tools work on files only: no shell and no web.';
 /**
- * What a run's own tools reach, by the tool it runs on: Claude Code, Grok and
- * Gemini get file tools only, and Codex its shell, which the kernel holds to
- * the run's folders with the network off (codex.ts). Gemini's policy allows a
- * write only by its full path (gemini.ts).
+ * What a run's own tools reach, as its prompt says it: file tools always, a
+ * shell when the run gets commands (`commandsHow` in the ledger, decided in
+ * run()), which each tool's sandbox holds to the run's folders with the
+ * network off, and the tool's own web search and fetch when the owner switched
+ * Browse the web on. Gemini's policy allows a write only by its full path
+ * (gemini.ts).
  */
-export const OWN_TOOLS: Record<Agent, string> = {
-  claude: FILES_ONLY,
-  grok: FILES_ONLY,
-  gemini: `${FILES_ONLY} Give each file tool the file's full path.`,
-  codex:
-    'Your own tools are a shell and file edits, confined to your folders, with no network and no web.'
-};
+export function ownToolsLine(agent: Agent, run: { commands: boolean; web: boolean }): string {
+  const plus = [
+    ...(run.commands ? ['a shell confined to your folders, with no network'] : []),
+    ...(run.web ? ['web search and fetch'] : [])
+  ];
+  const line = plus.length
+    ? [
+        `Your own tools work on files, plus ${plus.join(', and ')}.`,
+        ...(run.commands ? [] : ['No shell.']),
+        ...(run.web ? [] : ['No web.'])
+      ].join(' ')
+    : 'Your own tools work on files only: no shell and no web.';
+  return agent === 'gemini' ? `${line} Give each file tool the file's full path.` : line;
+}
 
 /**
  * Claude Code's name for a tool Grok names: a file tool by GROK_FILE_TOOLS,

@@ -6,11 +6,13 @@
 // Gemini keeps its sessions in the office's own Gemini home
 // (GEMINI_CLI_HOME), never the owner's ~/.gemini, and signs in with an API
 // key the owner gives on the office's page, kept in the keychain like the
-// Claude key, never a login. A Gemini Odd has file tools only:
-// Gemini itself holds its reads to the run's folder, the owner's data folder
-// and the thread folders it reads (`--include-directories`), and one policy
-// file per run, which beats every settings file, decides each call. Every
-// tool not named is denied, which also hides it from the model; the read tools
+// Claude key, never a login. A Gemini Odd has file tools, and with Browse
+// the web on, Gemini's web search and fetch; never a shell.
+// Gemini itself holds its reads to the run's folder, the owner's data folder,
+// the thread folders it reads and the folders the owner gave the Odd
+// (`--include-directories`), and one policy file per run, which beats every
+// settings file, decides each call. Every tool not named is denied, which also
+// hides it from the model; the read tools, the web tools with Browse the web on,
 // and the MCP tools access() allows are allowed; writes are allowed only under
 // the folders the run writes, and refused for an instruction file there, the
 // file the owner edited, or a path that is not plain. Gemini runs no shell,
@@ -97,9 +99,9 @@ type GeminiRun = {
   key: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
-  /** The folders the run writes: its own, and on a thread its part of it. */
+  /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
   /** The file the owner edited, inside `dir`, which a run reading that edit may read and not write. */
   edited?: string;
@@ -111,6 +113,8 @@ type GeminiRun = {
   servers: Record<string, Record<string, unknown>>;
   /** The MCP tools the run may call, as access() names them for Claude Code (`mcp__server` or `mcp__server__tool`). */
   allowed: string[];
+  /** The owner's Browse the web switch: Gemini's google_web_search and web_fetch. */
+  web: boolean;
 };
 
 type GeminiLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; done: () => void };
@@ -118,7 +122,9 @@ type GeminiLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; don
 type Rule = Record<string, Toml>;
 
 /** The run's policy rules, each as Gemini's TOML table holds it. */
-export function geminiRules(r: Pick<GeminiRun, 'dir' | 'writes' | 'edited' | 'allowed'>): Rule[] {
+export function geminiRules(
+  r: Pick<GeminiRun, 'dir' | 'writes' | 'edited' | 'allowed' | 'web'>
+): Rule[] {
   const names = INSTRUCTIONS.map(anyCase).join('|');
   const write = (priority: number, decision: string, argsPattern: string): Rule => ({
     toolName: WRITE_TOOLS,
@@ -138,6 +144,9 @@ export function geminiRules(r: Pick<GeminiRun, 'dir' | 'writes' | 'edited' | 'al
       : []),
     ...r.writes.map((w) => write(ALLOW, 'allow', `${FILE_PATH}${exact(w)}/`)),
     { toolName: READ_TOOLS, decision: 'allow', priority: ALLOW },
+    ...(r.web
+      ? [{ toolName: ['google_web_search', 'web_fetch'], decision: 'allow', priority: ALLOW }]
+      : []),
     ...r.allowed.map(mcpGrant).map(({ server, tool }): Rule => ({
       mcpName: server,
       toolName: tool ?? '*',

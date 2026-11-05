@@ -172,7 +172,8 @@ test('a Gemini run starts as a process group of its own, so its MCP servers stop
     input: 'Hello.',
     servers: {},
     allowed: [],
-    timeoutMs: 60_000
+    timeoutMs: 60_000,
+    web: false
   });
   assert.ok('args' in launch, JSON.stringify(launch));
   launch.done();

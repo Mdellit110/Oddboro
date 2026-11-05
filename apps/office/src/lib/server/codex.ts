@@ -10,9 +10,11 @@
 // by a permission profile the kernel enforces (Seatbelt on a Mac): it reads
 // the system's own folders (`:minimal`), Apple's developer tools (Xcode's
 // too, when the Mac uses it), node's OpenSSL config, its folder,
-// the owner's data folder and the thread folders it reads, writes only its
-// folder, its part of a thread and its own temp folder, never an instruction
-// file in them, and reaches no network. The codex process itself and the MCP servers run
+// the owner's data folder, the thread folders it reads and the folders the
+// owner gave it, writes only its folder, its part of a thread, the folders the
+// owner gave it to change and its own temp folder, never an instruction file
+// in them, and reaches no network. Codex's own web search runs outside the
+// profile, only with Browse the web on. The codex process itself and the MCP servers run
 // outside that profile, so the Codex home, the sign-in and every Codex Odd's
 // sessions stay shut to the model.
 import { execFileSync } from 'node:child_process';
@@ -73,7 +75,7 @@ const FEATURES_OFF = [
 /**
  * What every Codex run sets, whatever its home's config.toml says: no
  * approval prompts (a call outside the profile is refused, not escalated), no
- * web search, no sub-agents (`features.multi_agent` alone leaves spawn_agent
+ * sub-agents (`features.multi_agent` alone leaves spawn_agent
  * and the rest of the collaboration tools in the model's list; `agents.enabled`
  * takes them out, measured with `codex debug prompt-input` on 0.166.0), no
  * bundled skills, a shell that inherits only the core variables
@@ -83,7 +85,6 @@ const FEATURES_OFF = [
  */
 const SWITCHES: Record<string, Toml> = {
   approval_policy: 'never',
-  web_search: 'disabled',
   'agents.enabled': false,
   allow_login_shell: false,
   'shell_environment_policy.inherit': 'core',
@@ -116,9 +117,9 @@ type CodexRun = {
   key: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
-  /** The folders the run writes: its own, and on a thread its part of it. */
+  /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
   /** The file the owner edited, which a run reading that edit may read and not write. */
   edited?: string;
@@ -130,6 +131,8 @@ type CodexRun = {
   servers: Record<string, Record<string, unknown>>;
   /** The MCP tools the run may call, as access() names them for Claude Code (`mcp__server` or `mcp__server__tool`). */
   allowed: string[];
+  /** The owner's Browse the web switch: Codex's own web search, which works with the network off. */
+  web: boolean;
 };
 
 type CodexLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; done: () => void };
@@ -329,6 +332,7 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     '--strict-config',
     '--ignore-rules',
     ...Object.entries(SWITCHES).flatMap(([k, v]) => set(k, v)),
+    ...set('web_search', r.web ? 'live' : 'disabled'),
     ...set('developer_instructions', r.system),
     ...set('permissions', {
       [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: false } }

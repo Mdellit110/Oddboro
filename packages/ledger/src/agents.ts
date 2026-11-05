@@ -39,7 +39,7 @@ export const offeredAgent = (v: unknown, platform: NodeJS.Platform): Agent | und
  * `never` is off whatever it says. `why` is the line the page shows under a
  * switch the owner cannot move.
  */
-export type CommandsHow = { state: 'switch' | 'always' | 'never'; why?: string };
+export type CommandsHow = { state: 'switch' } | { state: 'always' | 'never'; why: string };
 
 /** Why each tool's Run commands is fixed, as the owner reads it. */
 export const COMMANDS_WHY: Record<Agent, string> = {

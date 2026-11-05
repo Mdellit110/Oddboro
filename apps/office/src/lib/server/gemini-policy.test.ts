@@ -40,7 +40,8 @@ const run = {
   dir,
   writes: [dir, part],
   edited: 'notes/Plan.md',
-  allowed: ['mcp__office', 'mcp__c__t']
+  allowed: ['mcp__office', 'mcp__c__t'],
+  web: false
 };
 
 test("every pattern in a Gemini run's policy passes the check Gemini's loader drops a rule for failing", () => {
@@ -160,43 +161,82 @@ const CASES: [
   ['a tool of a server not granted', { name: 'mcp_x_y', args: {} }, 'x', 'deny']
 ];
 
+/** The calls in `cases` Gemini's own loader and engine decide otherwise than meant under `r`'s policy. */
+async function misjudged(
+  r: typeof run,
+  cases: typeof CASES,
+  t: { mock: { method: (o: object, m: string, f: () => void) => unknown } }
+): Promise<string[]> {
+  assert.ok(bin);
+  const gemini = await engine(bin);
+  assert.ok(gemini, `no policy loader found in the Gemini CLI at ${bin}`);
+  // Gemini's engine logs each check it makes through console.debug.
+  t.mock.method(console, 'debug', () => {});
+  const file = join(folder, 'policy.toml');
+  writeFileSync(file, geminiPolicy(r));
+  // A `--policy` file is Gemini's user tier, 4.
+  const office = await gemini.loadPoliciesFromToml([file], () => 4);
+  assert.deepEqual(office.errors, []);
+  const expected = geminiRules(r).reduce(
+    (n, rule) => n + (Array.isArray(rule.toolName) ? rule.toolName.length : 1),
+    0
+  );
+  assert.equal(office.rules.length, expected, 'Gemini dropped a rule');
+  // Gemini's own default rules (tier 1) run beside the office's, and the
+  // highest rule settings can add (4.9) stands in here as allowing everything.
+  const core = await gemini.loadPoliciesFromToml([gemini.DEFAULT_CORE_POLICIES_DIR], () => 1);
+  assert.ok(core.rules.length > 0, 'Gemini has no default rules here');
+  const settings = { toolName: '*', decision: 'allow', priority: 4.9, source: 'settings' };
+  const decide = new gemini.PolicyEngine({
+    rules: [...office.rules, ...core.rules, settings],
+    nonInteractive: true
+  });
+  const wrong: string[] = [];
+  for (const [what, call, server, want] of cases) {
+    const { decision } = await decide.check(call, server);
+    if (decision !== want) wrong.push(`${what}: ${decision}, meant ${want}`);
+  }
+  return wrong;
+}
+
+const SKIP =
+  !bin &&
+  "SKIPPED: no gemini on PATH, so Gemini's own engine did not check the policy; put the Gemini CLI's folder first on PATH to run it";
+
 test(
   "Gemini's own loader reads a run's policy whole and its engine decides each call as the office means",
-  {
-    skip:
-      !bin &&
-      "SKIPPED: no gemini on PATH, so Gemini's own engine did not check the policy; put the Gemini CLI's folder first on PATH to run it"
-  },
+  { skip: SKIP },
   async (t) => {
-    assert.ok(bin);
-    const gemini = await engine(bin);
-    assert.ok(gemini, `no policy loader found in the Gemini CLI at ${bin}`);
-    // Gemini's engine logs each check it makes through console.debug.
-    t.mock.method(console, 'debug', () => {});
-    const file = join(folder, 'policy.toml');
-    writeFileSync(file, geminiPolicy(run));
-    // A `--policy` file is Gemini's user tier, 4.
-    const office = await gemini.loadPoliciesFromToml([file], () => 4);
-    assert.deepEqual(office.errors, []);
-    const expected = geminiRules(run).reduce(
-      (n, r) => n + (Array.isArray(r.toolName) ? r.toolName.length : 1),
-      0
-    );
-    assert.equal(office.rules.length, expected, 'Gemini dropped a rule');
-    // Gemini's own default rules (tier 1) run beside the office's, and the
-    // highest rule settings can add (4.9) stands in here as allowing everything.
-    const core = await gemini.loadPoliciesFromToml([gemini.DEFAULT_CORE_POLICIES_DIR], () => 1);
-    assert.ok(core.rules.length > 0, 'Gemini has no default rules here');
-    const settings = { toolName: '*', decision: 'allow', priority: 4.9, source: 'settings' };
-    const decide = new gemini.PolicyEngine({
-      rules: [...office.rules, ...core.rules, settings],
-      nonInteractive: true
-    });
-    const wrong: string[] = [];
-    for (const [what, call, server, want] of CASES) {
-      const { decision } = await decide.check(call, server);
-      if (decision !== want) wrong.push(`${what}: ${decision}, meant ${want}`);
-    }
-    assert.deepEqual(wrong, []);
+    assert.deepEqual(await misjudged(run, CASES, t), []);
   }
 );
+
+test("Browse the web allows Gemini's web tools and no shell", { skip: SKIP }, async (t) => {
+  const search = { name: 'google_web_search', args: { query: 'x' } };
+  const fetch = { name: 'web_fetch', args: { prompt: 'x' } };
+  const shell = { name: 'run_shell_command', args: { command: 'ls' } };
+  assert.deepEqual(
+    await misjudged(
+      { ...run, web: true },
+      [
+        ['a web search', search, undefined, 'allow'],
+        ['a web fetch', fetch, undefined, 'allow'],
+        ['a shell command', shell, undefined, 'deny']
+      ],
+      t
+    ),
+    []
+  );
+  assert.deepEqual(
+    await misjudged(
+      run,
+      [
+        ['a web search', search, undefined, 'deny'],
+        ['a web fetch', fetch, undefined, 'deny'],
+        ['a shell command', shell, undefined, 'deny']
+      ],
+      t
+    ),
+    []
+  );
+});

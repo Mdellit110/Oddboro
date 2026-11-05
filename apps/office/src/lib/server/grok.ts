@@ -182,11 +182,11 @@ type GrokRun = {
   staffId: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
-  /** On a thread: the Odd's own part of it, which it writes. */
+  /** On a thread: the Odd's own part of it, which names the run's own profile. */
   part?: string;
-  /** The folders the run writes. */
+  /** The folders the run writes: its own (the cwd), and any of its part of a thread and the folders the owner gave the Odd to change. */
   writes: string[];
   /** The paths the run may not write (`deniedEdits`). */
   deniedEdits: string[];
@@ -198,6 +198,8 @@ type GrokRun = {
   servers: Record<string, unknown>;
   /** The MCP tools the run may call, as access() names them for Claude Code (`mcp__server` or `mcp__server__tool`). */
   allowed: string[];
+  /** The owner's Browse the web switch: Grok's web_search and web_fetch. */
+  web: boolean;
 };
 
 type GrokLaunch = { args: string[]; env: NodeJS.ProcessEnv; done: () => void };
@@ -281,7 +283,8 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
   const rg = ripgrep();
   setProfile(sandbox, {
     readOnly: [...SERVER_CODE, ...rg, ...r.reads],
-    readWrite: [TEMP, ...(r.part ? [r.part] : [])],
+    // `strict` already writes the cwd, the Odd's own folder.
+    readWrite: [TEMP, ...r.writes.filter((w) => w !== r.dir)],
     deny: [...instructionPaths(r.writes), ...SHUT].flatMap(andBelow)
   });
   const agent = agentFile(r.key, r.servers);
@@ -302,13 +305,16 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     'dontAsk',
     '--no-subagents',
     '--no-auto-update',
-    // The five file tools a Claude Code run gets, grep only where ripgrep is.
-    // Grok keeps its MCP tools (search_tool, use_tool) beside them; no shell,
-    // web or image tool.
+    // The five file tools a Claude Code run gets, grep only where ripgrep is,
+    // and Grok's web tools with Browse the web on. Grok keeps its MCP tools
+    // (search_tool, use_tool) beside them; never a shell, since Grok's sandbox
+    // keeps a command off the network on Linux only (`commandsHow`), and no
+    // image tool.
     '--tools',
-    Object.keys(GROK_FILE_TOOLS)
-      .filter((tool) => tool !== 'grep' || rg.length)
-      .join(','),
+    [
+      ...Object.keys(GROK_FILE_TOOLS).filter((tool) => tool !== 'grep' || rg.length),
+      ...(r.web ? ['web_search', 'web_fetch'] : [])
+    ].join(','),
     ...[...UNREADABLE, ...rg]
       .flatMap((p) => denyRules(['Read'], p))
       .flatMap((rule) => ['--deny', rule]),
@@ -325,7 +331,9 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     `--rules=${r.system}`,
     ...(r.resume ? ['-r', r.resume] : ['-s', r.newSession])
   ];
-  return { args, env: grokEnv(), done: () => rmSync(agent, { force: true }) };
+  // web_fetch is off in every other grok the office starts (`grokEnv`).
+  const env = r.web ? { ...grokEnv(), GROK_WEB_FETCH: '1' } : grokEnv();
+  return { args, env, done: () => rmSync(agent, { force: true }) };
 }
 
 /**

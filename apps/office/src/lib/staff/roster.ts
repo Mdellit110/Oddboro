@@ -1,6 +1,13 @@
 // The shape of a staffer on the floor, and the words for what each one is
 // doing. The staff themselves live in Postgres; hiring adds a row there.
-import type { Agent, StaffRow } from '@oddboro/ledger';
+import type { StaffRow } from '@oddboro/ledger';
+// The page loads this file for ACTIVITY_LABEL, so only the ledger's page-safe parts.
+import {
+  commandsHow,
+  type Agent,
+  type CommandsHow,
+  type GrantedFolder
+} from '@oddboro/ledger/agents';
 import type { LookSpec } from '@oddboro/sprites/look';
 import { officeDay } from '@oddboro/ledger/time';
 
@@ -23,6 +30,14 @@ export type StaffProfile = {
   agent: Agent;
   /** The office tools the owner granted, beyond the ones every staffer has. */
   tools: string[];
+  /** The owner's Run commands switch, as stored; `commandsHow` says whether its tool follows it. */
+  commands: boolean;
+  /** How Run commands reaches its tool on the office's system. */
+  commandsHow: CommandsHow;
+  /** The owner's Browse the web switch. */
+  web: boolean;
+  /** Folders outside the office the owner gave it, by real path. */
+  folders: GrantedFolder[];
   /** One sentence on what this staffer is for, shown on the card. */
   remit: string;
   /** The room template this staffer works in when it has a choice. */
@@ -43,6 +58,7 @@ export function lookVersion(look: LookSpec, portraitPx: string): string {
 /**
  * A staff row as the page needs it. The job description stays on the server.
  * A new hire has no guesses of its own; the next office load counts any for every Odd.
+ * Only the server calls it: `commandsHow` reads the office's own system.
  */
 export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
   return {
@@ -57,6 +73,10 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     permission: r.permission,
     agent: r.agent,
     tools: r.tools,
+    commands: r.commands,
+    commandsHow: commandsHow(r.agent, process.platform),
+    web: r.web,
+    folders: r.folders,
     remit: r.remit,
     room: r.room,
     guesses,
