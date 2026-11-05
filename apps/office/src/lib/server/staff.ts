@@ -1006,9 +1006,10 @@ async function run(
         void holdNetwork().catch((e: unknown) =>
           console.error("Could not record that Odds' commands stay off the internet:", e)
         );
-      const r = refused
-        ? { ok: false, text: NETWORK_REFUSED_LINE.replaceAll('{name}', who.name) }
-        : end;
+      // Keyed on the owner's message, not the kind: a new hire's hello is a
+      // chat run the owner sent nothing to.
+      const line = NETWORK_REFUSED_LINE[opts.ownerSaid === undefined ? 'unsent' : 'sent'];
+      const r = refused ? { ok: false, text: line.replaceAll('{name}', who.name) } : end;
       clearTimeout(timer);
       runsGoing.delete(key);
       launch.done();

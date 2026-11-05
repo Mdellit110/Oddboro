@@ -41,9 +41,17 @@ export const LOOPBACK: string[] = ['localhost', '127.0.0.1', '::1', '[::1]', '0.
  */
 export const NETWORK_REFUSED = /Overly broad patterns/;
 
-/** What the owner reads on the run that met a refusal, with the Odd's name for `{name}`. */
-export const NETWORK_REFUSED_LINE =
-  "This version of Claude Code will not let commands reach the internet, so {name}'s commands now run with no network. Send your message again.";
+/**
+ * What the owner reads on the run that met a refusal, with the Odd's name for
+ * `{name}`. Only a message the owner sent can be sent again: the chat drops
+ * it when its run fails. Nothing tries any other run again: a job waits for
+ * its next time, and a hand-off's failure goes back to the Odd that handed it.
+ */
+export const NETWORK_REFUSED_LINE = {
+  sent: "This version of Claude Code will not let commands reach the internet, so {name}'s commands now run with no network. Send your message again.",
+  unsent:
+    "This version of Claude Code will not let commands reach the internet, so {name}'s commands now run with no network. This run stopped and is not tried again."
+};
 
 let held = false;
 
@@ -62,7 +70,7 @@ export async function holdNetwork(): Promise<void> {
     kind: 'access',
     actor: 'office',
     title: "Kept Odds' commands off the internet",
-    body: 'This version of Claude Code refuses to let commands reach the whole internet. Commands keep working, with no network.'
+    body: 'This version of Claude Code refuses to let commands reach the whole internet. Commands keep working, with no network. Restarting the office lifts this.'
   });
 }
 

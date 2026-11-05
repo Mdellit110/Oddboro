@@ -5,7 +5,7 @@
 // prompt and its my_access read one profile. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -25,9 +25,10 @@ import {
 } from './office-under-test.ts';
 
 const { LAUNCHES } = await import('./cli.ts');
-const { DEV_FOLDERS, DEV_SECRETS, LOOPBACK, NETWORK_REFUSED_LINE, networkHeld, resetHeldNetwork } =
+const { DEV_FOLDERS, DEV_SECRETS, LOOPBACK, networkHeld, resetHeldNetwork } =
   await import('./sandbox.ts');
 const { shellEnv } = await import('./launch.ts');
+const { runJob } = await import('./staff.ts');
 
 await L.pg`insert into staff ${L.pg([
   odd('ava', 'Ava'),
@@ -208,19 +209,28 @@ test(
       }
       writeFileSync(release, '');
       await Promise.all(refused);
+      // The owner sent each message, and the chat dropped it, so they send it again.
       assert.deepEqual(errors, {
-        cy: NETWORK_REFUSED_LINE.replaceAll('{name}', 'Cy'),
-        eli: NETWORK_REFUSED_LINE.replaceAll('{name}', 'Eli')
+        cy: "This version of Claude Code will not let commands reach the internet, so Cy's commands now run with no network. Send your message again.",
+        eli: "This version of Claude Code will not let commands reach the internet, so Eli's commands now run with no network. Send your message again."
       });
       // The Ledger line is written after the run ends, without holding it up.
-      let lines: { actor: string }[] = [];
+      // The hold lives in memory, so a restart lifts it, and the line says so.
+      let lines: { actor: string; body: string }[] = [];
       for (let i = 0; i < 100 && !lines.length; i++) {
-        lines = await L.pg<{ actor: string }[]>`select actor from ledger where title = ${title}`;
+        lines = await L.pg<
+          { actor: string; body: string }[]
+        >`select actor, body from ledger where title = ${title}`;
         if (!lines.length) await new Promise((r) => setTimeout(r, 20));
       }
       assert.deepEqual(
-        lines.map((l) => l.actor),
-        ['office']
+        lines.map((l) => ({ ...l })),
+        [
+          {
+            actor: 'office',
+            body: 'This version of Claude Code refuses to let commands reach the whole internet. Commands keep working, with no network. Restarting the office lifts this.'
+          }
+        ]
       );
       const next = await chatOf('cy', 'Refuse the open network.');
       assert.deepEqual(sandboxOf(next)?.network, { allowedDomains: [] });
@@ -242,6 +252,68 @@ test(
       assert.equal(offline.env.NETWORK_HELD, undefined);
       assert.ok(!offline.system.includes(L.NETWORK_HELD_LINE), offline.system);
     } finally {
+      resetHeldNetwork();
+    }
+  }
+);
+
+test(
+  'a refused job run says it stopped and is not tried again, never to send a message the owner never sent',
+  onMac,
+  async () => {
+    await setOwn('dee', { commands: true, web: true });
+    const job = await L.addJob({
+      staffId: 'dee',
+      name: 'Count the chairs',
+      instructions: 'Refuse the open network.',
+      schedule: { every: 'day', at: '07:00' }
+    });
+    try {
+      const r = await runJob(job, 'manual');
+      assert.deepEqual(r, {
+        ok: false,
+        text: "This version of Claude Code will not let commands reach the internet, so Dee's commands now run with no network. This run stopped and is not tried again."
+      });
+    } finally {
+      resetHeldNetwork();
+    }
+  }
+);
+
+test(
+  "a run with its network closed that fails with Claude Code's refusal words keeps its own words and holds no network",
+  onMac,
+  async () => {
+    // A Claude Code that fails every run with the refusal words. The network
+    // was never opened, so they cannot be a refusal of it.
+    const bin = join(folder, 'refusal-words-bin');
+    mkdirSync(bin, { recursive: true });
+    const claude = join(bin, 'claude');
+    writeFileSync(
+      claude,
+      `#!/usr/bin/env node
+process.stdin.resume();
+process.stdin.on('end', () => {
+  process.stderr.write('Overly broad patterns like "*" are not allowed\\n');
+  process.exit(1);
+});
+`
+    );
+    chmodSync(claude, 0o755);
+    await setOwn('eli', { commands: true });
+    try {
+      const errors: string[] = [];
+      await withEnv({ PATH: `${bin}:${process.env.PATH}` }, () =>
+        chat('eli', 'Hello.', (e) => {
+          if (e.type === 'error') errors.push(e.message);
+        })
+      );
+      assert.deepEqual(errors, [
+        'Claude Code stopped (exit 1). Overly broad patterns like "*" are not allowed'
+      ]);
+      assert.equal(networkHeld(), false);
+    } finally {
+      // A run held by mistake would hold every later test's network.
       resetHeldNetwork();
     }
   }
