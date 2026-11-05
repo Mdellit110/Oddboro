@@ -1,17 +1,24 @@
 // An Odd as the page gets it, worked out on the server: what its runs reach
 // reads the disk (folders still there) and this office's held network, and
 // each folder's `~` form reads the home folder, none of which the page can do.
-import { commandsHow, ownTools, shownFolder, webLine, type StaffRow } from '@oddboro/ledger';
+import {
+  commandsHow,
+  heldReach,
+  networkHeld,
+  ownTools,
+  shownFolder,
+  webLine,
+  type StaffRow
+} from '@oddboro/ledger';
 import { officeDay } from '@oddboro/ledger/time';
 import { lookVersion, type StaffProfile } from '../staff/roster.ts';
-import { heldNetwork } from './sandbox.ts';
 
 /**
  * A staff row as the page needs it. The job description stays on the server.
  * A new hire has no guesses of its own; the next office load counts any for every Odd.
  */
 export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
-  const reach = heldNetwork(r.agent, ownTools(r, process.platform));
+  const reach = heldReach(r.agent, ownTools(r, process.platform), networkHeld());
   return {
     id: r.id,
     name: r.name,

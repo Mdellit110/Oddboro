@@ -33,8 +33,8 @@ import {
 } from './office-under-test.ts';
 
 const { LAUNCHES } = await import('./cli.ts');
-const { DEV_FOLDERS, DEV_SECRETS, MAC_NAMES, macAddresses, networkHeld, resetHeldNetwork } =
-  await import('./sandbox.ts');
+const { DEV_FOLDERS, DEV_SECRETS, MAC_NAMES, macAddresses } = await import('./sandbox.ts');
+const { networkHeld, resetHeldNetwork } = L;
 const { shellEnv } = await import('./launch.ts');
 const { runJob } = await import('./staff.ts');
 
@@ -311,7 +311,7 @@ test(
       );
       const next = await chatOf('cy', 'Refuse the open network.');
       assert.deepEqual(sandboxOf(next)?.network, { allowedDomains: [] });
-      assert.equal(next.env.NETWORK_HELD, '1');
+      assert.equal(next.env.OFFICE_NETWORK_HELD, '1');
       assert.ok(next.system.includes(L.NETWORK_HELD_LINE), next.system);
       // The prompt and my_access say the same of the held network.
       const told = L.accessInRun(await L.capabilities((await L.staffer('cy'))!), owner, next.env);
@@ -323,11 +323,16 @@ test(
         1,
         'a held network was recorded twice'
       );
-      // An Odd with commands and no web lost no network to the hold, so is told nothing of it.
+      // An Odd with commands and no web lost no network to the hold, so is told
+      // nothing of it. Its tool server still hears the office holds it, as a
+      // Codex Odd's does, since office_report there speaks of every Odd.
       await setOwn('eli', { commands: true });
       const offline = await chatOf('eli');
-      assert.equal(offline.env.NETWORK_HELD, undefined);
+      assert.equal(offline.env.OFFICE_NETWORK_HELD, '1');
       assert.ok(!offline.system.includes(L.NETWORK_HELD_LINE), offline.system);
+      const codex = await chatOf('cole');
+      assert.equal(codex.env.OFFICE_NETWORK_HELD, '1');
+      assert.ok(!codex.system.includes(L.NETWORK_HELD_LINE), codex.system);
     } finally {
       resetHeldNetwork();
     }

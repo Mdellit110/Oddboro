@@ -61,9 +61,16 @@ await db.insert(staff).values([
   // Codex has a shell on every system, so the report fills in whose developer tools it reads.
   { ...person('cody', 'Cody', []), agent: 'codex' },
   // Lena hands work on, and leads one thread.
-  person('lena', 'Lena', ['hand_off'])
+  person('lena', 'Lena', ['hand_off']),
+  // Bea's commands reach the internet, unless the office holds the network.
+  { ...person('bea', 'Bea', []), commands: true, web: true }
 ]);
 const manager = await toolServer('mona', { RUN_KEY: 'k-access-profile' });
+// Mona has no shell of her own, so only the office's flag tells her run the network is held.
+const heldManager = await toolServer('mona', {
+  RUN_KEY: 'k-access-profile-held',
+  OFFICE_NETWORK_HELD: '1'
+});
 const [led] = await db
   .insert(threads)
   .values({ title: 'Count the chairs', hubId: 'lena', holderId: 'lena' })
@@ -254,6 +261,34 @@ test('a run off its threads hands off and names which thread it raises for, a ru
     handedOver: { handOff: false, work: false }
   });
 });
+
+/** Each Odd's own tools line in the office_report `client` gets, by id. */
+async function ownToolsReported(client: typeof manager): Promise<Record<string, unknown>> {
+  const r = await client.callTool({ name: 'office_report', arguments: {} });
+  const text = (r.content as { type: string; text: string }[])[0]?.text ?? '';
+  const report = JSON.parse(text) as { staff: { id: string; ownTools?: unknown }[] };
+  return Object.fromEntries(report.staff.map((s) => [s.id, s.ownTools]));
+}
+
+test(
+  "office_report applies the office's held network to each Claude Code Odd it lists, whoever asks, and leaves a Codex Odd as it is",
+  // Claude Code's Run commands follows the switch on a Mac only, so only there can Bea's commands reach the internet.
+  { skip: process.platform !== 'darwin' && 'Run commands runs on a Mac only' },
+  async () => {
+    const [open, held] = [await ownToolsReported(manager), await ownToolsReported(heldManager)];
+    const shell = "a shell confined to your folders and the owner's developer tools (read only)";
+    assert.equal(
+      open.bea,
+      `Your own tools work on files, plus ${shell}, which can reach the internet, and web search and fetch.`
+    );
+    assert.equal(
+      held.bea,
+      `Your own tools work on files, plus ${shell}, with no network, and web search and fetch. ${C.NETWORK_HELD_LINE}`
+    );
+    assert.equal(held.cody, open.cody);
+    assert.equal(held.mona, open.mona);
+  }
+);
 
 test("office_report lists each Odd's tool, own tools and folders", async () => {
   const r = await manager.callTool({ name: 'office_report', arguments: {} });

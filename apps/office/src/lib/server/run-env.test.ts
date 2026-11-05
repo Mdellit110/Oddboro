@@ -49,7 +49,7 @@ test("a run below the Odd's level names its level, and the rest only when set", 
       CEILING: 'draft',
       HAND_OFF_ID: '3',
       THREAD_ID: '7',
-      NETWORK_HELD: '1'
+      OFFICE_NETWORK_HELD: '1'
     }
   );
 });

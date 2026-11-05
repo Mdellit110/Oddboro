@@ -122,20 +122,79 @@ export async function setPermission(id: string, permission: Level): Promise<void
   });
 }
 
-/** What an access line adds when the change opens or closes the internet to the Odd's commands. */
+/**
+ * What an access line adds when the change opens or closes the internet to the
+ * Odd's commands. `held` is the line the office records when it holds the
+ * network (`holdNetwork`), and what a change that would open it says while held.
+ */
 export const NETWORK_NOTE = {
   on: 'Its commands can reach the internet now.',
-  off: 'Its commands are off the internet now.'
+  off: 'Its commands are off the internet now.',
+  held: 'This version of Claude Code refuses to let commands reach the whole internet. Commands keep working, with no network. Restarting the office lifts this.'
 } as const;
+
+// Whether this office holds the network: a Claude Code that refuses the open
+// network fails the run that met it, and from then on its runs' commands go
+// with none. In the office's own memory, so a restart tries the open network
+// once more and a refusal costs that one run again. A run's tool server is a
+// process of its own, so the office tells it in its environment
+// (`OFFICE_NETWORK_HELD`, which `heldReach`'s callers there read).
+let held = false;
+
+/** Whether this office has met that refusal since it started. Only the office's own process knows. */
+export function networkHeld(): boolean {
+  return held;
+}
+
+/** Called when a run meets the refusal. Records one Ledger line by the office, the first time. */
+export async function holdNetwork(): Promise<void> {
+  if (held) return;
+  // Held before the write, so two runs refused at once record one line, and
+  // a failed write still keeps commands off the internet.
+  held = true;
+  await record({
+    kind: 'access',
+    actor: 'office',
+    title: "Kept Odds' commands off the internet",
+    body: NETWORK_NOTE.held
+  });
+}
+
+/** For tests only: forgets a refusal, so the next run tries the open network again. */
+export function resetHeldNetwork(): void {
+  held = false;
+}
+
+/**
+ * What an Odd on `agent` reaches while the office holds the network or not
+ * (`officeHeld`): `own` with its network taken away while held. Only a Claude
+ * Code Odd's network is held, since the refusal is Claude Code's. `held` says
+ * the hold applies to this Odd, whether or not it had a network to lose. The
+ * one rule every reader of an Odd's reach goes through: runs, the prompt,
+ * my_access, office_report, the page and the Ledger line of a switch.
+ */
+export function heldReach<T extends { network: boolean }>(
+  agent: Agent,
+  own: T,
+  officeHeld: boolean
+): T & { held: boolean } {
+  const isHeld = agent === 'claude' && officeHeld;
+  return { ...own, network: own.network && !isHeld, held: isHeld };
+}
 
 /**
  * The body for a change from `before` to `after`: whether its commands reach
  * the internet changed, so the owner sees the reach a switch or a move opened
- * or closed, not only the switch.
+ * or closed, not only the switch. The two sides are compared without the hold,
+ * which would make them equal; a change that opens the network while the
+ * office holds it says the hold's words instead.
  */
 function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
   const [was, is] = [before, after].map((s) => commandsOnline(s.agent, process.platform, s));
-  return was === is ? {} : { body: NETWORK_NOTE[is ? 'on' : 'off'] };
+  if (was === is) return {};
+  if (!is) return { body: NETWORK_NOTE.off };
+  const opened = heldReach(after.agent, { network: is }, networkHeld()).network;
+  return { body: opened ? NETWORK_NOTE.on : NETWORK_NOTE.held };
 }
 
 /**

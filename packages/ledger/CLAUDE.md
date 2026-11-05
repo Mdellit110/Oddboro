@@ -215,7 +215,14 @@ hand-off or number, which ledger tests and the office's format test share.
   its network on), and a change to the switches or the tool that opens or
   closes that says so in its ledger line (`NETWORK_NOTE`). `ownTools()` in
   `capabilities.ts` is that one reading of the switches and folders for a
-  run, `my_access`, `office_report` and the page. `checkFolder()` refuses the home itself, a folder outside it,
+  run, `my_access`, `office_report` and the page. Once a Claude Code refuses
+  the open network, the office holds it (`holdNetwork` in `office.ts`, in the
+  office's memory until it restarts), and `heldReach()` is the one rule every
+  reader applies: a Claude Code Odd's commands go with no network. The office
+  tells every run's tool server so (`OFFICE_NETWORK_HELD`), whatever the run's
+  own tool, so `my_access` and `office_report` say it for each Odd they speak
+  of (`ownToolsSaid`), and a change that would open the network while held
+  records the hold's words (`NETWORK_NOTE.held`). `checkFolder()` refuses the home itself, a folder outside it,
   and one that holds or sits in a secret store (`SECRET_STORES`, which the
   office's `unreadable` also reads), the office's home or its code, and one
   whose real path holds `*`, `?`, `[` or `]`, which Codex cannot take
