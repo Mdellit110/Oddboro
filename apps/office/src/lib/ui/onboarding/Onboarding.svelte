@@ -32,14 +32,16 @@
   import type { StaffProfile } from '../../staff/roster.ts';
   import { call, follow } from '../api.ts';
   import { diagnostics } from '../diagnostics.svelte.ts';
+  import AccountCard from './AccountCard.svelte';
   import ClaudeCard from './ClaudeCard.svelte';
   import DiagnosticsCard from './DiagnosticsCard.svelte';
   import MacCard, { type Setup } from './MacCard.svelte';
   import ManagerCard, { type Custom, type Preset } from './ManagerCard.svelte';
   import SpaceCard from './SpaceCard.svelte';
 
-  // A new owner's first visit, over the live floor: seven cards (six when the
-  // office has nowhere to send reports), then the office going up on their lot
+  // A new owner's first visit, over the live floor: eight cards (seven when
+  // the office has nowhere to send reports), one of them an optional sign-in
+  // to New Altitude, then the office going up on their lot
   // and their manager arriving by bus. The slow parts
   // start the moment their inputs exist: the office draws from when the owner
   // leaves "Your space", and a described manager from when they leave theirs.
@@ -47,7 +49,16 @@
   type Props = { stage: Stage; sample?: World };
   let { stage, sample }: Props = $props();
 
-  const STEPS = ['mac', 'you', 'claude', 'manager', 'space', 'diagnostics', 'go'] as const;
+  const STEPS = [
+    'mac',
+    'you',
+    'claude',
+    'manager',
+    'space',
+    'account',
+    'diagnostics',
+    'go'
+  ] as const;
   type Step = (typeof STEPS)[number];
   const TITLE: Record<Step, string> = {
     mac: 'Your computer',
@@ -55,6 +66,7 @@
     claude: 'Your Claude',
     manager: 'Your office manager',
     space: 'Your space',
+    account: 'New Altitude',
     diagnostics: 'Help fix Oddboro',
     go: 'Open the office'
   };
@@ -473,6 +485,8 @@
                 next();
               }}
             />
+          {:else if step === 'account'}
+            <AccountCard onnext={next} onback={back} />
           {:else if step === 'diagnostics'}
             <DiagnosticsCard onnext={next} onback={back} />
           {:else}

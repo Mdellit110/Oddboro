@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Check } from '@oddboro/ledger/checks';
+  import AccountSection from './AccountSection.svelte';
   import { call } from './api.ts';
   import DiagnosticsSection from './DiagnosticsSection.svelte';
   import UpdatesSection from './UpdatesSection.svelte';
@@ -150,6 +151,7 @@
       {#if diagnostics.possible}
         <DiagnosticsSection />
       {/if}
+      <AccountSection />
     {/if}
 
     <section class="flex flex-col gap-2">
