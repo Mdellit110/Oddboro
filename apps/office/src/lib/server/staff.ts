@@ -51,6 +51,7 @@ import {
   type ThreadLine,
   type ThreadStory,
   HEALTH_WORDS,
+  handsOff,
   hasTool,
   jobsFor,
   levelAtMost,
@@ -556,7 +557,8 @@ function canDo(
 /**
  * The system prompt. A run on no thread, such as a chat or a job, lists the
  * threads the staffer leads, so it can continue one rather than open another;
- * a run on a thread hands on in that one. A chat also lists the threads it
+ * a run on a thread hands on in that one, and a run that cannot hand on is
+ * told none (`leads`). A chat also lists the threads it
  * works on and does not lead, so what {owner} says there about one reaches
  * its lead. `led` are the stories of the threads it leads that the run is
  * told in full (`ledStories`): the lead's run on its thread is told how to
@@ -575,12 +577,13 @@ async function prompt(
     own: OwnTools;
     /** Whether this office keeps the commands off the internet they would have reached. */
     networkHeld: boolean;
+    /** Whether the run is told the threads it leads, by the tool server's own rule (`handsOff`). */
+    leads: boolean;
   }
 ): Promise<string> {
-  const { dir, own } = opts;
+  const { dir, own, leads } = opts;
   // run() fills in the time, so the rest can be compared with what a resumed session saw.
   const now = NOW;
-  const leads = !opts.thread && hasTool(who.tools, 'hand_off');
   const updating = installsAt();
   return (
     who.desk +
@@ -787,6 +790,13 @@ async function run(
   const networkHeld = own.held && caps.own.network;
   const extraReads = own.granted.map((f) => f.path);
   const extraWrites = own.granted.filter((f) => f.write).map((f) => f.path);
+  // From the facts officeEnv hands the tool server, so the prompt lists the
+  // threads a run leads only when that run is offered hand_off.
+  const { leads } = handsOff(who.tools, {
+    thread: !!opts.threadId,
+    handOff: !!opts.handOffId,
+    lesson: !!opts.lessonRun
+  });
   const system = say(
     (await prompt(who, {
       dir,
@@ -797,7 +807,8 @@ async function run(
       led,
       shown: opts.shown,
       own,
-      networkHeld
+      networkHeld,
+      leads
     })) + (opts.extra ?? '')
   );
   const sections = sectionsOf(system, say(who.desk));

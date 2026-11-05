@@ -71,18 +71,22 @@ test("a colleague's run on a hand-off works at Draft, and its key is held while 
   assert.equal(L.runsGoing.size, 0, 'the key is still held after the run ended');
 });
 
-test("a run that reads the owner's no for a lesson works at Draft and hands nothing on; a carry-out does neither", async () => {
+test("a run that reads the owner's no for a lesson works at Draft, hands nothing on and is not told the work its Odd leads; a carry-out is told it and does neither", async () => {
+  // Work Lena leads, so a run that may hand on has a thread to be told of.
+  await L.pg`insert into threads (title, hub_id, holder_id) values ('Plan the picnic', 'lead', 'lead')`;
   const no = await L.raiseAsk('lead', { title: 'Book the band', why: 'w', ifApproved: 'i' });
   await L.decideAsk(no.ask.id, 'deny', 'Never book on a Friday.');
   const lesson = await runOf(await startedBy(no.ask.id, 'denied'), no.ask.id);
   assert.equal(lesson.env.LESSON_RUN, '1');
   assert.equal(lesson.env.CEILING, 'draft');
+  assert.doesNotMatch(lesson.system, /Plan the picnic/);
   const yes = await L.raiseAsk('lead', { title: 'Book the hall', why: 'w', ifApproved: 'i' });
   await L.decideAsk(yes.ask.id, 'approve', null);
   const carry = await runOf(await startedBy(yes.ask.id, 'carry_out'), yes.ask.id);
   assert.equal(carry.env.LESSON_RUN, undefined);
   assert.equal(carry.env.CEILING, undefined);
   assert.equal(carry.env.APPROVED_ASK, String(yes.ask.id));
+  assert.match(carry.system, /Plan the picnic/);
 });
 
 test("the colleague's run a yes to keep going starts is handed the held work as the lead wrote it", async () => {
