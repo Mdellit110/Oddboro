@@ -4,25 +4,25 @@
 // work needs their contents raises a plain ask first, and the owner's answer
 // reaches it as any ask's does. Access is compared with every Odd on the
 // thread, both ways: what the colleague lacks, and what it has that others
-// lack. The office's own code on every migration, in an in-memory PGlite that
-// stands in for db.ts (pglite.ts). Run with `npm test -w @oddboro/ledger`.
+// lack. Tools are outside tools, the web, and the folders the owner gave. The
+// office's own code on every migration, in an in-memory PGlite that stands in
+// for db.ts (pglite.ts). Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
 import { and, eq } from 'drizzle-orm';
-import {
-  asks,
-  connectors,
-  followUps,
-  goals,
-  grants,
-  staff,
-  threads,
-  type Level
-} from '../src/schema.ts';
+import type { Level } from '../src/access-words.ts';
+import { asks, connectors, followUps, goals, grants, staff, threads } from '../src/schema.ts';
 // Types only, erased before run, so the code under test still loads after the mock.
 import type { ThreadFor } from '../src/threads.ts';
 import { db } from './pglite.ts';
 
+// A home of the test's own, so a folder given to an Odd is named from `~`.
+const HOME = realpathSync(mkdtempSync(join(tmpdir(), 'thread-access-')));
+process.env.HOME = HOME;
+after(() => rmSync(HOME, { recursive: true, force: true }));
 // The ledger rows a decision writes embed nothing: no Ollama answers here.
 process.env.OLLAMA_URL = 'http://127.0.0.1:9';
 const { handOff, handOffBrief, handOffContext } = await import('../src/hand-offs.ts');
@@ -259,4 +259,46 @@ test("a held hand-off carries access as it is at the owner's yes, as a fresh han
   assert.ok('id' in fresh, JSON.stringify(fresh));
   const [now] = await ran(fresh.thread, 'hand_off');
   assert.deepEqual(started?.handOff, now?.handOff);
+});
+
+test('a colleague is told of the web and the folders others on the thread hold and it lacks, and never to pass on its own', async () => {
+  const p = join(HOME, 'p');
+  mkdirSync(join(p, 'sub'), { recursive: true });
+  // Wes browses the web. Fay was given ~/p, Sol only ~/p/sub, and Pia nothing.
+  await db
+    .insert(staff)
+    .values([
+      { ...odd('wes', 'Wes'), web: true },
+      { ...odd('fay', 'Fay'), folders: [{ path: p, write: true }] },
+      { ...odd('sol', 'Sol'), folders: [{ path: join(p, 'sub'), write: false }] },
+      odd('pia', 'Pia')
+    ]);
+  const from = (giver: string, to: string) =>
+    handOff({ from: giver, to, work, thread: { title: `${giver} to ${to}` } });
+  const handedTo = async (r: Awaited<ReturnType<typeof from>>, to: string) => {
+    assert.ok('id' in r, JSON.stringify(r));
+    const f = (await ran(r.thread, 'hand_off')).find((x) => x.staffId === to);
+    assert.ok(f?.handOff);
+    return f.handOff;
+  };
+
+  const toPia = await handedTo(await from('wes', 'pia'), 'pia');
+  assert.deepEqual(toPia.withheld, ['the web']);
+  const brief = handOffBrief({
+    kind: 'hand_off',
+    h: toPia,
+    colleague: { id: 'wes', name: 'Wes' },
+    me: 'pia',
+    result: null,
+    thread: 0
+  }).join('\n');
+  assert.match(brief, /You have no access to the web, which others on this work have/);
+
+  const toFay = await handedTo(await from('wes', 'fay'), 'fay');
+  assert.deepEqual(toFay.kept, ['~/p'], 'Wes lacks ~/p, so Fay keeps it out');
+
+  // Fay's ~/p holds Sol's ~/p/sub, so she lacks nothing of Sol's.
+  const fromSol = await handedTo(await from('sol', 'fay'), 'fay');
+  assert.equal(fromSol.withheld, undefined);
+  assert.deepEqual(fromSol.kept, ['~/p'], 'Sol has only ~/p/sub');
 });

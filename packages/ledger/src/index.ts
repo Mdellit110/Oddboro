@@ -3,6 +3,7 @@
 export * from './office.ts';
 export * from './schema.ts';
 export * from './agents.ts';
+export * from './access-words.ts';
 export {
   clockTime,
   describe as describeSchedule,

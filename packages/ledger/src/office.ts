@@ -68,14 +68,11 @@ import {
   usage,
   followUps,
   goals,
-  LEVELS,
-  levelAtMost,
   type AccessRequest,
   type FollowUpKind,
   type GoalDraft,
   type GoalPlan,
   type HireProposal,
-  type Level,
   type Outcome,
   type LedgerKind,
   type RunTrigger,
@@ -83,7 +80,8 @@ import {
   type Step,
   type UsageKind
 } from './schema.ts';
-import { AGENT_NAMES, type Agent, type GrantedFolder } from './agents.ts';
+import { AGENT_NAMES, commandsOnline, type Agent, type GrantedFolder } from './agents.ts';
+import { levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
@@ -116,12 +114,28 @@ export async function setPermission(id: string, permission: Level): Promise<void
   const before = await staffer(id);
   if (!before || before.permission === permission) return;
   await db.update(staff).set({ permission }).where(eq(staff.id, id));
-  const up = LEVELS.indexOf(permission) > LEVELS.indexOf(before.permission);
+  const up = !levelAtMost(permission, before.permission);
   await record({
     kind: 'access',
     actor: 'owner',
     title: `${up ? 'Raised' : 'Lowered'} ${before.name} from ${before.permission} to ${permission}`
   });
+}
+
+/** What an access line adds when the change opens or closes the internet to the Odd's commands. */
+export const NETWORK_NOTE = {
+  on: 'Its commands can reach the internet now.',
+  off: 'Its commands are off the internet now.'
+} as const;
+
+/**
+ * The body for a change from `before` to `after`: whether its commands reach
+ * the internet changed, so the owner sees the reach a switch or a move opened
+ * or closed, not only the switch.
+ */
+function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
+  const [was, is] = [before, after].map((s) => commandsOnline(s.agent, process.platform, s));
+  return was === is ? {} : { body: NETWORK_NOTE[is ? 'on' : 'off'] };
 }
 
 /**
@@ -137,7 +151,8 @@ export async function setAgent(id: string, agent: Agent): Promise<void> {
   await record({
     kind: 'access',
     actor: 'owner',
-    title: `Moved ${before.name} from ${AGENT_NAMES[before.agent]} to ${AGENT_NAMES[agent]}`
+    title: `Moved ${before.name} from ${AGENT_NAMES[before.agent]} to ${AGENT_NAMES[agent]}`,
+    ...networkNote(before, { ...before, agent })
   });
 }
 
@@ -178,7 +193,12 @@ export async function setOwnTool(
       : on
         ? `Let ${n} browse the web`
         : `Stopped ${n} browsing the web`;
-  await record({ kind: 'access', actor: 'owner', title });
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title,
+    ...networkNote(before, { ...before, [which]: on })
+  });
 }
 
 /**
@@ -259,7 +279,7 @@ export const FOLDER_REFUSED = {
  * stay allowed: Codex 0.166 takes them (measured twice), and Claude Code's
  * sandbox reads `{` as a plain character.
  */
-const GLOB = /[*?[\]]/;
+export const GLOB = /[*?[\]]/;
 
 /**
  * A path by its real one when it exists, so it compares with a real path. The
@@ -269,7 +289,7 @@ const GLOB = /[*?[\]]/;
 const real = (p: string): string => (existsSync(p) ? realpathSync.native(p) : p);
 
 /** Whether `p` is `parent` or sits inside it. A Windows disk ignores case. */
-function within(p: string, parent: string): boolean {
+export function within(p: string, parent: string): boolean {
   const [a, b] =
     process.platform === 'win32' ? [p.toLowerCase(), parent.toLowerCase()] : [p, parent];
   return a === b || a.startsWith(b.endsWith(sep) ? b : b + sep);

@@ -1,6 +1,7 @@
 // Run commands, Browse the web and folders the owner gives an Odd: which tool
-// follows the switch, what each owner change records, and which folders are
-// refused at the door. Run with `npm test -w @oddboro/ledger`.
+// follows the switch and which is offered in its place, what each owner change
+// records, and which folders are refused at the door. Run with
+// `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -57,6 +58,9 @@ test('commandsHow per tool and system', () => {
         'why' in how ? how.why : undefined,
         how.state === 'switch' ? undefined : COMMANDS_WHY[agent]
       );
+      // Only a switch locked off offers another tool: Claude Code, where it follows the switch.
+      const offered = agent !== 'claude' && agent !== 'codex' && platform === 'darwin';
+      assert.equal('offer' in how ? how.offer : undefined, offered ? 'claude' : undefined);
     }
   assert.deepEqual(COMMANDS_WHY, {
     claude: 'Not tested on this system yet.',
@@ -68,6 +72,58 @@ test('commandsHow per tool and system', () => {
 
 const titles = async () =>
   (await sql<{ title: string }>`select title from ledger order by id`).map((r) => r.title);
+
+/** `fn`, run as if the office ran on `platform`. */
+async function onPlatform(platform: NodeJS.Platform, fn: () => Promise<void>): Promise<void> {
+  const real = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: platform });
+  try {
+    await fn();
+  } finally {
+    if (real) Object.defineProperty(process, 'platform', real);
+  }
+}
+
+test("a switch or a move that opens or closes commands' internet says so in its Ledger line", async () => {
+  const odd = (id: string, o: { agent: Agent; commands: boolean; web: boolean }) => ({
+    id,
+    name: id,
+    role: 'r',
+    variant: 'v',
+    portrait: 'p',
+    remit: 'r',
+    desk: 'd',
+    ...o
+  });
+  await db
+    .insert(staff)
+    .values([
+      odd('Nell', { agent: 'claude', commands: true, web: false }),
+      odd('Otis', { agent: 'claude', commands: false, web: false }),
+      odd('Gale', { agent: 'grok', commands: true, web: true })
+    ]);
+  await onPlatform('darwin', async () => {
+    await O.setOwnTool('Nell', 'web', true);
+    await O.setOwnTool('Nell', 'web', false);
+    await O.setOwnTool('Otis', 'web', true);
+    await O.setAgent('Gale', 'claude');
+  });
+  const lines = await sql<{ title: string; body: string }>`
+    select title, body from ledger order by id`;
+  assert.deepEqual(
+    lines.map((l) => [l.title, l.body]),
+    [
+      ['Let Nell browse the web', O.NETWORK_NOTE.on],
+      ['Stopped Nell browsing the web', O.NETWORK_NOTE.off],
+      ['Let Otis browse the web', ''],
+      ['Moved Gale from Grok to Claude Code', O.NETWORK_NOTE.on]
+    ]
+  );
+  assert.deepEqual(O.NETWORK_NOTE, {
+    on: 'Its commands can reach the internet now.',
+    off: 'Its commands are off the internet now.'
+  });
+});
 
 test('setOwnTool and setFolder record one line each', async () => {
   await O.setOwnTool('ziva', 'commands', true);

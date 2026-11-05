@@ -20,14 +20,11 @@ import type { LookSpec, PartKind } from '@oddboro/sprites/look';
 import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/world';
 import { STARTER_TOOLS } from './tools.ts';
 import type { Agent, GrantedFolder } from './agents.ts';
+import type { Level } from './access-words.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
 const created = (name = 'created_at') => at(name).notNull().defaultNow();
 const id = () => integer().primaryKey().generatedAlwaysAsIdentity();
-
-export type Level = 'read' | 'draft' | 'act';
-export const LEVELS: readonly Level[] = ['read', 'draft', 'act'];
-export const levelAtMost = (a: Level, b: Level) => LEVELS.indexOf(a) <= LEVELS.indexOf(b);
 
 export const staff = pgTable('staff', {
   id: text().primaryKey(),

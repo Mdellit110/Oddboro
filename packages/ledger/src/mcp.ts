@@ -41,7 +41,16 @@ import {
   type GoalView
 } from './goals.ts';
 import { goalWhen, HEALTH_WORDS, HORIZONS, STATUS_WORDS } from './goal-words.ts';
-import { accessInRun, capabilities, outsideLines } from './capabilities.ts';
+import {
+  accessInRun,
+  capabilities,
+  folderLines,
+  handsOff,
+  outsideLines,
+  ownToolsLine
+} from './capabilities.ts';
+import { AGENT_NAMES } from './agents.ts';
+import { levelAtMost, LEVELS } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
   APPLIES_TO_MAX,
@@ -66,7 +75,7 @@ import { THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { heldTools, lacking } from './sharing.ts';
 import { ensureConnector, searchRegistry } from './registry.ts';
-import { levelAtMost, type GoalPlanItem, type HireProposal } from './schema.ts';
+import type { GoalPlanItem, HireProposal } from './schema.ts';
 import {
   clockTime,
   describe as describeSchedule,
@@ -134,6 +143,12 @@ const RUN_KEY = process.env.RUN_KEY || undefined;
 const LESSON_RUN = process.env.LESSON_RUN === '1';
 /** What an ask or task raised in this run is part of. */
 const RAISED_ON = { handOffId: HAND_OFF_ID, threadId: THREAD_ID };
+/** Whether this run gets hand_off, and whether it is told the threads it leads. */
+const HANDS_OFF = handsOff(me.tools, {
+  thread: THREAD_ID !== undefined,
+  handOff: HAND_OFF_ID !== undefined,
+  lesson: LESSON_RUN
+});
 
 const approvedArg = z
   .number()
@@ -235,7 +250,7 @@ const hireFields = {
     .string()
     .describe('The job description, a file in your folder, e.g. notes/jd-mail-clerk.md.'),
   permission: z
-    .enum(['read', 'draft', 'act'])
+    .enum(LEVELS)
     .describe('read reads and reports, draft prepares drafts for their yes, act acts alone.'),
   room: z
     .string()
@@ -418,7 +433,7 @@ const workingOn = said && has('tell_lead') ? await threadsOn(ME) : [];
 const goalRule = await goalWork(ME, workingOn);
 // A hub in a run on no thread, such as a chat or a job, names the thread an ask
 // or task is for, or null, so what it raises about a thread lands there.
-const leading = has('hand_off') && !THREAD_ID && !LESSON_RUN ? await recentThreads(ME) : [];
+const leading = HANDS_OFF.leads ? await recentThreads(ME) : [];
 /** The arguments raise_ask and give_owner_a_task take for where what they raise goes. */
 const raisedArgs = {
   ...(leading.length
@@ -573,7 +588,7 @@ if (has('give_owner_a_task'))
 tool(
   'my_access',
   {
-    description: `Your level, and each outside tool ${OWNER} gave you: what it reaches, or why a run leaves it out for now.`,
+    description: `Your level, the tool your runs go through and what its own tools reach, the folders ${OWNER} gave you, and each outside tool ${OWNER} gave you: what it reaches, or why a run leaves it out for now.`,
     inputSchema: {}
   },
   async () => text(accessInRun(await capabilities(me), OWNER, process.env))
@@ -1069,9 +1084,7 @@ if (has('edit_my_description'))
     }
   );
 
-// A colleague's run on a hand-off cannot hand off, so a thread stays hub and
-// spoke, and neither can a run that only reads the owner's words for a lesson.
-if (has('hand_off') && !HAND_OFF_ID && !LESSON_RUN) {
+if (HANDS_OFF.tool) {
   const colleagues = (await roster()).filter((s) => s.id !== ME);
   const serving = await goalsFor(ME);
   const held = await heldTools([ME, ...colleagues.map((c) => c.id)]);
@@ -1329,7 +1342,7 @@ if (has('office_report'))
   tool(
     'office_report',
     {
-      description: `Everything the office did in a window: each Odd with its remit, its level (read, draft or act), the office tools it holds beyond the ones every Odd has, its outside tools (each with what it reaches, or why a run leaves it out), and its jobs and runs, asks open and decided, and tasks for ${OWNER} open and done. For the daily report. followUps is the work owed after ${OWNER} answered: carrying out an approved ask, reworking one they sent back, acting on their feedback on a report, or picking up after a task they finished, each with its outcome (done, failed, waiting on ${OWNER}, or null while still to do). Each run has a trigger: 'schedule' means its timer started it, 'manual' means ${OWNER} pressed Run now. Judge a job's timing by its schedule runs only; a manual run at any hour is expected. Every time is ${ZONE}, like the schedules.`,
+      description: `Everything the office did in a window: each Odd with its remit, its level (read, draft or act), its tool and what its own tools reach, its folders, the office tools it holds beyond the ones every Odd has, its outside tools (each with what it reaches, or why a run leaves it out), and its jobs and runs, asks open and decided, and tasks for ${OWNER} open and done. For the daily report. followUps is the work owed after ${OWNER} answered: carrying out an approved ask, reworking one they sent back, acting on their feedback on a report, or picking up after a task they finished, each with its outcome (done, failed, waiting on ${OWNER}, or null while still to do). Each run has a trigger: 'schedule' means its timer started it, 'manual' means ${OWNER} pressed Run now. Judge a job's timing by its schedule runs only; a manual run at any hour is expected. Every time is ${ZONE}, like the schedules.`,
       inputSchema: { hours: z.number().int().min(1).max(168).default(24) }
     },
     async ({ hours }) => {
@@ -1344,6 +1357,9 @@ if (has('office_report'))
             ...s,
             remit: caps.remit,
             level: caps.level,
+            runsOn: AGENT_NAMES[caps.agent],
+            ownTools: ownToolsLine(caps.agent, caps.own).replaceAll('{owner}', OWNER),
+            folders: folderLines(caps.own),
             officeTools: caps.office,
             outsideTools: outsideLines(caps, OWNER)
           };
