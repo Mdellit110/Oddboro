@@ -13,6 +13,7 @@
   import { tickable, yesOrNo } from '@oddboro/ledger/tools';
   import { untrack } from 'svelte';
   import { goalWhen } from '@oddboro/ledger/goals';
+  import { LEVEL_LABEL } from '@oddboro/ledger/access';
   import type { StaffProfile } from '../staff/roster.ts';
 
   type Props = {
@@ -156,7 +157,6 @@
   const picked = (a: AskRow) => a.plan?.items.filter((_, i) => !skip[i]).length ?? 0;
   const nameOf = (id: string) => staff.find((p) => p.id === id)?.name ?? id;
   const toolName = (id: string) => OFFICE_TOOLS.find((t) => t.id === id)?.name ?? id;
-  const LEVEL = { read: 'Reads and reports', draft: 'Drafts for your yes', act: 'Acts on its own' };
   const step = (t: TaskRow, index: number, body: Record<string, unknown>) =>
     act(() => call(`/api/tasks/${t.id}`, { index, ...body }));
   async function saveSecret(t: TaskRow, index: number) {
@@ -322,7 +322,7 @@
               <dd class="mt-1 flex flex-col gap-1 rounded-lg bg-raise px-2.5 py-2 text-xs">
                 <div><span class="text-muted">Who:</span> {h.name}, {h.role}</div>
                 <div><span class="text-muted">For:</span> {h.remit}</div>
-                <div><span class="text-muted">Permission:</span> {LEVEL[h.permission]}</div>
+                <div><span class="text-muted">Permission:</span> {LEVEL_LABEL[h.permission]}</div>
                 {#if h.room}<div><span class="text-muted">Room:</span> {h.room}</div>{/if}
                 {#if h.tools?.length}
                   <div>
@@ -385,7 +385,7 @@
                         <span class="text-sm text-ink">Hire {h.name}, {h.role}</span>
                         <span>{item.part}</span>
                         <span class="text-muted"
-                          >{LEVEL[h.permission]}{h.room ? ` · ${h.room}` : ''}</span
+                          >{LEVEL_LABEL[h.permission]}{h.room ? ` · ${h.room}` : ''}</span
                         >
                         {#if h.job}
                           <span class="text-muted"

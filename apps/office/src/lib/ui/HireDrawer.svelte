@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { HireProposal, Schedule } from '@oddboro/ledger';
+  import { LEVEL_LABEL, LEVELS, type Level } from '@oddboro/ledger/access';
   import { AGENT_NAMES, type Agent } from '@oddboro/ledger/agents';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import Pixel from './Pixel.svelte';
@@ -33,7 +34,7 @@
   let brief = $state('');
   let remit = $state('');
   let desk = $state('');
-  let permission = $state<'read' | 'draft' | 'act'>('read');
+  let permission = $state<Level>('read');
   /** The tool its runs go through, its hello first. Stored with the hire. */
   let agent = $state<Agent>('claude');
   let jobName = $state('');
@@ -250,24 +251,14 @@
       <div>
         <div class="text-xs text-muted">Permission</div>
         <div class="mt-1 flex gap-1.5">
-          <button
-            class="flex-1 rounded-lg px-2 py-1.5 text-xs {permission === 'read'
-              ? 'bg-sea/25'
-              : 'bg-raise'}"
-            onclick={() => (permission = 'read')}>Reads and reports</button
-          >
-          <button
-            class="flex-1 rounded-lg px-2 py-1.5 text-xs {permission === 'draft'
-              ? 'bg-sea/25'
-              : 'bg-raise'}"
-            onclick={() => (permission = 'draft')}>Drafts for your yes</button
-          >
-          <button
-            class="flex-1 rounded-lg px-2 py-1.5 text-xs {permission === 'act'
-              ? 'bg-sea/25'
-              : 'bg-raise'}"
-            onclick={() => (permission = 'act')}>Acts on its own</button
-          >
+          {#each LEVELS as l (l)}
+            <button
+              class="flex-1 rounded-lg px-2 py-1.5 text-xs {permission === l
+                ? 'bg-sea/25'
+                : 'bg-raise'}"
+              onclick={() => (permission = l)}>{LEVEL_LABEL[l]}</button
+            >
+          {/each}
         </div>
         <!-- Every option's value is a tool id `/api/agents` sent, so the cast holds. -->
         <RunsOn
@@ -318,13 +309,7 @@
         </div>
         <div>
           <dt class="text-xs text-muted">Permission</dt>
-          <dd>
-            {permission === 'read'
-              ? 'Reads and reports'
-              : permission === 'draft'
-                ? 'Drafts for your yes'
-                : 'Acts on its own'}
-          </dd>
+          <dd>{LEVEL_LABEL[permission]}</dd>
         </div>
         <div>
           <dt class="text-xs text-muted">Runs on</dt>
