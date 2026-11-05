@@ -9,24 +9,26 @@
 // signs in, that file is the sign-in's to keep. A Codex Odd has a shell, held
 // by a permission profile the kernel enforces (Seatbelt on a Mac): it reads
 // the system's own folders (`:minimal`), Apple's developer tools (Xcode's
-// too, when the Mac uses it), node's OpenSSL config, its folder,
+// too, when the Mac uses it), node's OpenSSL config, the owner's developer
+// tool folders but their credential files (`devReads`), its folder,
 // the owner's data folder, the thread folders it reads and the folders the
 // owner gave it, writes only its folder, its part of a thread, the folders the
 // owner gave it to change and its own temp folder, never an instruction file
-// in them, and reaches no network. Codex's own web search runs outside the
-// profile, only with Browse the web on. The codex process itself and the MCP servers run
-// outside that profile, so the Codex home, the sign-in and every Codex Odd's
-// sessions stay shut to the model.
+// in them, and reaches the internet only with Browse the web on. Codex's own
+// web search runs outside the profile, only with Browse the web on. The codex
+// process itself and the MCP servers run outside that profile, so the Codex
+// home, the sign-in and every Codex Odd's sessions stay shut to the model.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { home } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
+import { devReads } from './sandbox.ts';
 import {
-  gitEnv,
   mcpGrant,
   NOT_SIGNED_IN,
   replace,
+  shellEnv,
   sweep,
   toml,
   vendorEnv,
@@ -136,6 +138,8 @@ type CodexRun = {
   allowed: string[];
   /** The owner's Browse the web switch: Codex's own web search, which works with the network off. */
   web: boolean;
+  /** Whether the run's commands reach the internet (`network` in its profile). */
+  network: boolean;
 };
 
 type CodexLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; done: () => void };
@@ -194,8 +198,8 @@ function developerReads(): string[] {
 /**
  * The kernel's allowlist for one run, every path a real one. `:root` shuts
  * everything not named; `:minimal` reads what a command needs to start,
- * `developerReads` what the shims in /usr/bin need, and NODE_OPENSSL what
- * node needs; /tmp,
+ * `developerReads` what the shims in /usr/bin need, NODE_OPENSSL what
+ * node needs, and `devReads` the owner's developer tools; /tmp,
  * which Codex lets a run write by default, is shut. Instruction files in the
  * folders the run writes are shut both ways, each path and what is under it.
  *
@@ -209,11 +213,16 @@ function developerReads(): string[] {
  * later (`REPO_RUNS` in files.ts).
  */
 function filesystem(r: CodexRun, temp: string): Record<string, string> {
+  const dev = devReads();
   return {
     ':root': 'deny',
     ':minimal': 'read',
     ':slash_tmp': 'deny',
-    ...Object.fromEntries([...developerReads(), NODE_OPENSSL, ...r.reads].map((p) => [p, 'read'])),
+    ...Object.fromEntries(
+      [...developerReads(), NODE_OPENSSL, ...dev.reads, ...r.reads].map((p) => [p, 'read'])
+    ),
+    // After the reads, so each deny shuts one file in a folder read above.
+    ...Object.fromEntries(dev.denies.map((p) => [p, 'deny'])),
     ...Object.fromEntries([...r.writes, temp].map((p) => [p, 'write'])),
     ...Object.fromEntries(
       instructionPaths(r.writes)
@@ -324,7 +333,7 @@ export function codexSignIn(): { args: string[]; env: NodeJS.ProcessEnv } {
 
 /**
  * Get a Codex run ready: its home, its temp folder with the empty git
- * template inside (`gitEnv`), and the arguments, environment and input to
+ * template inside (`shellEnv`), and the arguments, environment and input to
  * start `codex exec` with. `done` removes the temp folder.
  */
 export function codexLaunch(r: CodexRun): CodexLaunch {
@@ -333,8 +342,8 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   sweep(TEMPS, '', r.key);
   const temp = join(TEMPS, r.key);
   mkdirSync(temp, { mode: 0o700 });
-  const git = gitEnv(temp);
-  mkdirSync(git.GIT_TEMPLATE_DIR, { mode: 0o700 });
+  const shell = shellEnv(temp);
+  mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
   const set = (key: string, value: Toml) => ['-c', `${key}=${toml(value)}`];
   const model = process.env.OFFICE_CODEX_MODEL;
   const args = [
@@ -346,12 +355,13 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     '--strict-config',
     '--ignore-rules',
     ...Object.entries(SWITCHES).flatMap(([k, v]) => set(k, v)),
-    // Here, not in `env`: the shell inherits only the core variables.
-    ...set('shell_environment_policy.set', git),
+    // Here, not in `env`: the shell inherits only the core variables. One
+    // `set` only, since a second would replace the first.
+    ...set('shell_environment_policy.set', shell),
     ...set('web_search', r.web ? 'live' : 'disabled'),
     ...set('developer_instructions', r.system),
     ...set('permissions', {
-      [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: false } }
+      [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: r.network } }
     }),
     ...set('default_permissions', PROFILE),
     ...set('mcp_servers', mcpServers(r.servers, r.allowed)),

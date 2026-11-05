@@ -6,7 +6,7 @@
 // early. Server only.
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { Agent } from '@oddboro/ledger';
+import { COMMANDS_WHY, type Agent } from '@oddboro/ledger';
 import { deniedEdits } from './files.ts';
 import type { RunEvent } from './launch.ts';
 import { GROK_PLAN_LIMIT, GROK_SIGN_IN, grokLaunch, grokSignedOut } from './grok.ts';
@@ -49,6 +49,10 @@ export type CliRun = {
   granted: string[];
   /** The owner's Browse the web switch: the tool's own web search and fetch. */
   web: boolean;
+  /** A shell, decided in run() from commandsHow; a launch whose tool cannot hold it refuses. */
+  commands: boolean;
+  /** Whether those commands reach the internet (commandsOnline, less a held network). */
+  network: boolean;
   /** The file the owner edited, by its path inside `dir`, which a run reading that edit may not write. */
   edited?: string;
   system: string;
@@ -66,13 +70,17 @@ export type CliRun = {
 /**
  * Each tool but Claude Code, whose arguments run() builds from its own
  * rules. Every one has an entry, so a new tool fails the type check until it
- * is handled. A tool that cannot start says why instead (`refused`).
+ * is handled. A tool that cannot start says why instead (`refused`), and so
+ * does one handed a run its tool cannot hold, Grok or Gemini with commands
+ * and Codex without, first, so a change to `commandsHow` alone fails the run
+ * rather than silently dropping or adding the shell.
  */
 export const LAUNCHES: Record<
   Exclude<Agent, 'claude'>,
   (r: CliRun) => Promise<Launch | { refused: string }>
 > = {
   grok: async (r) => {
+    if (r.commands) return { refused: COMMANDS_WHY.grok };
     const signedOut = await grokSignedOut(r.timeoutMs);
     if (signedOut) return { refused: signedOut };
     return {
@@ -97,6 +105,8 @@ export const LAUNCHES: Record<
     };
   },
   codex: async (r) => {
+    if (!r.commands)
+      return { refused: 'Codex reads files through its commands, so it cannot run without them.' };
     const signedOut = codexSignedOut();
     if (signedOut) return { refused: signedOut };
     return {
@@ -111,13 +121,15 @@ export const LAUNCHES: Record<
         resume: r.resume,
         servers: r.servers,
         allowed: r.allowed,
-        web: r.web
+        web: r.web,
+        network: r.network
       }),
       read: codexReader(process.env.OFFICE_CODEX_MODEL ?? 'codex'),
       ownGroup: true
     };
   },
   gemini: async (r) => {
+    if (r.commands) return { refused: COMMANDS_WHY.gemini };
     const missing = geminiKeyMissing();
     if (missing) return { refused: missing };
     return {

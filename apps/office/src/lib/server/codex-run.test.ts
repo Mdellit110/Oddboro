@@ -16,6 +16,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from 'node:fs';
 import { join } from 'node:path';
@@ -34,6 +35,7 @@ import {
   goal,
   odd,
   ownerData,
+  ownerHome,
   plain,
   runOf,
   withEnv
@@ -149,24 +151,62 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
   assert.ok(run.message.endsWith('Hello.'), run.message);
 });
 
-test("a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network", async () => {
-  const run = await chatOf('cody');
-  assert.ok(run.system.includes(`data folder: ${ownerData}`), run.system);
-  assert.deepEqual(run.permissions?.network, { enabled: false });
-  assert.deepEqual(plainPaths(run.permissions?.filesystem ?? {}), {
-    ':root': 'deny',
-    ':minimal': 'read',
-    ':slash_tmp': 'deny',
-    '/Library/Developer/CommandLineTools': 'read',
-    '/private/var/db/xcode_select_link': 'read',
-    '<home>/Applications/Xcode.app/Contents/Developer': 'read',
-    '/System/Library/OpenSSL/openssl.cnf': 'read',
-    '<home>/data': 'read',
-    '<home>/staff/cody': 'write',
-    '<home>/codex-tmp/<id>': 'write',
-    ...shut('<home>/staff/cody')
-  });
+test("a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network", () =>
+  // An empty home, so this Mac's own developer tool folders are not read.
+  ownerHome(async () => {
+    const run = await chatOf('cody');
+    assert.ok(run.system.includes(`data folder: ${ownerData}`), run.system);
+    assert.deepEqual(run.permissions?.network, { enabled: false });
+    assert.deepEqual(plainPaths(run.permissions?.filesystem ?? {}), {
+      ':root': 'deny',
+      ':minimal': 'read',
+      ':slash_tmp': 'deny',
+      '/Library/Developer/CommandLineTools': 'read',
+      '/private/var/db/xcode_select_link': 'read',
+      '<home>/Applications/Xcode.app/Contents/Developer': 'read',
+      '/System/Library/OpenSSL/openssl.cnf': 'read',
+      '<home>/data': 'read',
+      '<home>/staff/cody': 'write',
+      '<home>/codex-tmp/<id>': 'write',
+      ...shut('<home>/staff/cody')
+    });
+  }));
+
+test("Codex's commands reach the internet only with Browse the web on", async () => {
+  const network = async () => (await chatOf('cole')).permissions?.network;
+  await L.pg`update staff set web = true where id = 'cole'`;
+  try {
+    assert.deepEqual(await network(), { enabled: true });
+  } finally {
+    await L.pg`update staff set web = false where id = 'cole'`;
+  }
+  assert.deepEqual(await network(), { enabled: false });
 });
+
+test("a Codex run reads the developer tool folders that exist and never their credential files, nor a link's folder in a secret store or with a glob character in its path", () =>
+  ownerHome(async (home) => {
+    const h = realpathSync(home);
+    /** A link in ~/.local/bin named `name`, to a file of that name in `folder`. */
+    const link = (name: string, folder: string) => {
+      mkdirSync(join(h, folder), { recursive: true });
+      writeFileSync(join(h, folder, name), '');
+      symlinkSync(join(h, folder, name), join(h, '.local/bin', name));
+    };
+    for (const d of ['.npm', '.cargo', '.local/bin']) mkdirSync(join(h, d), { recursive: true });
+    link('x', '.local/share/x/bin');
+    link('y', '.config/y');
+    link('z', '.local/share/z[1]/bin');
+    const profile = (await chatOf('cora')).permissions?.filesystem ?? {};
+    const mine = Object.entries(profile).filter(([p]) => p.startsWith(h + '/'));
+    assert.deepEqual(mine, [
+      [join(h, '.npm'), 'read'],
+      [join(h, '.cargo'), 'read'],
+      [join(h, '.local/bin'), 'read'],
+      [join(h, '.local/share/x/bin'), 'read'],
+      [join(h, '.cargo/credentials'), 'deny'],
+      [join(h, '.cargo/credentials.toml'), 'deny']
+    ]);
+  }));
 
 test("every glob in a Codex run's profile is a deny, and it names no repository, since Codex refuses to start on a glob it reads or writes and keeps each write folder's own .git read only itself", async () => {
   const w = join(realpathSync(folder), 'given', 'cora-repo');
@@ -248,7 +288,7 @@ test("a Codex run's environment has the office's Codex home and the run's own te
     assert.equal(run.temp, true, 'the temp folder was not there while the run went');
   }));
 
-test("a Codex run's shell gets the office's git settings through shell_environment_policy.set, never on codex's own environment, with an empty git template in its temp folder", async () => {
+test("a Codex run's shell gets the office's git settings and npm's cache in its temp folder through one shell_environment_policy.set, never on codex's own environment, with an empty git template in its temp folder", async () => {
   const run = await chatOf('cody');
   const temp = join(folder, 'codex-tmp', run.env.RUN_KEY);
   assert.deepEqual(run.git, {
@@ -258,8 +298,12 @@ test("a Codex run's shell gets the office's git settings through shell_environme
     GIT_CONFIG_KEY_0: 'core.excludesFile',
     GIT_CONFIG_VALUE_0: '/dev/null',
     GIT_CONFIG_KEY_1: 'core.attributesFile',
-    GIT_CONFIG_VALUE_1: '/dev/null'
+    GIT_CONFIG_VALUE_1: '/dev/null',
+    npm_config_cache: join(temp, 'npm'),
+    npm_config_userconfig: join(temp, 'npmrc')
   });
+  // A second set would replace the first.
+  assert.equal(run.args.filter((a) => a.startsWith('shell_environment_policy.set=')).length, 1);
   assert.equal(run.gitTemplate, true, 'the git template was missing or not empty as the run went');
   // The shell inherits only the core variables, so one set on codex itself never reaches it.
   assert.deepEqual(

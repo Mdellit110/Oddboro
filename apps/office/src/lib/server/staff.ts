@@ -124,6 +124,7 @@ import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, ownToolsLine, streamTools, type Launch } from './cli.ts';
 import { gitEnv, stopGroups } from './launch.ts';
+import { hiddenFromCommands } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
 
@@ -384,33 +385,6 @@ export function staffEnv(): NodeJS.ProcessEnv {
   delete env.ANTHROPIC_API_KEY;
   if (claudeSettings().auth === 'key') env.ANTHROPIC_API_KEY = apiKey();
   return env;
-}
-
-/** A variable's name that says it may hold a secret. */
-const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE)/i;
-/** The office's own git settings (`gitEnv`), by name; the folder they name does not matter here. */
-const OFFICE_GIT = new Set(Object.keys(gitEnv('')));
-
-/**
- * The variables of a run's environment (`env`) that its sandboxed commands
- * never see: the API key, the database's address, and every name that says
- * it may hold a secret. Claude Code itself and its MCP servers keep them: the
- * office's tool server needs `DATABASE_URL`, and a key sign-in the key.
- * `CLAUDE_CODE_MESSAGING_TOKEN` is named too: Claude Code sets it itself, so
- * it is never in `env`, and a walk saw it in Bash's `env`. The office's own
- * git settings pass by exact name (`OFFICE_GIT`): `GIT_CONFIG_KEY_0` and
- * `_1` say key, and git with one of them hidden or empty stops every command
- * with exit 128. The office's own `GIT_` variables never reach `env`
- * (`cleanEnv` drops them), so today the exact names act as a `GIT_` prefix
- * would, and no test can tell the two apart. Still by exact name, so a
- * `GIT_..._TOKEN` a later change puts in `env` after `cleanEnv` stays hidden
- * like every other name that looks like a secret.
- */
-function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
-  const names = Object.keys(env).filter(
-    (n) => !OFFICE_GIT.has(n) && (SECRET_NAME.test(n) || n === 'DATABASE_URL')
-  );
-  return [...new Set(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_MESSAGING_TOKEN', ...names])];
 }
 
 type Server = Record<string, unknown>;
@@ -964,7 +938,9 @@ async function run(
           servers,
           allowed,
           timeoutMs: opts.timeoutMs,
-          web: own.web
+          web: own.web,
+          commands: own.commands,
+          network: caps.own.network
         });
   if ('refused' in launch) {
     opts.onEvent?.({ type: 'error', message: launch.refused });
