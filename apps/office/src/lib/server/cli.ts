@@ -45,6 +45,8 @@ export type CliRun = {
   part?: string;
   /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
+  /** The folders the owner gave the Odd to change, some of `writes`, if any: only there is a repository's hooks, config and submodules never written (`repoRunPaths`). */
+  granted?: string[];
   /** The owner's Browse the web switch: the tool's own web search and fetch. */
   web: boolean;
   /** The file the owner edited, by its path inside `dir`, which a run reading that edit may not write. */
@@ -81,7 +83,7 @@ export const LAUNCHES: Record<
         reads: r.reads,
         part: r.part,
         writes: r.writes,
-        deniedEdits: deniedEdits(r.dir, r.writes, r.edited),
+        deniedEdits: deniedEdits(r.dir, r.writes, r.edited, r.granted),
         system: r.system,
         message: r.input,
         resume: r.resume,
@@ -124,6 +126,7 @@ export const LAUNCHES: Record<
         dir: r.dir,
         reads: r.reads,
         writes: r.writes,
+        granted: r.granted,
         edited: r.edited,
         system: r.system,
         input: r.input,

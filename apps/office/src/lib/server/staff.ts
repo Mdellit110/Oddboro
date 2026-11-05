@@ -9,8 +9,9 @@
 // folders the owner gave it (see `readable`), may write only inside the
 // staffer's own folder, its own part of that thread's and the folders the
 // owner gave it to change, except its tools' own instructions (`INSTRUCTIONS`
-// in files.ts), a repository's git hooks and config (`REPO_RUNS`) and,
-// reading the owner's edit, that file (`deniedEdits`),
+// in files.ts), a repository's git hooks, config and submodules in a folder
+// the owner gave it (`REPO_RUNS`) and, reading the owner's edit, that file
+// (`deniedEdits`),
 // loads no project settings, skills or plugins, and is denied anything not
 // pre-approved. It always gets the office server (asks,
 // tasks, the ledger), plus whatever access the owner granted: servers at read
@@ -393,10 +394,12 @@ const SECRET_NAME = /(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH|COOKIE)/i
  * never see: the API key, the database's address, and every name that says
  * it may hold a secret. Claude Code itself and its MCP servers keep them: the
  * office's tool server needs `DATABASE_URL`, and a key sign-in the key.
+ * `CLAUDE_CODE_MESSAGING_TOKEN` is named too: Claude Code sets it itself, so
+ * it is never in `env`, and a walk saw it in Bash's `env`.
  */
 function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
   const names = Object.keys(env).filter((n) => SECRET_NAME.test(n) || n === 'DATABASE_URL');
-  return [...new Set(['ANTHROPIC_API_KEY', ...names])];
+  return [...new Set(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_MESSAGING_TOKEN', ...names])];
 }
 
 type Server = Record<string, unknown>;
@@ -820,7 +823,7 @@ async function run(
   const part = opts.threadId ? threadPart(opts.threadId, who.id) : undefined;
   if (part) mkdirSync(part, { recursive: true });
   const writes = [dir, ...(part ? [part] : []), ...extraWrites];
-  const denied = deniedEdits(dir, writes, opts.ownerEdit?.path);
+  const denied = deniedEdits(dir, writes, opts.ownerEdit?.path, extraWrites);
   // Bash writes in every folder Claude Code works in (the cwd and each
   // --add-dir), whatever the Edit rules say. So with commands, only the
   // folders the run writes are added, and the sandbox's denyWrite, which beats
@@ -936,6 +939,7 @@ async function run(
           reads: [DATA, ...reads.map(threadFolder), ...extraReads],
           part,
           writes,
+          granted: extraWrites,
           edited: opts.ownerEdit?.path,
           system: system.replaceAll(NOW, time),
           input,

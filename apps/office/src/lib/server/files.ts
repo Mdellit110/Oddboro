@@ -54,11 +54,18 @@ export const INSTRUCTIONS = [
 
 /**
  * Paths in a git repository that run code the next time the owner's git runs
- * there: hooks, and settings that name a program. A run never writes them in
- * a folder it writes, but reads them, since git cannot run without reading
- * `.git/config`. So they are never shut both ways like `INSTRUCTIONS`.
+ * there: hooks, settings that name a program, and a submodule's own hooks and
+ * settings, which `git status` in the repository above runs too. A run never
+ * writes them in a folder the owner gave it to change, but reads them, since
+ * git cannot run without reading `.git/config`. So they are never shut both
+ * ways like `INSTRUCTIONS`. All of `.git/modules` is shut to writes, so an Odd
+ * cannot update a submodule there either: its objects sit in the same folder.
+ * Claude Code, Grok and Gemini take them as write refusals. Codex gets none:
+ * it keeps each write folder's own `.git` read only by itself, and a
+ * repository further in is not covered for Codex, since it takes a glob only
+ * as `deny`, which would stop git reading (`filesystem` in codex.ts).
  */
-export const REPO_RUNS = ['.git/hooks', '.git/config'];
+export const REPO_RUNS = ['.git/hooks', '.git/config', '.git/modules'];
 
 export type StaffFile = { staff: string; path: string; content: string; mtime: number };
 export type FileName = { staff: string; path: string };
@@ -319,23 +326,32 @@ export function instructionPaths(writes: string[]): string[] {
 }
 
 /**
- * Every git hook and config (`REPO_RUNS`) in the folders a run writes, as
- * path globs, at the top and in any repository further in.
+ * Every git hook and config (`REPO_RUNS`) in the folders the owner gave a run
+ * to change (`granted`), as path globs, at the top and in any repository
+ * further in. Only those, as the owner ruled: the Odd's own folder and its
+ * part of a thread are the office's, not the owner's projects, and an Odd may
+ * make and use a repository of its own there.
  */
-export function repoRunPaths(writes: string[]): string[] {
-  return REPO_RUNS.flatMap((p) => writes.flatMap((w) => [`${w}/${p}`, `${w}/**/${p}`]));
+export function repoRunPaths(granted: string[]): string[] {
+  return REPO_RUNS.flatMap((p) => granted.flatMap((w) => [`${w}/${p}`, `${w}/**/${p}`]));
 }
 
 /**
- * The paths a run may not write in the folders it writes (`writes`): no run
- * writes its tools' own instructions or a repository's hooks and config, and
- * a run reading the owner's edit to a file in its folder (`dir`) may not write
- * that file. Each tool turns them into its own rules.
+ * The paths a run may not write: its tools' own instructions in every folder
+ * it writes (`writes`), for a run reading the owner's edit to a file in its
+ * folder (`dir`) that file, and a repository's hooks, config and submodules
+ * in the folders the owner gave it to change (`granted`, some of `writes`;
+ * none when it has none). Each tool turns them into its own rules.
  */
-export function deniedEdits(dir: string, writes: string[], edited?: string): string[] {
+export function deniedEdits(
+  dir: string,
+  writes: string[],
+  edited?: string,
+  granted: string[] = []
+): string[] {
   return [
     ...instructionPaths(writes),
-    ...repoRunPaths(writes),
+    ...repoRunPaths(granted),
     ...(edited ? [join(dir, edited)] : [])
   ];
 }

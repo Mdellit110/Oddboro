@@ -21,7 +21,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { home } from '@oddboro/ledger';
-import { andBelow, instructionPaths, repoRunPaths } from './files.ts';
+import { andBelow, instructionPaths } from './files.ts';
 import {
   mcpGrant,
   NOT_SIGNED_IN,
@@ -194,8 +194,14 @@ function developerReads(): string[] {
  * `developerReads` what the shims in /usr/bin need, and NODE_OPENSSL what
  * node needs; /tmp,
  * which Codex lets a run write by default, is shut. Instruction files in the
- * folders the run writes are shut both ways, each path and what is under it,
- * and a repository's hooks and config there (`repoRunPaths`) are read only.
+ * folders the run writes are shut both ways, each path and what is under it.
+ *
+ * No entry names a repository's hooks, config or submodules (`REPO_RUNS`):
+ * Codex itself keeps each write folder's own `.git` read only (measured with
+ * `codex sandbox` on 0.166.0), so a Codex Odd cannot commit there either. A
+ * repository further in (`<w>/sub/.git`) is not covered: Codex takes a glob
+ * only as `deny` (it refuses to start on a `read` or `write` one), and a
+ * deny would stop git reading its config. A known gap.
  */
 function filesystem(r: CodexRun, temp: string): Record<string, string> {
   return {
@@ -208,12 +214,6 @@ function filesystem(r: CodexRun, temp: string): Record<string, string> {
       instructionPaths(r.writes)
         .flatMap(andBelow)
         .map((p) => [p, 'deny'])
-    ),
-    // Read, not shut: git cannot run without reading them.
-    ...Object.fromEntries(
-      repoRunPaths(r.writes)
-        .flatMap(andBelow)
-        .map((p) => [p, 'read'])
     ),
     ...(r.edited ? Object.fromEntries(andBelow(r.edited).map((p) => [p, 'read'])) : {})
   };

@@ -36,9 +36,12 @@ const dir = `${home}/staff/gemma`;
 const thread = `${home}/threads/7`;
 const part = `${thread}/gemma`;
 const data = `${home}/data`;
+/** A folder the owner gave the Odd to change, beside the office's home. */
+const given = `${dirname(home)}/projects/site`;
 const run = {
   dir,
-  writes: [dir, part],
+  writes: [dir, part, given],
+  granted: [given],
   edited: 'notes/Plan.md',
   allowed: ['mcp__office', 'mcp__c__t'],
   web: false
@@ -124,17 +127,30 @@ const CASES: [
     'deny'
   ],
   ['a write to CLAUDE.md', edit(`${dir}/CLAUDE.md`), undefined, 'deny'],
-  ['a write to a git hook', write(`${dir}/.git/hooks/pre-commit`), undefined, 'deny'],
-  ['a write to .GIT/Hooks', write(`${dir}/.GIT/Hooks/post-merge`), undefined, 'deny'],
-  ['an edit to a git config', edit(`${dir}/.git/config`), undefined, 'deny'],
+  ['a write in a given folder', write(`${given}/notes.md`), undefined, 'allow'],
+  ['a write to CLAUDE.md in a given folder', write(`${given}/CLAUDE.md`), undefined, 'deny'],
+  ['a write to a git hook', write(`${given}/.git/hooks/pre-commit`), undefined, 'deny'],
+  ['a write to .GIT/Hooks', write(`${given}/.GIT/Hooks/post-merge`), undefined, 'deny'],
+  ['an edit to a git config', edit(`${given}/.git/config`), undefined, 'deny'],
   [
     'a write to a nested repository’s git config',
-    write(`${part}/lib/vendor/.git/config`),
+    write(`${given}/lib/vendor/.git/config`),
     undefined,
     'deny'
   ],
-  ['a write elsewhere in .git', write(`${dir}/.git/HEAD`), undefined, 'allow'],
-  ['a write to a folder only named like .git', write(`${dir}/my.git/config`), undefined, 'allow'],
+  ['a write to a submodule’s config', write(`${given}/.git/modules/s/config`), undefined, 'deny'],
+  ['a write to a submodule’s hook', write(`${given}/.git/modules/s/hooks/x`), undefined, 'deny'],
+  [
+    'a write to a nested repository’s submodule config',
+    write(`${given}/sub/.git/modules/s/config`),
+    undefined,
+    'deny'
+  ],
+  ['a write elsewhere in .git', write(`${given}/.git/HEAD`), undefined, 'allow'],
+  ['a write to a folder only named like .git', write(`${given}/my.git/config`), undefined, 'allow'],
+  // The Odd's own folder and its part of a thread are the office's: it may make a repository there.
+  ['a git config in its own folder', write(`${dir}/.git/config`), undefined, 'allow'],
+  ['a git hook in its part of a thread', write(`${part}/r/.git/hooks/x`), undefined, 'allow'],
   ['a write to the owner’s data folder', write(`${data}/people.json`), undefined, 'deny'],
   ['a write in the thread folder outside its part', write(`${thread}/plan.md`), undefined, 'deny'],
   ['a write in another Odd’s part', write(`${thread}/gina/plan.md`), undefined, 'deny'],

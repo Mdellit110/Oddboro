@@ -103,6 +103,8 @@ type GeminiRun = {
   reads: string[];
   /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
+  /** The folders the owner gave the Odd to change, some of `writes`, if any: only there is a repository's hooks, config and submodules never written. */
+  granted?: string[];
   /** The file the owner edited, inside `dir`, which a run reading that edit may read and not write. */
   edited?: string;
   system: string;
@@ -123,23 +125,29 @@ type Rule = Record<string, Toml>;
 
 /** The run's policy rules, each as Gemini's TOML table holds it. */
 export function geminiRules(
-  r: Pick<GeminiRun, 'dir' | 'writes' | 'edited' | 'allowed' | 'web'>
+  r: Pick<GeminiRun, 'dir' | 'writes' | 'granted' | 'edited' | 'allowed' | 'web'>
 ): Rule[] {
-  // A git hook or config is never written either (`REPO_RUNS`), though read.
-  const names = [...INSTRUCTIONS, ...REPO_RUNS].map(anyCase).join('|');
   const write = (priority: number, decision: string, argsPattern: string): Rule => ({
     toolName: WRITE_TOOLS,
     decision,
     priority,
     argsPattern
   });
+  // A path with one of `names` as a part, anywhere in `w`. `(?:...)?` nests a
+  // quantifier, which Gemini drops, so "any folders, or none" is `(?:x|)`.
+  const anywhereIn = (w: string, names: string[]) =>
+    write(
+      REFUSE,
+      'deny',
+      `${FILE_PATH}${exact(w)}/(?:[^\\x00]*/|)(?:${names.map(anyCase).join('|')})[/"]`
+    );
   return [
     write(REFUSE, 'deny', NOT_PLAIN),
-    // An instruction file or folder, or a git hook or config, anywhere in a folder the run writes. `(?:...)?`
-    // nests a quantifier, which Gemini drops, so "any folders, or none" is `(?:x|)`.
-    ...r.writes.map((w) =>
-      write(REFUSE, 'deny', `${FILE_PATH}${exact(w)}/(?:[^\\x00]*/|)(?:${names})[/"]`)
-    ),
+    // An instruction file or folder in any folder the run writes, and a
+    // repository's hooks, config and submodules (`REPO_RUNS`), though read,
+    // in a folder the owner gave it to change.
+    ...r.writes.map((w) => anywhereIn(w, INSTRUCTIONS)),
+    ...(r.granted ?? []).map((w) => anywhereIn(w, REPO_RUNS)),
     ...(r.edited
       ? [write(REFUSE, 'deny', `${FILE_PATH}${exact(r.dir)}/${anyCase(r.edited)}"`)]
       : []),

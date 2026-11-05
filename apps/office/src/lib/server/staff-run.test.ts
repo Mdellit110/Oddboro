@@ -158,13 +158,7 @@ test("a Claude Code Odd's chat gets the arguments it always had, plus the new in
         `Edit(${p}/**)`
       ])
     ),
-    // A repository's git hooks and config, which git reads and no run writes (`REPO_RUNS`).
-    ...['.git/hooks', '.git/config'].flatMap((f) =>
-      [`/<home>/staff/cleo/${f}`, `/<home>/staff/cleo/**/${f}`].flatMap((p) => [
-        `Edit(${p})`,
-        `Edit(${p}/**)`
-      ])
-    ),
+    // No repository's hooks or config: those are refused only in a folder the owner gave it (`repoRunPaths`).
     '--permission-mode',
     'dontAsk',
     '--setting-sources',
@@ -193,20 +187,16 @@ test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the f
   const shown = plain((await chatOf('gus')).args).map((a) =>
     a.replace(/^(--single|--rules)=[^]*$/, '$1=<$1>')
   );
-  // The instruction files and git's hooks and config are pinned below; the rest is compared whole.
+  // The instruction files are pinned below; the rest is compared whole, so a
+  // repository's hooks or config in its own folder, which no rule refuses, would show there.
   const own = (a: string) =>
-    /^(Edit|Write)\(<home>\/staff\/gus\/.*(CLAUDE|\.claude|\.grok|AGENTS|\.mcp\.json|\.codex|\.agents|GEMINI|\.gemini|\.git\/hooks|\.git\/config)/.test(
+    /^(Edit|Write)\(<home>\/staff\/gus\/.*(CLAUDE|\.claude|\.grok|AGENTS|\.mcp\.json|\.codex|\.agents|GEMINI|\.gemini)/.test(
       a
     );
   const rules = shown.filter((a, i) => own(a) && shown[i - 1] === '--deny');
-  // Eleven names and two git paths, each as the path and everything under it, at the top and below, for Edit and Write.
-  assert.equal(rules.length, 104);
-  for (const p of [
-    '<home>/staff/gus/.grok/**',
-    '<home>/staff/gus/**/AGENTS.md',
-    '<home>/staff/gus/**/.git/hooks/**',
-    '<home>/staff/gus/.git/config'
-  ]) {
+  // Eleven names, each as the path and everything under it, at the top and below, for Edit and Write.
+  assert.equal(rules.length, 88);
+  for (const p of ['<home>/staff/gus/.grok/**', '<home>/staff/gus/**/AGENTS.md']) {
     assert.ok(rules.includes(`Edit(${p})`), p);
     assert.ok(rules.includes(`Write(${p})`), p);
   }

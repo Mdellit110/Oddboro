@@ -43,7 +43,8 @@ const { stopGroups } = await import('./launch.ts');
 await L.pg`insert into staff ${L.pg([
   { ...odd('cody', 'Cody'), agent: 'codex' },
   { ...odd('cass', 'Cass'), agent: 'codex' },
-  { ...odd('cole', 'Cole'), agent: 'codex' }
+  { ...odd('cole', 'Cole'), agent: 'codex' },
+  { ...odd('cora', 'Cora'), agent: 'codex' }
 ])}`;
 
 const CODEX_HOME = join(folder, 'codex');
@@ -66,13 +67,6 @@ const shut = (w: string) =>
   Object.fromEntries(
     INSTRUCTIONS.flatMap((n) =>
       [`${w}/${n}`, `${w}/${n}/**`, `${w}/**/${n}`, `${w}/**/${n}/**`].map((p) => [p, 'deny'])
-    )
-  );
-/** A repository's git hooks and config in `w`, read only, since git reads them (`REPO_RUNS`). */
-const gitRead = (w: string) =>
-  Object.fromEntries(
-    ['.git/hooks', '.git/config'].flatMap((n) =>
-      [`${w}/${n}`, `${w}/${n}/**`, `${w}/**/${n}`, `${w}/**/${n}/**`].map((p) => [p, 'read'])
     )
   );
 /** A profile's paths with this machine's folder and each run's id as stand-ins. */
@@ -166,9 +160,26 @@ test("a Codex Odd's chat is held by the kernel to its own folder and its own tem
     '<home>/data': 'read',
     '<home>/staff/cody': 'write',
     '<home>/codex-tmp/<id>': 'write',
-    ...shut('<home>/staff/cody'),
-    ...gitRead('<home>/staff/cody')
+    ...shut('<home>/staff/cody')
   });
+});
+
+test("every glob in a Codex run's profile is a deny, and it names no repository, since Codex refuses to start on a glob it reads or writes and keeps each write folder's own .git read only itself", async () => {
+  const w = join(realpathSync(folder), 'given', 'cora-repo');
+  const r = join(realpathSync(folder), 'given', 'cora-read');
+  for (const f of [w, r]) mkdirSync(join(f, '.git'), { recursive: true });
+  await L.pg`update staff set folders = ${JSON.stringify([
+    { path: w, write: true },
+    { path: r, write: false }
+  ])}::jsonb where id = 'cora'`;
+  const fs = (await chatOf('cora')).permissions?.filesystem ?? {};
+  assert.equal(fs[w], 'write', 'the granted folder did not reach the run');
+  // Codex takes `<p>/**` as the subtree of an exact path; any other `*` is a glob.
+  const globs = Object.keys(fs).filter((p) => p.replace(/\/\*\*$/, '').includes('*'));
+  assert.ok(globs.length > 0, 'no glob to check');
+  for (const p of globs) assert.equal(fs[p], 'deny', `${p} is a glob Codex refuses as ${fs[p]}`);
+  const repo = Object.keys(fs).filter((p) => p.includes('/.git/') || p.endsWith('/.git'));
+  assert.deepEqual(repo, []);
 });
 
 test('a Codex run reads the developer folder xcode-select names by its real path, never the link it named', async () => {

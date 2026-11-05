@@ -146,7 +146,14 @@ test(
       await setOwn('otto', { commands: true });
       const run = await chatOf('otto');
       const denied = settingsOf(run).sandbox?.credentials.envVars ?? [];
-      for (const name of ['ANTHROPIC_API_KEY', 'FAKE_TOKEN', 'DATABASE_URL', 'XAI_API_KEY'])
+      // Claude Code sets CLAUDE_CODE_MESSAGING_TOKEN itself, so it is in no environment the office passes.
+      for (const name of [
+        'ANTHROPIC_API_KEY',
+        'FAKE_TOKEN',
+        'DATABASE_URL',
+        'XAI_API_KEY',
+        'CLAUDE_CODE_MESSAGING_TOKEN'
+      ])
         assert.ok(
           denied.some((v) => v.name === name && v.mode === 'deny'),
           `${name} reaches Bash: ${JSON.stringify(denied)}`
@@ -367,7 +374,10 @@ test("with Run commands, Bash can write only the run's write folders", onMac, as
     const part = join(thread, 'otto');
     assert.deepEqual(each(onThread.args, '--add-dir'), [ownerData, part, sub]);
     const denyWrite = settingsOf(onThread).sandbox?.filesystem.denyWrite ?? [];
-    assert.deepEqual(denyWrite, [ownerData, ...deniedEdits(dir, [dir, part, sub])]);
+    assert.deepEqual(denyWrite, [
+      ownerData,
+      ...deniedEdits(dir, [dir, part, sub], undefined, [sub])
+    ]);
     for (const open of [thread, p, '/private/tmp'])
       assert.ok(!denyWrite.includes(open), `${open} is denied a write, which beats every allow`);
 
@@ -449,50 +459,86 @@ test(
   }
 );
 
-test("a write folder's git hooks and config are read and never written, on every tool", async () => {
+/** A repository's hooks, config and submodules in `w`, at the top and in any repository further in (`REPO_RUNS`). */
+const repoRuns = (w: string) =>
+  ['.git/hooks', '.git/config', '.git/modules'].flatMap((p) => [`${w}/${p}`, `${w}/**/${p}`]);
+/** What each tool but Codex is denied a write to, of `paths`, in one chat of each Odd. */
+async function deniedWrites(
+  paths: string[]
+): Promise<Record<'claude' | 'grok' | 'gemini', string[]>> {
+  const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
+  const grok = each((await chatOf('gwen')).args, '--deny');
+  const policy = (await chatOf('gem')).policy ?? '';
+  return {
+    claude: paths.filter((p) =>
+      [p, `${p}/**`].every((q) => claude.includes(`Edit(${L.rulePath(q)})`))
+    ),
+    grok: paths.filter((p) =>
+      [p, `${p}/**`].every((q) => ['Edit', 'Write'].every((t) => grok.includes(`${t}(${q})`)))
+    ),
+    // Gemini's write policy matches a file's path, so a file in each place stands for the place.
+    gemini: paths.filter((p) => writeRule(policy, 'deny', p.replace('/**/', '/sub/') + '/x'))
+  };
+}
+
+test("a given write folder's git hooks, config and submodules are read and never written, on every tool", async () => {
   const w = made('repo');
-  await setOwn('fern', { folders: [{ path: w, write: true }] });
-  await setOwn('gwen', { folders: [{ path: w, write: true }] });
-  await setOwn('cato', { folders: [{ path: w, write: true }] });
-  await setOwn('gem', { folders: [{ path: w, write: true }] });
-  const paths = [
-    `${w}/.git/hooks`,
-    `${w}/**/.git/hooks`,
-    `${w}/.git/config`,
-    `${w}/**/.git/config`
-  ];
+  for (const id of ['fern', 'gwen', 'cato', 'gem'])
+    await setOwn(id, { folders: [{ path: w, write: true }] });
+  const paths = repoRuns(w);
+  assert.deepEqual(await deniedWrites(paths), { claude: paths, grok: paths, gemini: paths });
 
   const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
-  for (const p of paths)
-    for (const q of [p, `${p}/**`])
-      assert.ok(claude.includes(`Edit(${L.rulePath(q)})`), `Claude Code may write ${q}`);
   assert.ok(!claude.some((d) => d.startsWith('Read(') && d.includes('.git')), 'git cannot read');
-
-  const grok = await chatOf('gwen');
-  const grokDenies = each(grok.args, '--deny');
-  for (const p of paths)
-    for (const tool of ['Edit', 'Write'])
-      assert.ok(grokDenies.includes(`${tool}(${p})`), `Grok's ${tool} may write ${p}`);
-  assert.ok(!(grok.profile ?? '').includes('.git/'), 'the kernel shuts git out of its config');
-
+  assert.ok(!((await chatOf('gwen')).profile ?? '').includes('.git/'), 'the kernel shuts git out');
+  // Codex keeps each write folder's own .git read only itself, and refuses a glob it reads.
   const codex = (await chatOf('cato')).permissions?.filesystem ?? {};
-  for (const p of paths)
-    for (const q of [p, `${p}/**`]) assert.equal(codex[q], 'read', `Codex may write ${q}`);
+  assert.deepEqual(
+    Object.keys(codex).filter((p) => p.includes('.git')),
+    []
+  );
+  assert.ok(writeRule((await chatOf('gem')).policy ?? '', 'allow', join(w, 'notes.md')));
+});
 
+test("only a folder the owner gave an Odd to change refuses git's hooks and config; its own folder keeps its instruction files shut", async () => {
+  const dirs = { fern: staffDir('fern'), gwen: staffDir('gwen'), gem: staffDir('gem') };
+  for (const id of ['fern', 'gwen', 'gem']) await setOwn(id, {});
+  const none = { claude: [], grok: [], gemini: [] };
+  const own = (id: keyof typeof dirs) => repoRuns(dirs[id]);
+  // With no folder given, no tool refuses a repository's hooks or config anywhere.
+  for (const id of ['fern', 'gwen', 'gem'] as const)
+    assert.deepEqual(await deniedWrites(own(id)), none, `${id}'s own folder`);
   const policy = (await chatOf('gem')).policy ?? '';
-  for (const p of ['.git/hooks/pre-commit', 'lib/.git/config', '.git/config'])
-    assert.ok(writeRule(policy, 'deny', join(w, p)), `Gemini may write ${p}`);
-  assert.ok(writeRule(policy, 'allow', join(w, 'notes.md')));
+  assert.ok(writeRule(policy, 'allow', join(dirs.gem, '.git', 'config')));
+  assert.ok(!writeRule(policy, 'deny', join(dirs.gem, '.git', 'config')));
+
+  const w = made('given-repo');
+  for (const id of ['fern', 'gwen', 'gem'])
+    await setOwn(id, { folders: [{ path: w, write: true }] });
+  const paths = repoRuns(w);
+  assert.deepEqual(await deniedWrites(paths), { claude: paths, grok: paths, gemini: paths });
+  for (const id of ['fern', 'gwen', 'gem'] as const)
+    assert.deepEqual(await deniedWrites(own(id)), none, `${id}'s own folder`);
+
+  // Its tools' instruction files stay shut in its own folder, on every tool.
+  const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
+  assert.ok(claude.includes(`Edit(${L.rulePath(join(dirs.fern, 'CLAUDE.md'))})`));
+  const grok = each((await chatOf('gwen')).args, '--deny');
+  assert.ok(grok.includes(`Write(${join(dirs.gwen, '**', 'AGENTS.md')})`), grok.join(' '));
+  const codex = (await chatOf('cato')).permissions?.filesystem ?? {};
+  assert.equal(codex[join(staffDir('cato'), 'AGENTS.md')], 'deny');
+  assert.ok(writeRule((await chatOf('gem')).policy ?? '', 'deny', join(dirs.gem, 'GEMINI.md')));
 });
 
 test(
-  "with Run commands, Bash cannot write a write folder's git hooks or config",
+  "with Run commands, Bash cannot write a given write folder's git hooks, config or submodules",
   onMac,
   async () => {
     const w = made('bash-repo');
     await setOwn('otto', { commands: true, folders: [{ path: w, write: true }] });
     const denyWrite = settingsOf(await chatOf('otto')).sandbox?.filesystem.denyWrite ?? [];
-    for (const p of ['.git/hooks', '**/.git/hooks', '.git/config', '**/.git/config'])
-      assert.ok(denyWrite.includes(`${w}/${p}`), `Bash may write ${w}/${p}`);
+    for (const p of repoRuns(w)) assert.ok(denyWrite.includes(p), `Bash may write ${p}`);
+    for (const p of repoRuns(staffDir('otto')))
+      assert.ok(!denyWrite.includes(p), `Bash may not write its own folder's ${p}`);
   }
 );

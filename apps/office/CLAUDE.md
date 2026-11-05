@@ -374,6 +374,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    never the data folder or what `deniedEdits` names (`denyWrite`), reach no
    network, and see none of the secrets in the run's environment
    (`credentials.envVars`, `hiddenFromCommands`): `ANTHROPIC_API_KEY`,
+   `CLAUDE_CODE_MESSAGING_TOKEN` (which Claude Code sets itself),
    `DATABASE_URL` and every name that says key, token, secret, password,
    credential, auth or cookie. Claude Code and the office's tool server keep
    them. Bash writes in every folder Claude Code works in, so `--add-dir`
@@ -386,11 +387,16 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    never an instruction file in any
    (`CLAUDE.md`, `CLAUDE.local.md`, `.claude`, `.grok`, `AGENTS.md`,
    `.mcp.json`, `AGENTS.override.md`, `.codex`, `.agents`, `GEMINI.md`, `.gemini`; `INSTRUCTIONS` and `deniedEdits` in `files.ts`), nor a
-   repository's `.git/hooks` or `.git/config` anywhere in a folder it writes
-   (`REPO_RUNS`, `repoRunPaths`), which it still reads, since git cannot run
-   without them (Codex gets them as `read`, Grok as Edit and Write denies
-   only, Gemini as write refusals), nor the file a run
-   reading the owner's edit is reading, and gets no skills, no
+   repository's `.git/hooks`, `.git/config` or `.git/modules` anywhere in a
+   folder the owner gave it to change (`REPO_RUNS`, `repoRunPaths`), which it
+   still reads, since git cannot run without them (Grok as Edit and Write
+   denies only, Gemini as write refusals). Its own folder and its part of a
+   thread are left out, so an Odd may make a repository there. Codex gets no
+   entry: it keeps each write folder's own `.git` read only by itself, so a
+   Codex Odd cannot commit in a given repository, and a repository nested in
+   a given folder is not covered for Codex, which takes a glob only to deny,
+   and a deny stops git reading. Nor does it write the file a run
+   reading the owner's edit is reading. It gets no skills, no
    plugins, none of the owner's own CLAUDE.md files and no Claude Code
    auto-memory (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with
    only the office tools the owner ticked under "In the office" on the Access tab,
