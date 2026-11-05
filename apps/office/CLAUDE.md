@@ -315,7 +315,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders, the owner's data folder, the folders the owner gave it
    and the owner's developer tool folders (`devReads` in `sandbox.ts`, as
    Claude Code's commands read them) read, their listed credential files shut
-   but not their env files, its
+   but not their env files or projects' git configs, its
    folder, its part of a thread, the given folders it may change and its own temp folder
    (`codex-tmp/<run key>`) written, instruction files and the edited file
    never, and no network, Browse the web or not (`network` in the profile,
@@ -414,17 +414,25 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `~/go`, `~/.gradle`, `~/.m2`, `~/.gem` and `~/.local/bin`), and the file
    each link in `~/.local/bin` leads to elsewhere in the home, never that
    file's folder, read only (`devReads`, which Codex's profile reads too).
-   Shut in them, for both tools (`denies`): the files in `DEV_SECRETS`
-   (`~/.cargo/credentials`, `credentials.toml`, `config` and `config.toml`,
-   `~/.gradle/gradle.properties`, `~/.m2/settings.xml` and
-   `settings-security.xml`, `~/.gem/credentials`), and npm's global config in
-   each node version nvm keeps (`~/.nvm/versions/node/<v>/etc/npmrc`), listed
-   per run. For Claude Code only (`globDenies`), every `.env` and `.env.*`
-   under each folder, as a `**` glob, which its sandbox honours (a `cat`
-   failed, measured on 2.1.318). Codex gets no glob: none was measured in its
-   profile, so a Codex Odd's commands can still read an env file there. A
-   credential file in a folder that is on no list (a Volta node's `npmrc`,
-   say) is read. A folder or link target in or holding a secret store, the
+   Shut in them, for both tools (`denies`): the files and folders in
+   `DEV_SECRETS` (`~/.cargo/credentials`, `credentials.toml`, `config` and
+   `config.toml`, `~/.gradle/gradle.properties`, `init.gradle`,
+   `init.gradle.kts` and `init.d`, `~/.m2/settings.xml` and
+   `settings-security.xml`, `~/.gem/credentials`), and the file in each entry
+   of the folders `EACH_ENTRY` names, listed per run: npm's global config in
+   each node version nvm and Volta keep (`~/.nvm/versions/node/<v>/etc/npmrc`,
+   `~/.volta/tools/image/node/<v>/etc/npmrc`), each script in
+   `~/.gradle/init.d`, and the `config` of each repository Go keeps in
+   `~/go/pkg/mod/cache/vcs`, whose remote's address can carry a token. For
+   Claude Code only (`globDenies`), every `.env`, `.env.*` and `.git/config`
+   under each folder, as a `**` glob, and the file in every entry of those
+   `EACH_ENTRY` folders by a single `*`, so one made during a run is shut
+   too; its sandbox honours both (a `cat` failed, measured on 2.1.318).
+   Codex gets no glob: none was measured in its profile, so a Codex Odd's
+   commands can still read an env file or a project's git config there, and
+   an entry made during the run. Whether Codex shuts a whole folder
+   (`init.d`) was not measured, so each script in it is listed by name too. A
+   credential file that is on no list is read. A folder or link target in or holding a secret store, the
    office's home or Oddboro's code is left out, as `checkFolder` refuses one,
    and so is one whose real path holds a glob character (`GLOB`); a link
    that leads outside the home adds nothing, so one into `/Users`, `/Volumes`
@@ -432,11 +440,14 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    needs the daemon's socket, which the sandbox does not open. With Browse
    the web on too, the sandbox allows every host (`OPEN_NETWORK`) but every
    address of this Mac (`macAddresses`), since the office's API and database
-   listen here and anything on every address (a Caddy in front of the
-   office) is one hop from them: the loopback names and the any-address in
+   listen here and anything on every address (the office's own Caddy on a
+   Mac) is one hop from them: the loopback names and the any-address in
    both families (`MAC_NAMES`: localhost, 127.0.0.1, ::1, [::1], 0.0.0.0, ::
-   and [::]) and each address `networkInterfaces()` gives at run start, IPv6
-   bare and in brackets. Claude Code's proxy (2.1.318) refused the 20
+   and [::]), each address `networkInterfaces()` gives at run start, IPv6
+   bare and in brackets, and this Mac's own names from `os.hostname()`: that
+   string, and the bare name before the first dot alone and with `.local`,
+   lowercased, since `<name>.local` resolves to this Mac. The proxy matches
+   names in any letter case. Claude Code's proxy (2.1.318) refused the 20
    loopback forms the earlier fix tried, `[::]` and its long form, the LAN
    IPv4 in dotted, decimal, hex, `::ffff:` and `nip.io` forms, IPv6
    link-local addresses, and a Caddy on every address reached by the LAN
@@ -868,10 +879,13 @@ policy through Caddy's admin API (127.0.0.1:2019, with an explicit origin, which
 that API wants), touches none of their files, and adds them again when the
 office starts and when a page loads (`keepAddress`). With anything else on port
 80 it stays at `:4500`; on Windows that is often http.sys, Windows' own web
-server. The office's own Caddy listens on 127.0.0.1 and [::1] only, on every
-system (`OWN_CADDYFILE`), so nothing else on the network, and no command an
-Odd runs, reaches the office through another address of this computer, and
-on Windows the firewall never asks. The owner's own Caddy listens where they
+server. On Windows the office's own Caddy listens on 127.0.0.1 and [::1]
+only (`ownCaddyfile`), so the firewall never asks. On a Mac it listens on
+every address, since a process the owner runs can bind a port under 1024
+only there (127.0.0.1 and ::1 were refused, measured), so other machines on
+the network can reach it, and what keeps an Odd's commands off it is the
+deny list each run gets (`macAddresses`, item 9). Linux was not measured and
+gets no bind either. The owner's own Caddy listens where they
 set it. HTTPS uses Caddy's own authority; the Mac trusts it once,
 with the owner's password in the macOS dialog (Make it secure; Windows asks in
 its own dialog and adds it to the owner's list, with no admin), because a

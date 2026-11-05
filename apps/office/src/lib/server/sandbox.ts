@@ -7,7 +7,7 @@
 // state lives in memory, so a restart tries the open network once more and a
 // refusal costs that one run again. Server only.
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
-import { homedir, networkInterfaces } from 'node:os';
+import { homedir, hostname, networkInterfaces } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import {
   CODE,
@@ -44,18 +44,26 @@ export const MAC_NAMES: string[] = [
 /**
  * Every address of this Mac, which commands never reach even with every host
  * open: the office's API and database listen here, and anything listening on
- * every address (a Caddy in front of the office) is one hop from them, so a
+ * every address (the office's own Caddy on a Mac) is one hop from them, so a
  * command could otherwise change the office behind the owner's back. That is
- * `MAC_NAMES` and each address of each interface in `interfaces`, IPv6 bare
- * and in brackets, as the proxy takes both. Read per run, so an address the
- * Mac gets later is listed from the next run; one that comes during a run is
- * not. Other `127.x` addresses and other machines on the network stay open.
+ * `MAC_NAMES`, each address of each interface in `interfaces`, IPv6 bare and
+ * in brackets, as the proxy takes both, and this Mac's own names from `host`
+ * (`os.hostname()`): that exact string, and the bare name (before the first
+ * dot) alone and with `.local`, lowercased, since `<name>.local` resolves to
+ * this Mac. Read per run, so an address the Mac gets later is listed from the
+ * next run; one that comes during a run is not. Other `127.x` addresses and
+ * other machines on the network stay open.
  */
-export function macAddresses(interfaces: ReturnType<typeof networkInterfaces>): string[] {
+export function macAddresses(
+  interfaces: ReturnType<typeof networkInterfaces>,
+  host: string
+): string[] {
   const all = new Set(MAC_NAMES);
   for (const list of Object.values(interfaces))
     for (const { family, address } of list ?? [])
       for (const a of family === 'IPv6' ? [address, `[${address}]`] : [address]) all.add(a);
+  const bare = host.split('.')[0].toLowerCase();
+  for (const name of [host, bare, `${bare}.local`]) all.add(name);
   return [...all];
 }
 /**
@@ -179,7 +187,10 @@ export function claudeSandbox(o: {
       denyWrite: o.denyWrite
     },
     network: o.network
-      ? { allowedDomains: OPEN_NETWORK, deniedDomains: macAddresses(networkInterfaces()) }
+      ? {
+          allowedDomains: OPEN_NETWORK,
+          deniedDomains: macAddresses(networkInterfaces(), hostname())
+        }
       : { allowedDomains: [] },
     credentials: {
       envVars: hiddenFromCommands(o.env).map((name) => ({ name, mode: 'deny' }))
@@ -206,8 +217,9 @@ export const DEV_FOLDERS = [
 ] as const;
 
 /**
- * Files inside them that commands never read, under the home folder: each
- * holds a token, or is a config its tool reads one from.
+ * Files and folders inside them that commands never read, under the home
+ * folder: each holds a token, or is a config its tool reads one from (Gradle
+ * runs every script in `init.d`).
  */
 export const DEV_SECRETS = [
   '.cargo/credentials',
@@ -215,26 +227,46 @@ export const DEV_SECRETS = [
   '.cargo/config',
   '.cargo/config.toml',
   '.gradle/gradle.properties',
+  '.gradle/init.gradle',
+  '.gradle/init.gradle.kts',
+  '.gradle/init.d',
   '.m2/settings.xml',
   '.m2/settings-security.xml',
   '.gem/credentials'
 ] as const;
 
-/** Where nvm keeps each node version, under `~/.nvm`; each has npm's global config at `etc/npmrc`. */
-const NVM_VERSIONS = ['versions', 'node'];
-/** The env files under every developer tool folder that Claude Code's commands never read, as globs. */
-const ENV_FILES = ['**/.env', '**/.env.*'];
+/**
+ * Folders each of whose entries holds a file commands never read: the
+ * developer tool folder, the folder inside it, and the file inside each
+ * entry. npm's global config in each node version nvm and Volta keep, each
+ * Gradle init script, and the config of each repository Go keeps for a
+ * module fetched from its source, whose remote's address can carry a token.
+ */
+const EACH_ENTRY: [folder: string, inside: string[], file: string[]][] = [
+  ['.nvm', ['versions', 'node'], ['etc', 'npmrc']],
+  ['.volta', ['tools', 'image', 'node'], ['etc', 'npmrc']],
+  ['.gradle', ['init.d'], []],
+  ['go', ['pkg', 'mod', 'cache', 'vcs'], ['config']]
+];
+/**
+ * What Claude Code's commands never read under every developer tool folder,
+ * as globs: env files, and each project's git config, whose remote's address
+ * can carry a token.
+ */
+const FOLDER_GLOBS = ['**/.env', '**/.env.*', '**/.git/config'];
 
 /**
  * What commands read of the owner's developer tools this run, by real path:
  * the folders that exist, and the file each link in `~/.local/bin` leads to
  * elsewhere in the home, never its folder; and the files they never read
- * (`denies`): `DEV_SECRETS` and each nvm node version's npm global config,
- * read per run so a version installed later is shut from the next run.
- * `globDenies` shuts every env file under each folder read; only Claude
- * Code's sandbox takes it, since no glob was measured in Codex's profile, so
- * a Codex Odd's commands can still read such a file. The home is read when
- * called, never at import, since tests move it.
+ * (`denies`): `DEV_SECRETS` and the file in each entry `EACH_ENTRY` names,
+ * listed per run so a node version installed later is shut from the next
+ * run. `globDenies` shuts `FOLDER_GLOBS` under each folder read, and the file
+ * in every entry of an `EACH_ENTRY` folder by a single `*`, so one made during
+ * a run is shut too. Only Claude Code's sandbox takes globs, since none was
+ * measured in Codex's profile, so a Codex Odd's commands can still read an
+ * env file or a project's git config there, and an entry made during a run.
+ * The home is read when called, never at import, since tests move it.
  *
  * A folder or link target is left out when it is in or holds a secret store,
  * the office's home or Oddboro's code (as `checkFolder` refuses one), so a
@@ -279,10 +311,13 @@ export function devReads(): { reads: string[]; denies: string[]; globDenies: str
     const real = folders.get(first);
     return real ? [join(real, ...rest)] : [];
   });
-  const nvm = folders.get('.nvm');
-  const versions = nvm && join(nvm, ...NVM_VERSIONS);
-  if (versions && existsSync(versions))
-    for (const v of readdirSync(versions)) denies.push(join(versions, v, 'etc', 'npmrc'));
-  const globDenies = [...folders.values()].flatMap((f) => ENV_FILES.map((g) => join(f, g)));
+  const globDenies = [...folders.values()].flatMap((f) => FOLDER_GLOBS.map((g) => join(f, g)));
+  for (const [folder, inside, file] of EACH_ENTRY) {
+    const real = folders.get(folder);
+    if (!real) continue;
+    const each = join(real, ...inside);
+    globDenies.push(join(each, '*', ...file));
+    if (existsSync(each)) for (const e of readdirSync(each)) denies.push(join(each, e, ...file));
+  }
   return { reads, denies, globDenies };
 }

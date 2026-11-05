@@ -27,8 +27,8 @@
 // do it (net.ipv4.ip_unprivileged_port_start at 80 or lower).
 //
 // So does Windows: the office's own Caddy runs as a Task Scheduler task, and
-// the firewall has nothing to ask about, since on every system it listens on
-// 127.0.0.1 and [::1] only (`OWN_CADDYFILE`); trust
+// the firewall has nothing to ask about, since there it listens on 127.0.0.1
+// and [::1] only (`ownCaddyfile`); trust
 // goes in the owner's own list of authorities, which Windows confirms in its
 // own dialog with no admin. Windows' own web server (http.sys, behind IIS and
 // some other services) often holds port 80, and then the office stays at its port.
@@ -45,10 +45,12 @@ import {
   LOGS,
   MAC,
   OFFICE_PORT,
+  SYSTEM,
   WINDOWS,
   home,
   installService,
-  powershell
+  powershell,
+  type System
 } from '@oddboro/ledger';
 import { writeEnv } from '@oddboro/ledger/env';
 
@@ -299,39 +301,46 @@ async function download(): Promise<string> {
 }
 
 /**
- * The office's own Caddyfile. HTTPS from Caddy's own authority for the real
- * name, plain HTTP for both names so the address works before this Mac trusts
- * that authority. The owner trusts it from the card, so Caddy does not ask on
- * its own. It listens on this computer's loopback addresses only: on every
- * address, anything on the network, and a command an Odd runs, would reach
- * the office through any address this computer has, and on Windows the
- * firewall would ask the owner.
+ * The office's own Caddyfile on `system`. HTTPS from Caddy's own authority
+ * for the real name, plain HTTP for both names so the address works before
+ * this Mac trusts that authority. The owner trusts it from the card, so Caddy
+ * does not ask on its own.
+ *
+ * Only on Windows does it listen on the loopback addresses alone, so the
+ * firewall never asks the owner. On a Mac a process the owner runs can bind
+ * a port under 1024 only on every address (127.0.0.1 and ::1 were refused,
+ * measured), so there the office's own Caddy listens on every address, and
+ * what keeps an Odd's commands off this Mac is the deny list each run gets
+ * (`macAddresses` in sandbox.ts). Linux was not measured, so it gets no bind
+ * either.
  */
-export const OWN_CADDYFILE = [
-  '# Written by the office: its address on this Mac.',
-  '{',
-  '\tadmin off',
-  '\tpersist_config off',
-  '\tskip_install_trust',
-  '\tdefault_bind 127.0.0.1 [::1]',
-  '}',
-  '',
-  `${SECURE} {`,
-  '\ttls internal',
-  `\treverse_proxy ${UPSTREAM}`,
-  '}',
-  '',
-  `${HOSTS.map((h) => `http://${h}`).join(', ')} {`,
-  `\treverse_proxy ${UPSTREAM}`,
-  '}',
-  ''
-].join('\n');
+export function ownCaddyfile(system: System | undefined): string {
+  return [
+    '# Written by the office: its address on this Mac.',
+    '{',
+    '\tadmin off',
+    '\tpersist_config off',
+    '\tskip_install_trust',
+    ...(system === 'windows' ? ['\tdefault_bind 127.0.0.1 [::1]'] : []),
+    '}',
+    '',
+    `${SECURE} {`,
+    '\ttls internal',
+    `\treverse_proxy ${UPSTREAM}`,
+    '}',
+    '',
+    `${HOSTS.map((h) => `http://${h}`).join(', ')} {`,
+    `\treverse_proxy ${UPSTREAM}`,
+    '}',
+    ''
+  ].join('\n');
+}
 
 /** The office's own Caddy, started now and at every login. */
 async function startOwn(): Promise<void> {
   const caddy = (await caddyBinary()) ?? (await download());
   mkdirSync(join(HOME, 'caddy'), { recursive: true });
-  writeFileSync(CADDYFILE, OWN_CADDYFILE);
+  writeFileSync(CADDYFILE, ownCaddyfile(SYSTEM));
   const started = await installService({
     label: LABEL,
     args: [caddy, 'run', '--config', CADDYFILE, '--adapter', 'caddyfile'],
