@@ -17,7 +17,7 @@ import { db, toolServer } from './tool-server.ts';
 const W = await import('../src/access-words.ts');
 const A = await import('../src/agents.ts');
 const C = await import('../src/capabilities.ts');
-const { staff } = await import('../src/schema.ts');
+const { staff, threads } = await import('../src/schema.ts');
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'access-profile-')));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -41,19 +41,50 @@ const odd = (agent: (typeof A.AGENTS)[number], commands: boolean, web: boolean) 
 });
 
 // Every await comes before the first test: the database closes once the tests end.
-await db.insert(staff).values({
-  id: 'mona',
-  name: 'Mona',
-  role: 'Office Manager',
-  remit: 'Runs the office.',
+const person = (id: string, name: string, tools: string[]) => ({
+  id,
+  name,
+  role: 'Tester',
+  remit: 'Tests.',
   variant: 'a',
   portrait: 'a',
-  desk: 'You are Mona.',
-  tools: ['office_report'],
-  web: true,
-  folders: [{ path: kept, write: false }]
+  desk: `You are ${name}.`,
+  tools
 });
+await db.insert(staff).values([
+  {
+    ...person('mona', 'Mona', ['office_report']),
+    role: 'Office Manager',
+    web: true,
+    folders: [{ path: kept, write: false }]
+  },
+  // Codex has a shell on every system, so the report fills in whose developer tools it reads.
+  { ...person('cody', 'Cody', []), agent: 'codex' },
+  // Lena hands work on, and leads one thread.
+  person('lena', 'Lena', ['hand_off'])
+]);
 const manager = await toolServer('mona', { RUN_KEY: 'k-access-profile' });
+const [led] = await db
+  .insert(threads)
+  .values({ title: 'Count the chairs', hubId: 'lena', holderId: 'lena' })
+  .returning({ id: threads.id });
+/** The tools Lena's run is offered, with raise_ask's arguments, as the office starts it with `env`. */
+async function offered(env: Record<string, string>) {
+  const { tools } = await (await toolServer('lena', env)).listTools();
+  return {
+    handOff: tools.some((t) => t.name === 'hand_off'),
+    work: 'work' in (tools.find((t) => t.name === 'raise_ask')?.inputSchema.properties ?? {})
+  };
+}
+const runs = {
+  offThread: await offered({ RUN_KEY: 'k-lena-chat' }),
+  onThread: await offered({ RUN_KEY: 'k-lena-thread', THREAD_ID: String(led.id) }),
+  handedOver: await offered({
+    RUN_KEY: 'k-lena-hand-off',
+    THREAD_ID: String(led.id),
+    HAND_OFF_ID: '1'
+  })
+};
 
 test('ownTools is what a run reaches: the switch as its tool takes it, the web, the internet only with both, and given folders still on the disk', () => {
   const on = (who: ReturnType<typeof odd>, platform: NodeJS.Platform) => {
@@ -73,8 +104,16 @@ test('ownTools is what a run reaches: the switch as its tool takes it, the web, 
   assert.deepEqual(on(odd('codex', false, true), 'darwin'), {
     commands: true,
     web: true,
-    network: A.NETWORK_WITH_WEB.codex
+    network: true
   });
+  // A tool whose walls were not measured holding with the network open keeps its commands off it.
+  const measured = { ...A.NETWORK_WITH_WEB };
+  A.NETWORK_WITH_WEB.codex = false;
+  try {
+    assert.equal(on(odd('codex', false, true), 'darwin').network, false);
+  } finally {
+    Object.assign(A.NETWORK_WITH_WEB, measured);
+  }
   assert.deepEqual(on(odd('grok', true, true), 'darwin'), {
     commands: false,
     web: true,
@@ -207,6 +246,14 @@ test('a run hands off, and is told the threads it leads, by one rule', () => {
         }
 });
 
+test('a run off its threads hands off and names which thread it raises for, a run on one only hands off there, and a handed-over run hands nothing on', () => {
+  assert.deepEqual(runs, {
+    offThread: { handOff: true, work: true },
+    onThread: { handOff: true, work: false },
+    handedOver: { handOff: false, work: false }
+  });
+});
+
 test("office_report lists each Odd's tool, own tools and folders", async () => {
   const r = await manager.callTool({ name: 'office_report', arguments: {} });
   const text = (r.content as { type: string; text: string }[])[0]?.text ?? '';
@@ -221,4 +268,9 @@ test("office_report lists each Odd's tool, own tools and folders", async () => {
       [`${kept} (read only)`]
     ]
   );
+  const cody = report.staff.find((s) => s.id === 'cody');
+  assert.ok(cody, text);
+  // With no owner's name set, the office calls them "the owner".
+  assert.match(String(cody.ownTools), /the owner's developer tools/);
+  assert.doesNotMatch(String(cody.ownTools), /\{owner\}/);
 });

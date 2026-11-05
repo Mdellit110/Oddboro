@@ -301,4 +301,17 @@ test('a colleague is told of the web and the folders others on the thread hold a
   const fromSol = await handedTo(await from('sol', 'fay'), 'fay');
   assert.equal(fromSol.withheld, undefined);
   assert.deepEqual(fromSol.kept, ['~/p'], 'Sol has only ~/p/sub');
+
+  // Kit and Lou were both given ~/gone, since deleted from the disk. Lou's runs
+  // no longer get it, so it is not hers, and what Kit read there is withheld.
+  const gone = join(HOME, 'gone');
+  mkdirSync(gone);
+  rmSync(gone, { recursive: true });
+  const given = [{ path: gone, write: false }];
+  await db.insert(staff).values([
+    { ...odd('kit', 'Kit'), folders: given },
+    { ...odd('lou', 'Lou'), folders: given }
+  ]);
+  const toLou = await handedTo(await from('kit', 'lou'), 'lou');
+  assert.deepEqual(toLou.withheld, ['~/gone']);
 });
