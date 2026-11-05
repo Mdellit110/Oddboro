@@ -333,6 +333,11 @@ test(
       const codex = await chatOf('cole');
       assert.equal(codex.env.OFFICE_NETWORK_HELD, '1');
       assert.ok(!codex.system.includes(L.NETWORK_HELD_LINE), codex.system);
+      // Nor does a Claude Code Odd with no shell, whose tool server still hears it.
+      await setOwn('ava', {});
+      const noShell = await chatOf('ava');
+      assert.equal(noShell.env.OFFICE_NETWORK_HELD, '1');
+      assert.ok(!noShell.system.includes(L.NETWORK_HELD_LINE), noShell.system);
     } finally {
       resetHeldNetwork();
     }
