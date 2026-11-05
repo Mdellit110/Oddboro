@@ -1,9 +1,8 @@
 // What a staffer's run does by the coding tool it runs on, apart from Claude
 // Code's own arguments, which run() in staff.ts builds: how a run on Grok,
-// Codex or Gemini starts (grok.ts, codex.ts, gemini.ts), what each tool's own
-// tools reach as the run's prompt says it, the tools a line of Claude
-// Code's stream names (Grok streams in that shape), and why a run ended
-// early. Server only.
+// Codex or Gemini starts (grok.ts, codex.ts, gemini.ts), the tools a line of
+// Claude Code's stream names (Grok streams in that shape), and why a run
+// ended early. Server only.
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { COMMANDS_WHY, type Agent } from '@oddboro/ledger';

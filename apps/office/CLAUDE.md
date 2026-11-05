@@ -238,11 +238,25 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    Under "Runs on", the Access tab has two switches, Run commands and Browse
    the web, and then a Folders list (`FoldersList.svelte`). Each goes through
    the staff PATCH, `setOwnTool` or `setFolder` in the ledger's `office.ts`,
-   which records a Ledger line, gets no 409 and takes effect on the next run.
-   Run commands shows how the Odd's tool takes it (`commandsHow` on the
-   profile): a switch on Claude Code on a Mac, else checked (Codex) or
-   unchecked and locked, with its reason under it, and the PATCH refuses
-   `{commands}` for a locked one. A folder is typed as a path and set to Can
+   which records a Ledger line, gets no 409 and takes effect on the next run;
+   a change that opens or closes the internet to the Odd's commands says so
+   in the line's body (`NETWORK_NOTE`). The page gets one profile per Odd,
+   built on the server (`toProfile` in `src/lib/server/profile.ts`): the
+   stored switches and folders, and `reach`, what its runs get now (the
+   ledger's `ownTools`, less a network this office holds back:
+   `heldNetwork`). The Odds list shows `reach` as chips beside each Odd's
+   role: Commands, Web and its folder count. Run commands shows
+   `reach.commands` and how the Odd's tool takes it (`commandsHow`): a switch
+   on Claude Code on a Mac, else checked (Codex) or unchecked and locked,
+   with its reason under it, and the PATCH refuses `{commands}` for a locked
+   one. Under one locked off, when a tool on this system follows the switch
+   (`offer`), one click moves the Odd there with Run commands on ("Switch Sam
+   to Claude Code?"): one PATCH with `{agent, commands}`, which checks that
+   the tool it moves to follows the switch before it changes anything. Under
+   Browse the web, one line says what the tool's web does and what its
+   commands do with it (`webLine` in the ledger's `agents.ts`), such as
+   "Search and read web pages. With Run commands on, its commands can reach
+   the internet too." A folder is typed as a path and set to Can
    read or Can read and change; `checkFolder` refuses the home folder,
    anything outside it, and one that holds or sits in a secret store, the
    office's home or Oddboro's code, comparing real paths as the disk spells
@@ -252,12 +266,15 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    that rule is not checked again), and `setFolder` refuses one inside or holding
    a folder the Odd already has ("That folder is inside one this Odd already
    has, or holds one."); the line shows under the field. The
-   list loads from the staff route's GET, which writes the home folder `~`,
-   and reloads when the profile's folders change; a level change or Remove
-   sends the path as stored. `run()` works out each switch once per run, as
-   its tool takes it (`OwnTools`), and passes the given folders still on the
-   disk; the prompt lists them under "Where things are", and "What you can
-   do" says what the Odd's own tools reach (`ownToolsLine` in `cli.ts`).
+   list reads the profile's folders, each with the home folder written `~`
+   (`shown`), so it loads nothing of its own and the staff route has no GET;
+   a level change or Remove sends the path as stored. `run()` takes the
+   switches and folders as its tool takes them from `capabilities()`
+   (`caps.own`), less a held network, and passes the given folders still on
+   the disk; the prompt lists them under "Where things are", and "What you
+   can do" says what the Odd's own tools reach (`ownToolsLine` in the
+   ledger's `capabilities.ts`), the same line `my_access` and `office_report`
+   give.
    `src/lib/server/grok.ts` starts a Grok run from the office's own Grok home,
    `~/.oddboro/grok` (`GROK_HOME`), never the owner's `~/.grok`. The owner signs
    in to it from the office's page (`agent-sign-in.ts`, item 18); a run from a
@@ -293,10 +310,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    A Codex Odd has a shell, held by one kernel permission profile per run
    (`filesystem` in `codex.ts`): everything shut but the system's own folders
    and Apple's developer tools (`DEVELOPER_TOOLS`, and the folder `xcode-select -p`
-   names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders, the owner's data folder and the folders the owner gave it read, its
+   names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders, the owner's data folder, the folders the owner gave it
+   and the owner's developer tool folders (`devReads` in `sandbox.ts`, as
+   Claude Code's commands read them) read, their credential files shut, its
    folder, its part of a thread, the given folders it may change and its own temp folder
    (`codex-tmp/<run key>`) written, instruction files and the edited file
-   never, and no network. Codex reads files through that shell, so its Run
+   never, and the internet only with Browse the web on (`network` in the
+   profile, from `commandsOnline`). Codex reads files through that shell, so its Run
    commands shows on and locked. Its own web search is set per run, `live`
    with Browse the web and `disabled` without (`web_search`, not one of
    `SWITCHES`). The run is a process group of its
@@ -370,24 +390,44 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    in `~/.oddboro` besides `staff/` and `data/` (and `threads/<id>/` for a
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
-   With Run commands, `--settings` adds Claude Code's sandbox (`sandbox()` in
-   `run()`): commands read only what the run reads, plus their temp folder,
-   node when it sits in the home folder, and the system's own folders outside
-   `/Users` and `/Volumes` (`denyRead`), write only where the run writes,
-   never the data folder or what `deniedEdits` names (`denyWrite`), reach no
-   network, and see none of the secrets in the run's environment
-   (`credentials.envVars`, `hiddenFromCommands`): `ANTHROPIC_API_KEY`,
-   `CLAUDE_CODE_MESSAGING_TOKEN` (which Claude Code sets itself),
-   `DATABASE_URL` and every name that says key, token, secret, password,
-   credential, auth or cookie, except the office's own git settings
-   (`GIT_CONFIG_KEY_0` and `_1`, from `gitEnv`), let through by exact name,
-   since git stops every command when one is hidden; every other name that
-   looks like a secret stays hidden. Claude Code and the office's tool server keep
-   them. Bash writes in every folder Claude Code works in, so `--add-dir`
-   then names only the data folder and the folders the run writes. That run
-   gets a temp folder of its own, `/private/tmp/ob-<start of the run key>` as
-   `CLAUDE_CODE_TMPDIR`, removed when it ends, the office's git settings
-   (`gitEnv` in `launch.ts`), and none of the office's `NODE_OPTIONS`.
+   With Run commands, `--settings` adds Claude Code's sandbox (`claudeSandbox`
+   in `src/lib/server/sandbox.ts`): commands read what the run reads, plus
+   their temp folder, node when it sits in the home folder, the owner's
+   developer tool folders, and the system's own folders outside `/Users` and
+   `/Volumes` (`denyRead`), write only where the run writes, never the data
+   folder or what `deniedEdits` names (`denyWrite`), reach the internet only
+   with Browse the web on, and see none of the secrets in the run's
+   environment (`credentials.envVars`, `hiddenFromCommands`):
+   `ANTHROPIC_API_KEY`, `CLAUDE_CODE_MESSAGING_TOKEN` (which Claude Code sets
+   itself), `DATABASE_URL` and every name that says key, token, secret,
+   password, credential, auth or cookie, except the office's own git settings
+   (`GIT_CONFIG_KEY_0` and `_1`, from `gitEnv` in `launch.ts`), let through by
+   exact name (`OFFICE_GIT`), since git stops every command when one is
+   hidden; every other name that looks like a secret stays hidden. Claude
+   Code and the office's tool server keep them. The developer tool folders
+   are those in `DEV_FOLDERS` that exist, such as `~/.npm` and `~/.cargo`,
+   and the folder of each link in `~/.local/bin` that leads elsewhere in the
+   home, read only, with their credential files (`DEV_SECRETS`) shut
+   (`devReads`, which Codex's profile reads too). A folder in or holding a
+   secret store, the office's home or Oddboro's code is left out, as
+   `checkFolder` refuses one, and so is one whose real path holds a glob
+   character (`GLOB`). With Browse the web on too, the sandbox allows every
+   host (`OPEN_NETWORK`). A Claude Code that refuses that (`NETWORK_REFUSED`)
+   fails the run that met it, which tells the owner so
+   (`NETWORK_REFUSED_LINE`), and the office records one Ledger line
+   (`holdNetwork`); from then on its Claude Code runs keep commands off the
+   internet, which the line under Browse the web says, as do the prompt and
+   `my_access` (`NETWORK_HELD`) of a run that would have had it. The hold is
+   in memory, so a restart tries the open network once more. Bash writes in
+   every folder Claude Code works in, so `--add-dir` then names only the data
+   folder, the folders the run writes and, last, the run's temp folder:
+   without it, Claude Code's sandbox lets commands write only its own folder
+   inside it, and npm keeps its cache beside that, in `npm`. That run gets a temp folder of
+   its own, `/private/tmp/ob-<start of the run key>` as `CLAUDE_CODE_TMPDIR`,
+   removed when it ends, the office's git and npm settings (`shellEnv` in
+   `launch.ts`: `gitEnv`, npm's cache in the temp folder, and npm's user
+   config at a file never made, so the owner's `~/.npmrc` is never read), and
+   none of the office's `NODE_OPTIONS`.
    Claude Code's own sandbox refuses every `.git/config` write, so a Claude
    Code Odd cannot start a repository anywhere: `git init` exits 128, even in
    its own folder, and Claude Code's sandbox setting that allows git config
@@ -414,13 +454,14 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    Codex Odd cannot commit in a given repository, and a repository nested in
    a given folder is not covered for Codex, which takes a glob only to deny,
    and a deny stops git reading. Every run with a shell, Claude Code's and
-   Codex's, gets the office's git settings (`gitEnv` in `launch.ts`), so an
+   Codex's, gets the office's git settings (`gitEnv` in `launch.ts`, inside
+   `shellEnv`), so an
    Odd's git ignores the owner's global git settings (`GIT_CONFIG_GLOBAL`,
    and `core.excludesFile` and `core.attributesFile` set to nothing) and
    a Codex Odd's `git init` copies no sample hooks (`GIT_TEMPLATE_DIR`, an
-   empty folder in the run's temp folder). Codex takes them through
+   empty folder in the run's temp folder). Codex takes `shellEnv` through one
    `-c shell_environment_policy.set`, since its shell inherits only the core
-   variables. Nor does it write the file a run
+   variables and a second `set` would replace the first. Nor does it write the file a run
    reading the owner's edit is reading. It gets no skills, no
    plugins, none of the owner's own CLAUDE.md files, no Claude Code
    auto-memory and none of the office process's own `GIT_` variables, which
@@ -432,7 +473,10 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `packages/ledger/src/capabilities.ts`, which also says why a granted one is
    held back (above the Odd's level, still connecting). The prompt's "What you
    can do" section, `my_access`, `office_report` and the owner's Access tab all
-   read it for the level and each outside tool. A hosted sign-in that ran out
+   read it for the level, what the Odd's own tools reach (`ownTools`: Run
+   commands, Browse the web, whether commands reach the internet, and the
+   folders) and each outside tool; `my_access` and `office_report` also name
+   the tool its runs go through. A hosted sign-in that ran out
    shows only to the run, which passes it to its own `my_access` as
    `SIGNED_OUT`; `office_report` and the Access tab still show that tool as
    working. A run below the Odd's own level (a hand-off's, either side, or a
@@ -843,19 +887,21 @@ into the page (scripts, styles, images) are served before the check.
 
 ## Where things live
 
-| Path                              | What it holds                                                       |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `src/lib/floor/`                  | The PixiJS floor and the Odds on it                                 |
-| `src/lib/staff/roster.ts`         | The Odd shape, hiring looks, and the label for each activity        |
-| `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat           |
-| `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain     |
-| `src/routes/api/`                 | One folder per thing the page reads or changes                      |
-| `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to    |
-| `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow              |
-| `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music |
-| `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                       |
-| `scripts/office-service.ts`       | The login service                                                   |
-| `src/app.css`                     | Tokens. Every colour in the chrome reads these.                     |
+| Path                              | What it holds                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib/floor/`                  | The PixiJS floor and the Odds on it                                                                                                  |
+| `src/lib/staff/roster.ts`         | The Odd shape the page gets (`StaffProfile`), hiring looks, and the label for each activity                                          |
+| `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat                                                                            |
+| `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain                                                                      |
+| `src/lib/server/profile.ts`       | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                               |
+| `src/lib/server/sandbox.ts`       | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the held network |
+| `src/routes/api/`                 | One folder per thing the page reads or changes                                                                                       |
+| `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to                                                                     |
+| `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow                                                                               |
+| `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music                                                                  |
+| `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                                                                                        |
+| `scripts/office-service.ts`       | The login service                                                                                                                    |
+| `src/app.css`                     | Tokens. Every colour in the chrome reads these.                                                                                      |
 
 ## Rules for this app
 
