@@ -171,7 +171,7 @@ test(
 );
 
 test(
-  "Claude's commands reach the internet only with Browse the web on, and never a loopback address",
+  "Claude's commands reach the internet only with Browse the web on, and never the office's five loopback names",
   onMac,
   async () => {
     await setOwn('bo', { commands: true, web: true });

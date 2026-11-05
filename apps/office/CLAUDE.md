@@ -415,7 +415,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    secret store, the office's home or Oddboro's code is left out, as
    `checkFolder` refuses one, and so is one whose real path holds a glob
    character (`GLOB`). With Browse the web on too, the sandbox allows every
-   host (`OPEN_NETWORK`) but the loopback addresses (`LOOPBACK`), where the
+   host (`OPEN_NETWORK`) but the five loopback names (`LOOPBACK`), where the
    office's API and database listen. A Claude Code that refuses that (`NETWORK_REFUSED`)
    fails the run that met it, which tells the owner so
    (`NETWORK_REFUSED_LINE`), and the office records one Ledger line

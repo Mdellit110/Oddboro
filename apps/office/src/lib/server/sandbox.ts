@@ -24,7 +24,7 @@ import { gitEnv } from './launch.ts';
 /** Every host, for commands when Run commands and Browse the web are both on (measured on Claude Code 2.1.318). */
 export const OPEN_NETWORK: string[] = ['*'];
 /**
- * The loopback addresses, which commands never reach even with every host
+ * The five loopback names, which commands never reach even with every host
  * open: the office's API and its database listen there, so a command could
  * otherwise change the office behind the owner's back. Measured on Claude
  * Code 2.1.318: its proxy refuses each of these, their `::ffff:` forms, and
@@ -109,8 +109,8 @@ export function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
  * (`reads`), the owner's developer tool folders (`devReads`), the commands'
  * own temp folder (`tmp`) and the system's own folders; writes as run() says,
  * never what `denyWrite` names; no network unless Browse the web is on
- * (`network`), and never a loopback address (`LOOPBACK`); and none of
- * the secrets in the run's environment (`env`).
+ * (`network`), and never the five loopback names (`LOOPBACK`, not every
+ * `127.x` address); and none of the secrets in the run's environment (`env`).
  */
 export function claudeSandbox(o: {
   reads: string[];
