@@ -1,16 +1,21 @@
 // A chat after a new session starts, in an office under test
 // (office-under-test.ts): the session hears the chat so far once, and the
-// files the Odd changed during it, and resumed chats hear nothing again.
+// files that changed during it, and resumed chats hear nothing again. Each
+// told and poke line since the owner last wrote is said once: in the replay,
+// or in the preface when the replay cut it or the session resumed.
 // Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { L, PATCH, chatOf, odd, onPlatform } from './office-under-test.ts';
-import { REPLAY_CHARS } from './replay.ts';
 
-await L.pg`insert into staff ${L.pg([odd('rory', 'Rory')])}`;
+// After the office under test set its home: replay.ts loads the ledger, which reads it as it loads.
+const { REPLAY_CHARS } = await import('./replay.ts');
+
+await L.pg`insert into staff ${L.pg([odd('rory', 'Rory'), odd('rosa', 'Rosa')])}`;
 
 const own = (path: string) => L.home('staff', 'rory', path);
+const lines = (entries: object[]) => entries.map((l) => JSON.stringify(l) + '\n').join('');
 const times = (text: string, part: string) => text.split(part).length - 1;
 
 test('the first chat after a tool switch replays the chat; the next does not', async () => {
@@ -20,15 +25,14 @@ test('the first chat after a tool switch replays the chat; the next does not', a
   const at = (minutes: number) => new Date(first.getTime() + minutes * 60_000).toISOString();
   writeFileSync(
     own('chat.jsonl'),
-    [
+    lines([
       // Too long to fit beside the rest, so the replay starts after it.
       { at: at(-30), from: 'owner', text: `Long ago. ${'x'.repeat(REPLAY_CHARS)}` },
       { at: at(0), from: 'owner', text: 'Plant the tulips.' },
       { at: at(1), from: 'staff', text: 'Tulips planted.' },
-      { at: at(2), from: 'staff', text: 'I watered them too.', told: true }
-    ]
-      .map((l) => JSON.stringify(l) + '\n')
-      .join('')
+      { at: at(2), from: 'staff', text: 'I watered them too.', told: true },
+      { at: at(3), from: 'staff', text: 'The tulips are up.', poke: true }
+    ])
   );
   writeFileSync(own('tulips.md'), 'Six rows.');
   writeFileSync(own('before.md'), 'From last week.');
@@ -57,14 +61,56 @@ test('the first chat after a tool switch replays the chat; the next does not', a
   assert.ok(!one.message.includes('Long ago.'), 'a line past the budget was replayed');
   for (const line of ['Plant the tulips.', 'Tulips planted.', 'I watered them too.'])
     assert.equal(times(one.message, line), 1, `"${line}" is not in the replay once`);
+  // A poke the replay holds is not said again in the preface.
+  assert.equal(times(one.message, 'The tulips are up.'), 1, one.message);
   assert.ok(
     one.message.includes('(Files in your folder that changed during it: tulips.md.)'),
     one.message
   );
   assert.ok(one.message.endsWith('What did I just ask you?'), one.message);
 
+  // Lines the office wrote after that chat, which the resumed session never saw.
+  appendFileSync(
+    own('chat.jsonl'),
+    lines([
+      { at: new Date().toISOString(), from: 'staff', text: 'I said the bulbs came.', told: true },
+      { at: new Date().toISOString(), from: 'staff', text: 'The bulbs came.', poke: true }
+    ])
+  );
   const two = await chatOf('rory', 'And now?');
   assert.ok(two.args.includes('resume'), 'the second chat started another session');
   assert.ok(!two.message.includes('This is a new session'), two.message);
   assert.ok(!two.message.includes('Plant the tulips.'), two.message);
+  assert.equal(times(two.message, '"I said the bulbs came."'), 1, two.message);
+  assert.match(
+    two.message,
+    /\(Before this, you said to [^:]+ in chat: "I said the bulbs came\."\.\)/
+  );
+  assert.equal(times(two.message, '"The bulbs came."'), 1, two.message);
+  assert.ok(
+    two.message.includes('the office delivered your pokes to them: "The bulbs came."'),
+    two.message
+  );
+});
+
+test('a told line since the owner last wrote that the replay cut is said once, in the preface', async () => {
+  const home = (path: string) => L.home('staff', 'rosa', path);
+  mkdirSync(home(''), { recursive: true });
+  const at = (minutes: number) => new Date(Date.now() - (60 - minutes) * 60_000).toISOString();
+  writeFileSync(
+    home('chat.jsonl'),
+    lines([
+      { at: at(0), from: 'owner', text: 'Water the roses.' },
+      { at: at(1), from: 'staff', text: 'I watered the roses.', told: true },
+      // Fills the budget alone, so the replay starts after the told line.
+      { at: at(2), from: 'staff', text: 'r'.repeat(REPLAY_CHARS) }
+    ])
+  );
+  const run = await chatOf('rosa', 'Did you?');
+  assert.ok(run.message.startsWith('(This is a new session'), run.message.slice(0, 200));
+  assert.equal(times(run.message, 'I watered the roses.'), 1, run.message.slice(0, 400));
+  assert.match(
+    run.message,
+    /\(Before this, you said to [^:]+ in chat: "I watered the roses\."\.\)/
+  );
 });

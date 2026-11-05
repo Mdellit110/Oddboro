@@ -86,8 +86,11 @@ async function chatError(id: string, message = 'Hello.'): Promise<string> {
   });
   return error;
 }
-/** A new chat session for `id`, as if it never chatted. */
-const forget = (id: string) => rmSync(L.chatSession(id), { force: true });
+/** A new chat session for `id`, as if it never chatted: no session, and no chat for a replay to carry a stand-in's words into. */
+const forget = (id: string) => {
+  rmSync(L.chatSession(id), { force: true });
+  rmSync(L.home('staff', id, 'chat.jsonl'), { force: true });
+};
 
 test("a Codex Odd's first chat starts codex exec with every switch the office sets, its message on stdin", async () => {
   const run = await chatOf('cody');

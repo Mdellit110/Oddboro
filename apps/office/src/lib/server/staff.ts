@@ -116,7 +116,7 @@ import { apiKey, claudeSettings, cleanEnv, modelArgs } from './claude.ts';
 import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
 import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
-import { changedSince, replay, replayed } from './replay.ts';
+import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
 import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
@@ -1066,12 +1066,22 @@ export async function chat(
     );
     const past = history(id);
     // A new session (the Odd moved to another tool, or its session is gone)
-    // never saw the chat: it gets the latest of it word for word, told and
-    // poke lines included, so the preface leaves those out.
-    const oldest = sessionIdIn(chatSession(id)) ? undefined : replayed(past)[0];
+    // never saw the chat: it gets the latest of it word for word. The preface
+    // leaves out the told and poke lines the replay holds, and keeps those the
+    // budget cut, so each line since the owner last wrote is said once.
+    const kept = sessionIdIn(chatSession(id)) ? [] : replayed(past);
+    const inReplay = new Set(replayedAt(past, kept));
+    const since = replaySince(past, kept);
+    // The Odd writes only its own folder and the given folders it may change, so only those are walked.
+    const writable = who.folders.filter((f) => f.write && existsSync(f.path)).map((f) => f.path);
     const prompt = [
-      ...(oldest ? [replay(past, changedSince(homeOf(id), oldest.at))] : []),
-      ...chatPreface(oldest ? past.filter((e) => !e.told && !e.poke) : past, landed),
+      ...(since
+        ? [replay(past, changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable))]
+        : []),
+      ...chatPreface(
+        past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
+        landed
+      ),
       ...(re ? [re.brief] : []),
       message
     ].join('\n\n');

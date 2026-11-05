@@ -11,9 +11,10 @@
 // node and the tool server's code, Grok's home and the system folders Grok
 // needs to start. It writes the Odd's folder, Grok's own temp folder and
 // Grok's sessions folder, which holds every Grok Odd's sessions. It adds the
-// folders the run reads besides its own (the owner's data folder, and its
-// thread's or a lead's goals') to read, and on a thread the Odd's part of it
-// to write.
+// folders the run reads besides its own (the owner's data folder, its
+// thread's or a lead's goals', and the folders the owner gave the Odd) to
+// read, and the given folders it may change, and on a thread the Odd's part
+// of it, to write.
 // Deny rules hold the rest: no Odd reads anything of the kernel's allowance
 // but its own folders (`UNREADABLE`), and none writes in Grok's home. A custom
 // profile that cannot apply stops Grok from starting, so a run is never left
