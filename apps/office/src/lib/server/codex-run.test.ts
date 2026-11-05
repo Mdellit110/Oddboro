@@ -186,7 +186,7 @@ test("Codex's commands stay off the internet, Browse the web or not", async () =
   assert.deepEqual((await chatOf('cole')).permissions?.network, { enabled: false });
 });
 
-test("a Codex run reads the developer tool folders that exist and never their credential files, nor a link's folder in a secret store or with a glob character in its path", () =>
+test("a Codex run reads the developer tool folders that exist and never their credential files, nor a link's folder, nor its file in a secret store or with a glob character in its path", () =>
   ownerHome(async (home) => {
     const h = realpathSync(home);
     /** A link in ~/.local/bin named `name`, to a file of that name in `folder`. */
@@ -205,9 +205,11 @@ test("a Codex run reads the developer tool folders that exist and never their cr
       [join(h, '.npm'), 'read'],
       [join(h, '.cargo'), 'read'],
       [join(h, '.local/bin'), 'read'],
-      [join(h, '.local/share/x/bin'), 'read'],
+      [join(h, '.local/share/x/bin/x'), 'read'],
       [join(h, '.cargo/credentials'), 'deny'],
-      [join(h, '.cargo/credentials.toml'), 'deny']
+      [join(h, '.cargo/credentials.toml'), 'deny'],
+      [join(h, '.cargo/config'), 'deny'],
+      [join(h, '.cargo/config.toml'), 'deny']
     ]);
   }));
 
@@ -303,7 +305,8 @@ test("a Codex run's shell gets the office's git settings and npm's cache in its 
     GIT_CONFIG_KEY_1: 'core.attributesFile',
     GIT_CONFIG_VALUE_1: '/dev/null',
     npm_config_cache: join(temp, 'npm'),
-    npm_config_userconfig: join(temp, 'npmrc')
+    npm_config_userconfig: join(temp, 'npmrc'),
+    npm_config_globalconfig: join(temp, 'npmrc-global')
   });
   // A second set would replace the first.
   assert.equal(run.args.filter((a) => a.startsWith('shell_environment_policy.set=')).length, 1);
