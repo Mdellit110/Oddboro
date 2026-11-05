@@ -10,6 +10,7 @@ import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
 import {
   L,
+  OFFICE_PROCESS_GIT,
   PATCH,
   awayFromHome,
   chatOf,
@@ -21,6 +22,7 @@ import {
   ownerHome,
   runOf,
   secrets,
+  withEnv,
   writeRule,
   type Gave
 } from './office-under-test.ts';
@@ -70,7 +72,6 @@ function listAfter(args: string[], flag: string): string[] {
 }
 type Sandbox = {
   filesystem: {
-    allowGitConfig: boolean;
     denyRead: string[];
     allowRead: string[];
     denyWrite: string[];
@@ -130,7 +131,6 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
     failIfUnavailable: true,
     allowUnsandboxedCommands: false,
     filesystem: {
-      allowGitConfig: true,
       denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
       // No data folder: there is none to read.
       allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
@@ -141,7 +141,7 @@ test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () 
 });
 
 test(
-  "a Claude run with Run commands gets the office's git settings from gitEnv, an empty git template in its temp folder, and its sandbox lets git write a config",
+  "a Claude run with Run commands gets the office's git settings from gitEnv, and an empty git template in its temp folder",
   onMac,
   async () => {
     await setOwn('otto', { commands: true });
@@ -165,17 +165,29 @@ test(
     );
     // Claude Code reads its own config from XDG_CONFIG_HOME.
     assert.ok(!('XDG_CONFIG_HOME' in gitEnv(tmp)));
-    assert.equal(settingsOf(run).sandbox?.filesystem.allowGitConfig, true);
   }
 );
 
 test(
-  "with Run commands, Bash keeps every git setting gitEnv gives it, by name: an owner's GIT_..._TOKEN is still hidden",
+  "no git variable of the office's own reaches a run: Claude's launch env holds only gitEnv's, and Grok's and Gemini's none",
   onMac,
-  async () => {
-    const before = process.env.GIT_ASKPASS_TOKEN;
-    process.env.GIT_ASKPASS_TOKEN = 'planted';
-    try {
+  () =>
+    withEnv(OFFICE_PROCESS_GIT, async () => {
+      await setOwn('otto', { commands: true });
+      const run = await chatOf('otto');
+      assert.deepEqual(run.git, gitEnv(`/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`));
+      const git = (env: Record<string, string> = {}) =>
+        Object.keys(env).filter((k) => k.startsWith('GIT_'));
+      assert.deepEqual(git((await chatOf('gwen')).grokEnv), []);
+      assert.deepEqual(git((await chatOf('gem')).geminiEnv), []);
+    })
+);
+
+test(
+  "with Run commands, Bash keeps every git setting gitEnv gives it, by name, while an owner's token stays hidden and an owner's GIT_..._TOKEN never reaches the run",
+  onMac,
+  () =>
+    withEnv({ OWNER_API_TOKEN: 'planted', GIT_ASKPASS_TOKEN: 'planted' }, async () => {
       await setOwn('otto', { commands: true });
       const run = await chatOf('otto');
       const denied = (settingsOf(run).sandbox?.credentials.envVars ?? []).map((v) => v.name);
@@ -188,12 +200,9 @@ test(
         git.filter((n) => denied.includes(n)),
         []
       );
-      assert.ok(denied.includes('GIT_ASKPASS_TOKEN'), JSON.stringify(denied));
-    } finally {
-      if (before === undefined) delete process.env.GIT_ASKPASS_TOKEN;
-      else process.env.GIT_ASKPASS_TOKEN = before;
-    }
-  }
+      assert.ok(denied.includes('OWNER_API_TOKEN'), JSON.stringify(denied));
+      assert.ok(!('GIT_ASKPASS_TOKEN' in (run.git ?? {})), 'the token reached the run');
+    })
 );
 
 test(

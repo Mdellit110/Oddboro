@@ -111,8 +111,11 @@ export function vendorEnv(prefixes: readonly string[]): NodeJS.ProcessEnv {
  * already keeps git from `$XDG_CONFIG_HOME/git/config`. `GIT_TEMPLATE_DIR` is
  * an empty folder in the run's own temp folder (`temp`), which the caller
  * makes before the run and removes with that folder, so `git init` copies no
- * sample hooks: Claude Code's sandbox refuses every write under a
- * `.git/hooks`, and git stops when it cannot copy one.
+ * sample hooks: a Codex Odd's repository in a subfolder of its own folder
+ * starts with none. For Claude Code it matters only if Claude Code later
+ * lets git write a `.git/config`, which its sandbox refuses today (2.1.318),
+ * so `git init` stops there first; its sandbox refuses every write under a
+ * `.git/hooks` too, and git stops when it cannot copy one.
  */
 export function gitEnv(temp: string): Record<string, string> {
   return {

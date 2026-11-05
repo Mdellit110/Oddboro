@@ -205,8 +205,10 @@ hand-off or number, which ledger tests and the office's format test share.
   switch, Codex always has one, Grok and Gemini never), so a tool switch never
   rewrites it. `checkFolder()` refuses the home itself, a folder outside it,
   and one that holds or sits in a secret store (`SECRET_STORES`, which the
-  office's `unreadable` also reads), the office's home or its code, with one
-  line each (`FOLDER_REFUSED`). It compares real paths as the disk spells
+  office's `unreadable` also reads), the office's home or its code, and one
+  whose real path holds `*`, `?`, `[` or `]`, which Codex cannot take
+  (`GLOB`), with one line each (`FOLDER_REFUSED`; the glob line names the
+  character). It compares real paths as the disk spells
   them (`realpathSync.native`), so on a Mac `~/.SSH` is `~/.ssh`, and a link
   is where it leads. `setFolder()` finds a folder the Odd has by that real
   path, so a level change replaces it, and refuses a new one inside or

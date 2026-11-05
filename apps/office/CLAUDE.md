@@ -387,9 +387,11 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    then names only the data folder and the folders the run writes. That run
    gets a temp folder of its own, `/private/tmp/ob-<start of the run key>` as
    `CLAUDE_CODE_TMPDIR`, removed when it ends, the office's git settings
-   (`gitEnv` in `launch.ts`), and none of the office's `NODE_OPTIONS`. Its
-   sandbox sets `allowGitConfig`, since Claude Code otherwise refuses every
-   `.git/config` and `git init` fails even in the Odd's own folder.
+   (`gitEnv` in `launch.ts`), and none of the office's `NODE_OPTIONS`.
+   Claude Code's own sandbox refuses every `.git/config` write, so a Claude
+   Code Odd cannot start a repository anywhere: `git init` exits 128, even in
+   its own folder, and Claude Code's sandbox setting that allows git config
+   did not change that on 2.1.318 (measured in a live run).
    A run writes only inside `~/.oddboro/staff/<id>/`, on a thread its own
    part of the thread's folder, and the folders the owner gave it to change,
    never an instruction file in any
@@ -404,8 +406,10 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    naming a config elsewhere, a nested repository for Codex, and code in
    project files such as package scripts, a Makefile or tests. The owner
    looks at what an Odd changed before running that project's tools. Its own
-   folder and its part of a
-   thread are left out, so an Odd may make a repository there. Codex gets no
+   folder and its part of a thread are left out, so a Codex Odd can start a
+   repository in a subfolder of its own folder; in a granted repository,
+   Claude Code's own sandbox refuses a write to `.git/config` too (a live
+   run: exit 1, the file unchanged). Codex gets no
    entry: it keeps each write folder's own `.git` read only by itself, so a
    Codex Odd cannot commit in a given repository, and a repository nested in
    a given folder is not covered for Codex, which takes a glob only to deny,
@@ -413,13 +417,14 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    Codex's, gets the office's git settings (`gitEnv` in `launch.ts`), so an
    Odd's git ignores the owner's global git settings (`GIT_CONFIG_GLOBAL`,
    and `core.excludesFile` and `core.attributesFile` set to nothing) and
-   `git init` copies no sample hooks (`GIT_TEMPLATE_DIR`, an empty folder in
-   the run's temp folder). Codex takes them through
+   a Codex Odd's `git init` copies no sample hooks (`GIT_TEMPLATE_DIR`, an
+   empty folder in the run's temp folder). Codex takes them through
    `-c shell_environment_policy.set`, since its shell inherits only the core
    variables. Nor does it write the file a run
    reading the owner's edit is reading. It gets no skills, no
-   plugins, none of the owner's own CLAUDE.md files and no Claude Code
-   auto-memory (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with
+   plugins, none of the owner's own CLAUDE.md files, no Claude Code
+   auto-memory and none of the office process's own `GIT_` variables, which
+   every tool's launch drops (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with
    only the office tools the owner ticked under "In the office" on the Access tab,
    and whatever outside access the owner granted: servers at read (the tools
    the owner ticked as read-only) or write (every tool, only while the Odd

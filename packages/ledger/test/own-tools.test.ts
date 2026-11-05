@@ -132,15 +132,21 @@ test('checkFolder refuses what holds keys, the home, the office and its code', (
   assert.deepEqual(refused(' ~/.sshx/ '), { real: sshx });
 });
 
-test('checkFolder refuses a folder whose real path holds a character Codex reads as a glob, naming it, and takes { and }', () => {
+test('checkFolder refuses a folder whose real path holds a character Codex reads as a glob, naming it, and takes {, } and !', () => {
   const R = O.FOLDER_REFUSED;
   assert.equal(R.glob('['), "That folder's path has a character an Odd's tool can't take: [");
   folder('Photos [2024]');
   assert.deepEqual(O.checkFolder('~/Photos [2024]'), { refused: R.glob('[') });
   folder('a*b', 'inner');
   assert.deepEqual(O.checkFolder('~/a*b/inner'), { refused: R.glob('*') });
+  folder('q?x');
+  assert.deepEqual(O.checkFolder('~/q?x'), { refused: R.glob('?') });
+  folder('a]b');
+  assert.deepEqual(O.checkFolder('~/a]b'), { refused: R.glob(']') });
   const braces = folder('x{y}');
   assert.deepEqual(O.checkFolder('~/x{y}'), { real: braces });
+  const bang = folder('i!j');
+  assert.deepEqual(O.checkFolder('~/i!j'), { real: bang });
   // A typed path with no such character, whose real path has one.
   symlinkSync(folder('pics [old]'), join(HOME, 'pics'));
   assert.deepEqual(O.checkFolder('~/pics'), { refused: R.glob('[') });

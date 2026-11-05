@@ -23,6 +23,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   L,
+  OFFICE_PROCESS_GIT,
   assertKeychainUntouched,
   bin,
   chat,
@@ -34,7 +35,8 @@ import {
   odd,
   ownerData,
   plain,
-  runOf
+  runOf,
+  withEnv
 } from './office-under-test.ts';
 
 const { mcpServers } = await import('./codex.ts');
@@ -236,14 +238,15 @@ test("a Codex run reading the owner's edit may read that file and never write it
   assert.equal(fs[join(dir, 'plan.md', '**')], 'read');
 });
 
-test("a Codex run's environment has the office's Codex home and the run's own temp folder, and no key, Codex setting or node options from the office's own", async () => {
-  const run = await chatOf('cody');
-  assert.deepEqual(run.codexEnv, {
-    CODEX_HOME,
-    TMPDIR: join(folder, 'codex-tmp', run.env.RUN_KEY)
-  });
-  assert.equal(run.temp, true, 'the temp folder was not there while the run went');
-});
+test("a Codex run's environment has the office's Codex home and the run's own temp folder, and no key, Codex setting, git variable or node options from the office's own", () =>
+  withEnv(OFFICE_PROCESS_GIT, async () => {
+    const run = await chatOf('cody');
+    assert.deepEqual(run.codexEnv, {
+      CODEX_HOME,
+      TMPDIR: join(folder, 'codex-tmp', run.env.RUN_KEY)
+    });
+    assert.equal(run.temp, true, 'the temp folder was not there while the run went');
+  }));
 
 test("a Codex run's shell gets the office's git settings through shell_environment_policy.set, never on codex's own environment, with an empty git template in its temp folder", async () => {
   const run = await chatOf('cody');

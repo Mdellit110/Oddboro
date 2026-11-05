@@ -53,13 +53,22 @@ export function modelArgs(): string[] {
  * `--setting-sources user`, a run still loaded the owner's ~/.claude/CLAUDE.md,
  * their instructions to their own Claude, which no Odd should read. Auto-memory
  * wrote each Odd's own notes into the owner's ~/.claude/projects, a second
- * memory beside the office's lessons that the owner never sees. A run's own
+ * memory beside the office's lessons that the owner never sees. None of the
+ * office process's own git variables either (every `GIT_` name, such as
+ * `GIT_DIR` or `GIT_CONFIG_PARAMETERS`), since the owner's git settings never
+ * shape an Odd's git: a run with a shell gets the office's own (`gitEnv`)
+ * after this. Every launch the office makes starts here. A run's own
  * instructions come in its arguments and its message, which this leaves alone.
  */
 export function cleanEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   for (const k of Object.keys(env))
-    if (k === 'CLAUDECODE' || k.startsWith('CLAUDE_CODE_') || k === 'CLAUDE_CONFIG_DIR')
+    if (
+      k === 'CLAUDECODE' ||
+      k.startsWith('CLAUDE_CODE_') ||
+      k === 'CLAUDE_CONFIG_DIR' ||
+      k.startsWith('GIT_')
+    )
       delete env[k];
   env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';
   env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';

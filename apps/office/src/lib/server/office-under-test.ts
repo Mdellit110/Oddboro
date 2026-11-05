@@ -95,7 +95,7 @@ function reply() {
 );
 chmodSync(join(bin, 'claude'), 0o755);
 // The stand-in for Grok, which reads no input: it sends back its arguments, the
-// Grok and key variables it got, the tool server's environment from its agent
+// Grok, git and key variables it got, the tool server's environment from its agent
 // file, and its sandbox profile. Then one MCP call the way Grok streams it
 // (through use_tool), and a result. A message that says "Replay <file>"
 // gets that recorded stream instead, and its arguments go in replay-args.json.
@@ -166,7 +166,7 @@ const profile = fs
 const gave = {
   args,
   grokEnv: Object.fromEntries(
-    Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS)/.test(k))
+    Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
   ),
   env: JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]).find((s) => s.office).office.env,
   agentMode: fs.statSync(after('--agent')).mode & 0o777,
@@ -282,7 +282,7 @@ process.stdin.on('end', () => {
 chmodSync(join(bin, 'codex'), 0o755);
 // The stand-in for Gemini, which reads the message on stdin: like Gemini, it
 // runs a message that starts with "/" as a command of its own, and fails it.
-// Else it sends back its arguments, the Gemini and key variables it got, its
+// Else it sends back its arguments, the Gemini, git and key variables it got, its
 // run folder's policy, settings and instructions, and the message, in the
 // event shapes `gemini -o stream-json` prints: the session, an echo of the
 // message, a reply in pieces, a file tool and an MCP call, the reply's last
@@ -311,7 +311,7 @@ process.stdin.on('end', () => {
   const gave = {
     args,
     geminiEnv: Object.fromEntries(
-      Object.entries(process.env).filter(([k]) => /^(GEMINI_|GOOGLE_|ANTHROPIC_API_KEY|NODE_OPTIONS)/.test(k))
+      Object.entries(process.env).filter(([k]) => /^(GEMINI_|GOOGLE_|ANTHROPIC_API_KEY|NODE_OPTIONS|GIT_)/.test(k))
     ),
     env: settings.mcpServers.office.env,
     settings,
@@ -430,9 +430,6 @@ Object.assign(process.env, {
   DEVELOPER_DIR: elsewhere
 });
 delete process.env.OFFICE_AUTH;
-// No git variable of whoever runs the tests (a git hook sets several), so the
-// git variables a run reports are the office's own.
-for (const k of Object.keys(process.env)) if (k.startsWith('GIT_')) delete process.env[k];
 /** The office's Gemini key under test: the shape the page takes, and nothing Google knows. */
 export const OFFICE_GEMINI_KEY = 'the-office-key-for-tests-01';
 /**
@@ -574,17 +571,33 @@ export async function onPlatform<T>(
     if (real) Object.defineProperty(process, 'platform', real);
   }
 }
-/** `fn`, run with HOME at `home`, which is then put back. */
-async function withHome<T>(home: string, fn: (home: string) => T | Promise<T>): Promise<T> {
-  const real = process.env.HOME;
-  process.env.HOME = home;
+/** `fn`, run with `vars` set in the office's own environment, which is then put back. */
+export async function withEnv<T>(
+  vars: Record<string, string>,
+  fn: () => T | Promise<T>
+): Promise<T> {
+  const real = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
   try {
-    return await fn(home);
+    return await fn();
   } finally {
-    if (real === undefined) delete process.env.HOME;
-    else process.env.HOME = real;
+    for (const [k, v] of Object.entries(real))
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
   }
 }
+/** `fn`, run with HOME at `home`, which is then put back. */
+const withHome = <T>(home: string, fn: (home: string) => T | Promise<T>): Promise<T> =>
+  withEnv({ HOME: home }, () => fn(home));
+/**
+ * Git variables the office's own environment may hold, from the owner's shell
+ * or a git hook: each would point an Odd's git elsewhere, and none may reach a run.
+ */
+export const OFFICE_PROCESS_GIT = {
+  GIT_DIR: '/nonexistent',
+  GIT_CONFIG_PARAMETERS: "'x.y=z'",
+  GIT_EDITOR: 'true'
+};
 /**
  * `fn`, run with HOME at an empty folder of its own, so the Mac's own
  * ~/.grok/bin, where `grokCommand` also looks, is never found. Only around a

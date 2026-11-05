@@ -400,8 +400,11 @@ const OFFICE_GIT = new Set(Object.keys(gitEnv('')));
  * it is never in `env`, and a walk saw it in Bash's `env`. The office's own
  * git settings pass by exact name (`OFFICE_GIT`): `GIT_CONFIG_KEY_0` and
  * `_1` say key, and git with one of them hidden or empty stops every command
- * with exit 128. Never by a `GIT_` prefix, so an owner's own `GIT_..._TOKEN`
- * stays hidden like every other name that looks like a secret.
+ * with exit 128. The office's own `GIT_` variables never reach `env`
+ * (`cleanEnv` drops them), so today the exact names act as a `GIT_` prefix
+ * would, and no test can tell the two apart. Still by exact name, so a
+ * `GIT_..._TOKEN` a later change puts in `env` after `cleanEnv` stays hidden
+ * like every other name that looks like a secret.
  */
 function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
   const names = Object.keys(env).filter(
@@ -866,11 +869,6 @@ async function run(
       failIfUnavailable: true,
       allowUnsandboxedCommands: false,
       filesystem: {
-        // Claude Code denies every `**/.git/config` without this (2.1.318),
-        // so `git init` stopped with exit 128 even in the Odd's own folder,
-        // where an Odd may make a repository. The folders the owner gave it
-        // keep theirs unwritable through `denyWrite` (`repoRunPaths`).
-        allowGitConfig: true,
         // Every home folder and every other disk, not only the owner's home.
         denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
         allowRead: [
