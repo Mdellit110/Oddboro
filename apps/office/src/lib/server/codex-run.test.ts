@@ -172,15 +172,18 @@ test("a Codex Odd's chat is held by the kernel to its own folder and its own tem
     });
   }));
 
-test("Codex's commands reach the internet only with Browse the web on", async () => {
-  const network = async () => (await chatOf('cole')).permissions?.network;
+test("Codex's commands stay off the internet, Browse the web or not", async () => {
+  const owner = await L.ownerName();
+  const offline = `a shell confined to your folders and ${owner}'s developer tools (read only), with no network`;
   await L.pg`update staff set web = true where id = 'cole'`;
   try {
-    assert.deepEqual(await network(), { enabled: true });
+    const on = await chatOf('cole');
+    assert.deepEqual(on.permissions?.network, { enabled: false });
+    assert.ok(on.system.includes(offline), on.system);
   } finally {
     await L.pg`update staff set web = false where id = 'cole'`;
   }
-  assert.deepEqual(await network(), { enabled: false });
+  assert.deepEqual((await chatOf('cole')).permissions?.network, { enabled: false });
 });
 
 test("a Codex run reads the developer tool folders that exist and never their credential files, nor a link's folder in a secret store or with a glob character in its path", () =>
@@ -363,7 +366,7 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
-test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, or reaching the internet with Browse the web on, never that it has no shell", async () => {
+test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not, never that it has no shell", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;
   const off = await chatOf('cody');
@@ -377,7 +380,7 @@ test("a Codex Odd is told it has a shell confined to its folders and the owner's
     const on = await chatOf('cody');
     assert.ok(
       on.system.includes(
-        `Your own tools work on files, plus ${shell}, which can reach the internet, and web search.`
+        `Your own tools work on files, plus ${shell}, with no network, and web search.`
       ),
       on.system
     );

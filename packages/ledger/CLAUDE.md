@@ -211,8 +211,9 @@ hand-off or number, which ledger tests and the office's format test share.
   the Odd to in one click, with the switch on. With Run commands and Browse
   the web both on, commands reach the internet where the tool's walls held
   with the network open (`NETWORK_WITH_WEB`, `commandsOnline()`: Claude Code
-  and Codex), and a change to the switches or the tool that opens or closes
-  that says so in its ledger line (`NETWORK_NOTE`). `ownTools()` in
+  only, since Codex's commands reached the office's own ports on this Mac with
+  its network on), and a change to the switches or the tool that opens or
+  closes that says so in its ledger line (`NETWORK_NOTE`). `ownTools()` in
   `capabilities.ts` is that one reading of the switches and folders for a
   run, `my_access`, `office_report` and the page. `checkFolder()` refuses the home itself, a folder outside it,
   and one that holds or sits in a secret store (`SECRET_STORES`, which the

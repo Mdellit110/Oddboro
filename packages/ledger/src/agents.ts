@@ -86,12 +86,15 @@ export function runsCommands(agent: Agent, platform: NodeJS.Platform, stored: bo
 
 /**
  * Whether a tool's commands may reach the internet when Browse the web is on:
- * only where its file walls were measured holding with the network open
- * (Claude Code 2.1.318 and Codex 0.166). Grok and Gemini run no commands.
+ * only where its walls were measured holding with the network open, the
+ * office's own ports on this Mac among them (Claude Code 2.1.318, whose
+ * sandbox refuses those addresses). Codex 0.166's commands, with its network
+ * on, reached the office's own API and database here, and no Codex setting
+ * was measured to shut them, so they stay off. Grok and Gemini run no commands.
  */
 export const NETWORK_WITH_WEB: Record<Agent, boolean> = {
   claude: true,
-  codex: true,
+  codex: false,
   grok: false,
   gemini: false
 };

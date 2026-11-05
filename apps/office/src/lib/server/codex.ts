@@ -14,7 +14,7 @@
 // the owner's data folder, the thread folders it reads and the folders the
 // owner gave it, writes only its folder, its part of a thread, the folders the
 // owner gave it to change and its own temp folder, never an instruction file
-// in them, and reaches the internet only with Browse the web on. Codex's own
+// in them, and never reaches the internet (`NETWORK_WITH_WEB`). Codex's own
 // web search runs outside the profile, only with Browse the web on. The codex
 // process itself and the MCP servers run outside that profile, so the Codex
 // home, the sign-in and every Codex Odd's sessions stay shut to the model.

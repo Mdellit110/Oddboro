@@ -315,8 +315,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    Claude Code's commands read them) read, their credential files shut, its
    folder, its part of a thread, the given folders it may change and its own temp folder
    (`codex-tmp/<run key>`) written, instruction files and the edited file
-   never, and the internet only with Browse the web on (`network` in the
-   profile, from `commandsOnline`). Codex reads files through that shell, so its Run
+   never, and no network, Browse the web or not (`network` in the profile,
+   from `commandsOnline`: with it on, Codex's commands reached the office's own
+   API and database on this Mac). Codex reads files through that shell, so its Run
    commands shows on and locked. Its own web search is set per run, `live`
    with Browse the web and `disabled` without (`web_search`, not one of
    `SWITCHES`). The run is a process group of its
@@ -412,7 +413,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    secret store, the office's home or Oddboro's code is left out, as
    `checkFolder` refuses one, and so is one whose real path holds a glob
    character (`GLOB`). With Browse the web on too, the sandbox allows every
-   host (`OPEN_NETWORK`). A Claude Code that refuses that (`NETWORK_REFUSED`)
+   host (`OPEN_NETWORK`) but this Mac's own addresses (`LOOPBACK`), where the
+   office's API and database listen. A Claude Code that refuses that (`NETWORK_REFUSED`)
    fails the run that met it, which tells the owner so
    (`NETWORK_REFUSED_LINE`), and the office records one Ledger line
    (`holdNetwork`); from then on its Claude Code runs keep commands off the
