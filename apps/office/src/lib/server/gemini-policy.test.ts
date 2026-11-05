@@ -148,7 +148,7 @@ const CASES: [
   ],
   ['a write elsewhere in .git', write(`${given}/.git/HEAD`), undefined, 'allow'],
   ['a write to a folder only named like .git', write(`${given}/my.git/config`), undefined, 'allow'],
-  // The Odd's own folder and its part of a thread are the office's: it may make a repository there.
+  // The Odd's own folder and its part of a thread are the office's: the git blocks cover only folders the owner gives.
   ['a git config in its own folder', write(`${dir}/.git/config`), undefined, 'allow'],
   ['a git hook in its part of a thread', write(`${part}/r/.git/hooks/x`), undefined, 'allow'],
   ['a write to the owner’s data folder', write(`${data}/people.json`), undefined, 'deny'],
