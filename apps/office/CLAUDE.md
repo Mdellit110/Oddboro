@@ -314,7 +314,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    and Apple's developer tools (`DEVELOPER_TOOLS`, and the folder `xcode-select -p`
    names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders, the owner's data folder, the folders the owner gave it
    and the owner's developer tool folders (`devReads` in `sandbox.ts`, as
-   Claude Code's commands read them) read, their credential files shut, its
+   Claude Code's commands read them) read, their listed credential files shut
+   but not their env files, its
    folder, its part of a thread, the given folders it may change and its own temp folder
    (`codex-tmp/<run key>`) written, instruction files and the edited file
    never, and no network, Browse the web or not (`network` in the profile,
@@ -408,15 +409,43 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    exact name (`OFFICE_GIT`), since git stops every command when one is
    hidden; every other name that looks like a secret stays hidden. Claude
    Code and the office's tool server keep them. The developer tool folders
-   are those in `DEV_FOLDERS` that exist, such as `~/.npm` and `~/.cargo`,
-   and the folder of each link in `~/.local/bin` that leads elsewhere in the
-   home, read only, with their credential files (`DEV_SECRETS`) shut
-   (`devReads`, which Codex's profile reads too). A folder in or holding a
-   secret store, the office's home or Oddboro's code is left out, as
-   `checkFolder` refuses one, and so is one whose real path holds a glob
-   character (`GLOB`). With Browse the web on too, the sandbox allows every
-   host (`OPEN_NETWORK`) but the five loopback names (`LOOPBACK`), where the
-   office's API and database listen. A Claude Code that refuses that (`NETWORK_REFUSED`)
+   are those in `DEV_FOLDERS` that exist (`~/.npm`, `~/.nvm`, `~/.volta`,
+   `~/.pyenv`, `~/.rbenv`, `~/.cargo`, `~/.rustup`, `~/.bun`, `~/.deno`,
+   `~/go`, `~/.gradle`, `~/.m2`, `~/.gem` and `~/.local/bin`), and the file
+   each link in `~/.local/bin` leads to elsewhere in the home, never that
+   file's folder, read only (`devReads`, which Codex's profile reads too).
+   Shut in them, for both tools (`denies`): the files in `DEV_SECRETS`
+   (`~/.cargo/credentials`, `credentials.toml`, `config` and `config.toml`,
+   `~/.gradle/gradle.properties`, `~/.m2/settings.xml` and
+   `settings-security.xml`, `~/.gem/credentials`), and npm's global config in
+   each node version nvm keeps (`~/.nvm/versions/node/<v>/etc/npmrc`), listed
+   per run. For Claude Code only (`globDenies`), every `.env` and `.env.*`
+   under each folder, as a `**` glob, which its sandbox honours (a `cat`
+   failed, measured on 2.1.318). Codex gets no glob: none was measured in its
+   profile, so a Codex Odd's commands can still read an env file there. A
+   credential file in a folder that is on no list (a Volta node's `npmrc`,
+   say) is read. A folder or link target in or holding a secret store, the
+   office's home or Oddboro's code is left out, as `checkFolder` refuses one,
+   and so is one whose real path holds a glob character (`GLOB`); a link
+   that leads outside the home adds nothing, so one into `/Users`, `/Volumes`
+   or a temp folder stays shut. `~/.docker` is not listed: the docker CLI
+   needs the daemon's socket, which the sandbox does not open. With Browse
+   the web on too, the sandbox allows every host (`OPEN_NETWORK`) but every
+   address of this Mac (`macAddresses`), since the office's API and database
+   listen here and anything on every address (a Caddy in front of the
+   office) is one hop from them: the loopback names and the any-address in
+   both families (`MAC_NAMES`: localhost, 127.0.0.1, ::1, [::1], 0.0.0.0, ::
+   and [::]) and each address `networkInterfaces()` gives at run start, IPv6
+   bare and in brackets. Claude Code's proxy (2.1.318) refused the 20
+   loopback forms the earlier fix tried, `[::]` and its long form, the LAN
+   IPv4 in dotted, decimal, hex, `::ffff:` and `nip.io` forms, IPv6
+   link-local addresses, and a Caddy on every address reached by the LAN
+   address with `Host: oddboro.localhost`. It matches exact hosts and
+   resolved addresses, not ranges, and refuses a zoned address
+   (`fe80::1%en0`) as a malformed host, so zones are not listed. Still open:
+   other `127.x` addresses (nothing answers there on a Mac unless `lo0` has
+   an alias), other machines on the network, and an address this Mac gets
+   during a run. A Claude Code that refuses that (`NETWORK_REFUSED`)
    fails the run that met it, which tells the owner so
    (`NETWORK_REFUSED_LINE`), and the office records one Ledger line
    (`holdNetwork`); from then on its Claude Code runs keep commands off the
@@ -429,8 +458,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    inside it, and npm keeps its cache beside that, in `npm`. That run gets a temp folder of
    its own, `/private/tmp/ob-<start of the run key>` as `CLAUDE_CODE_TMPDIR`,
    removed when it ends, the office's git and npm settings (`shellEnv` in
-   `launch.ts`: `gitEnv`, npm's cache in the temp folder, and npm's user
-   config at a file never made, so the owner's `~/.npmrc` is never read), and
+   `launch.ts`: `gitEnv`, npm's cache in the temp folder, and npm's user and
+   global configs at files never made, so neither the owner's `~/.npmrc` nor
+   the `etc/npmrc` beside the node running npm is read), and
    none of the office's `NODE_OPTIONS`.
    Claude Code's own sandbox refuses every `.git/config` write, so a Claude
    Code Odd cannot start a repository anywhere: `git init` exits 128, even in
@@ -838,8 +868,11 @@ policy through Caddy's admin API (127.0.0.1:2019, with an explicit origin, which
 that API wants), touches none of their files, and adds them again when the
 office starts and when a page loads (`keepAddress`). With anything else on port
 80 it stays at `:4500`; on Windows that is often http.sys, Windows' own web
-server. On Windows the office's Caddy listens on 127.0.0.1 only, so the
-firewall never asks. HTTPS uses Caddy's own authority; the Mac trusts it once,
+server. The office's own Caddy listens on 127.0.0.1 and [::1] only, on every
+system (`OWN_CADDYFILE`), so nothing else on the network, and no command an
+Odd runs, reaches the office through another address of this computer, and
+on Windows the firewall never asks. The owner's own Caddy listens where they
+set it. HTTPS uses Caddy's own authority; the Mac trusts it once,
 with the owner's password in the macOS dialog (Make it secure; Windows asks in
 its own dialog and adds it to the owner's list, with no admin), because a
 browser shows notifications only on a secure page. Firefox keeps its own trusted

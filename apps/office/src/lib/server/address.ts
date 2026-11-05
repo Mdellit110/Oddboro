@@ -26,8 +26,9 @@
 // dialog, and binding ports 80 and 443 needs a kernel that lets ordinary users
 // do it (net.ipv4.ip_unprivileged_port_start at 80 or lower).
 //
-// So does Windows: the office's own Caddy runs as a Task Scheduler task and
-// listens on 127.0.0.1 only, so the firewall has nothing to ask about; trust
+// So does Windows: the office's own Caddy runs as a Task Scheduler task, and
+// the firewall has nothing to ask about, since on every system it listens on
+// 127.0.0.1 and [::1] only (`OWN_CADDYFILE`); trust
 // goes in the owner's own list of authorities, which Windows confirms in its
 // own dialog with no admin. Windows' own web server (http.sys, behind IIS and
 // some other services) often holds port 80, and then the office stays at its port.
@@ -297,36 +298,40 @@ async function download(): Promise<string> {
   return OWN_CADDY;
 }
 
+/**
+ * The office's own Caddyfile. HTTPS from Caddy's own authority for the real
+ * name, plain HTTP for both names so the address works before this Mac trusts
+ * that authority. The owner trusts it from the card, so Caddy does not ask on
+ * its own. It listens on this computer's loopback addresses only: on every
+ * address, anything on the network, and a command an Odd runs, would reach
+ * the office through any address this computer has, and on Windows the
+ * firewall would ask the owner.
+ */
+export const OWN_CADDYFILE = [
+  '# Written by the office: its address on this Mac.',
+  '{',
+  '\tadmin off',
+  '\tpersist_config off',
+  '\tskip_install_trust',
+  '\tdefault_bind 127.0.0.1 [::1]',
+  '}',
+  '',
+  `${SECURE} {`,
+  '\ttls internal',
+  `\treverse_proxy ${UPSTREAM}`,
+  '}',
+  '',
+  `${HOSTS.map((h) => `http://${h}`).join(', ')} {`,
+  `\treverse_proxy ${UPSTREAM}`,
+  '}',
+  ''
+].join('\n');
+
 /** The office's own Caddy, started now and at every login. */
 async function startOwn(): Promise<void> {
   const caddy = (await caddyBinary()) ?? (await download());
   mkdirSync(join(HOME, 'caddy'), { recursive: true });
-  // HTTPS from Caddy's own authority for the real name, plain HTTP for both
-  // names so the address works before this Mac trusts that authority. The
-  // owner trusts it from the card, so Caddy does not ask on its own.
-  writeFileSync(
-    CADDYFILE,
-    [
-      '# Written by the office: its address on this Mac.',
-      '{',
-      '\tadmin off',
-      '\tpersist_config off',
-      '\tskip_install_trust',
-      // On Windows a server on every address makes the firewall ask the owner.
-      ...(WINDOWS ? ['\tdefault_bind 127.0.0.1'] : []),
-      '}',
-      '',
-      `${SECURE} {`,
-      '\ttls internal',
-      `\treverse_proxy ${UPSTREAM}`,
-      '}',
-      '',
-      `${HOSTS.map((h) => `http://${h}`).join(', ')} {`,
-      `\treverse_proxy ${UPSTREAM}`,
-      '}',
-      ''
-    ].join('\n')
-  );
+  writeFileSync(CADDYFILE, OWN_CADDYFILE);
   const started = await installService({
     label: LABEL,
     args: [caddy, 'run', '--config', CADDYFILE, '--adapter', 'caddyfile'],

@@ -7,7 +7,7 @@
 // state lives in memory, so a restart tries the open network once more and a
 // refusal costs that one run again. Server only.
 import { existsSync, readdirSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import {
   CODE,
@@ -24,16 +24,40 @@ import { gitEnv } from './launch.ts';
 /** Every host, for commands when Run commands and Browse the web are both on (measured on Claude Code 2.1.318). */
 export const OPEN_NETWORK: string[] = ['*'];
 /**
- * The five loopback names, which commands never reach even with every host
- * open: the office's API and its database listen there, so a command could
- * otherwise change the office behind the owner's back. Measured on Claude
- * Code 2.1.318: its proxy refuses each of these, their `::ffff:` forms, and
- * any name that resolves to one (`localtest.me`, `127.0.0.1.nip.io`). It
- * matches exact hosts and resolved addresses, not ranges: `127.0.0.0/8` in
- * place of `127.0.0.1` let `127.0.0.1` through. Other `127.x` addresses are
- * not refused; on a Mac nothing answers there unless `lo0` has an alias.
+ * The names of this Mac that hold whatever its network: the loopback names and
+ * the any-address in both families, where a server on every address answers.
+ * Measured on Claude Code 2.1.318: its proxy matches exact hosts and resolved
+ * addresses, not ranges (`127.0.0.0/8` in place of `127.0.0.1` let
+ * `127.0.0.1` through), and refuses `::ffff:` forms and any name that resolves
+ * to a listed address (`localtest.me`, `127.0.0.1.nip.io`).
  */
-export const LOOPBACK: string[] = ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0'];
+export const MAC_NAMES: string[] = [
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  '[::1]',
+  '0.0.0.0',
+  '::',
+  '[::]'
+];
+
+/**
+ * Every address of this Mac, which commands never reach even with every host
+ * open: the office's API and database listen here, and anything listening on
+ * every address (a Caddy in front of the office) is one hop from them, so a
+ * command could otherwise change the office behind the owner's back. That is
+ * `MAC_NAMES` and each address of each interface in `interfaces`, IPv6 bare
+ * and in brackets, as the proxy takes both. Read per run, so an address the
+ * Mac gets later is listed from the next run; one that comes during a run is
+ * not. Other `127.x` addresses and other machines on the network stay open.
+ */
+export function macAddresses(interfaces: ReturnType<typeof networkInterfaces>): string[] {
+  const all = new Set(MAC_NAMES);
+  for (const list of Object.values(interfaces))
+    for (const { family, address } of list ?? [])
+      for (const a of family === 'IPv6' ? [address, `[${address}]`] : [address]) all.add(a);
+  return [...all];
+}
 /**
  * Claude Code's words when it refuses that open form, as its binary carries
  * them. 2.1.318 took `*.com` in `--settings` and loaded a page, so how a
@@ -109,8 +133,8 @@ export function hiddenFromCommands(env: NodeJS.ProcessEnv): string[] {
  * (`reads`), the owner's developer tool folders (`devReads`), the commands'
  * own temp folder (`tmp`) and the system's own folders; writes as run() says,
  * never what `denyWrite` names; no network unless Browse the web is on
- * (`network`), and never the five loopback names (`LOOPBACK`, not every
- * `127.x` address); and none of the secrets in the run's environment (`env`).
+ * (`network`), and never an address of this Mac (`macAddresses`); and none
+ * of the secrets in the run's environment (`env`).
  */
 export function claudeSandbox(o: {
   reads: string[];
@@ -135,7 +159,8 @@ export function claudeSandbox(o: {
         '/private/tmp',
         '/tmp',
         '/private/var/folders',
-        ...dev.denies
+        ...dev.denies,
+        ...dev.globDenies
       ],
       allowRead: [
         ...o.reads,
@@ -146,7 +171,7 @@ export function claudeSandbox(o: {
       denyWrite: o.denyWrite
     },
     network: o.network
-      ? { allowedDomains: OPEN_NETWORK, deniedDomains: LOOPBACK }
+      ? { allowedDomains: OPEN_NETWORK, deniedDomains: macAddresses(networkInterfaces()) }
       : { allowedDomains: [] },
     credentials: {
       envVars: hiddenFromCommands(o.env).map((name) => ({ name, mode: 'deny' }))
@@ -172,31 +197,46 @@ export const DEV_FOLDERS = [
   '.local/bin'
 ] as const;
 
-/** Credential files inside them that commands never read, under the home folder. */
+/**
+ * Files inside them that commands never read, under the home folder: each
+ * holds a token, or is a config its tool reads one from.
+ */
 export const DEV_SECRETS = [
   '.cargo/credentials',
   '.cargo/credentials.toml',
+  '.cargo/config',
+  '.cargo/config.toml',
   '.gradle/gradle.properties',
   '.m2/settings.xml',
   '.m2/settings-security.xml',
   '.gem/credentials'
 ] as const;
 
+/** Where nvm keeps each node version, under `~/.nvm`; each has npm's global config at `etc/npmrc`. */
+const NVM_VERSIONS = ['versions', 'node'];
+/** The env files under every developer tool folder that Claude Code's commands never read, as globs. */
+const ENV_FILES = ['**/.env', '**/.env.*'];
+
 /**
  * What commands read of the owner's developer tools this run, by real path:
- * the folders that exist, and the folder of each link in `~/.local/bin` that
- * leads elsewhere in the home; and the credential files they never read. The
- * home is read when called, never at import, since tests move it.
+ * the folders that exist, and the file each link in `~/.local/bin` leads to
+ * elsewhere in the home, never its folder; and the files they never read
+ * (`denies`): `DEV_SECRETS` and each nvm node version's npm global config,
+ * read per run so a version installed later is shut from the next run.
+ * `globDenies` shuts every env file under each folder read; only Claude
+ * Code's sandbox takes it, since no glob was measured in Codex's profile, so
+ * a Codex Odd's commands can still read such a file. The home is read when
+ * called, never at import, since tests move it.
  *
- * A folder is left out when it is in or holds a secret store, the office's
- * home or Oddboro's code (as `checkFolder` refuses one), so a link's target
- * never opens `~/.claude` or the whole home. One whose real path holds `*`,
+ * A folder or link target is left out when it is in or holds a secret store,
+ * the office's home or Oddboro's code (as `checkFolder` refuses one), so a
+ * link never opens `~/.claude` and a folder never the whole home. One whose real path holds `*`,
  * `?`, `[` or `]` is left out too, with its denies: Codex reads such a path
  * as a glob and will not start (`GLOB`). A deny names the file whether it
  * exists or not, so one made during the run stays shut; both tools start
  * with a deny on a missing file (measured).
  */
-export function devReads(): { reads: string[]; denies: string[] } {
+export function devReads(): { reads: string[]; denies: string[]; globDenies: string[] } {
   const h = realpathSync.native(homedir());
   const shut = [...SECRET_STORES.map((s) => join(h, s)), home(), CODE].map((p) =>
     existsSync(p) ? realpathSync.native(p) : p
@@ -221,9 +261,9 @@ export function devReads(): { reads: string[]; denies: string[] } {
   if (bin)
     for (const e of readdirSync(bin, { withFileTypes: true })) {
       const link = join(bin, e.name);
-      // A link to nothing has no folder to read.
+      // A link to nothing has nothing to read.
       if (!e.isSymbolicLink() || !existsSync(link)) continue;
-      const target = dirname(realpathSync.native(link));
+      const target = realpathSync.native(link);
       if (within(target, h)) add(target);
     }
   const denies = DEV_SECRETS.flatMap((s) => {
@@ -231,5 +271,10 @@ export function devReads(): { reads: string[]; denies: string[] } {
     const real = folders.get(first);
     return real ? [join(real, ...rest)] : [];
   });
-  return { reads, denies };
+  const nvm = folders.get('.nvm');
+  const versions = nvm && join(nvm, ...NVM_VERSIONS);
+  if (versions && existsSync(versions))
+    for (const v of readdirSync(versions)) denies.push(join(versions, v, 'etc', 'npmrc'));
+  const globDenies = [...folders.values()].flatMap((f) => ENV_FILES.map((g) => join(f, g)));
+  return { reads, denies, globDenies };
 }

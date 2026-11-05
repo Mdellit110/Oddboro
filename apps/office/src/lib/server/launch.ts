@@ -134,14 +134,16 @@ export function gitEnv(temp: string): Record<string, string> {
  * Codex's one `shell_environment_policy.set` alike, from this one place so
  * the two cannot drift: the office's git settings (`gitEnv`), and npm's cache
  * in the run's temp folder (`temp`), since the sandbox shuts `~/.npm` to
- * writes. npm's user config names a file that is never made, so the owner's
- * `~/.npmrc`, which may hold a registry token, is never read.
+ * writes. npm's user and global configs name files that are never made, so
+ * neither the owner's `~/.npmrc` nor the `etc/npmrc` beside the node that
+ * runs npm, either of which may hold a registry token, is read.
  */
 export function shellEnv(temp: string): Record<string, string> {
   return {
     ...gitEnv(temp),
     npm_config_cache: join(temp, 'npm'),
-    npm_config_userconfig: join(temp, 'npmrc')
+    npm_config_userconfig: join(temp, 'npmrc'),
+    npm_config_globalconfig: join(temp, 'npmrc-global')
   };
 }
 

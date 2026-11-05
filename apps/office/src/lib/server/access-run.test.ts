@@ -5,8 +5,8 @@
 // prompt and its my_access read one profile. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { homedir, networkInterfaces, tmpdir, type NetworkInterfaceInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import {
@@ -25,8 +25,15 @@ import {
 } from './office-under-test.ts';
 
 const { LAUNCHES } = await import('./cli.ts');
-const { DEV_FOLDERS, DEV_SECRETS, LOOPBACK, NETWORK_REFUSED_LINE, networkHeld, resetHeldNetwork } =
-  await import('./sandbox.ts');
+const {
+  DEV_FOLDERS,
+  DEV_SECRETS,
+  MAC_NAMES,
+  NETWORK_REFUSED_LINE,
+  macAddresses,
+  networkHeld,
+  resetHeldNetwork
+} = await import('./sandbox.ts');
 const { shellEnv } = await import('./launch.ts');
 
 await L.pg`insert into staff ${L.pg([
@@ -170,15 +177,74 @@ test(
   }
 );
 
+/** One interface's address as `networkInterfaces` gives it; only the address and its family matter here. */
+const nic = (family: 'IPv4' | 'IPv6', address: string, internal = false): NetworkInterfaceInfo =>
+  ({
+    family,
+    address,
+    internal,
+    netmask: '',
+    mac: '',
+    cidr: null,
+    scopeid: 0
+  }) as NetworkInterfaceInfo;
+
+test('every address of every interface is denied to commands, IPv6 bare and in brackets, beside the loopback names and the any-address', () => {
+  const cases: [string, ReturnType<typeof networkInterfaces>, string[]][] = [
+    [
+      'a Mac on a network',
+      {
+        lo0: [
+          nic('IPv4', '127.0.0.1', true),
+          nic('IPv6', '::1', true),
+          nic('IPv6', 'fe80::1', true)
+        ],
+        en0: [
+          nic('IPv4', '192.168.1.20'),
+          nic('IPv6', '2001:db8::20'),
+          nic('IPv6', 'fe80::1c2b:3a4d:5e6f:7081')
+        ],
+        utun0: [nic('IPv6', 'fe80::9abc:def0:1234:5678')]
+      },
+      [
+        '192.168.1.20',
+        '2001:db8::20',
+        '[2001:db8::20]',
+        'fe80::1c2b:3a4d:5e6f:7081',
+        '[fe80::1c2b:3a4d:5e6f:7081]',
+        'fe80::9abc:def0:1234:5678',
+        '[fe80::9abc:def0:1234:5678]',
+        'fe80::1',
+        '[fe80::1]'
+      ]
+    ],
+    // With Wi-Fi off only loopback is up, and the list still builds.
+    [
+      'a Mac with only loopback up',
+      { lo0: [nic('IPv4', '127.0.0.1', true), nic('IPv6', '::1', true)] },
+      []
+    ],
+    ['no interfaces at all', {}, []]
+  ];
+  for (const [name, interfaces, own] of cases) {
+    const denied = macAddresses(interfaces);
+    for (const a of [...MAC_NAMES, ...own])
+      assert.ok(denied.includes(a), `${name}: ${a} is not denied`);
+    assert.ok(denied.includes('::') && denied.includes('[::]'), `${name}: ${denied.join(' ')}`);
+    assert.equal(new Set(denied).size, denied.length, `${name}: an address is listed twice`);
+  }
+});
+
 test(
-  "Claude's commands reach the internet only with Browse the web on, and never the office's five loopback names",
+  "Claude's commands reach the internet only with Browse the web on, and never an address of this Mac",
   onMac,
   async () => {
     await setOwn('bo', { commands: true, web: true });
-    assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, {
-      allowedDomains: ['*'],
-      deniedDomains: ['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']
-    });
+    const network = sandboxOf(await chatOf('bo'))?.network;
+    assert.deepEqual(network?.allowedDomains, ['*']);
+    const own = Object.values(networkInterfaces()).flatMap((l) => (l ?? []).map((i) => i.address));
+    for (const a of [...MAC_NAMES, ...own])
+      assert.ok(network?.deniedDomains?.includes(a), `${a} is not denied`);
     // Closed, the network keeps its exact settings: no deny list beside it.
     await setOwn('bo', { commands: true });
     assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, { allowedDomains: [] });
@@ -266,32 +332,25 @@ test(
     ownerHome(async (home) => {
       const h = realpathSync(home);
       const at = (...p: string[]) => join(h, ...p);
-      for (const d of [
-        '.npm',
-        '.cargo',
-        '.local/bin',
-        '.local/share/x/bin',
-        '.config/y',
-        '.local/share/z[1]/bin'
-      ])
+      for (const d of ['.npm', '.cargo', '.local/bin', '.nvm/versions/node/v1.0.0/bin'])
         mkdirSync(at(d), { recursive: true });
-      for (const [name, target] of [
-        ['x', at('.local/share/x/bin/x')],
-        ['y', at('.config/y/y')],
-        ['z', at('.local/share/z[1]/bin/z')]
-      ]) {
-        writeFileSync(target, '');
-        symlinkSync(target, at('.local/bin', name));
-      }
       await setOwn('dee', { commands: true });
       const run = await chatOf('dee');
       const fs = sandboxOf(run)?.filesystem;
-      for (const read of [at('.npm'), at('.cargo'), at('.local/bin'), at('.local/share/x/bin')])
+      for (const read of [at('.npm'), at('.cargo'), at('.local/bin'), at('.nvm')])
         assert.ok(fs?.allowRead.includes(read), `${read} is not read`);
-      for (const shut of [at('.config/y'), at('.local/share/z[1]/bin'), at('.pyenv')])
-        assert.ok(!fs?.allowRead.some((p) => p.startsWith(shut)), `${shut} is read`);
-      assert.ok(fs?.denyRead.includes(at('.cargo', 'credentials')));
-      assert.ok(fs?.denyRead.includes(at('.cargo', 'credentials.toml')));
+      assert.ok(!fs?.allowRead.some((p) => p.startsWith(at('.pyenv'))), '~/.pyenv is read');
+      for (const shut of [
+        at('.cargo', 'credentials'),
+        at('.cargo', 'credentials.toml'),
+        at('.cargo', 'config'),
+        at('.cargo', 'config.toml'),
+        at('.nvm/versions/node/v1.0.0/etc/npmrc'),
+        at('.npm', '**/.env'),
+        at('.npm', '**/.env.*'),
+        at('.local/bin', '**/.env')
+      ])
+        assert.ok(fs?.denyRead.includes(shut), `${shut} is not shut`);
       const tmp = tmpOf(run);
       assert.deepEqual(run.npm, {
         npm_config_cache: join(tmp, 'npm'),
@@ -299,6 +358,41 @@ test(
       });
       // Only commands read them: the file tools' Read allows name none.
       assert.ok(!readAllows(run).some((p) => p.startsWith(h)), readAllows(run).join(' '));
+    })
+);
+
+test(
+  'a link in ~/.local/bin opens only its own file in the home, and no developer tool folder opens one that holds the home',
+  onMac,
+  () =>
+    ownerHome(async (home) => {
+      const h = realpathSync(home);
+      const at = (...p: string[]) => join(h, ...p);
+      const outside = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-outside-')));
+      try {
+        for (const d of ['.local/bin', 'Downloads', '.config/y', '.local/share/z[1]/bin'])
+          mkdirSync(at(d), { recursive: true });
+        for (const [name, target] of [
+          ['x', at('Downloads/x')],
+          ['y', at('.config/y/y')],
+          ['z', at('.local/share/z[1]/bin/z')],
+          ['w', join(outside, 'w')]
+        ]) {
+          writeFileSync(target, '');
+          symlinkSync(target, at('.local/bin', name));
+        }
+        // A developer tool folder that is really the folder holding the home.
+        symlinkSync(dirname(h), at('go'));
+        await setOwn('dee', { commands: true });
+        const reads = sandboxOf(await chatOf('dee'))?.filesystem.allowRead ?? [];
+        assert.ok(reads.includes(at('Downloads/x')), `the link's own file is not read: ${reads}`);
+        assert.ok(!reads.includes(at('Downloads')), "the link's folder is read");
+        for (const shut of [at('.config/y'), at('.local/share/z[1]/bin'), outside])
+          assert.ok(!reads.some((p) => p.startsWith(shut)), `${shut} is read`);
+        assert.ok(!reads.includes(dirname(h)), 'the folder holding the home is read');
+      } finally {
+        rmSync(outside, { recursive: true, force: true });
+      }
     })
 );
 
@@ -390,7 +484,10 @@ test(
     withEnv({ FAKE_OWNER_API_TOKEN: 'x' }, async () => {
       await setOwn('bo', { commands: true, web: true });
       const sandbox = sandboxOf(await chatOf('bo'));
-      assert.deepEqual(sandbox?.network, { allowedDomains: ['*'], deniedDomains: LOOPBACK });
+      assert.deepEqual(sandbox?.network, {
+        allowedDomains: ['*'],
+        deniedDomains: macAddresses(networkInterfaces())
+      });
       const hidden = sandbox?.credentials.envVars ?? [];
       for (const name of ['FAKE_OWNER_API_TOKEN', 'ANTHROPIC_API_KEY'])
         assert.ok(
