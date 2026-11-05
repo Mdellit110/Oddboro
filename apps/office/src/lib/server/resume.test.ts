@@ -1,11 +1,11 @@
 // What a resumed chat session is told about its instructions. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { catchUp, NOW, parseSession, saveSession, sectionsOf } from './resume.ts';
+import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
 
 // A job description with a heading the office also uses, as the managers' do.
 const desk = 'You run the office.\n\n## Who you work for\n\nThe owner, kindly.';
@@ -98,4 +98,20 @@ test('a broken or misshapen session.json starts a new session or resends the pro
   assert.equal(parseSession('{not json'), undefined);
   assert.equal(parseSession('{"seen":{}}'), undefined);
   assert.deepEqual(parseSession('{"sessionId":"abc","seen":{"## A":3}}'), { sessionId: 'abc' });
+});
+
+test('a chat has a session only while its session file names one: a missing, broken or unreadable file has none', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oddboro-session-'));
+  try {
+    const file = join(dir, 'session.json');
+    assert.equal(sessionIdIn(file), undefined);
+    saveSession(file, { sessionId: 'abc', seen: now() });
+    assert.equal(sessionIdIn(file), 'abc');
+    writeFileSync(file, '{not json');
+    assert.equal(sessionIdIn(file), undefined);
+    // A folder where the file should be cannot be read as one.
+    assert.equal(sessionIdIn(dir), undefined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

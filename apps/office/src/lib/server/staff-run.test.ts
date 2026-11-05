@@ -832,8 +832,9 @@ test("a recorded Grok chat replays as it ran: the floor sees each tool by Claude
     assert.ok(!two.args.includes('-s'), 'the second message started a new session');
     assert.equal(two.text, 'pelican');
   } finally {
-    // Later Grok chats start a session of their own.
+    // Later Grok chats start a session of their own, and replay no "Replay" line to the stand-in.
     rmSync(L.chatSession('gus'), { force: true });
+    rmSync(L.home('staff', 'gus', 'chat.jsonl'), { force: true });
   }
 });
 

@@ -115,7 +115,8 @@ import { bearer } from './oauth.ts';
 import { apiKey, claudeSettings, cleanEnv, modelArgs } from './claude.ts';
 import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
-import { catchUp, NOW, parseSession, saveSession, sectionsOf } from './resume.ts';
+import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
+import { changedSince, replay, replayed } from './replay.ts';
 import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
@@ -1063,9 +1064,17 @@ export async function chat(
     const landed = (await deliveries(id, 20)).filter(
       (d) => !(d.kind === re?.ref.kind && d.id === re.ref.id)
     );
-    const prompt = [...chatPreface(history(id), landed), ...(re ? [re.brief] : []), message].join(
-      '\n\n'
-    );
+    const past = history(id);
+    // A new session (the Odd moved to another tool, or its session is gone)
+    // never saw the chat: it gets the latest of it word for word, told and
+    // poke lines included, so the preface leaves those out.
+    const oldest = sessionIdIn(chatSession(id)) ? undefined : replayed(past)[0];
+    const prompt = [
+      ...(oldest ? [replay(past, changedSince(homeOf(id), oldest.at))] : []),
+      ...chatPreface(oldest ? past.filter((e) => !e.told && !e.poke) : past, landed),
+      ...(re ? [re.brief] : []),
+      message
+    ].join('\n\n');
     const r = await run(who, prompt, {
       kind: 'chat',
       ownerSaid: message,

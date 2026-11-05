@@ -1,7 +1,7 @@
 // What a resumed chat session is told about its instructions. Claude Code
 // keeps a session's first system prompt when it resumes, and ignores a new
 // --append-system-prompt, so a resumed run puts what changed in its message.
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 /** A system prompt by section: heading line to the section's whole text. */
 export type Sections = Record<string, string>;
@@ -62,6 +62,16 @@ export function parseSession(text: string): Saved | undefined {
     seen !== null &&
     Object.values(seen).every((v) => typeof v === 'string');
   return isSections ? { sessionId, seen: seen as Sections } : { sessionId };
+}
+
+/** The session a session file names, or undefined when the file is missing or unreadable, so the next run starts a new one. */
+export function sessionIdIn(file: string): string | undefined {
+  try {
+    return parseSession(readFileSync(file, 'utf8'))?.sessionId;
+  } catch {
+    // A missing file means a new session, and one that cannot be read cannot be resumed.
+    return undefined;
+  }
 }
 
 /**

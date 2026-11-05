@@ -324,6 +324,14 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    session's first system prompt, so a resumed chat's message opens with the
    time and each section that changed since that session last saw it, in full
    (`catchUp` in `src/lib/server/resume.ts`; `session.json` keeps what it saw).
+   A chat that starts a new session (after a move to another tool, or with
+   `session.json` gone or unreadable: `sessionIdIn`) opens with the latest of
+   the chat instead, word for word, oldest first: the newest lines whose text
+   fits in 24,000 characters (`REPLAY_CHARS`), and the files in the Odd's own
+   folder changed since the oldest of them, 30 named and the rest counted
+   (`replay` and `changedSince` in `src/lib/server/replay.ts`). The replay
+   holds the told and poke lines, so `chatPreface` leaves those out. Nothing
+   on screen shows it.
    The office tells each run's tool server about the run through its
    environment (`officeEnv` in `src/lib/server/run-env.ts`): every run gets a
    `RUN_KEY`, and a `denied` or `edited` run, which only reads the owner's
