@@ -99,7 +99,6 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
     '--ignore-rules',
     ...[
       'approval_policy="never"',
-      'web_search="disabled"',
       'agents.enabled=false',
       'allow_login_shell=false',
       'shell_environment_policy.inherit="core"',
@@ -129,6 +128,8 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
         'tool_suggest',
         'sleep_tool'
       ].map((f) => `features.${f}=false`),
+      // Browse the web is off for a new Odd.
+      'web_search="disabled"',
       'developer_instructions=<…>',
       'permissions=<…>',
       'default_permissions="odd"',
@@ -275,9 +276,20 @@ test('a Codex Odd is told it has a shell confined to its folders with no network
   const run = await chatOf('cody');
   assert.match(
     run.system,
-    /Your own tools are a shell and file edits, confined to your folders, with no network and no web\./
+    /Your own tools work on files, plus a shell confined to your folders, with no network\. No web\./
   );
   assert.doesNotMatch(run.system, /no shell/);
+});
+
+test("Browse the web turns Codex's web search on", async () => {
+  const search = (args: string[]) => args.find((a) => a.startsWith('web_search='));
+  await L.pg`update staff set web = true where id = 'cole'`;
+  try {
+    assert.equal(search((await chatOf('cole')).args), 'web_search="live"');
+  } finally {
+    await L.pg`update staff set web = false where id = 'cole'`;
+  }
+  assert.equal(search((await chatOf('cole')).args), 'web_search="disabled"');
 });
 
 test('a recorded Codex turn replays as it ran: the floor sees the office call, the file change and the shell command once each, the reply is the last message, and the next chat resumes its thread', async () => {

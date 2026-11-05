@@ -34,7 +34,8 @@ const port = await new Promise<number>((done) => {
   });
 });
 // The stand-in for Claude Code: it reads the message, then reports one tool
-// call and a result that carries what the office gave the run. A message
+// call and a result that carries what the office gave the run, the variables
+// Run commands sets among it. A message
 // that says "Hold until <file> exists." keeps the run going until it does.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
@@ -71,7 +72,10 @@ function reply() {
     system: after('--append-system-prompt'),
     message,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
-    autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null
+    autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
+    tmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
+    gitConfig: process.env.GIT_CONFIG_GLOBAL ?? null,
+    nodeOptions: process.env.NODE_OPTIONS ?? null
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
@@ -478,6 +482,10 @@ export type Gave = {
   message: string;
   claudeMds: string | null;
   autoMemory: string | null;
+  /** The Claude Code run's CLAUDE_CODE_TMPDIR, GIT_CONFIG_GLOBAL and NODE_OPTIONS, which Run commands sets. */
+  tmpdir?: string | null;
+  gitConfig?: string | null;
+  nodeOptions?: string | null;
   grokEnv?: Record<string, string>;
   agentMode?: number;
   profile?: string;
@@ -586,6 +594,33 @@ export const plain = (args: string[]) =>
 /** The value after `flag` as a stand-in. */
 export const hide = (args: string[], ...flags: string[]) =>
   args.map((a, i) => (flags.includes(args[i - 1]) ? `<${args[i - 1].replace(/^-+/, '')}>` : a));
+
+/**
+ * Whether a rule of a Gemini run's policy with `decision` matches a write to
+ * `path`, as Gemini matches it: the arguments as JSON, each pair between NULs.
+ * Each value the office writes is a JSON string, one key a line.
+ */
+export function writeRule(policy: string, decision: 'allow' | 'deny', path: string): boolean {
+  const args = `{\0"content":"x"\0,\0"file_path":${JSON.stringify(path)}\0}`;
+  return policy
+    .split('[[rule]]\n')
+    .filter(Boolean)
+    .map(
+      (block) =>
+        Object.fromEntries(
+          block
+            .trim()
+            .split('\n')
+            .map((l) => [l.slice(0, l.indexOf(' = ')), JSON.parse(l.slice(l.indexOf(' = ') + 3))])
+        ) as Record<string, unknown>
+    )
+    .some(
+      (r) =>
+        r.decision === decision &&
+        typeof r.argsPattern === 'string' &&
+        new RegExp(r.argsPattern).test(args)
+    );
+}
 
 /** Every Codex launch so far, as its stand-in logged its arguments. */
 export const codexLaunches = (): string[][] => {

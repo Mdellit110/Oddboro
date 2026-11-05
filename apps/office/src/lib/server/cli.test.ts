@@ -1,8 +1,9 @@
-// What a line of a tool's own stream tells the floor about the tool in use.
-// Run with `npm test -w @oddboro/office`.
+// What a line of a tool's own stream tells the floor about the tool in use,
+// and what each Odd is told its own tools reach. Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { streamTools } from './cli.ts';
+import { AGENTS } from '@oddboro/ledger/agents';
+import { ownToolsLine, streamTools } from './cli.ts';
 import { codexReader } from './codex.ts';
 import { toolWords } from '../staff/work.ts';
 
@@ -30,4 +31,28 @@ test("a Codex shell command reaches the floor as Claude Code's Bash, and Grok lo
   });
   assert.deepEqual(codex, [{ type: 'tool', name: 'Bash' }]);
   assert.deepEqual(streamTools('grok', started('search_tool')), ['ToolSearch']);
+});
+
+test('each Odd is told its own tools', () => {
+  const told = {
+    neither: 'Your own tools work on files only: no shell and no web.',
+    commands:
+      'Your own tools work on files, plus a shell confined to your folders, with no network. No web.',
+    web: 'Your own tools work on files, plus web search and fetch. No shell.',
+    both: 'Your own tools work on files, plus a shell confined to your folders, with no network, and web search and fetch.'
+  };
+  for (const agent of AGENTS) {
+    // Gemini's policy allows a write only by its full path, so its Odds are told so.
+    const end = agent === 'gemini' ? " Give each file tool the file's full path." : '';
+    assert.deepEqual(
+      {
+        neither: ownToolsLine(agent, { commands: false, web: false }),
+        commands: ownToolsLine(agent, { commands: true, web: false }),
+        web: ownToolsLine(agent, { commands: false, web: true }),
+        both: ownToolsLine(agent, { commands: true, web: true })
+      },
+      Object.fromEntries(Object.entries(told).map(([k, v]) => [k, v + end])),
+      agent
+    );
+  }
 });
