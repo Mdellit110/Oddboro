@@ -359,36 +359,54 @@ sample stay in the window to move back to.
 ## A new owner's first visit
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
-welcomed, the page loads the sample's empty lot (`currentOffice({ lot: true })`,
-`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs six cards in
-the start panel, titled "{name}'s Lot" until the office stands on it. The
-command center's buttons and tabs appear there once the first run is over, so
-the owner meets the panel first. The cards: Your computer (`MacCard`, the checks
-from `/api/setup`, and Notifications: a test of the Mac's (`notifyMac` in `src/lib/server/notify.ts`, which macOS shows as Oddboro's in the app and as Script Editor's from the repo) with the way to System Settings if it does not show, and, outside the app, the browser's for the Desk, with buttons that install Claude Code or start its sign-in
-through `/api/setup/claude`; the owner moves on with Next), their name, Your Claude (`ClaudeCard`: a Claude plan tab with the account Claude Code is signed in to, from `claude auth status`, and Switch account, or an API key tab; a model picker in both. Sonnet cannot draw looks or design offices: `canDraw()` in `claude.ts` refuses them, and the later cards offer only the ready-made managers and Main Street; the model,
-or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
-every run), the Office Manager (`ManagerCard`: four ready-made ones from
-`GET /api/onboarding`, or one described and drawn by `/api/looks` while the
-owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
-a description or a chip, and starts the design job), and
-Open the office. `POST /api/onboarding` keeps the time zone, finishes the
-welcome, hires the manager (`hireManager`), writes their hello into their chat
-(each ready-made manager's `hello` in `managers.ts`, in their own voice, asks
-for goals and lets the owner skip them; a described one gets `customHello`),
-and tells the design job to move in when it is done. Then the reveal
-(`src/lib/floor/reveal.ts`) plays on the page's own floor. A drawn office waits
-behind a "Building the layout" card (tiles laid in a loop, the design's progress
-line, a bar of pieces drawn) until the job's `done`, so it goes up the way it
-will look, never on library stand-ins. A described manager still drawing keeps
-a card up ("Drawing Rosa") while the office goes up behind it: the drawn art
-goes in the atlas, `Floor.swap` puts the office in place with every part hidden, and
-`raise` chalks the rooms, lays the floors row by row, raises the walls and drops
-the furniture in, room by room, lamps on. Once the manager is ready (at once for
-a ready-made one), a bus drives up the street, and they walk from the bus stop
-to the owner's desk, where their card opens on the chat. Skip, under the caption
-while they come, sends the bus off and puts them at the desk at once
-(`StaffActor.arrive`). Until the office has
-moved in, the page keeps the floor it raised (`landing`) rather than reloading on the move. "Good Morning, Neighbor" opens the music over it. The music is a player (`music.svelte.ts`, one per page) over the 25 tracks in `static/audio/`, named in `tracks.ts`: a random order that skips the last few played, loved tracks twice as often, passed ones never, repeat one, and the Mac's media keys. Later visits play only if the owner left it on. Every choice is per viewer in localStorage. The tracks are AAC with every tag stripped but the title, since Safari won't play Opus, and LICENSE-ASSETS keeps the folder out of the Apache license. The bottom of the start panel (`FloorControls.svelte`), there during the first run and after, holds the player on the start side (the track's name, then love, back, play, next, repeat, pass, then the seek bar with the time, and a speaker that opens a vertical volume slider with a mute). A hairline separates it from the end side, where the light and, under it, the zoom stack at the same width. The light: Auto follows the office clock, the sun and the moon hold the floor at day or night for that viewer. Then the zoom: Fit shows the whole office in the room the panels leave (and stops following an Odd), and minus and plus step a crisp level out or in (`Floor.zoomBy`), gliding. A plan that fails twice raises the sample instead.
+welcomed, the page loads Main Street, the town (`townOffice()` in `space.ts`,
+the `town` plan), or their boro once it stands, and the start panel runs the
+first session (`src/lib/ui/town/Town.svelte`; progress in `/api/town`, kept on
+the owner row as `TownState`, so a reload or a return picks up there). There
+are no setup cards.
+
+1. **Pip.** They arrive at the bus stop and Pip, who runs the city council,
+   walks up and says hello. Main Street is busy: each shopkeeper stands behind
+   their counter and two neighbors stroll (`townsfolkOut` in the page). These
+   are scenery, not Odds: nothing they do stands for real work.
+2. **Their Odd, first.** They make their own Odd (`OddMaker.svelte`): a name,
+   and a look from parts drawn at once by `/api/me/preview`, or described and
+   drawn by `/api/looks` when Claude can draw. It goes on the owner row
+   (`/api/me`), and they walk as it from then on. Pip then offers "Show me
+   around!" or "Take me to my boro!", with "Did a friend invite you?"
+   (`readInvite`) and "Already have an agent?" a link away.
+3. **Walking.** A click walks there (`Floor.onTapTile`, which in the first
+   session replaces switching lamps), the arrow keys and WASD step a tile, the
+   camera follows them, and Pip walks beside them. The tour goes to the
+   nearest shop first (`TownStage.nearest`). Walking through a shop's door
+   opens it: Pip introduces them, and the shopkeeper asks one question
+   answered with a tap (`QUESTIONS`; `saveAnswer` keeps it as said, one per
+   shop). "Chat with Juno" hires that shop's Odd (`townsfolk.ts`) for a real
+   chat, with Remember or Don't and handoffs. A chat needs Claude; without it
+   the Claude card shows inline.
+4. **Their boro.** "Take me to my boro" (or walking onto the green behind the
+   shops) builds a small boro (`starterSpec`, `/api/boro`) and raises it on
+   the floor (`raise`). Pip says "Well, here we are", and they name it, pick
+   one of four styles (each keeps and redraws at once) or change their look.
+5. **Their first Odd.** "Hire my office manager" (`HireManager.svelte`): who,
+   what to help with, what they take on and how they talk (filled in from
+   the shops), what they can really do, and a first assignment.
+   `POST /api/onboarding` keeps the browser's time zone, finishes the welcome,
+   hires them with that brief, writes their hello, and starts the assignment
+   as a `first_day` follow-up with it as the note. A bus brings them and they
+   walk in. Or "Bring them in" (`BringAgent.svelte`, `/api/agents/import`):
+   a Claude Code agent file or pasted instructions becomes an Odd, the screen
+   says what stayed behind, and it counts only once it answers a test message.
+6. **After.** The office opens as theirs with the new Odd's chat, and the Pip
+   window (`PipWindow.svelte`, the plate's Pip button) shows the first task as
+   it really stands, with Try again on a failure, and what to try next.
+
+What Oddboro knows lists every kept row to correct or delete, with memory on
+or off, and Town stats shows the visit's counts (`town_events`), which never
+leave the computer. The computer's checks, notifications and the address are
+in the Setup window (`MacCard` embedded in `Welcome.svelte`). A friend's
+invite says Pip was told they were coming, and the friend waits at their boro.
+"Good Morning, Neighbor" opens the music over it. The music is a player (`music.svelte.ts`, one per page) over the 25 tracks in `static/audio/`, named in `tracks.ts`: a random order that skips the last few played, loved tracks twice as often, passed ones never, repeat one, and the Mac's media keys. Later visits play only if the owner left it on. Every choice is per viewer in localStorage. The tracks are AAC with every tag stripped but the title, since Safari won't play Opus, and LICENSE-ASSETS keeps the folder out of the Apache license. The bottom of the start panel (`FloorControls.svelte`), there during the first run and after, holds the player on the start side (the track's name, then love, back, play, next, repeat, pass, then the seek bar with the time, and a speaker that opens a vertical volume slider with a mute). A hairline separates it from the end side, where the light and, under it, the zoom stack at the same width. The light: Auto follows the office clock, the sun and the moon hold the floor at day or night for that viewer. Then the zoom: Fit shows the whole office in the room the panels leave (and stops following an Odd), and minus and plus step a crisp level out or in (`Floor.zoomBy`), gliding. A plan that fails twice raises the sample instead.
 
 ## The office's address
 
@@ -429,19 +447,20 @@ address when it answers and is trusted.
 
 ## Where things live
 
-| Path                              | What it holds                                                       |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `src/lib/floor/`                  | The PixiJS floor and the Odds on it                                 |
-| `src/lib/staff/roster.ts`         | The Odd shape, hiring looks, and the label for each activity        |
-| `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat           |
-| `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain     |
-| `src/routes/api/`                 | One folder per thing the page reads or changes                      |
-| `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to    |
-| `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow              |
-| `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music |
-| `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                       |
-| `scripts/office-service.ts`       | The login service                                                   |
-| `src/app.css`                     | Tokens. Every colour in the chrome reads these.                     |
+| Path                              | What it holds                                                     |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `src/lib/floor/`                  | The PixiJS floor and the Odds on it                               |
+| `src/lib/staff/roster.ts`         | The Odd shape, hiring looks, and the label for each activity      |
+| `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat         |
+| `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain   |
+| `src/routes/api/`                 | One folder per thing the page reads or changes                    |
+| `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to  |
+| `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow            |
+| `src/lib/ui/town/`                | Pip, Main Street, the owner's Odd, their boro, the first hire     |
+| `src/lib/ui/onboarding/`          | Cards the first session reuses: Claude, the manager, the computer |
+| `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                     |
+| `scripts/office-service.ts`       | The login service                                                 |
+| `src/app.css`                     | Tokens. Every colour in the chrome reads these.                   |
 
 ## Rules for this app
 

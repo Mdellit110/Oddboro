@@ -139,7 +139,10 @@ export async function drawnParts(): Promise<DrawnPart[]> {
   return db.select({ kind: parts.kind, name: parts.name, px: parts.px }).from(parts);
 }
 
-async function saveParts(list: DrawnPart[] | undefined, drawnFor: string): Promise<void> {
+export async function saveParts(
+  list: DrawnPart[] | undefined,
+  drawnFor: string | null
+): Promise<void> {
   for (const p of list ?? []) {
     await db
       .insert(parts)
@@ -416,8 +419,8 @@ async function followUp(
  * A new hire's first day: right after it says hello, it starts its work. Its
  * result goes on the owner's desk, so they see the first piece of work.
  */
-export async function startFirstDay(staffId: string): Promise<void> {
-  await followUp(staffId, 'first_day', { note: null, reportWhenDone: true });
+export async function startFirstDay(staffId: string, assignment?: string): Promise<void> {
+  await followUp(staffId, 'first_day', { note: assignment ?? null, reportWhenDone: true });
 }
 
 /** Follow-ups no staffer has started yet, with the ask, report, task or goal each is about. */

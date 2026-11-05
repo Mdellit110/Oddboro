@@ -7,12 +7,29 @@
   import { Floor, sharedAtlas } from '#lib/floor/engine.ts';
   import { loadLook } from '#lib/floor/looks.ts';
   import { StaffActor } from '#lib/floor/staff.ts';
-  import { bus, hideBuilding, raise, type Beat } from '#lib/floor/reveal.ts';
-  import Onboarding, { type Stage } from '#lib/ui/onboarding/Onboarding.svelte';
+  import { bus, hideBuilding, raise } from '#lib/floor/reveal.ts';
+  import PipWindow from '#lib/ui/town/PipWindow.svelte';
+  import Town, { type TownStage } from '#lib/ui/town/Town.svelte';
+  import {
+    shopOfRoom,
+    SHOPS,
+    inviteLink,
+    QUESTIONS,
+    stepFrom,
+    stepOfKey,
+    type Invite,
+    type Shop
+  } from '@oddboro/ledger/town';
+  import type { LookSpec } from '@oddboro/sprites/look';
   import FloorControls, { type Light } from '#lib/ui/FloorControls.svelte';
   import { music, musicEnded, startMusic } from '#lib/ui/music.svelte.ts';
   import { chatAbout } from '#lib/ui/chat-about.svelte.ts';
-  import { ACTIVITY_LABEL, type Activity, type StaffProfile } from '#lib/staff/roster.ts';
+  import {
+    ACTIVITY_LABEL,
+    lookVersion,
+    type Activity,
+    type StaffProfile
+  } from '#lib/staff/roster.ts';
   import StaffCard from '#lib/ui/StaffCard.svelte';
   import { chatRequest, type Delivered } from '#lib/ui/chat-about.svelte.ts';
   import AgentsPanel from '#lib/ui/AgentsPanel.svelte';
@@ -92,14 +109,17 @@
   /** False until the owner finishes the welcome, which the office opens on. */
   // svelte-ignore state_referenced_locally
   let welcomed = $state(data.welcomed);
-  /** A new owner's first visit, from the empty lot until their manager says hello. */
+  /** A new owner's first visit, from Main Street until their manager says hello. */
   // svelte-ignore state_referenced_locally
   let firstRun = $state(!data.welcomed);
-  /** Room signs show once the walls are up. */
+  /** Room signs: the shops' in town, then the office's once its walls are up. */
+  let signs = $state(true);
+  /** A new owner is in town, before they go on to build Main Street. */
   // svelte-ignore state_referenced_locally
-  let signs = $state(data.welcomed);
-  /** The owner's name as they type it, for the lot at the top of the panel. */
-  let lotName = $state('');
+  let inTown = $state(!data.welcomed);
+  let town: Town | undefined = $state();
+  /** The owner just moved in: the Office window opens on how to make it theirs. */
+  let makeItYours = $state(false);
   /** The office's name once it stands on the lot. */
   let raisedName = $state<string | undefined>();
   /** The first run is over, and the office's last drawn pieces have not landed yet. */
@@ -137,7 +157,8 @@
     { id: 'goals', label: 'Goals' },
     { id: 'ledger', label: 'Ledger' },
     { id: 'hire', label: 'Hire' },
-    { id: 'office', label: 'Office' }
+    { id: 'office', label: 'Office' },
+    { id: 'pip', label: 'Pip' }
   ] as const;
 
   /** Select a staffer, opening its panel if it was folded away. */
@@ -181,11 +202,7 @@
   const shownHour = $derived(light === 'day' ? 13 : light === 'night' ? 22 : hour);
   const office = $derived(liveWorld ? { ...data.office, world: liveWorld } : data.office);
   /** The name at the top of the panel: the lot, then the office. */
-  const plateName = $derived(
-    firstRun
-      ? (raisedName ?? (lotName.trim() ? `${lotName.trim()}'s Lot` : 'Your Lot'))
-      : office.name
-  );
+  const plateName = $derived(firstRun ? (raisedName ?? office.name) : office.name);
   /** The floor with the names the owner gave its rooms. */
   const world = $derived({
     ...office.world,
@@ -211,6 +228,13 @@
   );
   /** What a staffer is doing, in words: where it is headed, or what it is at. */
   function statusOf(t: Tag): string {
+    if (t.id === 'you') return 'You';
+    if (t.id === 'pip') return 'City council';
+    if (t.id === 'friend') return 'Invited you';
+    if (t.id === 'folk-coffee') return 'Barista';
+    if (t.id === 'folk-general') return 'Shopkeeper';
+    if (t.id === 'folk-workshop') return 'Workshop maker';
+    if (t.id.startsWith('folk-')) return 'Neighbor';
     if (t.heading) return `→ ${t.heading}`;
     if (messages[t.id]) return 'Has a message for you';
     if (waiting.has(t.id)) return 'Waiting on you';
@@ -347,10 +371,15 @@
     for (const a of actors) a.wear(wearing[a.profile.id]);
     for (const p of staff) {
       if (actors.some((a) => a.profile.id === p.id) || !atlasCatalog[p.sprite]) continue;
-      if (firstRun && !arrived.has(p.id)) continue;
+      // In town the townsfolk are already at their shops; later, a new hire waits for the bus.
+      if (firstRun && !inTown && !arrived.has(p.id)) continue;
       const a = new StaffActor(floor, p, start);
       a.wear(wearing[p.id]);
-      a.sprite.on('pointertap', () => select(p.id));
+      a.sprite.on('pointertap', () => {
+        const s = shopOfRoom(p.room);
+        if (inTown && s) townStage.walk(s);
+        else select(p.id);
+      });
       if (opened) a.assign('work', w.spots, taken(a));
       else {
         // The office is opening: everyone is already somewhere, each in a
@@ -455,13 +484,14 @@
   }
 
   /** A section's button: brings its window forward, or folds the panel when it already is. */
-  function toggle(id: 'agents' | 'desk' | 'goals' | 'ledger' | 'hire' | 'office') {
+  function toggle(id: 'agents' | 'desk' | 'goals' | 'ledger' | 'hire' | 'office' | 'pip') {
     if (leftOpen && front?.kind === id) return hide();
     if (id === 'agents') return open({ id: 'agents', kind: 'agents' });
     if (id === 'desk') return void openDesk();
     if (id === 'ledger') return open({ id: 'ledger', kind: 'ledger' });
     if (id === 'goals') return open({ id: 'goals', kind: 'goals' });
     if (id === 'office') return open({ id: 'office', kind: 'office' });
+    if (id === 'pip') return open({ id: 'pip', kind: 'pip' });
     const hire = wins.list.findLast((w) => w.kind === 'hire');
     if (hire) open(hire);
     else openHire();
@@ -482,6 +512,7 @@
     if (w.kind === 'ledger') return 'Ledger';
     if (w.kind === 'goals') return 'Goals';
     if (w.kind === 'office') return wins.titles[w.id] ?? 'Office';
+    if (w.kind === 'pip') return 'Pip';
     if (w.kind === 'setup') return welcomed ? 'Setup' : 'Welcome';
     if (w.kind === 'file') return w.file.path.split('/').pop() ?? w.file.path;
     if (w.kind === 'report') return w.report.title;
@@ -530,6 +561,8 @@
         )
       )
         refresh();
+      // An Odd in town offered to remember something, passed a brief, or made a file.
+      if (e.table === 'context') version++;
       if (
         [
           'jobs',
@@ -544,7 +577,8 @@
           'pokes',
           'goals',
           'staff_goals',
-          'goal_progress'
+          'goal_progress',
+          'follow_ups'
         ].includes(e.table)
       )
         version++;
@@ -561,11 +595,12 @@
         // Dev only: lets a browser console poke at the floor.
         if (import.meta.env.DEV) (window as unknown as { floor: Floor }).floor = floor;
         start = arrival(office.world);
-        if (firstRun) hideBuilding(floor);
         // Land on the whole office, centred on the floor the panels leave showing.
         floor.viewOffsetX = centreOffset();
         floor.viewCover = leftSpace + rightSpace;
         floor.overview(false);
+        // In town, step in to the shops on the street.
+        if (inTown) lookAtShops();
         void syncActors();
 
         // Name tags and room signs move only when the floor draws.
@@ -578,7 +613,7 @@
               holding.map((a) => [a.spotId!, { id: a.profile.id, name: a.profile.name }])
             );
           }
-          tags = actors
+          tags = [...actors, ...walkers()]
             .filter((a) => a.sprite.visible)
             .map((a) => {
               const p = floor!.toScreen(a.head.x, a.head.y);
@@ -613,6 +648,8 @@
           const w = office.world;
           const available = new Set(w.spots.map((s) => s.activity));
           for (const a of actors) a.update(dt);
+          for (const a of walkers()) a.update(dt);
+          if (inTown && you) noticeWhere(you);
           // Real state first: an open ask or task puts a staffer outside
           // the owner's door, and a running job puts it to work in its room.
           for (const a of actors) {
@@ -643,14 +680,18 @@
           if (!floor) return;
           const lead = following
             ? actors.find((a) => a.profile.id === following)
-            : selected && !rightCollapsed && !letGo
-              ? actors.find((a) => a.profile.id === selected)
-              : undefined;
+            : inTown && you && !letGo
+              ? you
+              : selected && !rightCollapsed && !letGo
+                ? actors.find((a) => a.profile.id === selected)
+                : undefined;
           // Centre the camera on the floor left between the two panels, and fit the office there.
           floor.viewOffsetX = centreOffset();
           floor.viewCover = leftSpace + rightSpace;
           if (lead && lead.visible) floor.focus(lead.x, lead.y - TILE);
-          floor.updateDoors(actors.filter((a) => a.visible).flatMap((a) => a.steps));
+          floor.updateDoors(
+            [...actors, ...walkers()].filter((a) => a.visible).flatMap((a) => a.steps)
+          );
         });
         ready = true;
         floorReady = true;
@@ -664,6 +705,7 @@
       clearInterval(timer);
       events.close();
       for (const a of actors) a.destroy();
+      for (const a of walkers()) a.destroy();
       floor?.destroy();
     };
   });
@@ -699,38 +741,264 @@
     return at;
   }
 
-  /** What the first run asks of the floor, while the cards and captions run the story. */
-  const stage: Stage = {
-    bus: () => (floor ? bus(floor) : undefined),
-    async build(next: World, name: string, onBeat: (b: Beat) => void, art) {
-      if (!floor) return;
-      // Art drawn for this office goes in the atlas before the floor asks for it.
-      if (art?.sheet) await addArt(floor.atlas, art.sheet, art.catalog);
-      signs = false;
-      floor.swap(next, { fit: true });
-      liveWorld = next;
-      start = arrival(next);
-      // The swap keeps the owner's view, gliding out only if the building would not fit.
-      hideBuilding(floor);
-      await raise(floor, onBeat);
-      signs = true;
-      raisedName = name;
-      floor.invalidate();
+  /** The middle of a room on the floor, in world pixels. */
+  function roomCentre(match: (id: string) => boolean): [number, number] | undefined {
+    const r = office.world.rooms.find((x) => match(x.id));
+    return r ? [(r.x + r.w / 2) * TILE, (r.y + r.h / 2) * TILE] : undefined;
+  }
+
+  /** The shops, from the street: the middle one centred. */
+  function lookAtShops() {
+    const at = roomCentre((id) => shopOfRoom(id) === 'general');
+    if (at) floor?.focus(at[0], at[1] + 2 * TILE);
+  }
+
+  // The owner's own Odd and the friend who greets them. They walk where the
+  // owner says, never on the office's schedule.
+  let you: StaffActor | undefined;
+  let friend: StaffActor | undefined;
+  let pip: StaffActor | undefined;
+  /**
+   * Main Street's people who are not Odds: shopkeepers behind their counters
+   * until the owner chats with one (then the real Odd stands there), and
+   * neighbors out for a walk. Scenery: nothing they do stands for real work.
+   */
+  let folk: StaffActor[] = [];
+  const walkers = () => [you, pip, friend, ...folk].filter((a): a is StaffActor => !!a);
+  /** The floor shows the owner's boro, not Main Street. */
+  // svelte-ignore state_referenced_locally
+  let atBoro = $state(!!data.town && data.office.id !== 'town');
+  type Me = { name: string; look: LookSpec | null; invite: Invite | null };
+
+  /** A person on the floor who is no Odd: the owner, or their friend. */
+  async function person(
+    id: string,
+    name: string,
+    look: LookSpec | null | undefined,
+    who: 'me' | 'friend',
+    variant = 'marshall'
+  ): Promise<StaffActor | undefined> {
+    if (!floor) return;
+    const version = look ? lookVersion(look, who) : '';
+    const profile: StaffProfile = {
+      id,
+      name,
+      role: '',
+      office: '',
+      sprite: 'staff',
+      variant,
+      portrait: `portrait-${variant}`,
+      hired: '',
+      permission: 'read',
+      tools: [],
+      remit: '',
+      room: '',
+      ...(look
+        ? {
+            look: {
+              spec: look,
+              sheet: `/api/me/sheet?who=${who}&v=${version}`,
+              portrait: '',
+              version
+            }
+          }
+        : {})
+    };
+    const a = new StaffActor(floor, profile, start);
+    a.wear(await loadLook(floor.atlas, profile).catch(() => undefined));
+    return a;
+  }
+
+  /** The tile the owner meant: the one they clicked, or the nearest they can stand on. */
+  function standable(t: [number, number]): [number, number] | undefined {
+    const w = office.world;
+    const ok = ([x, y]: [number, number]) =>
+      x >= 0 && y >= 0 && x < w.width && y < w.height && w.walkable[y * w.width + x];
+    for (let r = 0; r <= 4; r++)
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const c: [number, number] = [t[0] + dx, t[1] + dy];
+          if (ok(c)) return c;
+        }
+    return undefined;
+  }
+
+  /** Walk the owner's Odd to a tile, and let the camera follow again. Pip walks alongside. */
+  function walkYou(t: [number, number] | undefined) {
+    const goal = t && standable(t);
+    if (!you || !goal) return;
+    letGo = false;
+    you.walkTo(goal);
+    const beside = standable([goal[0] - 1, goal[1]]);
+    if (pip && beside && (beside[0] !== goal[0] || beside[1] !== goal[1])) pip.walkTo(beside);
+  }
+
+  /** The room a tile is in: the last stamped wins, as on the floor. */
+  const roomAt = ([x, y]: [number, number]) =>
+    office.world.rooms.findLast((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  const isPlot = (id: string | undefined) => !!id?.startsWith('town-lot');
+
+  /** Where to stand for a shop (in front of its counter) or the plot (just behind the shops). */
+  function placeFor(to: Shop | 'plot'): [number, number] | undefined {
+    const r =
+      to === 'plot'
+        ? office.world.rooms.find((x) => isPlot(x.id))
+        : office.world.rooms.find((x) => shopOfRoom(x.id) === to);
+    if (!r) return;
+    return to === 'plot' ? [r.x + 31, r.y + 25] : [r.x + 6, r.y + r.h - 3];
+  }
+
+  // Which room the owner's Odd is in, so walking through a door opens the shop.
+  let youRoom: string | undefined;
+  function noticeWhere(a: StaffActor) {
+    const id = roomAt(a.at)?.id;
+    if (id === youRoom) return;
+    const was = youRoom;
+    youRoom = id;
+    const s = id && shopOfRoom(id);
+    if (s) town?.visit(s);
+    else if (was && shopOfRoom(was)) town?.left();
+    if (isPlot(id) && !isPlot(was) && !a.moving) town?.atPlot();
+    else if (isPlot(id) && !isPlot(was)) plotNext = true;
+  }
+  /** The owner is crossing onto the plot: say so once they stop there. */
+  let plotNext = false;
+  $effect(() => {
+    if (!floorReady || !floor) return;
+    const t = floor.app.ticker;
+    const check = () => {
+      if (plotNext && you && !you.moving && isPlot(roomAt(you.at)?.id)) {
+        plotNext = false;
+        town?.atPlot();
+      }
+    };
+    t.add(check);
+    return () => void t.remove(check);
+  });
+
+  let peopleRun: Promise<void> = Promise.resolve();
+  /** The owner's Odd, Pip, a friend at their boro, and Main Street's townsfolk, onto the floor. */
+  async function placePeople({ pipWalksUp }: { pipWalksUp: boolean }) {
+    if (!floor) return;
+    const m = await call<Me>('/api/me');
+    // Off the floor before they are destroyed, so no frame moves a sprite that is gone.
+    const gone = walkers();
+    you = pip = friend = undefined;
+    folk = [];
+    for (const a of gone) a.destroy();
+    you = m.look ? await person('you', m.name || 'You', m.look, 'me') : undefined;
+    if (you) you.pace = 2.2;
+    you?.walkTo(start);
+    // Pip comes up the sidewalk to say hello, or is already beside them.
+    pip = await person('pip', 'Pip', undefined, 'friend', 'marshall');
+    // Pip keeps up with them on the tour.
+    if (pip) pip.pace = 2.2;
+    const by = standable([start[0] - 4, start[1]]) ?? start;
+    if (pipWalksUp) {
+      pip?.walkTo(standable([start[0] + 9, start[1]]) ?? start);
+      pip?.arrive();
+      pip?.walkTo(by);
+    } else {
+      pip?.walkTo(by);
+      pip?.arrive();
+    }
+    // A friend who invited them waits at their boro.
+    friend =
+      atBoro && m.invite
+        ? await person('friend', m.invite.name, m.invite.look, 'friend')
+        : undefined;
+    friend?.walkTo(standable([start[0] + 4, start[1]]) ?? start);
+    friend?.arrive();
+    if (!atBoro) await townsfolkOut();
+    youRoom = undefined;
+    letGo = false;
+    if (you) floor.focus(you.x, you.y - TILE);
+    floor.invalidate();
+  }
+
+  /** What the town asks of the floor. */
+  const townStage: TownStage = {
+    walk(to) {
+      walkYou(placeFor(to));
     },
-    async walkIn(id: string, skip: Promise<void>) {
+    nearest() {
+      if (!you) return [];
+      const [x, y] = you.at;
+      const far = (s: Shop) => {
+        const p = placeFor(s);
+        return p ? Math.abs(p[0] - x) + Math.abs(p[1] - y) : Infinity;
+      };
+      return (['coffee', 'general', 'workshop'] as Shop[]).sort((a, b) => far(a) - far(b));
+    },
+    walkOut() {
+      const r = youRoom ? office.world.rooms.find((x) => x.id === youRoom) : undefined;
+      if (r && shopOfRoom(r.id)) walkYou([r.x + 6, r.y + r.h + 1]);
+    },
+    people(opts) {
+      // One at a time, so two quick changes never leave two of anyone on the floor.
+      peopleRun = peopleRun.then(
+        () => placePeople(opts),
+        () => placePeople(opts)
+      );
+      return peopleRun;
+    },
+    async shopOdd(_s, id) {
       arrived.add(id);
       await refresh();
       await syncActors();
-      const a = actors.find((x) => x.profile.id === id);
-      if (!a || !floor) return;
-      manual = { ...manual, [id]: 'chat' };
-      following = id;
-      chatStart(id);
-      // Skip: at the owner's desk at once, the end of the walk without walking it.
-      void skip.then(() => {
-        a.arrive();
-        floor?.invalidate();
-      });
+      await townsfolkOut();
+    },
+    async toBoro(world, name) {
+      if (!floor) return;
+      for (const a of [...actors, ...walkers()]) a.destroy();
+      actors = [];
+      you = pip = friend = undefined;
+      folk = [];
+      arrived.clear();
+      signs = false;
+      atBoro = true;
+      floor.swap(world, { fit: true });
+      liveWorld = world;
+      start = arrival(world);
+      raisedName = name;
+      // Their building goes up on the plot, room by room, lamps on.
+      hideBuilding(floor);
+      await raise(floor, () => {});
+      signs = true;
+      await townStage.people({ pipWalksUp: false });
+    },
+    restyle(world) {
+      if (!floor) return;
+      floor.swap(world, { fit: false });
+      liveWorld = world;
+      start = arrival(world);
+      raisedName = world.rooms.find((r) => r.id.startsWith('lobby'))?.name ?? raisedName;
+      void townStage.people({ pipWalksUp: false });
+    },
+    toTown() {
+      if (!floor || !data.town) return;
+      atBoro = false;
+      for (const a of actors) a.destroy();
+      actors = [];
+      floor.swap(data.town, { fit: false });
+      liveWorld = data.town;
+      start = arrival(data.town);
+      raisedName = undefined;
+      void syncActors().then(() => townStage.people({ pipWalksUp: false }));
+    },
+    async arrive(odd) {
+      if (!floor) return;
+      arrived.add(odd.id);
+      await refresh();
+      // The bus brings them, and they walk in the front door to the owner's desk.
+      await bus(floor);
+      await syncActors();
+      const a = actors.find((x) => x.profile.id === odd.id);
+      if (!a) return;
+      manual = { ...manual, [odd.id]: 'chat' };
+      following = odd.id;
+      chatStart(odd.id);
       const ticker = floor.app.ticker;
       await new Promise<void>((done) => {
         const check = () => {
@@ -742,26 +1010,121 @@
       });
       following = undefined;
     },
-    async reload() {
-      await invalidateAll();
-      liveWorld = undefined;
-      landing = false;
-    },
-    finish(id: string) {
+    finish(odd) {
       firstRun = false;
-      landing = true;
+      inTown = false;
       welcomed = true;
-      // Their card opens on the chat, where the hello is waiting.
-      chatAbout(id, '');
-    },
-    zone(z: string) {
-      setZone(z);
-      officeZone = z;
-    },
-    name(n: string) {
-      lotName = n;
+      // Pip and the neighbors step back; the owner's Odd stays in their boro.
+      for (const a of [pip, friend, ...folk]) a?.destroy();
+      pip = friend = undefined;
+      folk = [];
+      void syncActors();
+      // Their new Odd starts on its first task; Pip shows how it goes, and what next.
+      open({ id: 'pip', kind: 'pip' });
+      chatAbout(odd.id, '');
+      // The assignment ran from the moment they were hired: it is on the floor now.
+      backToSchedule(odd.id);
     }
   };
+
+  /**
+   * Main Street's shopkeepers, behind their counters until the owner chats with
+   * one, and a couple of neighbors out for a walk.
+   */
+  async function townsfolkOut() {
+    if (!floor || atBoro) return;
+    const gone = folk;
+    folk = [];
+    for (const a of gone) a.destroy();
+    const keepers: [Shop, string][] = [
+      ['coffee', 'juno'],
+      ['general', 'theo'],
+      ['workshop', 'ada']
+    ];
+    for (const [s, variant] of keepers) {
+      if (staff.some((p) => p.room === SHOPS[s].room)) continue;
+      const r = office.world.rooms.find((x) => shopOfRoom(x.id) === s);
+      if (!r) continue;
+      const a = await person(`folk-${s}`, QUESTIONS[s].who, undefined, 'friend', variant);
+      a?.walkTo(standable([r.x + 6, r.y + 4]) ?? start);
+      a?.arrive();
+      if (a) folk.push(a);
+    }
+    for (const [i, variant] of ['wren', 'marshall'].entries()) {
+      const a = await person(
+        `folk-walk-${i}`,
+        i ? 'Sam' : 'Lou',
+        undefined,
+        'friend',
+        variant === 'wren' ? 'theo' : variant
+      );
+      if (!a) continue;
+      a.walkTo(sidewalk() ?? start);
+      a.arrive();
+      folk.push(a);
+    }
+  }
+
+  /** A tile on Main Street's sidewalk, for a neighbor to stroll to. */
+  function sidewalk(): [number, number] | undefined {
+    const r = office.world.rooms.find((x) => x.id.startsWith('street-town'));
+    if (!r) return;
+    return standable([r.x + 4 + Math.floor(Math.random() * (r.w - 8)), r.y + 1]);
+  }
+
+  // Neighbors stroll now and then, like Odds between breaks: a walk, a long stop.
+  let strollAt: Record<string, number> = {};
+  $effect(() => {
+    if (!floorReady || !floor) return;
+    const t = floor.app.ticker;
+    const stroll = () => {
+      const now = performance.now();
+      for (const a of folk) {
+        if (!a.profile.id.startsWith('folk-walk') || a.moving) continue;
+        strollAt[a.profile.id] ??= now + 8000 + Math.random() * 20000;
+        if (now < strollAt[a.profile.id]) continue;
+        delete strollAt[a.profile.id];
+        const to = sidewalk();
+        if (to) a.walkTo(to);
+      }
+    };
+    t.add(stroll);
+    return () => void t.remove(stroll);
+  });
+
+  /** Copy an invite: the owner's name and Odd, for a friend to paste into their Oddboro. */
+  let inviteCopied = $state(false);
+  async function inviteFriend() {
+    try {
+      const m = await call<Me>('/api/me');
+      await navigator.clipboard.writeText(
+        inviteLink({
+          name: m.name || 'A friend',
+          look: m.look ?? undefined,
+          note: 'Come build a place on Main Street. I will meet you at the bus stop.'
+        })
+      );
+      inviteCopied = true;
+      setTimeout(() => (inviteCopied = false), 4000);
+    } catch {
+      inviteCopied = false;
+    }
+  }
+
+  /** A click on a shop's sign or its Odd walks the owner there. */
+  function enterRoom(roomId: string) {
+    const s = shopOfRoom(roomId);
+    if (!inTown) return;
+    if (s) townStage.walk(s);
+    else if (isPlot(roomId)) townStage.walk('plot');
+  }
+
+  // In town a tap walks; switching lamps waits until the owner has a place of their own.
+  $effect(() => {
+    if (!floorReady || !floor) return;
+    floor.onTap = inTown ? undefined : flip;
+    floor.onTapTile = inTown ? (t) => walkYou(t) : undefined;
+  });
 
   /** Send a staffer to a place: a spot there nobody else holds. A full place takes nobody. */
   function send(id: string, place: Place) {
@@ -861,6 +1224,20 @@
     }
     const el = e.target as HTMLElement | null;
     if (el?.closest('input, textarea, select, [contenteditable]')) return;
+    // In town the arrow keys and WASD walk the owner's Odd, a tile at a time.
+    const step = inTown && you && !e.metaKey && !e.ctrlKey ? stepOfKey(e.key) : undefined;
+    if (step && you) {
+      e.preventDefault();
+      if (you.moving) return;
+      const next = stepFrom(you.at, step);
+      const w = office.world;
+      if (w.walkable[next[1] * w.width + next[0]]) {
+        letGo = false;
+        you.walkTo(next);
+      }
+      return;
+    }
+    if (inTown) return;
     if (e.key === 'd' || e.key === 'D') toggle('desk');
   }
 
@@ -930,14 +1307,23 @@
               >
             {/if}
           </form>
+        {:else if inTown && (shopOfRoom(l.id) || isPlot(l.id))}
+          {@const s = shopOfRoom(l.id)}
+          <button
+            class="pointer-events-auto min-w-0 truncate rounded px-1 tracking-[0.2em] uppercase hover:bg-night/60 hover:text-ink focus-visible:bg-night/60 focus-visible:text-ink"
+            title={s ? `Walk to the ${SHOPS[s].name}` : 'Walk to your plot'}
+            onclick={() => enterRoom(l.id)}>{l.name}</button
+          >
         {:else}
           <span class="min-w-0 truncate">{l.name}</span>
-          <button
-            class="pointer-events-auto -m-1 p-1 opacity-70 hover:text-ink hover:opacity-100 focus-visible:text-ink focus-visible:opacity-100"
-            aria-label={`Rename ${l.name}`}
-            title="Rename"
-            onclick={() => startRename(l)}><PixelPencil /></button
-          >
+          {#if !firstRun}
+            <button
+              class="pointer-events-auto -m-1 p-1 opacity-70 hover:text-ink hover:opacity-100 focus-visible:text-ink focus-visible:opacity-100"
+              aria-label={`Rename ${l.name}`}
+              title="Rename"
+              onclick={() => startRename(l)}><PixelPencil /></button
+            >
+          {/if}
         {/if}
       </div>
     {/each}
@@ -948,7 +1334,12 @@
         class:active={selected === t.id}
         class:waiting={isWaiting}
         style="transform: translate(calc({t.x}px - 50%), calc({t.y}px - 100% - 6px))"
-        onclick={() => tagClick(t.id)}
+        onclick={() => {
+          const p = staff.find((x) => x.id === t.id);
+          const s = p && shopOfRoom(p.room);
+          if (inTown && s) townStage.walk(s);
+          else if (t.id !== 'you' && t.id !== 'friend') tagClick(t.id);
+        }}
       >
         <span class="font-medium text-ink">{t.name}</span>
         <span class={isWaiting ? 'text-ember' : 'text-muted'}>{statusOf(t)}</span>
@@ -976,6 +1367,12 @@
           Your Mac ·
           <button class="underline underline-offset-2 hover:text-ink" onclick={openSetup}
             >Setup</button
+          >
+          ·
+          <button
+            class="underline underline-offset-2 hover:text-ink"
+            title="Copy a link that brings a friend to Oddboro, greeted by your Odd"
+            onclick={inviteFriend}>{inviteCopied ? 'Invite link copied' : 'Invite a friend'}</button
           >
         </div>
       </div>
@@ -1044,7 +1441,7 @@
       <div class="flex h-full min-h-0 flex-col">
         {@render plate(true)}
         {#if floorReady}
-          <Onboarding {stage} sample={data.sample} />
+          <Town bind:this={town} stage={townStage} {version} {atBoro} />
         {/if}
         <div class="mt-auto border-t border-hairline px-3 py-2">
           <FloorControls bind:light onfit={fitFloor} onzoom={(d) => floor?.zoomBy(d)} />
@@ -1138,12 +1535,24 @@
                     close(w.id, true);
                   }}
                 />
+              {:else if w.kind === 'pip'}
+                <PipWindow
+                  {version}
+                  onoffice={() => {
+                    makeItYours = true;
+                    open({ id: 'office', kind: 'office' });
+                  }}
+                  ondesk={() => toggle('desk')}
+                  onchat={(id) => chatAbout(id, '')}
+                  onhire={() => openHire()}
+                />
               {:else if w.kind === 'office'}
                 <OfficeDesigner
                   id={w.id}
                   catalog={office.catalog}
                   staffCount={staff.length}
                   current={office.name}
+                  welcome={makeItYours}
                 />
               {:else if w.kind === 'hire'}
                 <HireDrawer

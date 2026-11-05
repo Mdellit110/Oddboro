@@ -2,6 +2,7 @@
   import type { Check } from '@oddboro/ledger/checks';
   import { call } from './api.ts';
   import UpdatesSection from './UpdatesSection.svelte';
+  import MacCard from './onboarding/MacCard.svelte';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
@@ -146,6 +147,11 @@
     {#if welcomed}
       <UpdatesSection />
     {/if}
+
+    <section class="flex flex-col gap-2" aria-label="Notifications and address">
+      <h3 class="text-xs tracking-[0.16em] text-sea uppercase">Notifications and address</h3>
+      <MacCard embedded />
+    </section>
 
     <section class="flex flex-col gap-2">
       <div class="flex items-center">

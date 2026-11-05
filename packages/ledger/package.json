@@ -8,6 +8,7 @@
     "./time": "./src/time.ts",
     "./tools": "./src/tools.ts",
     "./goals": "./src/goal-words.ts",
+    "./town": "./src/town-rules.ts",
     "./checks": "./src/checks.ts",
     "./platform": "./src/platform.ts",
     "./secrets": "./src/secrets.ts",

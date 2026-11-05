@@ -1,0 +1,72 @@
+{
+  "id": "shop-general",
+  "name": "General Store",
+  "wall": "wall-plaster",
+  "floor": "oak",
+  "map": [
+    "WWWWWWWWWWWWWW",
+    "WWNNWWWWWWNNWW",
+    "WWNNWWWWWWNNWW",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "WWWWWW..WWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "art-frame",
+      "at": [6, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [8, 2]
+    },
+    {
+      "sprite": "library-shelf",
+      "at": [1, 3]
+    },
+    {
+      "sprite": "bookshelf",
+      "at": [3, 3]
+    },
+    {
+      "sprite": "mail-pigeonholes",
+      "at": [10, 3]
+    },
+    {
+      "sprite": "lobby-reception",
+      "at": [5, 4]
+    },
+    {
+      "sprite": "mail-parcels",
+      "at": [1, 6]
+    },
+    {
+      "sprite": "mail-box-stack",
+      "at": [1, 7]
+    },
+    {
+      "sprite": "mail-cart",
+      "at": [11, 6]
+    },
+    {
+      "sprite": "kitchen-shelf",
+      "at": [3, 2]
+    },
+    {
+      "sprite": "filing-cabinet",
+      "at": [12, 8]
+    },
+    {
+      "sprite": "plant-tall",
+      "at": [1, 8]
+    },
+    {
+      "sprite": "rug",
+      "at": [5, 7]
+    }
+  ]
+}

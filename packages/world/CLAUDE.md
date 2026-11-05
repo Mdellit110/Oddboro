@@ -84,7 +84,14 @@ but not a room, so the office shows no name over it. The owner renames the other
 rooms from the floor, and the office keeps those names in its database: a
 template's `name` and a plan's `label` are only the starting names.
 
-`lotOf(plan, templates)` gives the site before the building goes up: the
+`plans/town.json` is Main Street, the town a new owner walks first: Main
+Street's own street and grounds, a lot named "Your plot" (`town-lot`) and three
+shops (`shop-coffee`, `shop-general`, `shop-workshop`). A new owner's own boro
+is a spec (`starterSpec` in `@oddboro/ledger`), which `generateOffice` builds
+like any drawn office.
+
+`lotOf(plan, templates)` gives the site before the building goes up (the
+site's hero art uses it): the
 plan's street and grounds, with plain grass on exactly the tiles the building
 takes, and none of what comes with the office: the shop fronts, door lamps,
 coffee cart and bike rack. A new

@@ -15,8 +15,14 @@
     /** Whether the office can show its own notifications on this computer. */
     notify?: boolean;
   };
-  type Props = { onnext: () => void; onkey: () => void; onsetup: (s: Setup) => void };
-  let { onnext, onkey, onsetup }: Props = $props();
+  type Props = {
+    onnext?: () => void;
+    onkey?: () => void;
+    onsetup?: (s: Setup) => void;
+    /** Inside the Setup window: no Next, just the checks and the switches. */
+    embedded?: boolean;
+  };
+  let { onnext, onkey, onsetup, embedded = false }: Props = $props();
 
   // Docker, uv and the login service are for later; Node is right or setup would not have run.
   const SHOWN = ['mac', 'claude', 'database', 'pgvector', 'notify', 'ollama'];
@@ -37,7 +43,7 @@
     problem = '';
     try {
       const s = await call<Setup>('/api/setup');
-      onsetup(s);
+      onsetup?.(s);
       app = !!s.app;
       system = s.system;
       canNotify = s.notify !== false;
@@ -376,7 +382,9 @@
   {#if missing}
     <button class="link text-sm" onclick={load}>Check again</button>
   {/if}
-  <button class="btn primary" disabled={!checks || missing > 0} onclick={onnext}>Next</button>
+  {#if !embedded}
+    <button class="btn primary" disabled={!checks || missing > 0} onclick={onnext}>Next</button>
+  {/if}
 </div>
 
 <style>

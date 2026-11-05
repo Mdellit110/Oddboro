@@ -8,7 +8,7 @@ import { activeOffice, drawnArt } from '@oddboro/ledger';
 import { artCatalog, artSheet, checkArt, type DrawnArt } from '@oddboro/sprites/art';
 import { DIST } from '@oddboro/sprites/load';
 import type { Palette, SpriteDef } from '@oddboro/sprites/px';
-import { composeWorld, lotOf, type SpriteCatalog, type World } from '@oddboro/world';
+import { composeWorld, type SpriteCatalog, type World } from '@oddboro/world';
 import { loadSpaces } from '@oddboro/world/load';
 
 /** `id` keys the room names the owner gives: `main-street` for the sample, `office-<n>` for a layout. */
@@ -28,6 +28,8 @@ export type ArtSheetJson = {
 };
 
 export const SAMPLE = 'main-street';
+/** The town a new owner arrives in, before Main Street goes up on the same site. */
+export const TOWN = 'town';
 
 type Meta = { palette: Palette; sprites: SpriteCatalog };
 const meta = (): Meta => JSON.parse(readFileSync(join(DIST, 'meta.json'), 'utf8')) as Meta;
@@ -88,8 +90,8 @@ export async function officeLibrary(): Promise<{
   };
 }
 
-/** The office the owner is in. Before they have one, `lot` gives the empty site instead. */
-export async function currentOffice(opts: { lot?: boolean } = {}): Promise<Office> {
+/** The office the owner is in, or the sample Main Street until they have one. */
+export async function currentOffice(): Promise<Office> {
   const { catalog, sheet } = await officeLibrary();
   const active = await activeOffice();
   if (active)
@@ -102,11 +104,23 @@ export async function currentOffice(opts: { lot?: boolean } = {}): Promise<Offic
     };
   const { rooms, plans } = loadSpaces();
   const plan = plans[SAMPLE];
-  const site = opts.lot ? lotOf(plan, rooms) : { plan, templates: rooms };
   return {
     id: SAMPLE,
     name: plan.name,
-    world: composeWorld(site.plan, site.templates, catalog, { actors: false }),
+    world: composeWorld(plan, rooms, catalog, { actors: false }),
+    catalog
+  };
+}
+
+/** The town: three shops on Main Street's site, with its street and grounds. */
+export async function townOffice(): Promise<Office> {
+  const { catalog } = await officeLibrary();
+  const { rooms, plans } = loadSpaces();
+  const plan = plans[TOWN];
+  return {
+    id: TOWN,
+    name: plan.name,
+    world: composeWorld(plan, rooms, catalog, { actors: false }),
     catalog
   };
 }

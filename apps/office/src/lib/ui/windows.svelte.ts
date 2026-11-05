@@ -15,6 +15,7 @@ export type Win =
   | { id: 'goals'; kind: 'goals' }
   | { id: 'ledger'; kind: 'ledger' }
   | { id: 'office'; kind: 'office' }
+  | { id: 'pip'; kind: 'pip' }
   | { id: 'setup'; kind: 'setup' }
   | { id: string; kind: 'hire'; from?: HireFrom }
   | { id: string; kind: 'file'; file: FileRef }

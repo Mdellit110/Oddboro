@@ -133,7 +133,7 @@
     {#if settings?.model === 'sonnet'}
       <p class="mt-2 rounded-lg bg-ember/15 px-3 py-2 text-xs text-ember" role="alert">
         On Sonnet, the office cannot draw looks for new Odds or design offices. Those need Opus. You
-        can still pick a ready-made manager and move into Main Street (our default layout).
+        can still pick a ready-made manager and move into Menlo Park (our ready-made office).
       </p>
     {/if}
   </div>

@@ -22,6 +22,7 @@
     "markdown-it": "^14.3.3"
   },
   "devDependencies": {
+    "@oddboro/ledger": "*",
     "@oddboro/sprites": "*",
     "@oddboro/world": "*",
     "@sveltejs/adapter-static": "^4.0.1",

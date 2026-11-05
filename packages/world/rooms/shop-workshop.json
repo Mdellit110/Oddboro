@@ -1,0 +1,72 @@
+{
+  "id": "shop-workshop",
+  "name": "Workshop",
+  "wall": "wall-brick",
+  "floor": "rubber",
+  "map": [
+    "WWWWWWWWWWWWWW",
+    "WWNNWWWWWWNNWW",
+    "WWNNWWWWWWNNWW",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "W............W",
+    "WWWWWW..WWWWWW"
+  ],
+  "props": [
+    {
+      "sprite": "whiteboard",
+      "at": [2, 2]
+    },
+    {
+      "sprite": "mail-corkboard",
+      "at": [9, 2]
+    },
+    {
+      "sprite": "wall-clock",
+      "at": [6, 2]
+    },
+    {
+      "sprite": "desk",
+      "at": [1, 4]
+    },
+    {
+      "sprite": "chair",
+      "at": [2, 5]
+    },
+    {
+      "sprite": "desk-lamp",
+      "at": [1, 4]
+    },
+    {
+      "sprite": "mail-sort-table",
+      "at": [5, 3]
+    },
+    {
+      "sprite": "mail-printer",
+      "at": [9, 3]
+    },
+    {
+      "sprite": "filing-cabinet",
+      "at": [12, 3]
+    },
+    {
+      "sprite": "mail-box-stack",
+      "at": [10, 7]
+    },
+    {
+      "sprite": "floor-lamp",
+      "at": [12, 8]
+    },
+    {
+      "sprite": "plant-small",
+      "at": [1, 8]
+    },
+    {
+      "sprite": "bin",
+      "at": [4, 8]
+    }
+  ]
+}

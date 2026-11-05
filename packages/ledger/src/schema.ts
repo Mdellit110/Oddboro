@@ -19,6 +19,14 @@ import type { ArtKind, Place } from '@oddboro/sprites/art';
 import type { LookSpec, PartKind } from '@oddboro/sprites/look';
 import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/world';
 import { STARTER_TOOLS } from './tools.ts';
+import type {
+  ContextBasis,
+  ContextKind,
+  ContextStatus,
+  Invite,
+  TownEvent,
+  TownState
+} from './town-rules.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
 const created = (name = 'created_at') => at(name).notNull().defaultNow();
@@ -287,7 +295,7 @@ export const pokes = pgTable('pokes', {
   sentAt: at('sent_at')
 });
 
-export type LedgerKind = 'decision' | 'work' | 'report' | 'hire' | 'access';
+export type LedgerKind = 'decision' | 'work' | 'report' | 'hire' | 'access' | 'handoff';
 
 /** Append-only. Every decision and every piece of finished work, by a staffer or by the owner. */
 export const ledger = pgTable(
@@ -487,6 +495,14 @@ export const owner = pgTable('owner', {
   name: text().notNull(),
   /** When the owner finished the welcome. Until then the office opens on it. */
   welcomedAt: at('welcomed_at'),
+  /** Where a new owner got to in the town before Main Street went up. See town-rules.ts. */
+  town: jsonb().$type<TownState>(),
+  /** False when the owner told the office not to remember anything about them. */
+  memory: boolean().notNull().default(true),
+  /** The owner's own Odd: how they look walking around Oddboro. */
+  look: jsonb().$type<LookSpec>(),
+  /** The friend whose invite brought them here, as the invite carried them. */
+  invitedBy: jsonb().$type<Invite>(),
   updatedAt: at('updated_at').notNull().defaultNow()
 });
 
@@ -609,4 +625,45 @@ export const appUpdate = pgTable('app_update', {
   downAt: at('down_at'),
   upAt: at('up_at'),
   updatedAt: at('updated_at').notNull().defaultNow()
+});
+
+/**
+ * What the owner let the office remember about them: one fact, goal,
+ * preference, project, outcome or piece of feedback a row. An Odd only
+ * proposes a row; it counts once the owner keeps it, and the owner can change
+ * or delete it. A handoff is a short brief one Odd passes another, kept the
+ * same way. Never a whole conversation.
+ */
+export const context = pgTable('context', {
+  id: id(),
+  kind: text().$type<ContextKind>().notNull(),
+  /** `said`: the owner said it. `observed`: an Odd saw it happen. `inferred`: an Odd's guess. */
+  basis: text().$type<ContextBasis>().notNull(),
+  status: text().$type<ContextStatus>().notNull().default('proposed'),
+  /** One line, in plain words. */
+  title: text().notNull(),
+  body: text().notNull().default(''),
+  /** The Odd that proposed it, or `owner`. */
+  source: text().notNull(),
+  /** Null: every Odd may read it. Otherwise only this Odd: a handoff names who it is for. */
+  forStaffId: text().references(() => staff.id),
+  /** 0 to 1. What the owner said is 1. */
+  confidence: doublePrecision().notNull().default(1),
+  /** The row this one corrects. Keeping it marks that one replaced. */
+  replaces: integer(),
+  /** A file the Odd made, in its own folder, for an outcome. */
+  file: text(),
+  createdAt: created(),
+  updatedAt: at('updated_at').notNull().defaultNow()
+});
+
+/**
+ * How the first visit went, counted on this computer only. A row holds the
+ * moment's name and the shop it happened in, never anything anyone said.
+ */
+export const townEvents = pgTable('town_events', {
+  id: id(),
+  name: text().$type<TownEvent>().notNull(),
+  shop: text(),
+  at: created('at')
 });

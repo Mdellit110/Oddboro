@@ -61,7 +61,12 @@ import {
   zone,
   zoneName,
   STAFF_SERVER,
-  home
+  home,
+  contextFor,
+  contextLines,
+  logEvent,
+  roster as everyone,
+  shopOfRoom
 } from '@oddboro/ledger';
 import { emit } from './events.ts';
 import type { Work } from '../staff/work.ts';
@@ -383,10 +388,24 @@ async function whoFor(who: StaffRow, dir: string): Promise<string> {
       '- After a run that moves one of these goals, or shows it slipping, call log_progress once with one line of evidence.',
     hasTool(who.tools, 'list_goals') &&
       '- list_goals shows every goal, who serves it and how it is going.',
+    ...(await remembered(who)),
     ''
   ]
     .filter((l) => l !== false)
     .join('\n');
+}
+
+/**
+ * What the owner let the office remember, and the briefs other Odds passed
+ * this one with their yes. A failed read means nothing kept: the Odd asks.
+ */
+async function remembered(who: StaffRow): Promise<string[]> {
+  const items = await contextFor(who.id);
+  const people = await everyone().catch(() => []);
+  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? id;
+  const shop = shopOfRoom(who.room);
+  if (shop && items.some((c) => c.kind !== 'outcome')) void logEvent('context_reused', shop);
+  return [...contextLines(items, nameOf)].filter((l): l is string => !!l);
 }
 
 /** What this run can do: its level, where it writes, and each outside tool it holds or was granted. */
@@ -741,6 +760,16 @@ function followUpBrief(
   t?: { row: TaskRow; files: string[] },
   g?: GoalRow
 ): string[] {
+  if (f.kind === 'first_day' && f.note)
+    return [
+      'You joined the office today, and you just said hello to {owner} in chat. They gave you a first assignment. Do it now, with what you have.',
+      '',
+      `- The assignment: ${f.note}`,
+      '- Read your job description, "Who you work for" and my_goals first: use everything the office knows, and never ask for what it already knows.',
+      '- Make the file first, now, before anything else: never stop to ask {owner} questions before they have something to look at. Write the result as a Markdown file in your folder, as the assignment says. Make it useful today, mark anything you had to guess, and put your questions at the end of the file, not on their desk.',
+      '- If part of it needs a tool you do not have, do the rest, and say plainly what needs connecting.',
+      '- Your reply goes on their desk. Write it to {owner}: what you made, where it is (its path), and the one next step you suggest.'
+    ];
   if (f.kind === 'first_day')
     return [
       'You joined the office today, and you just said hello to {owner} in chat. Get started now, so they never have to ask.',
@@ -925,7 +954,7 @@ export async function draft(id: string, message: string): Promise<Run> {
  * owner's chats then resume, and then starts its first day's work as a
  * follow-up. Nobody has to ping it to get it moving.
  */
-export async function firstDay(id: string): Promise<void> {
+export async function firstDay(id: string, assignment?: string): Promise<void> {
   const who = await staffer(id);
   if (!who) return;
   if (!chatting.has(id)) {
@@ -958,7 +987,7 @@ export async function firstDay(id: string): Promise<void> {
       chatting.delete(id);
     }
   }
-  await startFirstDay(id);
+  await startFirstDay(id, assignment);
 }
 
 /** A line from a staffer in their chat that no run wrote, like a new manager's hello. */

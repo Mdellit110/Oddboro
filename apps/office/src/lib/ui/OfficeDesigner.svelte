@@ -25,8 +25,17 @@
   // In the large view the owner can also arrange a room by hand: pick a thing
   // to move or remove, or add one. Each change is an edit on its room in the
   // spec, built at once with no Claude run. Earlier layouts stay, to move back to.
-  type Props = { id: string; catalog: SpriteCatalog; staffCount: number; current: string };
-  let { id, catalog, staffCount, current }: Props = $props();
+  type Props = {
+    id: string;
+    catalog: SpriteCatalog;
+    staffCount: number;
+    current: string;
+    /** Just moved in: say how to make the place their own. */
+    welcome?: boolean;
+  };
+  let { id, catalog, staffCount, current, welcome = false }: Props = $props();
+  // svelte-ignore state_referenced_locally
+  let showWelcome = $state(welcome);
 
   type Drawn = {
     spec: OfficeSpec;
@@ -581,6 +590,38 @@
   {/if}
 
   <div class="flex flex-1 flex-col gap-3 overflow-y-auto p-3 text-sm">
+    {#if showWelcome && here && !drawn}
+      <section class="flex flex-col gap-2 rounded-xl bg-sea/10 p-3" aria-label="Make it yours">
+        <div class="font-pixel text-base text-ink">Make it yours</div>
+        <p class="text-xs text-ink">
+          {current} is yours now. Change anything, the way you would a new place.
+        </p>
+        <ul class="flex flex-col gap-1 text-xs text-ink">
+          <li>
+            <span class="font-medium">Rearrange and decorate:</span> Arrange by hand, then drag furniture
+            around, or drag pieces in from the Library.
+          </li>
+          <li>
+            <span class="font-medium">Expand it:</span> say what you want below, like "add a studio wing"
+            or "a garden out back", and the office builds it.
+          </li>
+        </ul>
+        <div class="flex gap-2">
+          <button
+            class="rounded-lg bg-sea px-3 py-1.5 text-xs font-medium text-night disabled:opacity-40"
+            disabled={drawing || moving || building}
+            onclick={() => {
+              showWelcome = false;
+              void refurnish(true);
+            }}>Arrange by hand</button
+          >
+          <button
+            class="rounded-lg px-3 py-1.5 text-xs text-muted hover:text-ink"
+            onclick={() => (showWelcome = false)}>Later</button
+          >
+        </div>
+      </section>
+    {/if}
     {#if !drawn}
       {#if here}
         <div class="flex flex-col gap-1">

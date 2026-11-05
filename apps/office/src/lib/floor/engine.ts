@@ -250,6 +250,8 @@ export class Floor {
   private switches = new Map<string, Switch>();
   /** Called when the owner taps a prop that can be switched, with its id. */
   onTap: ((obj: string) => void) | undefined;
+  /** A tap on the floor that switched nothing: the tile under it. Walking uses it. */
+  onTapTile: ((tile: [number, number]) => void) | undefined;
   /** Every placed prop with an id in its room, for picking one by hand. */
   private items: {
     obj: string;
@@ -1159,8 +1161,9 @@ export class Floor {
       if (this.drag && still && e.target === canvas) {
         if (this.onPick) this.onPick(this.pickAt(e.clientX, e.clientY));
         else {
-          const obj = this.switchAt(e.clientX, e.clientY);
+          const obj = this.onTap && this.switchAt(e.clientX, e.clientY);
           if (obj) this.onTap?.(obj);
+          else this.onTapTile?.(this.tileAt(e.clientX, e.clientY));
         }
       }
       this.drag = undefined;

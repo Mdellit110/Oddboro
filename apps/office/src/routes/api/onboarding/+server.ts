@@ -1,20 +1,29 @@
-// A new owner's first visit. GET lists the ready-made managers to pick from.
-// POST is Go at the end of it: the office keeps the owner's time zone,
-// finishes the welcome under their name, hires the Office Manager they picked
-// (ready-made, or the one they described and the office drew), has the
-// manager say hello in chat and ask for the owner's goals, and moves into the
-// drawn office the moment the drawing is done.
+// Hiring a new owner's first Odd, their office manager. GET lists the
+// ready-made managers to pick from. POST hires the one they picked
+// (ready-made, or described and drawn) with what they asked of them, keeps
+// their time zone, finishes the welcome, has the manager say hello in chat,
+// and starts their first assignment at once: real work, whose result lands on
+// the owner's desk.
 import { error, json } from '@sveltejs/kit';
 import {
   customHello,
   finishWelcome,
+  activeOffice,
+  boroName,
   hireManager,
+  logEvent,
+  me,
+  saveTown,
+  startFirstDay,
+  starterSpec,
+  townState,
   managerPortrait,
   MANAGERS
 } from '@oddboro/ledger';
 import { isZone, setZone } from '@oddboro/ledger/time';
 import { writeEnv } from '@oddboro/ledger/env';
 import { currentDesign, moveInWhenDone } from '#lib/server/design-job.ts';
+import { moveInto } from '#lib/server/move-in.ts';
 import { drawnFrom, preview, problemsWith } from '#lib/server/looks.ts';
 import { sayInChat } from '#lib/server/staff.ts';
 import { toProfile } from '#lib/staff/roster.ts';
@@ -43,7 +52,7 @@ export const GET: RequestHandler = async () =>
 
 export const POST: RequestHandler = async ({ request }) => {
   const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-  const name = typeof b.name === 'string' ? b.name.trim().slice(0, 30) : '';
+  const name = (typeof b.name === 'string' ? b.name.trim().slice(0, 30) : '') || (await me()).name;
   if (!name) error(400, 'Say what your Odds should call you');
   const zone = typeof b.zone === 'string' ? b.zone : '';
   if (!isZone(zone)) error(400, 'Pick a time zone from the list');
@@ -66,19 +75,49 @@ export const POST: RequestHandler = async ({ request }) => {
     };
   } else error(400, 'Pick an office manager');
 
+  const brief = (b.brief ?? {}) as Record<string, unknown>;
+  const words = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const managerBrief = {
+    help: words(brief.help, 600) || undefined,
+    responsibilities: Array.isArray(brief.responsibilities)
+      ? brief.responsibilities
+          .map((r) => words(r, 300))
+          .filter(Boolean)
+          .slice(0, 6)
+      : [],
+    comms: words(brief.comms, 300) || undefined
+  };
+  const assignment = words(b.assignment, 2000);
+  if (!assignment) error(400, 'Give your manager a first assignment');
+  await logEvent('agent_create_attempt');
+
   writeEnv({ OFFICE_TIME_ZONE: zone });
   process.env.OFFICE_TIME_ZONE = zone;
   setZone(zone);
   await finishWelcome(name);
   let row;
   try {
-    row = await hireManager(choice);
+    row = await hireManager(choice, managerBrief);
   } catch (e) {
     error(400, e instanceof Error ? e.message : String(e));
   }
   const preset = 'preset' in choice ? MANAGERS.find((p) => p.id === choice.preset) : undefined;
   sayInChat(row.id, preset ? preset.hello(name) : customHello(row.name, name));
+  // Their boro is the office they move into. With none yet (they skipped
+  // straight here), a starter goes up, so nobody lands in an empty lot.
+  if (!(await activeOffice())) {
+    const { state } = await townState();
+    const style = state.boro?.style ?? 'village';
+    await moveInto(starterSpec(boroName(state.boro?.name ?? '', name), style), [], 'Starter boro');
+  }
   const job = currentDesign();
   if (job) await moveInWhenDone(job);
+  // The first assignment starts now: the manager walks to their desk while it runs.
+  await startFirstDay(row.id, assignment);
+  const { state } = await townState();
+  await saveTown({ ...state, step: 'team', firstOdd: row.id });
+  await logEvent('agent_ready');
+  await logEvent('first_task_started');
+  await logEvent('main_street_created');
   return json({ manager: toProfile(row) });
 };

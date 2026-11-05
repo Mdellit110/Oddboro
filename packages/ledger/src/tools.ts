@@ -96,6 +96,21 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     does: 'Brings you one plan per goal: who to hire and what Odds already here take on.'
   },
   {
+    id: 'remember',
+    name: 'Remember',
+    does: 'Offers to remember something you told it. Nothing counts until you press Remember.'
+  },
+  {
+    id: 'hand_off',
+    name: 'Pass you along',
+    does: 'Passes another Odd a short brief about what you want, once you say yes. Never the whole chat.'
+  },
+  {
+    id: 'deliver',
+    name: 'Hand over its work',
+    does: 'Hands you a file it made in its own folder, so you can open it.'
+  },
+  {
     id: 'update_goal',
     name: 'Update goals',
     does: 'Marks a goal met or paused, or rewords it, when you ask in chat or approve an ask.'

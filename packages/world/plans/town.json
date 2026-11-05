@@ -1,0 +1,32 @@
+{
+  "id": "town",
+  "name": "Main Street",
+  "grounds": {
+    "room": "grounds-main-street",
+    "margin": [28, 14, 28, 10]
+  },
+  "halls": [],
+  "rooms": [
+    {
+      "room": "street-town",
+      "at": [0, 41]
+    },
+    {
+      "room": "town-lot",
+      "at": [1, 2]
+    },
+    {
+      "room": "shop-coffee",
+      "at": [8, 31]
+    },
+    {
+      "room": "shop-general",
+      "at": [25, 31]
+    },
+    {
+      "room": "shop-workshop",
+      "at": [42, 31]
+    }
+  ],
+  "props": []
+}

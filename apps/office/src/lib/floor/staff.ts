@@ -36,6 +36,8 @@ export class StaffActor {
   private phase = 0;
   private clock = 0;
   private floor: Floor;
+  /** How fast it walks, against an Odd's pace: the owner's own Odd hurries. */
+  pace = 1;
 
   constructor(floor: Floor, profile: StaffProfile, start: [number, number]) {
     this.floor = floor;
@@ -168,6 +170,28 @@ export class StaffActor {
     return true;
   }
 
+  /**
+   * Walk to a tile, for no activity: the owner's own Odd goes where they
+   * click. False when nothing walkable reaches it.
+   */
+  walkTo(tile: [number, number]): boolean {
+    const w = this.floor.world;
+    const path = findPath(w.walkable, w.width, this.tile, tile, {});
+    if (!path) return false;
+    this.sprite.visible = true;
+    this.shadow.visible = true;
+    this.spot = undefined;
+    this.activity = 'talk';
+    this.path = path.slice(1);
+    this.floor.invalidate();
+    return true;
+  }
+
+  /** The tile it stands on, or is about to step onto. */
+  get at(): [number, number] {
+    return this.path[0] ?? this.tile;
+  }
+
   /** Be where the current walk ends, without walking it: for a staffer already there when the office opens. */
   arrive() {
     const end = this.path.at(-1);
@@ -198,7 +222,7 @@ export class StaffActor {
       const dx = tx - this.x;
       const dy = ty - this.y;
       const dist = Math.hypot(dx, dy);
-      const step = SPEED * dt;
+      const step = SPEED * this.pace * dt;
       if (Math.abs(dx) > Math.abs(dy)) this.facing = dx > 0 ? 'right' : 'left';
       else this.facing = dy > 0 ? 'down' : 'up';
       if (dist <= step) {

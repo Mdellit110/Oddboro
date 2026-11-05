@@ -48,6 +48,8 @@ import type { GoalPlanItem, HireProposal } from './schema.ts';
 import { clockTime, describe as describeSchedule, officeAt, WEEKDAYS, zoneName } from './time.ts';
 import { hasTool, isGrantable } from './tools.ts';
 import { home } from './home.ts';
+import { deliver, handOff, proposeContext } from './town.ts';
+import { shopOfRoom } from './town-rules.ts';
 
 const ME = process.env.STAFF_ID ?? '';
 const me = await staffer(ME);
@@ -895,6 +897,91 @@ if (has('office_report'))
         })
       );
       return json({ ...activity, staff });
+    }
+  );
+
+if (has('remember'))
+  server.registerTool(
+    'remember',
+    {
+      description: `Offer to remember one thing ${OWNER} told you, so no Odd asks again. ${OWNER} sees it and presses Remember or Don't; nothing counts until they do. One line, in their words. Never a log of the chat, and never anything private they did not say themselves.`,
+      inputSchema: {
+        kind: z
+          .enum(['fact', 'goal', 'preference', 'project', 'feedback'])
+          .describe(
+            'A fact about them, a goal, how they like things, a project, or their feedback.'
+          ),
+        basis: z
+          .enum(['said', 'observed', 'inferred'])
+          .describe('"said" when they told you. "inferred" is a guess, and only for a preference.'),
+        title: z.string().max(160).describe('One line: "Opening a bakery in the spring".'),
+        detail: z.string().max(2000).optional().describe('A sentence or two more, if it helps.'),
+        confidence: z.number().min(0).max(1).optional().describe('How sure, for a guess.'),
+        replaces: z
+          .number()
+          .int()
+          .optional()
+          .describe('The id of a kept row this corrects, when they changed their mind.')
+      }
+    },
+    async ({ kind, basis, title, detail, confidence, replaces }) => {
+      const r = await proposeContext(ME, {
+        kind,
+        basis,
+        title,
+        body: detail,
+        confidence,
+        replaces
+      });
+      if ('problem' in r) return text(r.problem);
+      return text(
+        `${OWNER} sees "${r.row.title}" above this chat, with Remember and Don't. Carry on, and do not mention it: they can see it.`
+      );
+    }
+  );
+
+if (has('hand_off'))
+  server.registerTool(
+    'hand_off',
+    {
+      description: `Pass another Odd a short brief so ${OWNER} does not repeat themselves there. ${OWNER} sees it and says whether it goes. A brief, never the whole chat: what they want, and what the other Odd needs to start.`,
+      inputSchema: {
+        to: z
+          .enum(['coffee', 'general', 'workshop'])
+          .describe('The shop: the Coffee Shop, the General Store or the Workshop.'),
+        title: z
+          .string()
+          .max(160)
+          .describe('What they want, in one line: "A launch plan for the bakery".'),
+        detail: z.string().max(2000).optional().describe('What the other Odd needs to start.')
+      }
+    },
+    async ({ to, title, detail }) => {
+      const r = await handOff(ME, to, { title, body: detail });
+      if ('problem' in r) return text(r.problem);
+      return text(
+        `${OWNER} sees the brief for ${r.to.name} with "Yes, take me there" above this chat. Say in one line why that shop, and leave it to them.`
+      );
+    }
+  );
+
+if (has('deliver'))
+  server.registerTool(
+    'deliver',
+    {
+      description: `Hand ${OWNER} a file you made in your folder, so they can open it beside the chat.`,
+      inputSchema: {
+        title: z.string().max(160).describe('What it is: "Bakery launch plan".'),
+        path: z.string().describe('Its path in your folder, like made/launch-plan.md.')
+      }
+    },
+    async ({ title, path }) => {
+      const file = ownFile(path);
+      if (!file) return text(`No file at ${path} in your folder. Write it first.`);
+      await deliver(ME, { title, file, shop: shopOfRoom(me.room) });
+      return text(
+        `${OWNER} can open "${title}" now. Tell them what is in it and the one next step.`
+      );
     }
   );
 

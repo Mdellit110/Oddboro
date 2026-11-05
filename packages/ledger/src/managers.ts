@@ -210,8 +210,24 @@ export type ManagerChoice =
       };
     };
 
+/** What the owner told the hire conversation: what to take on, and how to talk. */
+export type ManagerBrief = { help?: string; responsibilities?: string[]; comms?: string };
+
+/** The brief as lines for the manager's job description. */
+function briefLines(b: ManagerBrief | undefined): string {
+  if (!b) return '';
+  return [
+    '',
+    '## What {owner} hired you for',
+    '',
+    ...(b.help ? [`- In their words: ${b.help}`] : []),
+    ...(b.responsibilities ?? []).map((r) => `- ${r}`),
+    ...(b.comms ? [`- How they want you to talk: ${b.comms}`] : [])
+  ].join('\n');
+}
+
 /** Hire the office's manager and give them the daily report. */
-export async function hireManager(choice: ManagerChoice): Promise<StaffRow> {
+export async function hireManager(choice: ManagerChoice, brief?: ManagerBrief): Promise<StaffRow> {
   const owner = await ownerName();
   const remit =
     'Runs the floor, writes your daily report, and hires the rest of your Odds with you.';
@@ -230,7 +246,7 @@ export async function hireManager(choice: ManagerChoice): Promise<StaffRow> {
     row = await hire({
       ...base,
       name: m.name,
-      desk: managerDesk(m.name, m.says, owner),
+      desk: managerDesk(m.name, m.says, owner) + briefLines(brief),
       ...(m.look && portraitPx
         ? { variant: 'look', portrait: 'look', look: m.look, portraitPx }
         : { variant: m.id, portrait: `portrait-${m.id}` })
@@ -240,7 +256,7 @@ export async function hireManager(choice: ManagerChoice): Promise<StaffRow> {
     row = await hire({
       ...base,
       name: c.name,
-      desk: managerDesk(c.name, c.description, owner),
+      desk: managerDesk(c.name, c.description, owner) + briefLines(brief),
       variant: 'look',
       portrait: 'look',
       look: c.look,
