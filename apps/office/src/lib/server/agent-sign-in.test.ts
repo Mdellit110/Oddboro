@@ -305,7 +305,7 @@ test("signing out removes only the office home's sign-in and never runs a tool's
 });
 
 test('Gemini stays off the list and its sign-in until its list names this system, then shows with no other change', async () => {
-  assert.ok(!L.AGENT_PLATFORMS.gemini.includes('darwin'));
+  assert.ok(!L.AGENT_PLATFORMS.gemini.runs.includes('darwin'));
   assert.equal(
     (await listed()).find((t) => t.id === 'gemini'),
     undefined
@@ -318,8 +318,8 @@ test('Gemini stays off the list and its sign-in until its list names this system
     onPlatform('darwin', () => send('PUT', 'gemini', { key: OFFICE_GEMINI_KEY })),
     refused(404)
   );
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   try {
     assert.deepEqual(await stateOf('gemini'), {
       how: 'key',
@@ -327,7 +327,7 @@ test('Gemini stays off the list and its sign-in until its list names this system
       signedIn: true
     });
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
   }
 });
 
@@ -343,8 +343,8 @@ test('a Gemini key from the page is tried once with Google, then kept in the key
       status: [GOOD, OFFICE_GEMINI_KEY].includes(asked.at(-1)?.key ?? '') ? 200 : 403
     });
   };
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   const put = (key: string) => onPlatform('darwin', () => send('PUT', 'gemini', { key }));
   try {
     await assert.rejects(
@@ -386,13 +386,13 @@ test('a Gemini key from the page is tried once with Google, then kept in the key
   } finally {
     await setGeminiKey(OFFICE_GEMINI_KEY);
     globalThis.fetch = fetch;
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
   }
 });
 
 test("the keychain is read once however many times Gemini's state is asked, with a key or without", async () => {
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   const reads = () => secretReads.filter((n) => n === 'gemini:API_KEY').length;
   /** Reads of the key across three loads of the list and one run's check, from cold. */
   const readsFromCold = async (signedIn: boolean) => {
@@ -409,7 +409,7 @@ test("the keychain is read once however many times Gemini's state is asked, with
     secrets.set('gemini:API_KEY', OFFICE_GEMINI_KEY);
     assert.equal(await readsFromCold(true), 1);
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
     secrets.set('gemini:API_KEY', OFFICE_GEMINI_KEY);
   }
 });
@@ -467,12 +467,12 @@ test('Other AI tools, on onboarding and in Setup, has a row for each tool this s
   assert.deepEqual(await ids('darwin'), ['grok', 'codex']);
   assert.deepEqual(await ids('linux'), []);
   // Gemini gets its row once its list names this system, with no other change.
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   try {
     assert.deepEqual(await ids('darwin'), ['grok', 'codex', 'gemini']);
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
   }
 });
 
@@ -685,7 +685,7 @@ test('a sign-in for a tool the office cannot find says to install it, never a sp
 });
 
 test('Gemini cannot be installed while its list does not name this system', async () => {
-  assert.ok(!L.AGENT_PLATFORMS.gemini.includes('darwin'));
+  assert.ok(!L.AGENT_PLATFORMS.gemini.runs.includes('darwin'));
   const from = installed().length;
   await assert.rejects(
     onPlatform('darwin', () => send('POST', 'gemini', { action: 'install' })),

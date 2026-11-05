@@ -11,7 +11,6 @@ import { test } from 'node:test';
 import {
   L,
   OFFICE_PROCESS_GIT,
-  PATCH,
   awayFromHome,
   chatOf,
   folder,
@@ -20,8 +19,12 @@ import {
   onPlatform,
   ownerData,
   ownerHome,
+  patch,
+  recorded,
+  refusal,
   runOf,
   secrets,
+  setOwn,
   withEnv,
   writeRule,
   type Gave
@@ -45,15 +48,6 @@ await L.pg`insert into staff ${L.pg([
 const onMac = { skip: process.platform !== 'darwin' && 'Run commands runs on a Mac only' };
 const staffDir = (id: string) => join(folder, 'staff', id);
 
-/** An Odd's switches and folders as the owner left them; anything not named is off. */
-async function setOwn(
-  id: string,
-  o: { commands?: boolean; web?: boolean; folders?: { path: string; write: boolean }[] }
-): Promise<void> {
-  await L.pg`
-    update staff set commands = ${o.commands ?? false}, web = ${o.web ?? false},
-      folders = ${JSON.stringify(o.folders ?? [])}::jsonb where id = ${id}`;
-}
 /** A folder outside the office made now, by its real path, as `checkFolder` stores one. */
 function made(...parts: string[]): string {
   const p = join(folder, 'given', ...parts);
@@ -81,30 +75,6 @@ type Sandbox = {
 };
 const settingsOf = (run: Gave) =>
   JSON.parse(after(run.args, '--settings')) as { sandbox?: Sandbox; enabledPlugins: unknown };
-/** The owner's PATCH of an Odd from its card. */
-const patch = (id: string, body: unknown) =>
-  PATCH({
-    params: { id },
-    request: new Request(`http://office/api/staff/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body)
-    })
-  } as unknown as Parameters<typeof PATCH>[0]);
-/** What the route said when it refused a PATCH. */
-async function refusal(
-  body: ReturnType<typeof patch>
-): Promise<{ status: number; message: string }> {
-  try {
-    await body;
-  } catch (e) {
-    const h = e as { status: number; body: { message: string } };
-    return { status: h.status, message: h.body.message };
-  }
-  assert.fail('the route took it');
-}
-/** Whether the ledger holds a line with this title. */
-const recorded = async (title: string) =>
-  (await L.pg`select 1 from ledger where title = ${title}`).length === 1;
 
 test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () => {
   assert.ok(!existsSync(ownerData), 'this office has a data folder, which the sandbox would read');

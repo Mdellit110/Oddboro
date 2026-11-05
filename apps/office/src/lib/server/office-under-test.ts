@@ -704,3 +704,36 @@ export async function gave(...a: Parameters<typeof give>): Promise<{ id: number;
   assert.ok('id' in h, JSON.stringify(h));
   return h;
 }
+/** An Odd's switches and folders as the owner left them; anything not named is off. */
+export async function setOwn(
+  id: string,
+  o: { commands?: boolean; web?: boolean; folders?: { path: string; write: boolean }[] }
+): Promise<void> {
+  await L.pg`
+    update staff set commands = ${o.commands ?? false}, web = ${o.web ?? false},
+      folders = ${JSON.stringify(o.folders ?? [])}::jsonb where id = ${id}`;
+}
+/** The owner's PATCH of an Odd from its card. */
+export const patch = (id: string, body: unknown) =>
+  PATCH({
+    params: { id },
+    request: new Request(`http://office/api/staff/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    })
+  } as unknown as Parameters<typeof PATCH>[0]);
+/** What the route said when it refused a PATCH. */
+export async function refusal(
+  body: ReturnType<typeof patch>
+): Promise<{ status: number; message: string }> {
+  try {
+    await body;
+  } catch (e) {
+    const h = e as { status: number; body: { message: string } };
+    return { status: h.status, message: h.body.message };
+  }
+  assert.fail('the route took it');
+}
+/** Whether the ledger holds a line with this title. */
+export const recorded = async (title: string) =>
+  (await L.pg`select 1 from ledger where title = ${title}`).length === 1;

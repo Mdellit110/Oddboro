@@ -259,15 +259,15 @@ test('"Runs on" offers Gemini on no system until its live test, and no Odd moves
 });
 
 test('once its list names this system, "Runs on" offers Gemini and an Odd moves to it', async () => {
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = [process.platform];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = [process.platform];
   try {
     assert.ok(L.agentsOn(process.platform).includes('gemini'));
     assert.ok((await offered()).includes('gemini'));
     assert.equal((await patch('sam', { agent: 'gemini' })).status, 200);
     assert.equal((await L.staffer('sam'))?.agent, 'gemini');
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
     await patch('sam', { agent: 'claude' });
   }
 });

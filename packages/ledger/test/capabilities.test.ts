@@ -171,8 +171,8 @@ test('my_access says the tool, what its own tools reach and each folder, and a h
       web: true,
       network: true,
       granted: [
-        { path: '/Users/sam/p', write: false },
-        { path: '/Users/sam/q', write: true }
+        { path: '/Users/Shared/p', write: false },
+        { path: '/Users/Shared/q', write: true }
       ]
     }
   };
@@ -183,8 +183,8 @@ test('my_access says the tool, what its own tools reach and each folder, and a h
     'Your runs go through Claude Code.',
     `Your own tools work on files, plus ${shell}, which can reach the internet, and web search and fetch.`,
     'Folders Sam gave you:',
-    '- /Users/sam/p (read only)',
-    '- /Users/sam/q (read and change)',
+    '- /Users/Shared/p (read only)',
+    '- /Users/Shared/q (read and change)',
     'Sam has connected no outside tools for you yet.'
   ]);
   const held = said({ NETWORK_HELD: '1' });
