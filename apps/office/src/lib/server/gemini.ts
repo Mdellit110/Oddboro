@@ -7,7 +7,8 @@
 // (GEMINI_CLI_HOME), never the owner's ~/.gemini, and signs in with an API
 // key the owner gives on the office's page, kept in the keychain like the
 // Claude key, never a login. A Gemini Odd has file tools, and with Browse
-// the web on, Gemini's web search and fetch; never a shell.
+// the web on, Gemini's web search and fetch; never a shell: its launch refuses
+// a run with commands (`LAUNCHES.gemini` in cli.ts).
 // Gemini itself holds its reads to the run's folder, the owner's data folder,
 // the thread folders it reads and the folders the owner gave the Odd
 // (`--include-directories`), and one policy file per run, which beats every

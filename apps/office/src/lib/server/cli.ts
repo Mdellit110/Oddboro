@@ -155,29 +155,6 @@ export const LAUNCHES: Record<
 };
 
 /**
- * What a run's own tools reach, as its prompt says it: file tools always, a
- * shell when the run gets commands (`commandsHow` in the ledger, decided in
- * run()), which each tool's sandbox holds to the run's folders with the
- * network off, and the tool's own web search and fetch when the owner switched
- * Browse the web on. Gemini's policy allows a write only by its full path
- * (gemini.ts).
- */
-export function ownToolsLine(agent: Agent, run: { commands: boolean; web: boolean }): string {
-  const plus = [
-    ...(run.commands ? ['a shell confined to your folders, with no network'] : []),
-    ...(run.web ? ['web search and fetch'] : [])
-  ];
-  const line = plus.length
-    ? [
-        `Your own tools work on files, plus ${plus.join(', and ')}.`,
-        ...(run.commands ? [] : ['No shell.']),
-        ...(run.web ? [] : ['No web.'])
-      ].join(' ')
-    : 'Your own tools work on files only: no shell and no web.';
-  return agent === 'gemini' ? `${line} Give each file tool the file's full path.` : line;
-}
-
-/**
  * Claude Code's name for a tool Grok names: a file tool by GROK_FILE_TOOLS,
  * and search_tool, which finds an MCP tool before Grok calls it, ToolSearch.
  */

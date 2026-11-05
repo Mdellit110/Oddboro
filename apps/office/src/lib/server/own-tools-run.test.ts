@@ -76,39 +76,45 @@ type Sandbox = {
 const settingsOf = (run: Gave) =>
   JSON.parse(after(run.args, '--settings')) as { sandbox?: Sandbox; enabledPlugins: unknown };
 
-test('a Claude run with Run commands gets Bash in its sandbox', onMac, async () => {
-  assert.ok(!existsSync(ownerData), 'this office has a data folder, which the sandbox would read');
-  await setOwn('otto', { commands: true });
-  const run = await chatOf('otto');
-  assert.equal(after(run.args, '--tools'), 'Read,Glob,Grep,Write,Edit,Bash');
-  assert.ok(listAfter(run.args, '--allowedTools').includes('Bash'));
-  const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
-  assert.match(run.tmpdir ?? '', /^\/private\/tmp\/ob-[0-9a-f]{8}$/);
-  assert.equal(run.tmpdir, tmp);
-  assert.equal(run.nodeOptions, null, "the office's node options reached the run");
-  assert.ok(!existsSync(tmp), "the commands' temp folder outlived the run");
-  const dir = staffDir('otto');
-  const sandbox = settingsOf(run).sandbox;
-  // Claude Code names the sessions folder after the Odd's folder, which differs from Mac to Mac.
-  const sessions = sandbox?.filesystem.allowRead.find((p) => p.includes('/.claude/projects/'));
-  assert.equal(dirname(sessions ?? ''), join(homedir(), '.claude', 'projects'));
-  const node = dirname(dirname(process.execPath));
-  // The secrets commands never see depend on the test's own environment: the next test holds them.
-  const { credentials, ...rest } = sandbox ?? ({} as Sandbox);
-  assert.ok(credentials.envVars.length > 0);
-  assert.deepEqual(rest, {
-    enabled: true,
-    failIfUnavailable: true,
-    allowUnsandboxedCommands: false,
-    filesystem: {
-      denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
-      // No data folder: there is none to read.
-      allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
-      denyWrite: deniedEdits({ dir, writes: [dir], granted: [] })
-    },
-    network: { allowedDomains: [] }
-  });
-});
+// In an empty home, so no developer tool folder of this Mac's joins the sandbox's reads.
+test('a Claude run with Run commands gets Bash in its sandbox', onMac, () =>
+  ownerHome(async () => {
+    assert.ok(
+      !existsSync(ownerData),
+      'this office has a data folder, which the sandbox would read'
+    );
+    await setOwn('otto', { commands: true });
+    const run = await chatOf('otto');
+    assert.equal(after(run.args, '--tools'), 'Read,Glob,Grep,Write,Edit,Bash');
+    assert.ok(listAfter(run.args, '--allowedTools').includes('Bash'));
+    const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
+    assert.match(run.tmpdir ?? '', /^\/private\/tmp\/ob-[0-9a-f]{8}$/);
+    assert.equal(run.tmpdir, tmp);
+    assert.equal(run.nodeOptions, null, "the office's node options reached the run");
+    assert.ok(!existsSync(tmp), "the commands' temp folder outlived the run");
+    const dir = staffDir('otto');
+    const sandbox = settingsOf(run).sandbox;
+    // Claude Code names the sessions folder after the Odd's folder, which differs from Mac to Mac.
+    const sessions = sandbox?.filesystem.allowRead.find((p) => p.includes('/.claude/projects/'));
+    assert.equal(dirname(sessions ?? ''), join(homedir(), '.claude', 'projects'));
+    const node = dirname(dirname(process.execPath));
+    // The secrets commands never see depend on the test's own environment: the next test holds them.
+    const { credentials, ...rest } = sandbox ?? ({} as Sandbox);
+    assert.ok(credentials.envVars.length > 0);
+    assert.deepEqual(rest, {
+      enabled: true,
+      failIfUnavailable: true,
+      allowUnsandboxedCommands: false,
+      filesystem: {
+        denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
+        // No data folder: there is none to read.
+        allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
+        denyWrite: deniedEdits({ dir, writes: [dir], granted: [] })
+      },
+      network: { allowedDomains: [] }
+    });
+  })
+);
 
 test(
   "a Claude run with Run commands gets the office's git settings from gitEnv, and an empty git template in its temp folder",
@@ -413,7 +419,8 @@ test("with Run commands, Bash can write only the run's write folders", onMac, as
     const onThread = await runOf(h.id);
     const thread = L.threadFolder(h.thread);
     const part = join(thread, 'otto');
-    assert.deepEqual(each(onThread.args, '--add-dir'), [ownerData, part, sub]);
+    // The run's temp folder last, where npm keeps its cache.
+    assert.deepEqual(each(onThread.args, '--add-dir'), [ownerData, part, sub, onThread.tmpdir]);
     const denyWrite = settingsOf(onThread).sandbox?.filesystem.denyWrite ?? [];
     assert.deepEqual(denyWrite, [
       ownerData,

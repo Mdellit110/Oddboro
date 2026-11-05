@@ -308,9 +308,9 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     '--no-auto-update',
     // The five file tools a Claude Code run gets, grep only where ripgrep is,
     // and Grok's web tools with Browse the web on. Grok keeps its MCP tools
-    // (search_tool, use_tool) beside them; never a shell, since Grok's sandbox
-    // keeps a command off the network on Linux only (`commandsHow`), and no
-    // image tool.
+    // (search_tool, use_tool) beside them, and no image tool. Never a shell:
+    // its launch refuses a run with commands (`LAUNCHES.grok` in cli.ts), since
+    // Grok's sandbox keeps a command off the network on Linux only.
     '--tools',
     [
       ...Object.keys(GROK_FILE_TOOLS).filter((tool) => tool !== 'grep' || rg.length),

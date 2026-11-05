@@ -363,13 +363,27 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
-test('a Codex Odd is told it has a shell confined to its folders with no network, never that it has no shell', async () => {
-  const run = await chatOf('cody');
-  assert.match(
-    run.system,
-    /Your own tools work on files, plus a shell confined to your folders, with no network\. No web\./
+test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, or reaching the internet with Browse the web on, never that it has no shell", async () => {
+  const owner = await L.ownerName();
+  const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;
+  const off = await chatOf('cody');
+  assert.ok(
+    off.system.includes(`Your own tools work on files, plus ${shell}, with no network. No web.`),
+    off.system
   );
-  assert.doesNotMatch(run.system, /no shell/);
+  assert.doesNotMatch(off.system, /no shell/);
+  await L.pg`update staff set web = true where id = 'cody'`;
+  try {
+    const on = await chatOf('cody');
+    assert.ok(
+      on.system.includes(
+        `Your own tools work on files, plus ${shell}, which can reach the internet, and web search.`
+      ),
+      on.system
+    );
+  } finally {
+    await L.pg`update staff set web = false where id = 'cody'`;
+  }
 });
 
 test("Browse the web turns Codex's web search on", async () => {

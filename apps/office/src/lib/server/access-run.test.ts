@@ -1,14 +1,76 @@
 // What an Odd's own tools reach in a run, in an office under test
-// (office-under-test.ts): which launch holds a shell, and which of the
-// owner's developer tool folders commands may read. Run with
+// (office-under-test.ts): which launch holds a shell, whether commands reach
+// the internet and what happens when Claude Code refuses that, which of the
+// owner's developer tool folders commands may read, and that the run, its
+// prompt and its my_access read one profile. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
+import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { folder, L } from './office-under-test.ts';
+import {
+  chat,
+  chatOf,
+  folder,
+  gave,
+  L,
+  odd,
+  onPlatform,
+  ownerHome,
+  runOf,
+  setOwn,
+  withEnv,
+  type Gave
+} from './office-under-test.ts';
 
 const { LAUNCHES } = await import('./cli.ts');
-const { DEV_FOLDERS, DEV_SECRETS } = await import('./sandbox.ts');
+const { DEV_FOLDERS, DEV_SECRETS, NETWORK_REFUSED_LINE, resetHeldNetwork } =
+  await import('./sandbox.ts');
+const { shellEnv } = await import('./launch.ts');
+
+await L.pg`insert into staff ${L.pg([
+  odd('ava', 'Ava'),
+  odd('bo', 'Bo'),
+  odd('cy', 'Cy'),
+  odd('dee', 'Dee'),
+  { ...odd('kit', 'Kit'), agent: 'grok' },
+  { ...odd('cole', 'Cole'), agent: 'codex' }
+])}`;
+
+/** Run commands is on only on a Mac (`commandsHow`), where Claude Code's sandbox was measured. */
+const onMac = { skip: process.platform !== 'darwin' && 'Run commands runs on a Mac only' };
+
+/** A folder outside the office made now, by its real path, as `checkFolder` stores one. */
+function made(...parts: string[]): string {
+  const p = join(folder, 'given', ...parts);
+  mkdirSync(p, { recursive: true });
+  return realpathSync(p);
+}
+/** The value after `flag`. */
+const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
+/** Every value given with `flag`, which may come more than once. */
+const each = (args: string[], flag: string) => args.filter((_, i) => args[i - 1] === flag);
+/** The values after `flag`, up to the next flag. */
+function listAfter(args: string[], flag: string): string[] {
+  const from = args.indexOf(flag) + 1;
+  const end = args.findIndex((a, i) => i >= from && a.startsWith('--'));
+  return args.slice(from, end);
+}
+type Sandbox = {
+  filesystem: { denyRead: string[]; allowRead: string[]; denyWrite: string[] };
+  network: { allowedDomains: string[] };
+  credentials: { envVars: { name: string; mode: string }[] };
+};
+const sandboxOf = (run: Gave) =>
+  (JSON.parse(after(run.args, '--settings')) as { sandbox?: Sandbox }).sandbox;
+/** The run's temp folder, where Run commands puts its commands' own files. */
+const tmpOf = (run: Gave) => `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
+/** The paths of a Claude Code run's Read allows, in order. */
+const readAllows = (run: Gave) =>
+  listAfter(run.args, '--allowedTools')
+    .filter((a) => a.startsWith('Read(/'))
+    .map((a) => a.slice('Read(/'.length, -'/**)'.length));
 
 /** A run on another tool, with `commands` as given and nothing else switched on. */
 const run = (commands: boolean) => {
@@ -33,7 +95,27 @@ const run = (commands: boolean) => {
 
 // No tool's sign-in check refuses in the office under test, so a launch that
 // got past its refusal would start.
-test('a launch handed a run its tool cannot hold refuses it: Grok and Gemini with commands, Codex without', async () => {
+test("each tool's launch gives a shell exactly when commandsHow says, on every system, and refuses a run it cannot hold", async () => {
+  // Every Odd here has Run commands stored on, so only its tool decides.
+  for (const [id, agent] of [
+    ['bo', 'claude'],
+    ['kit', 'grok'],
+    ['cole', 'codex']
+  ] as const) {
+    await setOwn(id, { commands: true });
+    for (const platform of ['darwin', 'linux', 'win32'] as const) {
+      if (!L.AGENT_PLATFORMS[agent].runs.includes(platform)) continue;
+      const run = await onPlatform(platform, () => chatOf(id));
+      const shell = L.runsCommands(agent, platform, true);
+      const tools = after(run.args, '--tools');
+      if (agent === 'claude')
+        assert.equal(tools.split(',').includes('Bash'), shell, `${agent} on ${platform}`);
+      // Grok's five file tools, never a shell.
+      if (agent === 'grok') assert.equal(tools, 'read_file,list_dir,grep,write,search_replace');
+      // Codex reads files through its shell, held by its permission profile.
+      if (agent === 'codex') assert.ok(shell && run.permissions, `${agent} on ${platform}`);
+    }
+  }
   assert.deepEqual(await LAUNCHES.grok(run(true)), { refused: L.COMMANDS_WHY.grok });
   assert.deepEqual(await LAUNCHES.gemini(run(true)), { refused: L.COMMANDS_WHY.gemini });
   assert.deepEqual(await LAUNCHES.codex(run(false)), {
@@ -56,4 +138,244 @@ test('every developer tool credential file sits in a listed folder, and no liste
         `${f} and the secret store ${s}`
       );
   assert.ok(!DEV_FOLDERS.some((f) => L.within(at(f), at('.docker'))), '~/.docker is listed');
+});
+
+test(
+  "a handed-over run keeps the Odd's own Run commands, Browse the web and given folders; only its outside tools come down to Draft",
+  onMac,
+  async () => {
+    await L.addConnector({
+      id: 'notes',
+      name: 'Notes',
+      description: 'Notes for tests.',
+      kind: 'http',
+      config: { url: 'http://127.0.0.1:9/mcp' },
+      readTools: ['read_note'],
+      tools: ['read_note', 'write_note'],
+      readyAt: new Date()
+    });
+    await L.pg`insert into grants (staff_id, connector_id, level) values ('ava', 'notes', 'act')`;
+    const w = made('handed', 'write');
+    await setOwn('ava', { commands: true, web: true, folders: [{ path: w, write: true }] });
+    const h = await gave('lead', 'ava', { title: 'Handed over' });
+    const run = await runOf(h.id);
+    assert.equal(after(run.args, '--tools'), 'Read,Glob,Grep,Write,Edit,Bash,WebSearch,WebFetch');
+    assert.ok(sandboxOf(run), 'the handed-over run lost its sandbox');
+    const allowed = listAfter(run.args, '--allowedTools');
+    assert.ok(allowed.includes(`Edit(${L.rulePath(w)}/**)`), allowed.join(' '));
+    assert.equal(run.env.CEILING, 'draft');
+    assert.ok(allowed.includes('mcp__notes__read_note'), allowed.join(' '));
+    assert.ok(!allowed.some((a) => a === 'mcp__notes' || a === 'mcp__notes__write_note'));
+  }
+);
+
+test("Claude's commands reach the internet only with Browse the web on", onMac, async () => {
+  await setOwn('bo', { commands: true, web: true });
+  assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, { allowedDomains: ['*'] });
+  await setOwn('bo', { commands: true });
+  assert.deepEqual(sandboxOf(await chatOf('bo'))?.network, { allowedDomains: [] });
+});
+
+test(
+  'a Claude Code that refuses the open network fails that run in plain words, and later runs keep commands off the internet and say so',
+  onMac,
+  async () => {
+    const owner = await L.ownerName();
+    const title = "Kept Odds' commands off the internet";
+    await setOwn('cy', { commands: true, web: true });
+    try {
+      let error = '';
+      await chat('cy', 'Refuse the open network.', (e) => {
+        if (e.type === 'error') error = e.message;
+      });
+      assert.equal(error, NETWORK_REFUSED_LINE.replaceAll('{name}', 'Cy'));
+      // The Ledger line is written after the run ends, without holding it up.
+      let lines: { actor: string }[] = [];
+      for (let i = 0; i < 100 && !lines.length; i++) {
+        lines = await L.pg<{ actor: string }[]>`select actor from ledger where title = ${title}`;
+        if (!lines.length) await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.deepEqual(
+        lines.map((l) => l.actor),
+        ['office']
+      );
+      const next = await chatOf('cy', 'Refuse the open network.');
+      assert.deepEqual(sandboxOf(next)?.network, { allowedDomains: [] });
+      assert.equal(next.env.NETWORK_HELD, '1');
+      assert.ok(next.system.includes(L.NETWORK_HELD_LINE), next.system);
+      // The prompt and my_access say the same of the held network.
+      const told = L.accessInRun(await L.capabilities((await L.staffer('cy'))!), owner, next.env);
+      assert.ok(told.includes(L.NETWORK_HELD_LINE), told);
+      const tools = told.split('\n').find((l) => l.startsWith('Your own tools'));
+      assert.ok(tools && next.system.includes(tools), `${tools}\n${next.system}`);
+      assert.equal(
+        (await L.pg`select 1 from ledger where title = ${title}`).length,
+        1,
+        'a held network was recorded twice'
+      );
+    } finally {
+      resetHeldNetwork();
+    }
+  }
+);
+
+test(
+  "with Run commands, Claude reads the owner's developer tool folders that exist, never their credential files, and npm caches in the run's temp",
+  onMac,
+  () =>
+    ownerHome(async (home) => {
+      const h = realpathSync(home);
+      const at = (...p: string[]) => join(h, ...p);
+      for (const d of [
+        '.npm',
+        '.cargo',
+        '.local/bin',
+        '.local/share/x/bin',
+        '.config/y',
+        '.local/share/z[1]/bin'
+      ])
+        mkdirSync(at(d), { recursive: true });
+      for (const [name, target] of [
+        ['x', at('.local/share/x/bin/x')],
+        ['y', at('.config/y/y')],
+        ['z', at('.local/share/z[1]/bin/z')]
+      ]) {
+        writeFileSync(target, '');
+        symlinkSync(target, at('.local/bin', name));
+      }
+      await setOwn('dee', { commands: true });
+      const run = await chatOf('dee');
+      const fs = sandboxOf(run)?.filesystem;
+      for (const read of [at('.npm'), at('.cargo'), at('.local/bin'), at('.local/share/x/bin')])
+        assert.ok(fs?.allowRead.includes(read), `${read} is not read`);
+      for (const shut of [at('.config/y'), at('.local/share/z[1]/bin'), at('.pyenv')])
+        assert.ok(!fs?.allowRead.some((p) => p.startsWith(shut)), `${shut} is read`);
+      assert.ok(fs?.denyRead.includes(at('.cargo', 'credentials')));
+      assert.ok(fs?.denyRead.includes(at('.cargo', 'credentials.toml')));
+      const tmp = tmpOf(run);
+      assert.deepEqual(run.npm, {
+        npm_config_cache: join(tmp, 'npm'),
+        npm_config_userconfig: join(tmp, 'npmrc')
+      });
+      // Only commands read them: the file tools' Read allows name none.
+      assert.ok(!readAllows(run).some((p) => p.startsWith(h)), readAllows(run).join(' '));
+    })
+);
+
+test("the Odd's prompt and its my_access say the same about its own tools", onMac, async () => {
+  const owner = await L.ownerName();
+  await setOwn('dee', {
+    commands: true,
+    web: true,
+    folders: [
+      { path: made('same', 'read'), write: false },
+      { path: made('same', 'write'), write: true }
+    ]
+  });
+  const run = await chatOf('dee');
+  const told = L.accessInRun(await L.capabilities((await L.staffer('dee'))!), owner, run.env);
+  const lines = told.split('\n');
+  const tools = lines.find((l) => l.startsWith('Your own tools'));
+  assert.ok(tools && run.system.includes(tools), `${tools}\n${run.system}`);
+  const folders = lines.slice(lines.indexOf(`Folders ${owner} gave you:`) + 1, -1);
+  assert.equal(folders.length, 2, told);
+  for (const l of folders) assert.ok(run.system.includes(`  ${l}\n`), `${l}\n${run.system}`);
+});
+
+test("a chat's replay walks the given write folders the profile lists", async () => {
+  const gone = made('replay', 'gone');
+  await setOwn('ava', { folders: [{ path: gone, write: true }] });
+  await chatOf('ava');
+  rmSync(gone, { recursive: true });
+  // A file the Odd's own folder gained since, which the replay names.
+  const notes = join(folder, 'staff', 'ava', 'notes');
+  mkdirSync(notes, { recursive: true });
+  writeFileSync(join(notes, 'since.md'), 'New.');
+  // The stand-in keeps no session, so each chat starts a new one, with the replay.
+  const { message } = await chatOf('ava');
+  assert.ok(message.includes('(Files in your folder that changed during it: '), message);
+  assert.ok(!message.includes('in your folder and the folders'), message);
+});
+
+test(
+  "every tool reads one list: what a Codex run reads is what a Claude run reads, less its own folder and Claude Code's sessions folder",
+  onMac,
+  () =>
+    ownerHome(async () => {
+      const r = made('one-list', 'read');
+      await setOwn('bo', { folders: [{ path: r, write: false }] });
+      const onClaude = await runOf((await gave('lead', 'bo', { title: 'On Claude' })).id);
+      const claudeThread = L.threadFolder(
+        (
+          await L.pg<{ id: number }[]>`
+      select id from threads where title = 'On Claude'`
+        )[0].id
+      );
+      const dir = join(folder, 'staff', 'bo');
+      const sessions = join(homedir(), '.claude', 'projects', dir.replace(/[^a-zA-Z0-9]/g, '-'));
+      const claude = readAllows(onClaude)
+        .filter((p) => p !== dir && p !== sessions)
+        .map((p) => (p === claudeThread ? '<thread>' : p));
+      await L.pg`update staff set agent = 'codex' where id = 'bo'`;
+      try {
+        const h = await gave('lead', 'bo', { title: 'On Codex' });
+        const onCodex = await runOf(h.id);
+        const fs = Object.entries(onCodex.permissions?.filesystem ?? {});
+        // The run's reads come after node's OpenSSL config; this empty home has no developer tool folders.
+        const from = fs.findIndex(([p]) => p.endsWith('/openssl.cnf')) + 1;
+        const codex = fs
+          .slice(from)
+          .filter(([, v]) => v === 'read')
+          .map(([p]) => (p === L.threadFolder(h.thread) ? '<thread>' : p));
+        assert.deepEqual(codex, claude);
+        assert.equal(claude.length, 3, claude.join(' '));
+      } finally {
+        await L.pg`update staff set agent = 'claude' where id = 'bo'`;
+      }
+    })
+);
+
+test(
+  "with Run commands and Browse the web both on, the office's secrets stay hidden from commands that reach the internet",
+  onMac,
+  () =>
+    withEnv({ FAKE_OWNER_API_TOKEN: 'x' }, async () => {
+      await setOwn('bo', { commands: true, web: true });
+      const sandbox = sandboxOf(await chatOf('bo'));
+      assert.deepEqual(sandbox?.network, { allowedDomains: ['*'] });
+      const hidden = sandbox?.credentials.envVars ?? [];
+      for (const name of ['FAKE_OWNER_API_TOKEN', 'ANTHROPIC_API_KEY'])
+        assert.ok(
+          hidden.some((v) => v.name === name && v.mode === 'deny'),
+          `${name} reaches commands: ${JSON.stringify(hidden)}`
+        );
+    })
+);
+
+test("--add-dir holds the run's temp only with Run commands on", onMac, async () => {
+  await setOwn('bo', { commands: true });
+  const on = await chatOf('bo');
+  assert.equal(each(on.args, '--add-dir').at(-1), tmpOf(on));
+  await setOwn('bo', { web: true });
+  const off = await chatOf('bo');
+  assert.ok(
+    !each(off.args, '--add-dir').some((p) => p.startsWith('/private/tmp/')),
+    each(off.args, '--add-dir').join(' ')
+  );
+});
+
+test('npm_config_cache is the same <tmp>/npm for Claude and Codex', onMac, async () => {
+  await setOwn('bo', { commands: true });
+  const claude = await chatOf('bo');
+  const npm = (env: Record<string, string>) => ({
+    npm_config_cache: env.npm_config_cache,
+    npm_config_userconfig: env.npm_config_userconfig
+  });
+  assert.deepEqual(claude.npm, npm(shellEnv(tmpOf(claude))));
+  const codex = await chatOf('cole');
+  assert.deepEqual(
+    npm(codex.git ?? {}),
+    npm(shellEnv(join(folder, 'codex-tmp', codex.env.RUN_KEY)))
+  );
+  assert.equal(claude.npm?.npm_config_cache, join(tmpOf(claude), 'npm'));
 });

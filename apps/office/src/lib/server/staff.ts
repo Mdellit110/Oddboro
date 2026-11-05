@@ -100,9 +100,12 @@ import {
   zoneName,
   STAFF_SERVER,
   AGENT_NAMES,
-  commandsHow,
+  folderLines,
+  NETWORK_HELD_LINE,
+  ownTools,
+  ownToolsLine,
   SECRET_STORES,
-  type GrantedFolder,
+  type OwnTools,
   chatSession,
   home,
   rulePath,
@@ -122,9 +125,15 @@ import { changedSince, replay, replayed, replayedAt, replaySince } from './repla
 import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
-import { endedEarly, LAUNCHES, ownToolsLine, streamTools, type Launch } from './cli.ts';
-import { gitEnv, stopGroups } from './launch.ts';
-import { hiddenFromCommands } from './sandbox.ts';
+import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
+import { shellEnv, stopGroups } from './launch.ts';
+import {
+  claudeSandbox,
+  heldNetwork,
+  holdNetwork,
+  NETWORK_REFUSED,
+  NETWORK_REFUSED_LINE
+} from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
 
@@ -509,18 +518,18 @@ async function taught(who: StaffRow): Promise<string> {
   ].join('\n');
 }
 
-/** What a run's own tools reach, decided once in run(), which its launch and its prompt both read. */
-type OwnTools = {
-  /** Whether the run gets a shell: the owner's Run commands switch, as its tool takes it (`commandsHow`). */
-  commands: boolean;
-  /** The owner's Browse the web switch. */
-  web: boolean;
-  /** The folders the owner gave the Odd that are still on the disk. */
-  granted: GrantedFolder[];
-};
-
-/** What this run can do: its level, where it writes, its own tools, and each outside tool it holds or was granted. */
-function canDo(caps: Capabilities, owner: string, agent: Agent, own: OwnTools): string {
+/**
+ * What this run can do: its level, where it writes, its own tools, and each
+ * outside tool it holds or was granted. `networkHeld` says this office keeps
+ * the commands off the internet they would have reached, as my_access says it.
+ */
+function canDo(
+  caps: Capabilities,
+  owner: string,
+  agent: Agent,
+  own: OwnTools,
+  networkHeld: boolean
+): string {
   const lines = outsideLines(caps, owner);
   const writes = own.granted.some((f) => f.write)
     ? 'You write files only in your folder, on work you share with colleagues in your part of its folder, and in the folders {owner} gave you to change.'
@@ -536,7 +545,7 @@ function canDo(caps: Capabilities, owner: string, agent: Agent, own: OwnTools): 
     '## What you can do',
     '',
     `- ${levelLine(caps.level, owner)}`,
-    `- ${writes} ${ownToolsLine(agent, own)} ${beyond}`,
+    `- ${[writes, ownToolsLine(agent, own), ...(networkHeld ? [NETWORK_HELD_LINE] : []), beyond].join(' ')}`,
     '- If a brief names tools you do not have, do the work with your own tools.',
     '- Outside tools:',
     ...(lines.length ? lines.map((l) => `  - ${l}`) : ['  - None yet.']),
@@ -564,6 +573,8 @@ async function prompt(
     led: ThreadStory[];
     shown?: number[];
     own: OwnTools;
+    /** Whether this office keeps the commands off the internet they would have reached. */
+    networkHeld: boolean;
   }
 ): Promise<string> {
   const { dir, own } = opts;
@@ -594,11 +605,11 @@ async function prompt(
     }) +
     `\n## Where things are\n\n- Your folder: ${dir}\n- Your notes: ${join(dir, 'notes')}\n- {owner}'s data folder: ${DATA}\n` +
     (own.granted.length
-      ? `- Folders {owner} gave you:\n${own.granted
-          .map((f) => `  - ${f.path} (${f.write ? 'read and change' : 'read only'})\n`)
+      ? `- Folders {owner} gave you:\n${folderLines(own)
+          .map((l) => `  - ${l}\n`)
           .join('')}`
       : '') +
-    canDo(opts.caps, opts.owner, who.agent, own)
+    canDo(opts.caps, opts.owner, who.agent, own, opts.networkHeld)
   );
 }
 
@@ -632,13 +643,23 @@ export async function notePlan(info: unknown): Promise<void> {
  * reads the same list.
  */
 function readable(dir: string, reads: number[], granted: string[]): string[] {
-  return [
-    dir,
-    DATA,
-    join(homedir(), '.claude', 'projects', sessionsOf(dir)),
-    ...reads.map(threadFolder),
-    ...granted
-  ];
+  return [dir, DATA, sessionsFolder(dir), ...reads.map(threadFolder), ...granted];
+}
+
+/**
+ * What a run reads beyond its own: `readable` less the run's folder, which
+ * each tool reaches already as its working folder, and Claude Code's sessions
+ * folder, which is Claude Code's own. Every tool's launch, and Claude Code's
+ * `--add-dir` without commands, read this one list, in `readable`'s order.
+ */
+function readsBeyond(dir: string, reads: number[], granted: string[]): string[] {
+  const own = [dir, sessionsFolder(dir)];
+  return readable(dir, reads, granted).filter((p) => !own.includes(p));
+}
+
+/** Claude Code's folder for the sessions of a run in `dir`, where long tool results land. */
+function sessionsFolder(dir: string): string {
+  return join(homedir(), '.claude', 'projects', sessionsOf(dir));
 }
 
 /** Claude Code names a working folder's sessions folder after its path. */
@@ -757,15 +778,13 @@ async function run(
       ? await ledStories(who.id, 'chat')
       : [];
   const reads = opts.threadId ? [opts.threadId] : led.map((s) => s.thread.id);
-  // The owner's switches, as this run's tool takes them: decided here once,
-  // and never written back, so a move to another tool keeps the owner's choice.
-  const how = commandsHow(who.agent, process.platform);
-  const own: OwnTools = {
-    commands: how.state === 'always' || (how.state === 'switch' && who.commands),
-    web: who.web,
-    // A folder deleted since the owner gave it reaches no tool.
-    granted: who.folders.filter((f) => existsSync(f.path))
-  };
+  // The owner's switches and folders as this run's tool takes them (the
+  // ledger's `ownTools`, which `capabilities` worked out once), less a network
+  // this office holds back after Claude Code refused the open one.
+  const own = heldNetwork(who.agent, caps.own);
+  // Told only when the hold took away a network the run would have had, as
+  // my_access says it (`NETWORK_HELD`).
+  const networkHeld = own.held && caps.own.network;
   const extraReads = own.granted.map((f) => f.path);
   const extraWrites = own.granted.filter((f) => f.write).map((f) => f.path);
   const system = say(
@@ -777,7 +796,8 @@ async function run(
       chat: inChat,
       led,
       shown: opts.shown,
-      own
+      own,
+      networkHeld
     })) + (opts.extra ?? '')
   );
   const sections = sectionsOf(system, say(who.desk));
@@ -801,7 +821,8 @@ async function run(
       ceiling: ceiling !== who.permission ? ceiling : undefined,
       handOffId: opts.handOffId,
       threadId: opts.threadId,
-      lessonRun: !!opts.lessonRun
+      lessonRun: !!opts.lessonRun,
+      networkHeld
     })
   );
   // On a thread, the run writes only its own part of the thread's folder.
@@ -823,41 +844,15 @@ async function run(
   // the office's home, which is neither the cwd nor added, so nothing in the
   // run can make it.
   const data = existsSync(DATA) ? [DATA] : [];
-  const workIn = own.commands
-    ? [...data, ...(part ? [part] : []), ...extraWrites]
-    : [DATA, ...reads.map(threadFolder), ...extraReads];
   // Commands get a temp folder of their own: short, since a long one falls
   // back to the folder every run shares, and spelt /private/tmp, since /tmp
   // broke every command (both measured). Commands are on only on a Mac.
   const tmp = own.commands ? `/private/tmp/ob-${key.slice(0, 8)}` : undefined;
-  /**
-   * Claude Code's sandbox for a run's commands: reads only what the run reads
-   * and the system's own folders, writes as above, no network, and none of
-   * the secrets in the run's environment (`env`).
-   */
-  function sandbox(env: NodeJS.ProcessEnv) {
-    // Commands run on node, which may be installed under the home folder.
-    const node = dirname(dirname(process.execPath));
-    return {
-      enabled: true,
-      failIfUnavailable: true,
-      allowUnsandboxedCommands: false,
-      filesystem: {
-        // Every home folder and every other disk, not only the owner's home.
-        denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
-        allowRead: [
-          ...readable(dir, reads, extraReads).filter((p) => p !== DATA || data.length),
-          tmp,
-          ...(node.startsWith(homedir() + sep) ? [node] : [])
-        ],
-        denyWrite: [...data, ...denied]
-      },
-      network: { allowedDomains: [] },
-      credentials: {
-        envVars: hiddenFromCommands(env).map((name) => ({ name, mode: 'deny' }))
-      }
-    };
-  }
+  // The temp folder comes last: npm keeps its cache there (`shellEnv`), and
+  // without it in --add-dir the sandbox refuses npm's writes (measured).
+  const workIn = tmp
+    ? [...data, ...(part ? [part] : []), ...extraWrites, tmp]
+    : readsBeyond(dir, reads, extraReads);
   function claudeArgs(env: NodeJS.ProcessEnv): string[] {
     return [
       '-p',
@@ -892,7 +887,17 @@ async function run(
       '--settings',
       JSON.stringify({
         enabledPlugins: pluginsOff(),
-        ...(own.commands ? { sandbox: sandbox(env) } : {})
+        ...(tmp
+          ? {
+              sandbox: claudeSandbox({
+                reads: readable(dir, reads, extraReads).filter((p) => p !== DATA || data.length),
+                tmp,
+                denyWrite: [...data, ...denied],
+                network: own.network,
+                env
+              })
+            }
+          : {})
       }),
       ...workIn.flatMap((p) => ['--add-dir', p]),
       ...modelArgs(),
@@ -907,12 +912,12 @@ async function run(
     const env = staffEnv();
     if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: () => {} };
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
-    const git = gitEnv(tmp);
-    mkdirSync(git.GIT_TEMPLATE_DIR, { mode: 0o700 });
-    // The office's git settings (`gitEnv`), and none of the office's own node
-    // options, which every node a command starts would take as its own.
+    const shell = shellEnv(tmp);
+    mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
+    // The office's git and npm settings (`shellEnv`), and none of the office's
+    // own node options, which every node a command starts would take as its own.
     delete env.NODE_OPTIONS;
-    Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, ...git });
+    Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, ...shell });
     return {
       args: claudeArgs(env),
       env,
@@ -927,7 +932,7 @@ async function run(
           key,
           staffId: who.id,
           dir,
-          reads: [DATA, ...reads.map(threadFolder), ...extraReads],
+          reads: readsBeyond(dir, reads, extraReads),
           part,
           writes,
           granted: extraWrites,
@@ -940,7 +945,7 @@ async function run(
           timeoutMs: opts.timeoutMs,
           web: own.web,
           commands: own.commands,
-          network: caps.own.network
+          network: own.network
         });
   if ('refused' in launch) {
     opts.onEvent?.({ type: 'error', message: launch.refused });
@@ -972,9 +977,24 @@ async function run(
     let last = '';
     let session: string | undefined;
     let finished = false;
-    const finish = (r: Run) => {
+    const finish = (end: Run) => {
       if (finished) return;
       finished = true;
+      // A Claude Code that refuses the open network fails this run: the owner
+      // is told plainly, and from now on this office's Claude Code runs keep
+      // their commands off the internet (`holdNetwork`).
+      const refused =
+        !end.ok &&
+        who.agent === 'claude' &&
+        own.network &&
+        NETWORK_REFUSED.test(`${end.text}\n${stderr}`);
+      if (refused)
+        void holdNetwork().catch((e: unknown) =>
+          console.error("Could not record that Odds' commands stay off the internet:", e)
+        );
+      const r = refused
+        ? { ok: false, text: NETWORK_REFUSED_LINE.replaceAll('{name}', who.name) }
+        : end;
       clearTimeout(timer);
       runsGoing.delete(key);
       launch.done();
@@ -1093,7 +1113,9 @@ export async function chat(
     const inReplay = new Set(replayedAt(past, kept));
     const since = replaySince(past, kept);
     // The Odd writes only its own folder and the given folders it may change, so only those are walked.
-    const writable = who.folders.filter((f) => f.write && existsSync(f.path)).map((f) => f.path);
+    const writable = ownTools(who, process.platform)
+      .granted.filter((f) => f.write)
+      .map((f) => f.path);
     const prompt = [
       ...(since
         ? [replay(past, changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable))]

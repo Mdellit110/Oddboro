@@ -36,8 +36,11 @@ const port = await new Promise<number>((done) => {
 // The stand-in for Claude Code: it reads the message, then reports one tool
 // call and a result that carries what the office gave the run, the variables
 // Run commands sets among it, and whether the git template folder those name
-// was there and empty as it ran (`done()` removes it after). A message
-// that says "Hold until <file> exists." keeps the run going until it does.
+// was there and empty as it ran (`done()` removes it after), and npm's
+// settings. A message that says "Hold until <file> exists." keeps the run
+// going until it does. One that says "Refuse the open network", in a run
+// whose sandbox opens every host, gets the words Claude Code's binary refuses
+// that with, on stderr, and exit 1.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
 // waits on the owner.
@@ -60,6 +63,15 @@ if (verb === 'auth' && sub === 'login') {
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
+  // Only a staff run carries --settings, so it is read only for the trigger.
+  const settings = () => JSON.parse(process.argv[process.argv.indexOf('--settings') + 1]);
+  if (
+    message.includes('Refuse the open network') &&
+    settings().sandbox?.network?.allowedDomains?.includes('*')
+  ) {
+    process.stderr.write('Overly broad patterns like "*" are not allowed\\n');
+    process.exit(1);
+  }
   const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(message)?.[1];
   if (!hold) return reply();
   const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), reply()), 20);
@@ -84,6 +96,10 @@ function reply() {
     tmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
     git: Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('GIT_'))),
     gitTemplate: emptyFolder(process.env.GIT_TEMPLATE_DIR),
+    npm: {
+      npm_config_cache: process.env.npm_config_cache ?? null,
+      npm_config_userconfig: process.env.npm_config_userconfig ?? null
+    },
     nodeOptions: process.env.NODE_OPTIONS ?? null,
     apiKey: process.env.ANTHROPIC_API_KEY ?? null
   };
@@ -510,6 +526,8 @@ export type Gave = {
   git?: Record<string, string>;
   /** Whether that environment's GIT_TEMPLATE_DIR was there and empty while the run went. */
   gitTemplate?: boolean;
+  /** The Claude Code run's npm cache and user config, which Run commands sets (`shellEnv`). */
+  npm?: { npm_config_cache: string | null; npm_config_userconfig: string | null };
   /** The Claude Code run's ANTHROPIC_API_KEY, which only a key sign-in sets. */
   apiKey?: string | null;
   grokEnv?: Record<string, string>;
