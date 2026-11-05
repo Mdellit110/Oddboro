@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { FOLDER_LABEL } from '@oddboro/ledger/access';
   import Pixel from './Pixel.svelte';
   import type { StaffProfile } from '../staff/roster.ts';
   import type { Work } from '../staff/work.ts';
@@ -7,7 +8,8 @@
   // Every staffer, one per row, with a search that matches name, role or
   // remit. A row opens that staffer's card; its In progress badge opens the
   // card on that tab. From the search box, the arrow keys pick a row and Enter
-  // opens a chat with it.
+  // opens a chat with it. Small chips beside its role say what its runs
+  // reach now: commands, the web and its folders.
   type Props = {
     staff: StaffProfile[];
     /** Staffer id to what it is doing now, in words. */
@@ -25,6 +27,14 @@
   };
   let { staff, status, waiting, inProgress, selected, find, onselect, onwork, onchat }: Props =
     $props();
+
+  const CHIP = 'rounded-full bg-night/60 px-1.5 text-[10px] text-muted';
+  /** The folders its runs get, one per line, each as the owner reads it with its level. */
+  const foldersTitle = (p: StaffProfile) =>
+    p.folders
+      .filter((f) => p.reach.granted.some((g) => g.path === f.path))
+      .map((f) => `${f.shown} (${FOLDER_LABEL[f.write ? 'write' : 'read']})`)
+      .join('\n');
 
   let query = $state('');
   let box: HTMLInputElement | undefined = $state();
@@ -115,6 +125,27 @@
             <span class="flex items-baseline gap-2">
               <span class="text-sm font-medium text-ink">{p.name}</span>
               <span class="truncate text-[11px] text-faint">{p.role}</span>
+              {#if p.reach.commands || p.reach.web || p.reach.granted.length}
+                <span class="flex shrink-0 gap-1">
+                  {#if p.reach.commands}
+                    <span
+                      class={CHIP}
+                      title="Runs commands{p.reach.network ? ', which can reach the internet' : ''}"
+                      >Commands</span
+                    >
+                  {/if}
+                  {#if p.reach.web}
+                    <span class={CHIP}>Web</span>
+                  {/if}
+                  {#if p.reach.granted.length}
+                    <span class={CHIP} title={foldersTitle(p)}
+                      >{p.reach.granted.length === 1
+                        ? '1 folder'
+                        : `${p.reach.granted.length} folders`}</span
+                    >
+                  {/if}
+                </span>
+              {/if}
             </span>
             <span class="block truncate text-xs {waiting.has(p.id) ? 'text-ember' : 'text-muted'}"
               >{status[p.id] ?? 'Arriving'}</span

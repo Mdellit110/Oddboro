@@ -1,5 +1,14 @@
 <script lang="ts">
   import type { Candidate, HeldBack } from '@oddboro/ledger';
+  import {
+    GRANT_LABEL,
+    LEVEL_LABEL,
+    LEVELS,
+    levelAtMost,
+    type GrantLevel,
+    type Level
+  } from '@oddboro/ledger/access';
+  import { AGENT_NAMES, type Agent } from '@oddboro/ledger/agents';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import { call } from './api.ts';
   import FoldersList from './FoldersList.svelte';
@@ -9,7 +18,7 @@
   type Grant = {
     connector: string;
     name: string;
-    level: 'read' | 'act';
+    level: GrantLevel;
     /** What a run reaches, like "3 tools" or "every tool". */
     reach: string;
     heldBack: HeldBack | null;
@@ -26,7 +35,7 @@
     registry: []
   });
   let pick = $state<{ id: string; name: string; kind: string } | undefined>();
-  let level = $state<'read' | 'act'>('read');
+  let level = $state<GrantLevel>('read');
   let problem = $state('');
   let done = $state('');
 
@@ -72,24 +81,17 @@
     );
   }
 
-  const LEVEL = { read: 'Read only', act: 'Read and write' } as const;
   /** Why its runs leave a granted tool out, for the owner. Grants are read or act, so only act can sit above a level. */
   const HELD_BACK: Record<HeldBack, string> = {
-    'above its level': 'held back until you set its level to Acts on its own',
+    'above its level': `held back until you set its level to ${LEVEL_LABEL.act}`,
     'still connecting': 'waiting on your steps',
     'sign-in ran out': 'sign in again'
   };
-  const RANK = { read: 0, draft: 1, act: 2 } as const;
-  const levels = ['read', 'act'] as const;
+  const levels: GrantLevel[] = ['read', 'act'];
   /** Never above the staffer's own level. */
-  const allowed = (l: 'read' | 'act') => RANK[profile.permission] >= RANK[l];
+  const allowed = (l: GrantLevel) => levelAtMost(l, profile.permission);
   const isUrl = $derived(/^https:\/\/\S+$/.test(q.trim()));
 
-  const PERMISSIONS = [
-    { id: 'read', label: 'Reads and reports' },
-    { id: 'draft', label: 'Drafts for your yes' },
-    { id: 'act', label: 'Acts on its own' }
-  ] as const;
   const GRANTABLE = OFFICE_TOOLS.filter((t) => !t.always);
   async function setTool(tool: string, on: boolean) {
     problem = '';
@@ -100,7 +102,7 @@
     }
   }
 
-  /** The page shows how Run commands reaches the Odd's tool; only the server works it out. */
+  /** The page shows how Run commands reaches the Odd's tool and what its runs get; only the server works either out. */
   const how = $derived(profile.commandsHow);
   async function setOwnTool(which: 'commands' | 'web', box: HTMLInputElement) {
     problem = '';
@@ -124,7 +126,17 @@
     }
   }
 
-  async function setPermission(permission: string) {
+  /** The one click under a switch the Odd's tool cannot follow: the move and the switch, in one PATCH. */
+  async function moveFor(offer: Agent) {
+    problem = '';
+    try {
+      await call(`/api/staff/${profile.id}`, { agent: offer, commands: true }, 'PATCH');
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function setPermission(permission: Level) {
     problem = '';
     try {
       await call(`/api/staff/${profile.id}`, { permission }, 'PATCH');
@@ -144,38 +156,49 @@
   <div class="border-b border-hairline px-3 py-2">
     <div class="text-[11px] text-muted">Permission level</div>
     <div class="mt-1 flex gap-1" role="group" aria-label="Permission level">
-      {#each PERMISSIONS as p (p.id)}
+      {#each LEVELS as l (l)}
         <button
-          class="flex-1 rounded-lg px-1.5 py-1 text-[11px] {profile.permission === p.id
+          class="flex-1 rounded-lg px-1.5 py-1 text-[11px] {profile.permission === l
             ? 'bg-sea/25 text-ink'
             : 'bg-raise text-muted'}"
-          aria-pressed={profile.permission === p.id}
-          onclick={() => setPermission(p.id)}>{p.label}</button
+          aria-pressed={profile.permission === l}
+          onclick={() => setPermission(l)}>{LEVEL_LABEL[l]}</button
         >
       {/each}
     </div>
     <RunsOn value={profile.agent} onpick={setAgent} class="mt-2 text-[11px]" />
     <ul class="mt-2 flex flex-col gap-1 rounded-xl bg-raise p-1.5">
-      <li>
-        <label
-          class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 {how.state === 'switch'
-            ? 'cursor-pointer hover:bg-night/40'
-            : ''}"
-        >
-          <input
-            type="checkbox"
-            class="mt-0.5"
-            checked={how.state === 'always' || (how.state === 'switch' && profile.commands)}
-            disabled={how.state !== 'switch'}
-            onchange={(e) => setOwnTool('commands', e.currentTarget)}
-          />
-          <span class="min-w-0 flex-1">
-            <span class="block text-sm">Run commands</span>
-            {#if how.state !== 'switch'}
-              <span class="block text-xs text-muted">{how.why}</span>
-            {/if}
-          </span>
-        </label>
+      <!-- The label wraps only the switch's name, so the offer below it is a button of its own. -->
+      <li
+        class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 {how.state === 'switch'
+          ? 'hover:bg-night/40'
+          : ''}"
+      >
+        <input
+          id="commands-{profile.id}"
+          type="checkbox"
+          class="mt-0.5 {how.state === 'switch' ? 'cursor-pointer' : ''}"
+          checked={profile.reach.commands}
+          disabled={how.state !== 'switch'}
+          onchange={(e) => setOwnTool('commands', e.currentTarget)}
+        />
+        <span class="min-w-0 flex-1">
+          <label
+            for="commands-{profile.id}"
+            class="block text-sm {how.state === 'switch' ? 'cursor-pointer' : ''}"
+            >Run commands</label
+          >
+          {#if how.state !== 'switch'}
+            <span class="block text-xs text-muted">{how.why}</span>
+          {/if}
+          {#if how.state === 'never' && how.offer}
+            {@const offer = how.offer}
+            <button
+              class="mt-0.5 block text-start text-xs text-sea hover:text-ink"
+              onclick={() => moveFor(offer)}>Switch {profile.name} to {AGENT_NAMES[offer]}?</button
+            >
+          {/if}
+        </span>
       </li>
       <li>
         <label
@@ -187,7 +210,10 @@
             checked={profile.web}
             onchange={(e) => setOwnTool('web', e.currentTarget)}
           />
-          <span class="block text-sm">Browse the web</span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm">Browse the web</span>
+            <span class="block text-xs text-muted">{profile.webLine}</span>
+          </span>
         </label>
       </li>
     </ul>
@@ -303,7 +329,7 @@
                 title={allowed(l)
                   ? ''
                   : `${profile.name} needs the ${l} level first. Change it above.`}
-                onclick={() => (level = l)}>{LEVEL[l]}</button
+                onclick={() => (level = l)}>{GRANT_LABEL[l]}</button
               >
             {/each}
           </div>
@@ -337,7 +363,7 @@
             <div class="min-w-0 flex-1">
               <div class="font-medium">{g.name}</div>
               <div class="text-xs text-muted">
-                {LEVEL[g.level]} · {g.reach}{g.heldBack ? ` · ${HELD_BACK[g.heldBack]}` : ''}
+                {GRANT_LABEL[g.level]} · {g.reach}{g.heldBack ? ` · ${HELD_BACK[g.heldBack]}` : ''}
               </div>
             </div>
             <button class="text-xs text-muted hover:text-coral" onclick={() => revoke(g)}

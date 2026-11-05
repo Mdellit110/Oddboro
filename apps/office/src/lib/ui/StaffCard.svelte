@@ -10,6 +10,7 @@
   import WorkTab from './WorkTab.svelte';
   import type { Work } from '../staff/work.ts';
   import { call } from './api.ts';
+  import { LEVEL_LABEL } from '@oddboro/ledger/access';
   import { ACTIVITY_LABEL, type Activity, type StaffProfile } from '../staff/roster.ts';
   import type { Place, PlaceGroup } from '../staff/places.ts';
 
@@ -101,12 +102,6 @@
     work: work.length,
     lessons: profile.guesses
   });
-
-  const PERMISSION = {
-    read: 'Reads and reports',
-    draft: 'Drafts for your yes',
-    act: 'Acts on its own'
-  } as const;
 
   const hired = $derived(
     new Date(`${profile.hired}T12:00:00`).toLocaleDateString('en-US', {
@@ -208,7 +203,7 @@
               <div class="px-4 pt-4 pb-2">
                 <div class="font-pixel text-xl">{profile.name}</div>
                 <div class="text-xs text-muted">
-                  {profile.role} · {PERMISSION[profile.permission]}
+                  {profile.role} · {LEVEL_LABEL[profile.permission]}
                 </div>
               </div>
               {#if flipped}
@@ -343,14 +338,22 @@
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
     background:
-      radial-gradient(120% 80% at 20% 0%, rgb(47 179 166 / 0.22), transparent 60%),
-      radial-gradient(90% 60% at 100% 100%, rgb(242 180 90 / 0.16), transparent 60%),
+      radial-gradient(
+        120% 80% at 20% 0%,
+        color-mix(in srgb, var(--color-sea) 22%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        90% 60% at 100% 100%,
+        color-mix(in srgb, var(--color-ember) 16%, transparent),
+        transparent 60%
+      ),
       var(--color-panel-solid);
     box-shadow:
       var(--shadow-float),
-      inset 0 0 0 2px rgb(47 179 166 / 0.55),
+      inset 0 0 0 2px color-mix(in srgb, var(--color-sea) 55%, transparent),
       inset 0 0 0 6px var(--color-panel-solid),
-      inset 0 0 0 7px rgb(242 180 90 / 0.35);
+      inset 0 0 0 7px color-mix(in srgb, var(--color-ember) 35%, transparent);
     overflow: hidden;
   }
   .face::after {
@@ -362,8 +365,8 @@
     background: linear-gradient(
       115deg,
       transparent 40%,
-      rgb(255 255 255 / 0.07) 48%,
-      rgb(255 255 255 / 0.02) 52%,
+      color-mix(in srgb, var(--color-white) 7%, transparent) 48%,
+      color-mix(in srgb, var(--color-white) 2%, transparent) 52%,
       transparent 60%
     );
     animation: sheen 1.8s ease-in-out both;
@@ -376,9 +379,13 @@
     border-radius: 10px;
     padding: 12px 0;
     background:
-      radial-gradient(70% 70% at 50% 35%, rgb(47 179 166 / 0.35), transparent 70%),
-      linear-gradient(#0f3b3a, #0b1a22);
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+      radial-gradient(
+        70% 70% at 50% 35%,
+        color-mix(in srgb, var(--color-sea) 35%, transparent),
+        transparent 70%
+      ),
+      linear-gradient(var(--color-sea-deep), var(--color-sea-night));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-white) 8%, transparent);
   }
   .dot {
     width: 7px;

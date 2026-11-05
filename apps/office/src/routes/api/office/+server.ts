@@ -16,7 +16,7 @@ import {
 } from '@oddboro/ledger';
 import { currentOffice } from '#lib/server/space.ts';
 import { inProgress, working } from '#lib/server/staff.ts';
-import { toProfile } from '#lib/staff/roster.ts';
+import { toProfile } from '#lib/server/profile.ts';
 import { heldThreads } from '#lib/staff/thread-tags.ts';
 import type { RequestHandler } from './$types';
 

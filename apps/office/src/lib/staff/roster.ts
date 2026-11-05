@@ -1,20 +1,14 @@
 // The shape of a staffer on the floor, and the words for what each one is
 // doing. The staff themselves live in Postgres; hiring adds a row there.
-import type { StaffRow } from '@oddboro/ledger';
-// The page loads this file for ACTIVITY_LABEL, so only the ledger's page-safe parts.
-import {
-  commandsHow,
-  type Agent,
-  type CommandsHow,
-  type GrantedFolder
-} from '@oddboro/ledger/agents';
+// The page loads this file for ACTIVITY_LABEL, so it takes only types from
+// the ledger; the server builds the profile (`toProfile` in `lib/server/profile.ts`).
+import type { OwnTools } from '@oddboro/ledger';
+import type { Level } from '@oddboro/ledger/access';
+import type { Agent, CommandsHow, GrantedFolder } from '@oddboro/ledger/agents';
 import type { LookSpec } from '@oddboro/sprites/look';
-import { officeDay } from '@oddboro/ledger/time';
 
 export type Activity =
   'work' | 'intake' | 'read' | 'wait' | 'play' | 'rest' | 'eat' | 'exercise' | 'talk' | 'home';
-
-export type PermissionLevel = 'read' | 'draft' | 'act';
 
 export type StaffProfile = {
   id: string;
@@ -25,19 +19,30 @@ export type StaffProfile = {
   variant: string;
   portrait: string;
   hired: string;
-  permission: PermissionLevel;
+  permission: Level;
   /** The coding tool its runs go through. */
   agent: Agent;
   /** The office tools the owner granted, beyond the ones every staffer has. */
   tools: string[];
   /** The owner's Run commands switch, as stored; `commandsHow` says whether its tool follows it. */
   commands: boolean;
-  /** How Run commands reaches its tool on the office's system. */
+  /** How Run commands reaches its tool on the office's system, and the tool here that follows it when its own cannot. */
   commandsHow: CommandsHow;
-  /** The owner's Browse the web switch. */
+  /** The owner's Browse the web switch, as stored. */
   web: boolean;
-  /** Folders outside the office the owner gave it, by real path. */
-  folders: GrantedFolder[];
+  /** The line under Browse the web: what its commands do with it on this tool. */
+  webLine: string;
+  /**
+   * Folders outside the office the owner gave it, as stored, so one gone from
+   * the disk can still be taken back, each with its home folder written `~`.
+   */
+  folders: (GrantedFolder & { shown: string })[];
+  /**
+   * What its runs get now. The stored switches and folders above are the
+   * owner's choice; this is what its tool makes of them, less folders gone
+   * from the disk and a network this office holds back.
+   */
+  reach: OwnTools & { held: boolean };
   /** One sentence on what this staffer is for, shown on the card. */
   remit: string;
   /** The room template this staffer works in when it has a choice. */
@@ -53,43 +58,6 @@ export function lookVersion(look: LookSpec, portraitPx: string): string {
   let h = 5381;
   for (const ch of JSON.stringify(look) + portraitPx) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0;
   return h.toString(36);
-}
-
-/**
- * A staff row as the page needs it. The job description stays on the server.
- * A new hire has no guesses of its own; the next office load counts any for every Odd.
- * Only the server calls it: `commandsHow` reads the office's own system.
- */
-export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
-  return {
-    id: r.id,
-    name: r.name,
-    role: r.role,
-    office: r.office,
-    sprite: r.sprite,
-    variant: r.variant,
-    portrait: r.portrait,
-    hired: officeDay(new Date(r.hiredAt)),
-    permission: r.permission,
-    agent: r.agent,
-    tools: r.tools,
-    commands: r.commands,
-    commandsHow: commandsHow(r.agent, process.platform),
-    web: r.web,
-    folders: r.folders,
-    remit: r.remit,
-    room: r.room,
-    guesses,
-    look:
-      r.look && r.portraitPx
-        ? {
-            spec: r.look,
-            version: lookVersion(r.look, r.portraitPx),
-            sheet: `/api/staff/${r.id}/look?v=${lookVersion(r.look, r.portraitPx)}`,
-            portrait: `/api/staff/${r.id}/portrait?v=${lookVersion(r.look, r.portraitPx)}`
-          }
-        : undefined
-  };
 }
 
 /** What a person reads on the floor for each activity. */

@@ -12,7 +12,7 @@ import {
 } from '@oddboro/ledger';
 import { keepAddress } from '#lib/server/address.ts';
 import { currentOffice } from '#lib/server/space.ts';
-import { toProfile } from '#lib/staff/roster.ts';
+import { toProfile } from '#lib/server/profile.ts';
 import { heldThreads } from '#lib/staff/thread-tags.ts';
 import type { PageServerLoad } from './$types';
 

@@ -18,9 +18,11 @@
   --color-faint: #6e6a82;
   --color-sea: #2fb3a6;
   --color-sea-deep: #0f3b3a;
+  --color-sea-night: #0b1a22;
   --color-ember: #f2b45a;
   --color-coral: #ef7a6b;
   --color-moss: #8fc36b;
+  --color-white: #ffffff;
 
   --font-pixel: 'Pixelify Sans', ui-monospace, monospace;
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
