@@ -235,6 +235,23 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    switch on the Access tab goes through `setAgent` from the staff PATCH, clears the Odd's chat
    session, and gets a 409 while the Odd is replying. A computer without the
    picked tool fails the run naming it; it never falls back to the other.
+   Under "Runs on", the Access tab has two switches, Run commands and Browse
+   the web, and then a Folders list (`FoldersList.svelte`). Each goes through
+   the staff PATCH, `setOwnTool` or `setFolder` in the ledger's `office.ts`,
+   which records a Ledger line, gets no 409 and takes effect on the next run.
+   Run commands shows how the Odd's tool takes it (`commandsHow` on the
+   profile): a switch on Claude Code on a Mac, else checked (Codex) or
+   unchecked and locked, with its reason under it, and the PATCH refuses
+   `{commands}` for a locked one. A folder is typed as a path and set to Can
+   read or Can read and change; `checkFolder` refuses the home folder,
+   anything outside it, and one that holds or sits in a secret store, the
+   office's home or Oddboro's code, and its line shows under the field. The
+   list loads from the staff route's GET, which writes the home folder `~`,
+   and reloads when the profile's folders change; a level change or Remove
+   sends the path as stored. `run()` works out each switch once per run, as
+   its tool takes it (`OwnTools`), and passes the given folders still on the
+   disk; the prompt lists them under "Where things are", and "What you can
+   do" says what the Odd's own tools reach (`ownToolsLine` in `cli.ts`).
    `src/lib/server/grok.ts` starts a Grok run from the office's own Grok home,
    `~/.oddboro/grok` (`GROK_HOME`), never the owner's `~/.grok`. The owner signs
    in to it from the office's page (`agent-sign-in.ts`, item 18); a run from a
@@ -247,8 +264,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    (`grokSignedOut` in `grok.ts`). Its files are
    held by a kernel sandbox profile per Odd (per run on a thread), built on
    Grok's `strict`, which reads the Odd's folders (a lead's chat also its live
-   goals' folders, in the Odd's own profile), the owner's data folder and the tool server's code and
-   shuts `~/Library`, `/Library`, `/tmp` and `/var`; Read deny rules
+   goals' folders, in the Odd's own profile), the owner's data folder, the
+   folders the owner gave it and the tool server's code, writes the given
+   folders it may change (`readWrite`), and
+   shuts `~/Library`, `/Library`, `/tmp` and `/var`. Its `--tools` are the
+   five file tools and, with Browse the web, `web_search` and `web_fetch`,
+   with `GROK_WEB_FETCH=1` on that run alone (every other grok gets `0`);
+   never a shell, so Run commands shows off. Read deny rules
    (`UNREADABLE`) cover what the kernel still lets it read, Grok's home among
    them, and Edit and Write deny rules cover Grok's home, whose sessions folder
    the kernel lets it write. Every deny rule, for either tool, names the path
@@ -265,10 +287,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    A Codex Odd has a shell, held by one kernel permission profile per run
    (`filesystem` in `codex.ts`): everything shut but the system's own folders
    and Apple's developer tools (`DEVELOPER_TOOLS`, and the folder `xcode-select -p`
-   names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders and the owner's data folder read, its
-   folder, its part of a thread and its own temp folder
+   names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders, the owner's data folder and the folders the owner gave it read, its
+   folder, its part of a thread, the given folders it may change and its own temp folder
    (`codex-tmp/<run key>`) written, instruction files and the edited file
-   never, and no network. The run is a process group of its
+   never, and no network. Codex reads files through that shell, so its Run
+   commands shows on and locked. Its own web search is set per run, `live`
+   with Browse the web and `disabled` without (`web_search`, not one of
+   `SWITCHES`). The run is a process group of its
    own; when it ends or times out, that group and each of its commands'
    groups stop (`stopGroups` in `launch.ts`). A job a command moves into a
    group of its own (`set -m`) outlives the run, still confined: macOS shows
@@ -280,12 +305,15 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    read once per office start, the miss too, so a key put there outside the
    page is seen after a restart; with none the run points to the Access tab and
    starts nothing. A Gemini Odd has file
-   tools only. Gemini holds its reads to its folder, the owner's data folder
-   and its thread folders (`--include-directories`), and one policy file per
+   tools and, with Browse the web, Gemini's `google_web_search` and
+   `web_fetch`; never a shell, so Run commands shows off. Gemini holds its
+   reads to its folder, the owner's data folder, its thread folders and the
+   folders the owner gave it (`--include-directories`), and one policy file per
    run (`geminiRules`), in a run folder outside every readable path with the
    run's settings and instructions, is its write wall: every tool it does not
-   name denied, reads and the granted MCP tools allowed, writes allowed only
-   by full path under its folder and its part of a thread, and refused for an
+   name denied, reads, the web tools with Browse the web and the granted MCP
+   tools allowed, writes allowed only by full path under its folder, its part
+   of a thread and the given folders it may change, and refused for an
    instruction file there in any case, the edited file in any case, and any
    path with a `.` or `..` part, `//`, a backslash or a character past ASCII.
    The policy is proved against Gemini's own engine
@@ -306,21 +334,37 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    is, when it started, and the tool it is using now. The list reaches the
    page with each `working` event; only work starting or ending reloads the
    card's tabs. Every Claude Code run gets five file
-   tools, reads only its own folder, the owner's data folder (as a Grok run does), Claude
+   tools (Read, Glob, Grep, Write, Edit), `Bash` with Run commands and
+   `WebSearch` and `WebFetch` with Browse the web, and reads only its own
+   folder, the owner's data folder (as a Grok run does), Claude
    Code's sessions folder for its own folder, where long
-   tool results land, and on a thread, the thread's folder. A lead's chat reads
+   tool results land, on a thread, the thread's folder, and the folders the
+   owner gave it. A lead's chat reads
    the folder of each live (active or paused) goal it leads, and is told where
    each stands, as its pick-ups there are (`readable` in `staff.ts`; Read rules cover Glob and Grep,
    and `dontAsk` turns down every other path). Deny rules beat any allow,
    the owner's own Claude Code settings included, so `unreadable` names what
-   stays shut whatever else allows it: `~/.ssh`, `~/.aws`, `~/.gnupg`,
-   `~/.config`, `~/Library`, `~/.claude.json`, `~/.google_workspace_mcp` (where
-   that MCP server keeps its sign-ins for other apps on the Mac), everything
+   stays shut whatever else allows it: the secret stores in `SECRET_STORES`
+   (the ledger's `office.ts`, which `checkFolder` also reads): `~/.ssh`,
+   `~/.aws`, `~/.gnupg`, `~/.config`, `~/Library`, `~/AppData`,
+   `~/.claude.json`, `~/.google_workspace_mcp` (where
+   that MCP server keeps its sign-ins for other apps on the Mac), `~/.grok`,
+   `~/.codex` and `~/.gemini`, everything
    in `~/.oddboro` besides `staff/` and `data/` (and `threads/<id>/` for a
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
-   A run writes only inside `~/.oddboro/staff/<id>/`, and on a thread its own
-   part of the thread's folder, never an instruction file in either
+   With Run commands, `--settings` adds Claude Code's sandbox (`sandbox()` in
+   `run()`): commands read only what the run reads, plus their temp folder and
+   node when it sits in the home folder, write only where the run writes,
+   never the data folder or an instruction file (`denyWrite`), and reach no
+   network. Bash writes in every folder Claude Code works in, so `--add-dir`
+   then names only the data folder and the folders the run writes. That run
+   gets a temp folder of its own, `/private/tmp/ob-<start of the run key>` as
+   `CLAUDE_CODE_TMPDIR`, removed when it ends, `GIT_CONFIG_GLOBAL=/dev/null`,
+   and none of the office's `NODE_OPTIONS`.
+   A run writes only inside `~/.oddboro/staff/<id>/`, on a thread its own
+   part of the thread's folder, and the folders the owner gave it to change,
+   never an instruction file in any
    (`CLAUDE.md`, `CLAUDE.local.md`, `.claude`, `.grok`, `AGENTS.md`,
    `.mcp.json`, `AGENTS.override.md`, `.codex`, `.agents`, `GEMINI.md`, `.gemini`; `INSTRUCTIONS` and `deniedEdits` in `files.ts`), nor the file a run
    reading the owner's edit is reading, and gets no skills, no

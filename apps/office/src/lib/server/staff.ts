@@ -2,13 +2,16 @@
 // or Gemini for an Odd the owner moved to one (cli.ts), run headless, with the staffer's job
 // description from Postgres added to the system prompt. Server only.
 //
-// A Claude Code run gets five file tools (Read, Glob, Grep, Write, Edit), may
-// read only its own folder, the owner's data folder and, on a thread, the
-// thread's folder (see `readable`), may write only inside the staffer's own folder and
-// its own part of that thread's, except its tools' own instructions
-// (`INSTRUCTIONS` in files.ts) and, reading the owner's edit, that file (`deniedEdits`),
-// loads no project settings, skills or plugins, and
-// is denied anything not pre-approved. It always gets the office server (asks,
+// A Claude Code run gets five file tools (Read, Glob, Grep, Write, Edit), and
+// with the owner's switches as its tool takes them (`OwnTools`), Bash in
+// Claude Code's sandbox and WebSearch and WebFetch. It may read only its own
+// folder, the owner's data folder, on a thread the thread's folder, and the
+// folders the owner gave it (see `readable`), may write only inside the
+// staffer's own folder, its own part of that thread's and the folders the
+// owner gave it to change, except its tools' own instructions (`INSTRUCTIONS`
+// in files.ts) and, reading the owner's edit, that file (`deniedEdits`),
+// loads no project settings, skills or plugins, and is denied anything not
+// pre-approved. It always gets the office server (asks,
 // tasks, the ledger), plus whatever access the owner granted: servers at read
 // level (the tools the owner ticked as read-only) or at write level (every
 // tool). Hosted servers get a fresh OAuth token per run.

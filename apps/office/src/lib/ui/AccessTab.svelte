@@ -2,6 +2,7 @@
   import type { Candidate, HeldBack } from '@oddboro/ledger';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import { call } from './api.ts';
+  import FoldersList from './FoldersList.svelte';
   import RunsOn from './RunsOn.svelte';
   import type { StaffProfile } from '../staff/roster.ts';
 
@@ -99,6 +100,19 @@
     }
   }
 
+  /** The page shows how Run commands reaches the Odd's tool; only the server works it out. */
+  const how = $derived(profile.commandsHow);
+  async function setOwnTool(which: 'commands' | 'web', box: HTMLInputElement) {
+    problem = '';
+    try {
+      await call(`/api/staff/${profile.id}`, { [which]: box.checked }, 'PATCH');
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+      // The switch did not change, so nothing redraws the box.
+      box.checked = !box.checked;
+    }
+  }
+
   async function setAgent(select: HTMLSelectElement) {
     problem = '';
     try {
@@ -141,9 +155,47 @@
       {/each}
     </div>
     <RunsOn value={profile.agent} onpick={setAgent} class="mt-2 text-[11px]" />
+    <ul class="mt-2 flex flex-col gap-1 rounded-xl bg-raise p-1.5">
+      <li>
+        <label
+          class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 {how.state === 'switch'
+            ? 'cursor-pointer hover:bg-night/40'
+            : ''}"
+        >
+          <input
+            type="checkbox"
+            class="mt-0.5"
+            checked={how.state === 'always' || (how.state === 'switch' && profile.commands)}
+            disabled={how.state !== 'switch'}
+            onchange={(e) => setOwnTool('commands', e.currentTarget)}
+          />
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm">Run commands</span>
+            {#if how.state !== 'switch'}
+              <span class="block text-xs text-muted">{how.why}</span>
+            {/if}
+          </span>
+        </label>
+      </li>
+      <li>
+        <label
+          class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-night/40"
+        >
+          <input
+            type="checkbox"
+            class="mt-0.5"
+            checked={profile.web}
+            onchange={(e) => setOwnTool('web', e.currentTarget)}
+          />
+          <span class="block text-sm">Browse the web</span>
+        </label>
+      </li>
+    </ul>
   </div>
   <div class="flex-1 overflow-y-auto p-3">
-    <section aria-labelledby="office-tools">
+    <FoldersList {profile} />
+
+    <section class="mt-4" aria-labelledby="office-tools">
       <h3 id="office-tools" class="text-[11px] text-muted">In the office</h3>
       <ul class="mt-1.5 flex flex-col gap-1 rounded-xl bg-raise p-1.5">
         {#each GRANTABLE as t (t.id)}
