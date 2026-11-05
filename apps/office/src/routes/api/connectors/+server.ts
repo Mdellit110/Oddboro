@@ -11,7 +11,10 @@ export const GET: RequestHandler = async ({ url }) => {
     name: c.name,
     description: c.description,
     kind: c.kind,
-    ready: !!c.readyAt
+    ready: !!c.readyAt,
+    /** A hosted server named by its address, so the owner picks how it lets the office in. */
+    byAddress: c.kind === 'http' && !c.registry,
+    keyHeader: c.config.oauth ? undefined : c.config.headers?.[0]
   }));
   let registry: Awaited<ReturnType<typeof searchRegistry>> = [];
   let problem: string | undefined;

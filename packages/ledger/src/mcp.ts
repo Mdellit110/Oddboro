@@ -447,16 +447,26 @@ if (has('ask_for_access'))
           .enum(['read', 'write'])
           .describe('read to look, write to change things in the tool.'),
         why: z.string().describe('What job this access is for, in one or two sentences.'),
+        key_header: z
+          .string()
+          .max(64)
+          .optional()
+          .describe(
+            `Only for an https address that takes a key instead of a sign-in: the name of the header the key goes in, as the server's docs or ${OWNER} give it, e.g. x-api-key or Authorization. ${OWNER} pastes the key on their desk. Never ask for the key itself.`
+          ),
         revises: revisesArg
       }
     },
-    async ({ connector: wanted, level: asked, why, revises }) => {
+    async ({ connector: wanted, level: asked, why, key_header, revises }) => {
       const level = asked === 'write' ? 'act' : 'read';
       if (!levelAtMost(level, me.permission))
         return text(
           `You hold ${me.permission}, so you cannot ask for ${asked}. Ask ${OWNER} to raise your level first.`
         );
-      const found = await ensureConnector(wanted);
+      const found = await ensureConnector(
+        wanted,
+        key_header ? { keyHeader: key_header.trim() } : undefined
+      );
       if (!found.connector) return text(`${found.problem} Use find_connectors.`);
       const conn = found.connector;
       const title = `Connect ${conn.name} (${asked})`;

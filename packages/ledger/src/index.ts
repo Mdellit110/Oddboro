@@ -13,7 +13,13 @@ export {
 } from './time.ts';
 export * from './tools.ts';
 export * from './capabilities.ts';
-export { searchRegistry, ensureConnector, type Candidate } from './registry.ts';
+export {
+  searchRegistry,
+  ensureConnector,
+  HEADER_NAME,
+  type Candidate,
+  type WayIn
+} from './registry.ts';
 export { sql as pg, DATABASE_URL, LOCAL } from './db.ts';
 export * from './home.ts';
 export * from './platform.ts';

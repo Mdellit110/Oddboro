@@ -8,6 +8,7 @@ import {
   desc,
   eq,
   gte,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -15,6 +16,7 @@ import {
   sql
 } from 'drizzle-orm';
 import { db, sql as pg } from './db.ts';
+import { deleteSecret } from './secrets.ts';
 import { embed } from './embed.ts';
 import {
   asks,
@@ -633,7 +635,8 @@ function connectSteps(conn: ConnectorRow, again = false): Step[] {
         ]
       : []),
     ...[...(conn.config.secrets ?? []), ...(conn.config.headers ?? [])].map((name) => ({
-      text: `Paste ${name === 'Authorization' ? `your ${conn.name} key` : `the ${name} value for ${conn.name}`} below. It goes in this computer's password store, never the database.`,
+      // A server named by its address has one header, and it holds the key.
+      text: `Paste ${name === 'Authorization' || (conn.kind === 'http' && !conn.registry) ? `your ${conn.name} key` : `the ${name} value for ${conn.name}`} below. It goes in this computer's password store, never the database.`,
       done: false,
       action: { kind: 'secret' as const, connector: conn.id, name }
     })),
@@ -667,6 +670,68 @@ export async function setConnectorConfig(
   await db.update(connectors).set({ config }).where(eq(connectors.id, id));
 }
 
+/**
+ * The names a tool's secrets go by in the system's secret store: its keys,
+ * and a hosted server's sign-in. `all` adds the sign-in of any hosted server,
+ * since one can leave tokens behind even after it turned out to need none.
+ */
+function secretNames(c: Pick<ConnectorRow, 'kind' | 'config'>, all = false): string[] {
+  return [
+    ...(c.config.secrets ?? []),
+    ...(c.config.headers ?? []),
+    ...(c.config.oauth || (all && c.kind === 'http') ? ['oauth'] : [])
+  ];
+}
+
+/** Drop the open tasks whose steps connect a tool, for one staffer or for all of them. */
+async function dropConnectTasks(id: string, staffId?: string): Promise<void> {
+  const open = await db
+    .select()
+    .from(tasks)
+    .where(
+      staffId ? and(eq(tasks.status, 'open'), eq(tasks.staffId, staffId)) : eq(tasks.status, 'open')
+    );
+  const stale = open
+    .filter((t) =>
+      t.steps.some((s) => s.action && 'connector' in s.action && s.action.connector === id)
+    )
+    .map((t) => t.id);
+  if (stale.length)
+    await db.update(tasks).set({ status: 'dropped' }).where(inArray(tasks.id, stale));
+}
+
+/**
+ * A tool not connected yet changes how it lets the office in, like a key in a
+ * header instead of a sign-in. Its open connect tasks name the old way, so
+ * they drop, and the next grant puts the new steps on the desk. Keys and
+ * sign-ins the new way does not use come out of the secret store.
+ */
+export async function reconfigureConnector(
+  id: string,
+  config: ConnectorRow['config']
+): Promise<void> {
+  const before = await connector(id);
+  await db.update(connectors).set({ config }).where(eq(connectors.id, id));
+  await dropConnectTasks(id);
+  if (!before) return;
+  const keep = secretNames({ kind: before.kind, config });
+  for (const name of secretNames(before, true)) if (!keep.includes(name)) deleteSecret(id, name);
+}
+
+/**
+ * No Odd holds a tool any more: its keys and sign-ins come out of the secret
+ * store, so none sit there unused, and it needs connecting again before the
+ * next grant uses it. True when there was something to remove.
+ */
+async function forgetConnector(id: string): Promise<boolean> {
+  const c = await connector(id);
+  if (!c) return false;
+  const removed = secretNames(c, true).filter((name) => deleteSecret(id, name));
+  if (removed.length)
+    await db.update(connectors).set({ readyAt: null }).where(eq(connectors.id, id));
+  return removed.length > 0;
+}
+
 export async function connectorReady(
   id: string,
   tools: string[],
@@ -694,12 +759,22 @@ export async function revoke(staffId: string, connectorId: string): Promise<void
     .delete(grants)
     .where(and(eq(grants.staffId, staffId), eq(grants.connectorId, connectorId)))
     .returning();
-  if (gone)
-    await record({
-      kind: 'access',
-      actor: 'owner',
-      title: `Revoked ${connectorId} for ${staffId}`
-    });
+  if (!gone) return;
+  await dropConnectTasks(connectorId, staffId);
+  const [held] = await db
+    .select({ staffId: grants.staffId })
+    .from(grants)
+    .where(eq(grants.connectorId, connectorId))
+    .limit(1);
+  const forgot = !held && (await forgetConnector(connectorId));
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: `Revoked ${connectorId} for ${staffId}`,
+    body: forgot
+      ? "No Odd holds it now, so its saved keys and sign-ins came out of this computer's password store."
+      : undefined
+  });
 }
 
 // Tasks for the owner

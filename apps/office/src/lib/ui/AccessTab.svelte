@@ -12,7 +12,17 @@
     reach: string;
     heldBack: HeldBack | null;
   };
-  type Own = { id: string; name: string; description: string; kind: string; ready: boolean };
+  type Own = {
+    id: string;
+    name: string;
+    description: string;
+    kind: string;
+    ready: boolean;
+    byAddress: boolean;
+    keyHeader?: string;
+  };
+  /** A hosted server named by its address lets the office in with a sign-in, or a key in a header. */
+  type Pick = { id: string; name: string; kind: string; byAddress?: boolean; keyHeader?: string };
   type Props = { profile: StaffProfile; version: number };
   let { profile, version }: Props = $props();
 
@@ -23,8 +33,16 @@
     catalog: [],
     registry: []
   });
-  let pick = $state<{ id: string; name: string; kind: string } | undefined>();
+  let pick = $state<Pick | undefined>();
   let level = $state<'read' | 'act'>('read');
+  let useKey = $state(false);
+  let keyHeader = $state('');
+  /** Pick a tool. One named by its address starts on the way in it has, or a sign-in. */
+  function choose(p: Pick) {
+    pick = p;
+    useKey = !!p.keyHeader;
+    keyHeader = p.keyHeader ?? 'Authorization';
+  }
   let problem = $state('');
   let done = $state('');
 
@@ -52,7 +70,11 @@
     if (!pick) return;
     problem = '';
     try {
-      await call(`/api/staff/${profile.id}/access`, { connector: pick.id, level });
+      await call(`/api/staff/${profile.id}/access`, {
+        connector: pick.id,
+        level,
+        way: pick.byAddress ? { keyHeader: useKey ? keyHeader.trim() : undefined } : undefined
+      });
       done = `A task with the steps to connect ${pick.name} is on your desk.`;
       adding = false;
       pick = undefined;
@@ -186,11 +208,16 @@
                 <button
                   class="w-full rounded-lg px-2 py-1.5 text-start text-sm hover:bg-night/60"
                   onclick={() =>
-                    (pick = { id: q.trim(), name: new URL(q.trim()).hostname, kind: 'http' })}
+                    choose({
+                      id: q.trim(),
+                      name: new URL(q.trim()).hostname,
+                      kind: 'http',
+                      byAddress: true
+                    })}
                 >
                   <span class="block">Connect {new URL(q.trim()).hostname}</span>
                   <span class="block text-xs text-muted"
-                    >A hosted MCP server. You sign in to it next.</span
+                    >A hosted MCP server. You sign in or give it a key next.</span
                   >
                 </button>
               </li>
@@ -199,7 +226,7 @@
               <li>
                 <button
                   class="w-full rounded-lg px-2 py-1.5 text-start text-sm hover:bg-night/60"
-                  onclick={() => (pick = c)}
+                  onclick={() => choose({ ...c, byAddress: c.byAddress && !c.ready })}
                 >
                   <span class="block"
                     >{c.name} <span class="text-[11px] text-moss">in the office</span></span
@@ -213,7 +240,7 @@
                 <button
                   class="w-full rounded-lg px-2 py-1.5 text-start text-sm hover:bg-night/60 disabled:opacity-40"
                   disabled={!!c.unsupported}
-                  onclick={() => (pick = { id: c.registry, name: c.name, kind: c.kind ?? 'stdio' })}
+                  onclick={() => choose({ id: c.registry, name: c.name, kind: c.kind ?? 'stdio' })}
                 >
                   <span class="block"
                     >{c.name} <span class="text-[11px] text-faint">{c.registry}</span></span
@@ -228,6 +255,35 @@
           </ul>
         {:else}
           <div class="text-sm font-medium">{pick.name}</div>
+          {#if pick.byAddress}
+            <div class="flex gap-1.5" role="group" aria-label="How it lets the office in">
+              {#each [false, true] as key (key)}
+                <button
+                  class="flex-1 rounded-lg px-2 py-1.5 text-xs {useKey === key
+                    ? 'bg-sea/25'
+                    : 'bg-night/60'}"
+                  aria-pressed={useKey === key}
+                  onclick={() => (useKey = key)}>{key ? 'Takes a key' : 'Signs in'}</button
+                >
+              {/each}
+            </div>
+            {#if useKey}
+              <label class="flex flex-col gap-1 text-xs text-muted">
+                The header the key goes in
+                <input
+                  class="rounded-lg bg-night/60 px-3 py-2 text-sm text-ink outline-none placeholder:text-faint"
+                  placeholder="Authorization"
+                  spellcheck="false"
+                  autocomplete="off"
+                  bind:value={keyHeader}
+                />
+              </label>
+              <p class="text-[11px] text-faint">
+                The server's setup guide names it, like x-api-key. You paste the key on your desk
+                next, and it goes in this computer's password store.
+              </p>
+            {/if}
+          {/if}
           <div class="flex gap-1.5">
             {#each levels as l (l)}
               <button
@@ -249,6 +305,7 @@
             >
             <button
               class="flex-1 rounded-lg bg-sea px-3 py-1.5 text-xs font-medium text-night disabled:opacity-40"
+              disabled={!!pick.byAddress && useKey && !keyHeader.trim()}
               onclick={grant}>Grant</button
             >
           </div>
