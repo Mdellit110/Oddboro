@@ -1,5 +1,10 @@
 // Talking to the office server from the page. A failed call throws with the
 // server's own message, so the page can show it as written.
+//
+// Every action goes as JSON, even one with no body, like a DELETE. SvelteKit
+// refuses an action with no content type unless its Origin matches the
+// office's, and in a release the office takes its origin to be https while
+// the page is http (apps/office/CLAUDE.md, "Who the office answers").
 export async function call<T = { ok: true }>(
   url: string,
   body?: unknown,
@@ -7,7 +12,7 @@ export async function call<T = { ok: true }>(
 ): Promise<T> {
   const res = await fetch(url, {
     method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: method === 'GET' ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   if (!res.ok) throw await failure(res);

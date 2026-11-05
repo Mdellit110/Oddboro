@@ -63,11 +63,16 @@
   }
 
   async function revoke(g: Grant) {
-    await call(
-      `/api/staff/${profile.id}/access?connector=${encodeURIComponent(g.connector)}`,
-      undefined,
-      'DELETE'
-    );
+    problem = '';
+    try {
+      await call(
+        `/api/staff/${profile.id}/access?connector=${encodeURIComponent(g.connector)}`,
+        undefined,
+        'DELETE'
+      );
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+    }
   }
 
   const LEVEL = { read: 'Read only', act: 'Read and write' } as const;
