@@ -100,13 +100,17 @@ test("a switch or a move that opens or closes commands' internet says so in its 
     .values([
       odd('Nell', { agent: 'claude', commands: true, web: false }),
       odd('Otis', { agent: 'claude', commands: false, web: false }),
-      odd('Gale', { agent: 'grok', commands: true, web: true })
+      odd('Gale', { agent: 'grok', commands: true, web: true }),
+      odd('Wren', { agent: 'claude', commands: false, web: true })
     ]);
   await onPlatform('darwin', async () => {
     await O.setOwnTool('Nell', 'web', true);
     await O.setOwnTool('Nell', 'web', false);
     await O.setOwnTool('Otis', 'web', true);
     await O.setAgent('Gale', 'claude');
+    // Run commands, with Browse the web already on, opens the internet too.
+    await O.setOwnTool('Wren', 'commands', true);
+    await O.setOwnTool('Wren', 'commands', false);
   });
   const lines = await sql<{ title: string; body: string }>`
     select title, body from ledger order by id`;
@@ -116,7 +120,9 @@ test("a switch or a move that opens or closes commands' internet says so in its 
       ['Let Nell browse the web', O.NETWORK_NOTE.on],
       ['Stopped Nell browsing the web', O.NETWORK_NOTE.off],
       ['Let Otis browse the web', ''],
-      ['Moved Gale from Grok to Claude Code', O.NETWORK_NOTE.on]
+      ['Moved Gale from Grok to Claude Code', O.NETWORK_NOTE.on],
+      ['Let Wren run commands', O.NETWORK_NOTE.on],
+      ['Stopped Wren running commands', O.NETWORK_NOTE.off]
     ]
   );
   assert.deepEqual(O.NETWORK_NOTE, {
