@@ -987,8 +987,12 @@ address when it answers and is trusted.
 Other pages open in the owner's browser can send requests to the office too,
 so `guardOffice` (`src/lib/server/owner-page.ts`, the server's `handle` in
 `hooks.server.ts`) checks every route and API request before the route sees
-it, in every mode. SvelteKit's own check covers form posts only. Files built
-into the page (scripts, styles, images) are served before the check.
+it, in every mode. Files built into the page (scripts, styles, images) are
+served before the check. SvelteKit's own check stays on as well, for form
+posts and any action with no content type. In a release, whose port moves,
+the adapter takes the office's origin to be https, so that check refuses
+the owner's own http page. So the page's `call()` (`src/lib/ui/api.ts`)
+sends every action as JSON, body or not.
 
 1. The Host must be one of the office's names, whatever the port: 127.0.0.1,
    [::1], localhost, the addresses through Caddy (`HOSTS` in

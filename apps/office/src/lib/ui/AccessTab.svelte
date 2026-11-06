@@ -114,11 +114,16 @@
   }
 
   async function revoke(g: Grant) {
-    await call(
-      `/api/staff/${profile.id}/access?connector=${encodeURIComponent(g.connector)}`,
-      undefined,
-      'DELETE'
-    );
+    problem = '';
+    try {
+      await call(
+        `/api/staff/${profile.id}/access?connector=${encodeURIComponent(g.connector)}`,
+        undefined,
+        'DELETE'
+      );
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+    }
   }
 
   /** Why its runs leave a granted tool out, for the owner. Grants are read or act, so only act can sit above a level. */
