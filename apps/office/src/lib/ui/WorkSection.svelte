@@ -5,8 +5,9 @@
   import { toolWords, type Work } from '../staff/work.ts';
   import type { StaffProfile } from '../staff/roster.ts';
 
-  // What a staffer is working on right now: each job, approved ask or rework,
-  // and what it is using this moment. It updates as the staffer works.
+  // What an Odd is working on right now, on its info page: each job, approved
+  // ask or rework, and what it is using this moment. It updates as the Odd
+  // works.
   type Props = { profile: StaffProfile; items: Work[] };
   let { profile, items }: Props = $props();
 
@@ -40,10 +41,13 @@
   }
 </script>
 
-<div class="flex flex-col gap-3 p-3">
+<section class="flex flex-col gap-2" aria-label="In progress">
+  <h3 class="text-xs font-semibold text-ink">
+    In progress{#if items.length}<span class="ms-1.5 text-ember">{items.length}</span>{/if}
+  </h3>
   {#if !items.length}
-    <p class="py-10 text-center text-sm text-muted">
-      {profile.name} has nothing in progress. Jobs and approved asks show here while they run.
+    <p class="rounded-xl bg-raise px-3 py-3 text-sm text-muted">
+      Nothing right now. Jobs and approved asks show here while they run.
     </p>
   {/if}
   {#each items as w (w.id)}
@@ -88,7 +92,7 @@
       {/if}
     </section>
   {/each}
-</div>
+</section>
 
 <style>
   .busy {

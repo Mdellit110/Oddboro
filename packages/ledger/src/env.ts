@@ -18,7 +18,12 @@ export const ENV_FILE =
  * the same way in both.
  */
 export function readEnv(file = ENV_FILE): NodeJS.Dict<string> {
-  return existsSync(file) ? parseEnv(readFileSync(file, 'utf8')) : {};
+  try {
+    return existsSync(file) ? parseEnv(readFileSync(file, 'utf8')) : {};
+  } catch {
+    // Unreadable here (a sandbox that shows the file but will not open it): nothing from it.
+    return {};
+  }
 }
 
 /**

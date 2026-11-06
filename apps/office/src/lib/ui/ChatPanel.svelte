@@ -2,6 +2,7 @@
   import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import type { HandOffLine, HandOffStep, LessonLine, PokeRow, ThreadLine } from '@oddboro/ledger';
+  import { FIRST_QUESTIONS, firstQuestionIn } from '@oddboro/ledger/first-questions';
   import { clockTime } from '@oddboro/ledger/time';
   import Markdown from './Markdown.svelte';
   import Lesson from './Lesson.svelte';
@@ -251,6 +252,21 @@
     const re = replyTo;
     draft = '';
     replyTo = undefined;
+    await say(message, re);
+  }
+
+  /**
+   * The answers to tap under the manager's first questions (`FIRST_QUESTIONS`):
+   * only while the question is the chat's last line. Typing an answer works too.
+   */
+  const answers = $derived.by(() => {
+    const last = lines.at(-1);
+    if (sending || !last || last.from !== 'staff' || last.pending || last.failed) return [];
+    return FIRST_QUESTIONS[firstQuestionIn(last.text)]?.answers ?? [];
+  });
+
+  /** Send one message and stream the reply into the chat. */
+  async function say(message: string, re?: Delivered) {
     sending = true;
     status = 'Thinking';
     lines.push({ from: 'owner', text: message, re });
@@ -616,6 +632,16 @@
         {/if}
       {/if}
     {/each}
+    {#if answers.length}
+      <div class="ms-auto flex max-w-[85%] flex-wrap justify-end gap-1.5" aria-label="Answers">
+        {#each answers as a (a)}
+          <button
+            class="rounded-full border border-sea/50 px-3 py-1 text-xs text-ink hover:bg-sea/20"
+            onclick={() => say(a)}>{a}</button
+          >
+        {/each}
+      </div>
+    {/if}
     <!-- A poke to come keeps its words until it lands as a message, at the bottom. -->
     {#each upcoming as p (p.id)}
       <div class="me-auto ms-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">

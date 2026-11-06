@@ -9,35 +9,44 @@
 // signs in, that file is the sign-in's to keep. A Codex Odd has a shell, held
 // by a permission profile the kernel enforces (Seatbelt on a Mac): it reads
 // the system's own folders (`:minimal`), Apple's developer tools (Xcode's
-// too, when the Mac uses it), node's OpenSSL config, its folder,
-// the owner's data folder and the thread folders it reads, writes only its
-// folder, its part of a thread and its own temp folder, never an instruction
-// file in them, and reaches no network. The codex process itself and the MCP servers run
-// outside that profile, so the Codex home, the sign-in and every Codex Odd's
-// sessions stay shut to the model.
+// too, when the Mac uses it), node's OpenSSL config, the owner's developer
+// tool folders but their credential files (`devReads`), its folder,
+// the owner's data folder, the thread folders it reads and the folders the
+// owner gave it, writes only its folder, its part of a thread, the folders the
+// owner gave it to change and its own temp folder, never an instruction file
+// in them, and never reaches the internet (`NETWORK_WITH_WEB`). Codex's own
+// web search runs outside the profile, only with Browse the web on. The codex
+// process itself and the MCP servers run outside that profile, so the Codex
+// home, the sign-in and every Codex Odd's sessions stay shut to the model.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { home } from '@oddboro/ledger';
+import { home, OFFICE_ACCOUNT, toolHome, type Effort } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
+import { devReads } from './sandbox.ts';
 import {
   mcpGrant,
   NOT_SIGNED_IN,
   replace,
+  shellEnv,
   sweep,
   toml,
   vendorEnv,
   type RunEvent,
+  type RunImage,
   type Toml
 } from './launch.ts';
 
-export const CODEX_HOME = home('codex');
-const CONFIG = join(CODEX_HOME, 'config.toml');
 /**
- * Where a sign-in is kept, since config.toml says `cli_auth_credentials_store
- * = "file"`. Sign out from the page removes it (agent-sign-in.ts).
+ * One account's Codex home (`toolHome`), its config, and where its sign-in is
+ * kept, since config.toml says `cli_auth_credentials_store = "file"`. Sign out
+ * from the page removes it (agent-sign-in.ts).
  */
-export const CODEX_AUTH = join(CODEX_HOME, 'auth.json');
+export function codexHome(account: string = OFFICE_ACCOUNT) {
+  const dir = toolHome('codex', account);
+  return { dir, config: join(dir, 'config.toml'), auth: join(dir, 'auth.json') };
+}
+type CodexHome = ReturnType<typeof codexHome>;
 /**
  * Each run's own temp folder, named by its key. A shared one would let one
  * Odd's shell read what another's left there.
@@ -73,17 +82,18 @@ const FEATURES_OFF = [
 /**
  * What every Codex run sets, whatever its home's config.toml says: no
  * approval prompts (a call outside the profile is refused, not escalated), no
- * web search, no sub-agents (`features.multi_agent` alone leaves spawn_agent
+ * sub-agents (`features.multi_agent` alone leaves spawn_agent
  * and the rest of the collaboration tools in the model's list; `agents.enabled`
  * takes them out, measured with `codex debug prompt-input` on 0.166.0), no
- * bundled skills, a shell that inherits only the core variables
- * and is never a login shell, no history, analytics or update check, the
+ * bundled skills, a shell that inherits only the core variables (so
+ * anything a run's shell needs besides them goes in
+ * `shell_environment_policy.set`, never on the codex process's own
+ * environment) and is never a login shell, no history, analytics or update check, the
  * sign-in kept as a file, and instruction files read from the run's folder
  * only (no project root above it).
  */
 const SWITCHES: Record<string, Toml> = {
   approval_policy: 'never',
-  web_search: 'disabled',
   'agents.enabled': false,
   allow_login_shell: false,
   'shell_environment_policy.inherit': 'core',
@@ -114,11 +124,13 @@ const PROFILE = 'odd';
 type CodexRun = {
   /** The run's key (`runsGoing`), which names its temp folder. */
   key: string;
+  /** The account whose Codex home the run uses (accounts.ts). */
+  account: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
-  /** The folders the run writes: its own, and on a thread its part of it. */
+  /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
   /** The file the owner edited, which a run reading that edit may read and not write. */
   edited?: string;
@@ -130,6 +142,16 @@ type CodexRun = {
   servers: Record<string, Record<string, unknown>>;
   /** The MCP tools the run may call, as access() names them for Claude Code (`mcp__server` or `mcp__server__tool`). */
   allowed: string[];
+  /** The owner's Browse the web switch: Codex's own web search, which works with the network off. */
+  web: boolean;
+  /** Whether the run's commands reach the internet (`network` in its profile). */
+  network: boolean;
+  /** Pictures sent with the message (an office run only), each as `--image=<file>`. */
+  images?: RunImage[];
+  /** How hard the model thinks, as `model_reasoning_effort`: an Odd's level or an office run's. */
+  effort?: Effort;
+  /** The Odd's own model; without one, the office's (`OFFICE_CODEX_MODEL`) or the tool's default. */
+  model?: string;
 };
 
 type CodexLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; done: () => void };
@@ -188,17 +210,31 @@ function developerReads(): string[] {
 /**
  * The kernel's allowlist for one run, every path a real one. `:root` shuts
  * everything not named; `:minimal` reads what a command needs to start,
- * `developerReads` what the shims in /usr/bin need, and NODE_OPENSSL what
- * node needs; /tmp,
+ * `developerReads` what the shims in /usr/bin need, NODE_OPENSSL what
+ * node needs, and `devReads` the owner's developer tools; /tmp,
  * which Codex lets a run write by default, is shut. Instruction files in the
  * folders the run writes are shut both ways, each path and what is under it.
+ *
+ * No entry names a repository's hooks, config or submodules (`REPO_RUNS`):
+ * Codex itself keeps each write folder's own `.git` read only (measured with
+ * `codex sandbox` on 0.166.0), so a Codex Odd cannot commit there either. A
+ * repository further in (`<w>/sub/.git`) is not covered: Codex takes a glob
+ * only as `deny` (it refuses to start on a `read` or `write` one), and a
+ * deny would stop git reading its config. Like every tool's git walls, these
+ * shut git's usual places only, not every way code in a project can run
+ * later (`REPO_RUNS` in files.ts).
  */
 function filesystem(r: CodexRun, temp: string): Record<string, string> {
+  const dev = devReads();
   return {
     ':root': 'deny',
     ':minimal': 'read',
     ':slash_tmp': 'deny',
-    ...Object.fromEntries([...developerReads(), NODE_OPENSSL, ...r.reads].map((p) => [p, 'read'])),
+    ...Object.fromEntries(
+      [...developerReads(), NODE_OPENSSL, ...dev.reads, ...r.reads].map((p) => [p, 'read'])
+    ),
+    // After the reads, so each deny shuts one file in a folder read above.
+    ...Object.fromEntries(dev.denies.map((p) => [p, 'deny'])),
     ...Object.fromEntries([...r.writes, temp].map((p) => [p, 'write'])),
     ...Object.fromEntries(
       instructionPaths(r.writes)
@@ -250,10 +286,10 @@ export function mcpServers(
  * if it had none. Made before the sign-in check and the sign-in, so a sign-in
  * keeps itself as a file, not in the keychain.
  */
-function homeReady(): void {
-  mkdirSync(CODEX_HOME, { recursive: true, mode: 0o700 });
-  chmodSync(CODEX_HOME, 0o700);
-  if (!existsSync(CONFIG)) replace(CONFIG, FIRST_CONFIG);
+function homeReady(h: CodexHome): void {
+  mkdirSync(h.dir, { recursive: true, mode: 0o700 });
+  chmodSync(h.dir, 0o700);
+  if (!existsSync(h.config)) replace(h.config, FIRST_CONFIG);
 }
 
 /**
@@ -261,10 +297,11 @@ function homeReady(): void {
  * file, else the email its ID token names, when it names one. The token's
  * signature is not checked: the email is shown, never trusted.
  */
-export function codexAccount(): { email?: string } | undefined {
-  if (!existsSync(CODEX_AUTH)) return undefined;
+export function codexAccount(account: string = OFFICE_ACCOUNT): { email?: string } | undefined {
+  const h = codexHome(account);
+  if (!existsSync(h.auth)) return undefined;
   try {
-    const auth = JSON.parse(readFileSync(CODEX_AUTH, 'utf8')) as {
+    const auth = JSON.parse(readFileSync(h.auth, 'utf8')) as {
       tokens?: { id_token?: unknown };
     };
     const payload = auth.tokens?.id_token;
@@ -284,14 +321,14 @@ export function codexAccount(): { email?: string } | undefined {
  * nothing. Codex's own advice would sign in the owner's ~/.codex, so this
  * points to the office's own sign-in, on the page.
  */
-export function codexSignedOut(): string | undefined {
-  homeReady();
-  return codexAccount() ? undefined : `Codex ${NOT_SIGNED_IN}`;
+export function codexSignedOut(account: string = OFFICE_ACCOUNT): string | undefined {
+  homeReady(codexHome(account));
+  return codexAccount(account) ? undefined : `Codex ${NOT_SIGNED_IN}`;
 }
 
 /** The environment every `codex` the office starts gets: the office's Codex home, and no key or setup of the office's own. */
-function codexEnv(): NodeJS.ProcessEnv {
-  return Object.assign(vendorEnv(['OPENAI_', 'CODEX_']), { CODEX_HOME });
+function codexEnv(h: CodexHome): NodeJS.ProcessEnv {
+  return Object.assign(vendorEnv(['OPENAI_', 'CODEX_']), { CODEX_HOME: h.dir });
 }
 
 /**
@@ -299,29 +336,39 @@ function codexEnv(): NodeJS.ProcessEnv {
  * (agent-sign-in.ts). It says to keep the sign-in as a file even when the
  * home's config.toml does not, or the office would never see it.
  */
-export function codexSignIn(): { args: string[]; env: NodeJS.ProcessEnv } {
-  homeReady();
+export function codexSignIn(account: string = OFFICE_ACCOUNT): {
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  const h = codexHome(account);
+  homeReady(h);
   return {
     args: ['login', '-c', `cli_auth_credentials_store=${toml('file')}`],
-    env: codexEnv()
+    env: codexEnv(h)
   };
 }
 
 /**
- * Get a Codex run ready: its home, its temp folder, and the arguments,
- * environment and input to start `codex exec` with. `done` removes the temp
- * folder.
+ * Get a Codex run ready: its home, its temp folder with the empty git
+ * template inside (`shellEnv`), and the arguments, environment and input to
+ * start `codex exec` with. `done` removes the temp folder.
  */
 export function codexLaunch(r: CodexRun): CodexLaunch {
-  homeReady();
+  const h = codexHome(r.account);
+  homeReady(h);
   mkdirSync(TEMPS, { recursive: true, mode: 0o700 });
   sweep(TEMPS, '', r.key);
   const temp = join(TEMPS, r.key);
   mkdirSync(temp, { mode: 0o700 });
+  const shell = shellEnv(temp);
+  mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
   const set = (key: string, value: Toml) => ['-c', `${key}=${toml(value)}`];
-  const model = process.env.OFFICE_CODEX_MODEL;
+  const model = r.model ?? process.env.OFFICE_CODEX_MODEL;
   const args = [
     'exec',
+    // Joined to its flag: `--image` takes many values, so a bare file after
+    // it would also take the "-" that reads the message.
+    ...(r.images ?? []).map((i) => `--image=${i.path}`),
     '--json',
     // The Odd's folder is not a git repository.
     '--skip-git-repo-check',
@@ -329,19 +376,24 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     '--strict-config',
     '--ignore-rules',
     ...Object.entries(SWITCHES).flatMap(([k, v]) => set(k, v)),
+    // Here, not in `env`: the shell inherits only the core variables. One
+    // `set` only, since a second would replace the first.
+    ...set('shell_environment_policy.set', shell),
+    ...set('web_search', r.web ? 'live' : 'disabled'),
     ...set('developer_instructions', r.system),
     ...set('permissions', {
-      [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: false } }
+      [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: r.network } }
     }),
     ...set('default_permissions', PROFILE),
     ...set('mcp_servers', mcpServers(r.servers, r.allowed)),
+    ...(r.effort ? set('model_reasoning_effort', r.effort) : []),
     ...(model ? ['-m', model] : []),
     // "-" reads the message from stdin, so one that starts with a dash is never a flag.
     ...(r.resume ? ['resume', r.resume, '-'] : ['-'])
   ];
   return {
     args,
-    env: { ...codexEnv(), TMPDIR: temp },
+    env: { ...codexEnv(h), TMPDIR: temp },
     stdin: r.input,
     done: () => rmSync(temp, { recursive: true, force: true })
   };

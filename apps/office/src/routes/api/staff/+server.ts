@@ -16,14 +16,14 @@ import {
   ask,
   hire,
   offeredAgent,
-  type Level
+  parseLevel
 } from '@oddboro/ledger';
 import { parseSchedule } from '#lib/server/schedule.ts';
 import { firstDay } from '#lib/server/staff.ts';
 import { giveIntake } from '#lib/server/files.ts';
 import { currentOffice } from '#lib/server/space.ts';
 import { drawnFrom, problemsWith } from '#lib/server/looks.ts';
-import { toProfile } from '#lib/staff/roster.ts';
+import { toProfile } from '#lib/server/profile.ts';
 import type { RequestHandler } from './$types';
 
 type Body = Partial<Record<'name' | 'role' | 'room' | 'permission' | 'remit' | 'desk', string>> & {
@@ -47,7 +47,7 @@ export const POST: RequestHandler = async ({ request }) => {
   const office = await currentOffice();
   const rooms = new Set(office.world.rooms.map((r) => r.id.split('#')[0]));
   const room = text(b.room, 60);
-  const permission = (['read', 'draft', 'act'] as Level[]).find((l) => l === b.permission);
+  const permission = parseLevel(b.permission);
   if (!name || !role || !remit || !desk)
     error(400, 'Fill in the name, role, remit and job description');
   if (!drawn) error(400, 'Draw them first');

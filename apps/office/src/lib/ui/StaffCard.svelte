@@ -1,15 +1,13 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Pixel from './Pixel.svelte';
   import ChatPanel from './ChatPanel.svelte';
   import { chatRequest, type Delivered } from './chat-about.svelte.ts';
-  import JobsTab from './JobsTab.svelte';
   import AccessTab from './AccessTab.svelte';
   import LessonsTab from './LessonsTab.svelte';
-  import UsageStats from './UsageStats.svelte';
-  import LookStudio from './LookStudio.svelte';
-  import WorkTab from './WorkTab.svelte';
+  import OddInfo from './OddInfo.svelte';
+  import StorageTab from './StorageTab.svelte';
   import type { Work } from '../staff/work.ts';
-  import { call } from './api.ts';
   import { ACTIVITY_LABEL, type Activity, type StaffProfile } from '../staff/roster.ts';
   import type { Place, PlaceGroup } from '../staff/places.ts';
 
@@ -22,7 +20,7 @@
     working: string | undefined;
     /** Everything it is working on now. */
     work: Work[];
-    /** Open on this tab, e.g. from the agents list. `n` changes to ask again. */
+    /** Open the info page at In progress, e.g. from the agents list. `n` changes to ask again. */
     show?: { tab: 'work'; n: number };
     /** Opens something the staffer delivered, on the start side. */
     onitem: (item: Delivered) => void;
@@ -61,7 +59,6 @@
     onclose,
     onitem
   }: Props = $props();
-  let flipped = $state(false);
 
   /** Who fills a place, when every spot there is held by someone else. */
   function fullBy(place: Place): string | undefined {
@@ -69,13 +66,17 @@
     if (others.some((h) => !h || h.id === profile.id)) return undefined;
     return [...new Set(others.map((h) => h!.name))].join(' and ');
   }
-  /** Redrawing this staffer's look, under the card. */
-  let redrawing = $state(false);
-  let appearance = $state('');
-  // The chat comes first: the card is a click away.
-  let tab = $state<'card' | 'send' | 'chat' | 'work' | 'jobs' | 'lessons' | 'access'>('chat');
+  // The chat comes first: the info page is a click away, on the name.
+  type Tab = 'card' | 'send' | 'chat' | 'lessons' | 'storage' | 'access';
+  let tab = $state<Tab>('chat');
+  /** Bumped to open the info page at In progress. */
+  let toWork = $state(0);
+  function showWork() {
+    tab = 'card';
+    toWork++;
+  }
   $effect(() => {
-    if (show) tab = show.tab;
+    if (show) untrack(showWork);
   });
   // The id, not the profile: every office reload brings a new profile, and an
   // effect that read it would send the owner back to Chat from any tab.
@@ -88,33 +89,52 @@
   $effect(() => {
     if (chatRequest.focus?.staff === id) tab = 'chat';
   });
-  const TABS = [
-    { id: 'chat', label: 'Chat' },
-    { id: 'card', label: 'Card' },
-    { id: 'work', label: 'In progress' },
-    { id: 'jobs', label: 'Jobs' },
-    { id: 'lessons', label: 'Lessons' },
-    { id: 'access', label: 'Access' }
-  ] as const;
-  /** What waits on a tab: work in progress, and guesses for the owner's Keep. */
-  const counts: Partial<Record<(typeof TABS)[number]['id'], number>> = $derived({
-    work: work.length,
-    lessons: profile.guesses
+  /**
+   * Three groups, each an icon and a word (the icon alone when the bar is
+   * narrow), and under Data a row of its own tabs. Chat is the chat alone,
+   * and Settings holds its own four tabs. The info page, opened from the
+   * name, sits in no group: it holds In progress and Jobs.
+   */
+  const GROUPS = [
+    {
+      id: 'chat',
+      label: 'Chat',
+      icon: 'M4 5h16v11H9l-5 4z',
+      tabs: [{ id: 'chat', label: 'Chat' }]
+    },
+    {
+      id: 'data',
+      label: 'Data',
+      // Files, one over another.
+      icon: 'M9 3h6l4 4v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM15 3v4h4M5 7v13a1 1 0 0 0 1 1h9',
+      tabs: [
+        { id: 'lessons', label: 'Lessons' },
+        { id: 'storage', label: 'Storage' }
+      ]
+    },
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+      tabs: [{ id: 'access', label: 'Settings' }]
+    }
+  ] as const satisfies readonly {
+    id: string;
+    label: string;
+    icon: string;
+    tabs: readonly { id: Tab; label: string }[];
+  }[];
+  type Group = (typeof GROUPS)[number];
+  const group = $derived(GROUPS.find((g) => g.tabs.some((t) => t.id === tab)));
+  /** The tab each group was last on, so going back to it lands there. */
+  const last: Partial<Record<Group['id'], Tab>> = {};
+  $effect(() => {
+    if (group) last[group.id] = tab;
   });
-
-  const PERMISSION = {
-    read: 'Reads and reports',
-    draft: 'Drafts for your yes',
-    act: 'Acts on its own'
-  } as const;
-
-  const hired = $derived(
-    new Date(`${profile.hired}T12:00:00`).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  );
+  /** What waits on a tab: guesses for the owner's Keep. Work in progress shows by the name. */
+  const counts: Partial<Record<Tab, number>> = $derived({ lessons: profile.guesses });
+  /** A group's count is its tabs' together. */
+  const groupCount = (g: Group) => g.tabs.reduce((n, t) => n + (counts[t.id] ?? 0), 0);
 
   function onkey(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
@@ -133,11 +153,51 @@
       label={profile.name}
       class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sea-deep"
     />
+    <!-- The name opens their info page, which has no tab of its own, so the tabs have room. -->
     <div class="min-w-0 flex-1">
-      <div class="truncate font-medium">{profile.name}</div>
-      <div class="truncate text-xs text-muted">
-        {profile.role} · {working ? working : ACTIVITY_LABEL[activity]}
+      <div class="flex min-w-0 items-center gap-2">
+        <button
+          class="group flex min-w-0 text-start"
+          aria-current={tab === 'card' || tab === 'send' ? 'page' : undefined}
+          title={`About ${profile.name}`}
+          onclick={() => (tab = 'card')}
+        >
+          <span class="flex min-w-0 items-center gap-1.5">
+            <span class="truncate font-medium group-hover:underline group-hover:underline-offset-2"
+              >{profile.name}</span
+            >
+            <svg
+              class="size-4 shrink-0 {tab === 'card' || tab === 'send'
+                ? 'text-sea'
+                : 'text-muted group-hover:text-ink'}"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              aria-hidden="true"
+              ><circle cx="8" cy="8" r="6.25" /><path d="M8 7.25v4" stroke-linecap="round" /><circle
+                cx="8"
+                cy="4.9"
+                r="0.4"
+                fill="currentColor"
+              /></svg
+            >
+            <span class="sr-only">Open their info</span>
+          </span>
+        </button>
+        <!-- How much is in progress, in a turning ring, only while there is some. -->
+        {#if work.length}
+          <button
+            class="busy"
+            aria-label="{work.length} in progress"
+            title="{work.length} in progress"
+            onclick={showWork}><span>{work.length}</span></button
+          >
+        {/if}
       </div>
+      <span class="block truncate text-xs text-muted">
+        {profile.role} · {working ? working : ACTIVITY_LABEL[activity]}
+      </span>
     </div>
     <button
       class="rounded-full px-2 py-1 text-muted hover:text-ink"
@@ -151,104 +211,65 @@
       onclick={onclose}>✕</button
     >
   </header>
-  <nav class="flex gap-1 border-b border-hairline p-1.5 text-sm" aria-label="Odd">
-    {#each TABS as t (t.id)}
+  <!-- Three sections of one bar, split by thin lines; the one open lights whole. -->
+  <nav class="groups flex border-b border-hairline text-sm" aria-label="Odd">
+    {#each GROUPS as g, i (g.id)}
+      {@const on = group?.id === g.id}
+      {@const n = groupCount(g)}
       <button
-        class="flex-1 rounded-full px-2 py-1.5 font-medium whitespace-nowrap transition-colors {tab ===
-          t.id ||
-        (t.id === 'card' && tab === 'send')
-          ? 'bg-raise text-ink'
-          : 'text-muted hover:text-ink'}"
-        aria-current={tab === t.id ? 'page' : undefined}
-        onclick={() => (tab = t.id)}
-        >{t.label}{#if counts[t.id]}<span class="ms-1 text-ember">{counts[t.id]}</span>{/if}</button
+        class="flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 font-medium whitespace-nowrap transition-colors {i
+          ? 'border-s border-hairline'
+          : ''} {on ? 'bg-sea/20 text-ink' : 'text-muted hover:bg-raise/60 hover:text-ink'}"
+        aria-current={on ? 'page' : undefined}
+        aria-label={g.label}
+        title={g.label}
+        onclick={() => (tab = last[g.id] ?? g.tabs[0].id)}
       >
+        <svg
+          class="size-4 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"><path d={g.icon} /></svg
+        >
+        <span class="word">{g.label}</span>
+        {#if n}<span class="text-ember">{n}</span>{/if}
+      </button>
     {/each}
   </nav>
+  {#if group && group.tabs.length > 1}
+    <nav
+      class="flex gap-1 overflow-x-auto border-b border-hairline px-1.5 py-1 text-xs"
+      aria-label={group.label}
+    >
+      {#each group.tabs as t (t.id)}
+        <button
+          class="flex-1 rounded-full px-2 py-1 whitespace-nowrap transition-colors {tab === t.id
+            ? 'bg-raise/70 text-ink'
+            : 'text-muted hover:text-ink'}"
+          aria-current={tab === t.id ? 'page' : undefined}
+          onclick={() => (tab = t.id)}
+          >{t.label}{#if counts[t.id]}<span class="ms-1 text-ember">{counts[t.id]}</span
+            >{/if}</button
+        >
+      {/each}
+    </nav>
+  {/if}
 
   <div class="relative min-h-0 flex-1">
     {#if tab === 'card'}
-      <div class="h-full overflow-y-auto p-4">
-        <div class="card-scene mx-auto max-w-[340px] text-start">
-          <div class="card" class:flipped>
-            <!-- Front -->
-            <div class="face front">
-              <div
-                class="flex items-center justify-between px-4 pt-3 text-[10px] tracking-[0.18em] uppercase"
-              >
-                <span class="text-sea">Oddboro</span>
-                <span class="text-muted">{profile.office}</span>
-              </div>
-              <div class="portrait mx-4 mt-2">
-                <Pixel
-                  src={profile.look?.portrait}
-                  frame={`${profile.portrait}/default`}
-                  fallback={`${profile.sprite}@${profile.variant}/idle-down-0`}
-                  scale={4}
-                  label={`Portrait of ${profile.name}`}
-                  class="flex justify-center"
-                />
-              </div>
-              <div class="px-4 pt-3">
-                <div class="font-pixel text-3xl leading-none">{profile.name}</div>
-                <div class="mt-1 text-sm text-ember">{profile.role}</div>
-                <p class="mt-3 text-xs leading-relaxed text-muted">{profile.remit}</p>
-              </div>
-              <div class="mt-auto flex items-center justify-between px-4 pb-4 text-xs">
-                <span class="flex items-center gap-1.5">
-                  <span class="dot" class:live={activity !== 'home'}></span>
-                  {ACTIVITY_LABEL[activity]}
-                </span>
-                <span class="text-faint">Hired {hired}</span>
-              </div>
-            </div>
-
-            <!-- Back -->
-            <div class="face back">
-              <div class="px-4 pt-4 pb-2">
-                <div class="font-pixel text-xl">{profile.name}</div>
-                <div class="text-xs text-muted">
-                  {profile.role} · {PERMISSION[profile.permission]}
-                </div>
-              </div>
-              {#if flipped}
-                <UsageStats staffId={profile.id} {version} />
-              {/if}
-            </div>
-          </div>
-        </div>
-        <div class="mx-auto mt-3 flex max-w-[340px] items-center justify-between gap-2">
-          <button
-            class="rounded-full bg-raise px-3 py-1 text-xs text-ink"
-            onclick={() => (flipped = !flipped)}>{flipped ? 'Show the front' : 'Show stats'}</button
-          >
-          <button
-            class="rounded-full bg-raise px-3 py-1 text-xs text-ink"
-            aria-expanded={redrawing}
-            onclick={() => (redrawing = !redrawing)}>Redraw look</button
-          >
-          <button
-            class="rounded-full bg-raise px-3 py-1 text-xs text-ink"
-            onclick={() => (tab = 'send')}>Send to a place</button
-          >
-        </div>
-        {#if redrawing}
-          <div class="mx-auto mt-3 max-w-[340px]">
-            <LookStudio
-              name={profile.name}
-              role={profile.role}
-              staffId={profile.id}
-              current={profile.look?.spec}
-              bind:description={appearance}
-              keepLabel="Keep and save"
-              onkeep={async (d) => {
-                await call(`/api/staff/${profile.id}/look`, d, 'PUT');
-                redrawing = false;
-              }}
-            />
-          </div>
-        {/if}
-      </div>
+      <OddInfo
+        {profile}
+        {activity}
+        {version}
+        {working}
+        {work}
+        focus={toWork}
+        onsend={() => (tab = 'send')}
+      />
     {:else if tab === 'send'}
       <div class="flex h-full min-h-0 flex-col">
         <div class="border-b border-hairline p-3">
@@ -294,12 +315,10 @@
           {/each}
         </div>
       </div>
-    {:else if tab === 'work'}
-      <WorkTab {profile} items={work} />
-    {:else if tab === 'jobs'}
-      <JobsTab {profile} {version} {working} />
     {:else if tab === 'lessons'}
       <LessonsTab {profile} {version} />
+    {:else if tab === 'storage'}
+      <StorageTab {profile} {version} />
     {:else if tab === 'access'}
       <AccessTab {profile} {version} />
     {/if}
@@ -319,83 +338,48 @@
 </div>
 
 <style>
-  .card-scene {
-    perspective: 1200px;
-    display: block;
-    width: 100%;
+  /* The group bar is its own container: too narrow for the words, each shows its icon alone. */
+  .groups {
+    container-type: inline-size;
   }
-  .card {
+  @container (max-width: 18rem) {
+    .word {
+      display: none;
+    }
+  }
+  /* The in-progress count: a ring that turns while the Odd works, and only then. */
+  .busy {
     position: relative;
-    width: 100%;
-    aspect-ratio: 5 / 7;
-    transform-style: preserve-3d;
-    transition: transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    display: grid;
+    inline-size: 1.375rem;
+    block-size: 1.375rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--color-ember);
   }
-  .card.flipped {
-    transform: rotateY(180deg);
-  }
-  .face {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    border-radius: var(--radius-card);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    background:
-      radial-gradient(120% 80% at 20% 0%, rgb(47 179 166 / 0.22), transparent 60%),
-      radial-gradient(90% 60% at 100% 100%, rgb(242 180 90 / 0.16), transparent 60%),
-      var(--color-panel-solid);
-    box-shadow:
-      var(--shadow-float),
-      inset 0 0 0 2px rgb(47 179 166 / 0.55),
-      inset 0 0 0 6px var(--color-panel-solid),
-      inset 0 0 0 7px rgb(242 180 90 / 0.35);
-    overflow: hidden;
-  }
-  .face::after {
-    /* A foil sheen sweeps across once as the card opens. Transform only, and
-       never on a loop: an endless one recomposites the card every frame. */
+  .busy::before {
     content: '';
     position: absolute;
-    inset: -50%;
-    background: linear-gradient(
-      115deg,
-      transparent 40%,
-      rgb(255 255 255 / 0.07) 48%,
-      rgb(255 255 255 / 0.02) 52%,
-      transparent 60%
-    );
-    animation: sheen 1.8s ease-in-out both;
-    pointer-events: none;
+    inset: 0;
+    border-radius: 9999px;
+    border: 2px solid color-mix(in srgb, var(--color-ember) 25%, transparent);
+    border-block-start-color: var(--color-ember);
+    animation: turn 1s linear infinite;
   }
-  .back {
-    transform: rotateY(180deg);
+  .busy:hover::before {
+    border-color: var(--color-ember);
   }
-  .portrait {
-    border-radius: 10px;
-    padding: 12px 0;
-    background:
-      radial-gradient(70% 70% at 50% 35%, rgb(47 179 166 / 0.35), transparent 70%),
-      linear-gradient(#0f3b3a, #0b1a22);
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
-  }
-  .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 99px;
-    background: var(--color-faint);
-  }
-  .dot.live {
-    background: var(--color-moss);
-    box-shadow: 0 0 8px var(--color-moss);
-  }
-  @keyframes sheen {
-    from {
-      transform: translateX(-30%);
-    }
+  @keyframes turn {
     to {
-      transform: translateX(30%);
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .busy::before {
+      animation: none;
     }
   }
 </style>

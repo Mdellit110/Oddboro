@@ -47,6 +47,11 @@ Each rule's reason is in `docs/hard-rules.md`, under the same heading.
     changes, never on a loop: nothing redraws, polls or animates forever while
     the screen is still. Every change leaves the code simpler or lighter, or
     says why it could not.
+14. **Setup works on a Mac, Linux and Windows.** Every change to onboarding
+    (`apps/office/src/lib/ui/onboarding/`), the Setup window and the routes
+    they call gets a pass on all three: a test of what the server gives each
+    system (`onPlatform` in the office's tests), and a walk through setup on
+    each before a release ships it.
 
 ## Layout
 

@@ -2,7 +2,8 @@
 // (agent-sign-in.ts and routes/api/agents/[tool]), in an office under test
 // (office-under-test.ts) whose stand-in `grok`, `codex` and `claude` play each
 // sign-in and stand-in `npm` and `bash` each installer: what "Runs on" and
-// the Other AI tools card hear of each tool, each tool's own installer run to
+// setup's Your AI list hear of each tool on a Mac, Linux and Windows, the
+// tool the office runs on and a hire that starts on it, each tool's own installer run to
 // its end, one at a time, a Grok installed only in xAI's install folder found
 // without a restart, Grok's and Codex's browser sign-ins in the office's own
 // homes, starting over and Cancel, Sign out that never runs a tool's own
@@ -15,8 +16,10 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,27 +34,23 @@ import {
   chatOf,
   folder,
   installers,
+  nodeBin,
   installs,
   onPlatform,
   secretReads,
-  secrets
+  secrets,
+  withEnv
 } from './office-under-test.ts';
 import { onPath } from './on-path.ts';
-import {
-  offersOtherTools,
-  offersSignOut,
-  signInRows,
-  toolAction,
-  type ToolAction
-} from '../ui/tool-action.ts';
-import type { AgentTool } from '../../routes/api/agents/+server.ts';
+import { offersSignOut, toolAction, type ToolAction } from '../ui/tool-action.ts';
+import type { AgentTool, LaterTool } from '../../routes/api/agents/+server.ts';
 
 const route = await import('../../routes/api/agents/[tool]/+server.ts');
 const claudeRoute = await import('../../routes/api/setup/claude/+server.ts');
 const { geminiKeyMissing, clearGeminiKey, setGeminiKey } = await import('./gemini.ts');
 
-const GROK_HOME = join(folder, 'grok');
-const CODEX_HOME = join(folder, 'codex');
+const GROK_HOME = join(folder, 'accounts', 'grok', 'office');
+const CODEX_HOME = join(folder, 'accounts', 'codex', 'office');
 
 /** One request to the sign-in route for `tool`, as the page sends it. */
 function send(method: 'POST' | 'PUT' | 'DELETE', tool: string, body?: unknown) {
@@ -64,13 +63,26 @@ function send(method: 'POST' | 'PUT' | 'DELETE', tool: string, body?: unknown) {
   } as unknown as Parameters<typeof route.POST>[0];
   return route[method](event);
 }
-/** The tools "Runs on" and the card hear of, as on a Mac. */
-async function listed(platform: NodeJS.Platform = 'darwin'): Promise<AgentTool[]> {
+type Listing = { office: string; tools: AgentTool[]; later: LaterTool[] };
+/** What "Runs on" and the Your AI list hear, as on `platform`. */
+async function listing(platform: NodeJS.Platform = 'darwin'): Promise<Listing> {
   return onPlatform(platform, async () => {
     const res = await agents.GET({} as Parameters<typeof agents.GET>[0]);
-    return ((await res.json()) as { tools: AgentTool[] }).tools;
+    return (await res.json()) as Listing;
   });
 }
+/** The tools "Runs on" and the list hear of, as on a Mac. */
+const listed = async (platform: NodeJS.Platform = 'darwin') => (await listing(platform)).tools;
+/** Pick the office's tool as the page does, on `platform`. */
+const pickOffice = (office: unknown, platform: NodeJS.Platform = 'darwin') =>
+  onPlatform(platform, () =>
+    agents.PUT({
+      request: new Request('http://office/api/agents', {
+        method: 'PUT',
+        body: JSON.stringify({ office })
+      })
+    } as unknown as Parameters<typeof agents.PUT>[0])
+  );
 const stateOf = async (id: string) => (await listed()).find((t) => t.id === id)?.signIn;
 
 /** `check` once it gives a value, within 4 s. */
@@ -163,7 +175,7 @@ const installed = (): string[][] => installRuns().map((r) => r.args);
 /** `fn` on a Mac with none of the tools on PATH, only the installers' stand-ins, and an empty home. */
 async function withNoTools<T>(fn: (home: string) => Promise<T>): Promise<T> {
   const path = process.env.PATH;
-  process.env.PATH = `${installers}:${dirname(process.execPath)}:/usr/bin:/bin`;
+  process.env.PATH = `${installers}:${nodeBin}:/usr/bin:/bin`;
   try {
     // The installers run here are the stand-ins, never the Mac's own.
     assert.equal(onPath('npm'), join(installers, 'npm'));
@@ -187,7 +199,12 @@ test('the "Runs on" list says which tools the office is signed in to, with the a
     installing: false,
     signedIn: true
   });
-  assert.equal(tools.find((t) => t.id === 'claude')?.signIn, undefined);
+  // The office's own Claude Code folder, which nobody signed in under test.
+  assert.deepEqual(tools.find((t) => t.id === 'claude')?.signIn, {
+    how: 'browser',
+    installing: false,
+    signedIn: false
+  });
   grokSignedInAs('owner@example.com');
   try {
     assert.deepEqual(await stateOf('grok'), {
@@ -199,10 +216,11 @@ test('the "Runs on" list says which tools the office is signed in to, with the a
   } finally {
     rmSync(join(GROK_HOME, 'auth.json'), { force: true });
   }
+  // Linux offers Claude Code alone, so only its sign-in shows there.
   const linux = await listed('linux');
   assert.deepEqual(
-    linux.filter((t) => t.signIn),
-    []
+    linux.filter((t) => t.signIn).map((t) => t.id),
+    ['claude']
   );
 });
 
@@ -305,7 +323,7 @@ test("signing out removes only the office home's sign-in and never runs a tool's
 });
 
 test('Gemini stays off the list and its sign-in until its list names this system, then shows with no other change', async () => {
-  assert.ok(!L.AGENT_PLATFORMS.gemini.includes('darwin'));
+  assert.ok(!L.AGENT_PLATFORMS.gemini.runs.includes('darwin'));
   assert.equal(
     (await listed()).find((t) => t.id === 'gemini'),
     undefined
@@ -318,8 +336,8 @@ test('Gemini stays off the list and its sign-in until its list names this system
     onPlatform('darwin', () => send('PUT', 'gemini', { key: OFFICE_GEMINI_KEY })),
     refused(404)
   );
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   try {
     assert.deepEqual(await stateOf('gemini'), {
       how: 'key',
@@ -327,7 +345,7 @@ test('Gemini stays off the list and its sign-in until its list names this system
       signedIn: true
     });
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
   }
 });
 
@@ -343,8 +361,8 @@ test('a Gemini key from the page is tried once with Google, then kept in the key
       status: [GOOD, OFFICE_GEMINI_KEY].includes(asked.at(-1)?.key ?? '') ? 200 : 403
     });
   };
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   const put = (key: string) => onPlatform('darwin', () => send('PUT', 'gemini', { key }));
   try {
     await assert.rejects(
@@ -377,7 +395,7 @@ test('a Gemini key from the page is tried once with Google, then kept in the key
     assert.equal((await stateOf('gemini'))?.signedIn, false);
     assert.equal(
       geminiKeyMissing(),
-      "Gemini has no API key in this office. Add one on this Odd's Access tab, under Runs on."
+      "Gemini has no API key in this office. Add one on this Odd's Settings tab, under Model."
     );
     await assert.rejects(
       onPlatform('darwin', () => send('POST', 'gemini', { action: 'sign-in' })),
@@ -386,13 +404,13 @@ test('a Gemini key from the page is tried once with Google, then kept in the key
   } finally {
     await setGeminiKey(OFFICE_GEMINI_KEY);
     globalThis.fetch = fetch;
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
   }
 });
 
 test("the keychain is read once however many times Gemini's state is asked, with a key or without", async () => {
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   const reads = () => secretReads.filter((n) => n === 'gemini:API_KEY').length;
   /** Reads of the key across three loads of the list and one run's check, from cold. */
   const readsFromCold = async (signedIn: boolean) => {
@@ -409,7 +427,7 @@ test("the keychain is read once however many times Gemini's state is asked, with
     secrets.set('gemini:API_KEY', OFFICE_GEMINI_KEY);
     assert.equal(await readsFromCold(true), 1);
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
     secrets.set('gemini:API_KEY', OFFICE_GEMINI_KEY);
   }
 });
@@ -458,33 +476,93 @@ test("every grok the office starts outside a run names the office's own leader s
   }
 });
 
-test('Other AI tools, on onboarding and in Setup, has a row for each tool this system offers but Claude Code, and none where Claude Code is the only one', async () => {
-  const ids = async (platform: NodeJS.Platform) =>
-    signInRows(await listed(platform)).map(({ tool, signIn }) => {
-      assert.equal(signIn, tool.signIn);
-      return tool.id;
-    });
-  assert.deepEqual(await ids('darwin'), ['grok', 'codex']);
-  assert.deepEqual(await ids('linux'), []);
-  // Gemini gets its row once its list names this system, with no other change.
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = ['darwin'];
+test('Your AI lists every tool once on a Mac, Linux and Windows: the ones this system offers to pick, the rest greyed with why', async () => {
+  const ids = (l: Listing) => [...l.tools.map((t) => t.id), ...l.later.map((t) => t.id)].sort();
+  for (const platform of ['darwin', 'linux', 'win32'] as const) {
+    const l = await listing(platform);
+    assert.deepEqual(ids(l), [...L.AGENTS].sort(), platform);
+    assert.equal(l.office, 'claude', platform);
+  }
+  const mac = await listing('darwin');
+  assert.deepEqual(
+    mac.tools.map((t) => t.id),
+    ['claude', 'grok', 'codex']
+  );
+  assert.deepEqual(mac.later, [
+    { id: 'gemini', name: 'Gemini', why: 'Coming soon. We are still testing it.' }
+  ]);
+  for (const platform of ['linux', 'win32'] as const) {
+    const l = await listing(platform);
+    assert.deepEqual(
+      l.tools.map((t) => t.id),
+      ['claude'],
+      platform
+    );
+    assert.deepEqual(
+      l.later.map((t) => [t.id, t.why]),
+      [
+        ['grok', 'Mac only for now.'],
+        ['codex', 'Mac only for now.'],
+        ['gemini', 'Coming soon. We are still testing it.']
+      ],
+      platform
+    );
+  }
+  // Gemini moves from greyed to offered once its list names this system, with no other change.
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = ['darwin'];
   try {
-    assert.deepEqual(await ids('darwin'), ['grok', 'codex', 'gemini']);
+    const l = await listing('darwin');
+    assert.deepEqual(
+      l.tools.map((t) => t.id),
+      ['claude', 'grok', 'codex', 'gemini']
+    );
+    assert.deepEqual(l.later, []);
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
   }
 });
 
-test('the Other AI tools card shows only where a tool can be signed in to', async () => {
-  assert.equal(offersOtherTools(await listed('darwin')), true);
-  // Linux offers Claude Code alone, which signs in on its own card.
-  assert.deepEqual(
-    (await listed('linux')).map((t) => t.id),
-    ['claude']
-  );
-  assert.equal(offersOtherTools(await listed('linux')), false);
-  assert.equal(offersOtherTools([]), false);
+test('the office runs on the tool picked at setup, only one this system offers, and a hire with no tool starts on it', async () => {
+  const before = process.env.OFFICE_AGENT;
+  const envFile = join(folder, 'none.env');
+  const hadEnv = existsSync(envFile) ? readFileSync(envFile) : undefined;
+  try {
+    const picked = await pickOffice('grok');
+    assert.deepEqual(await picked.json(), { office: 'grok' });
+    assert.equal((await listing('darwin')).office, 'grok');
+    assert.match(readFileSync(envFile, 'utf8'), /^OFFICE_AGENT=grok$/m);
+    const hired = await L.hire({
+      name: 'Ida',
+      role: 'Tester',
+      remit: 'Test work.',
+      desk: 'You are Ida.',
+      room: 'workspace',
+      permission: 'draft',
+      sprite: 'staff',
+      variant: 'a',
+      portrait: 'a'
+    } as Parameters<typeof L.hire>[0]);
+    assert.equal(hired.agent, 'grok');
+    // Gemini is offered nowhere yet, and Grok is not offered on Linux or Windows.
+    for (const [office, platform] of [
+      ['gemini', 'darwin'],
+      ['grok', 'linux'],
+      ['codex', 'win32'],
+      ['nonsense', 'darwin']
+    ] as const)
+      await assert.rejects(pickOffice(office, platform), (e: { status?: number }) => {
+        assert.equal(e.status, 400, `${office} on ${platform}`);
+        return true;
+      });
+    // An office moved to a system that does not offer its tool runs on Claude Code.
+    assert.equal((await listing('linux')).office, 'claude');
+  } finally {
+    if (before === undefined) delete process.env.OFFICE_AGENT;
+    else process.env.OFFICE_AGENT = before;
+    if (hadEnv) writeFileSync(envFile, hadEnv);
+    else rmSync(envFile, { force: true });
+  }
 });
 
 test('each tool state offers exactly one action, and a signed-in tool still offers Sign in again', () => {
@@ -685,7 +763,7 @@ test('a sign-in for a tool the office cannot find says to install it, never a sp
 });
 
 test('Gemini cannot be installed while its list does not name this system', async () => {
-  assert.ok(!L.AGENT_PLATFORMS.gemini.includes('darwin'));
+  assert.ok(!L.AGENT_PLATFORMS.gemini.runs.includes('darwin'));
   const from = installed().length;
   await assert.rejects(
     onPlatform('darwin', () => send('POST', 'gemini', { action: 'install' })),
@@ -696,4 +774,268 @@ test('Gemini cannot be installed while its list does not name this system', asyn
 
 test('no test reached the keychain', () => {
   assertKeychainUntouched();
+});
+
+test("an office run on Codex or Grok goes through the tool's own sandboxed launch with no MCP, sends its pictures, and leaves nothing behind", async () => {
+  const { runAsOffice } = await import('./office-run.ts');
+  const picture = { mediaType: 'image/png', data: Buffer.from('a picture').toString('base64') };
+  const ask = () =>
+    runAsOffice('Draw a desk for {owner}.', {
+      system: 'You draw for {owner}.',
+      kind: 'look',
+      timeoutMs: 60_000,
+      effort: 'low',
+      images: [picture]
+    });
+  const gaveOf = (text: string) =>
+    JSON.parse(text.slice(0, text.lastIndexOf('\nOutcome:'))) as Record<string, unknown>;
+  const runs = join(folder, 'office', 'runs');
+
+  const codex = await withEnv({ OFFICE_AGENT: 'codex' }, ask);
+  assert.ok(codex.ok, codex.text);
+  const c = gaveOf(codex.text) as {
+    args: string[];
+    pictures: boolean[];
+    servers: object;
+    permissions: { network: { enabled: boolean } };
+    message: string;
+    system: string;
+  };
+  assert.deepEqual(c.pictures, [true]);
+  assert.ok(c.args.includes('model_reasoning_effort="low"'), c.args.join(' '));
+  assert.deepEqual(c.servers, {});
+  assert.equal(c.permissions.network.enabled, false);
+  assert.ok(!c.message.includes('{owner}') && c.message.startsWith('Draw a desk for '));
+  assert.ok(!c.system.includes('{owner}'));
+  assert.deepEqual(readdirSync(runs), []);
+
+  const signedIn = { expires_at: new Date(Date.now() + 86_400_000).toISOString() };
+  writeFileSync(
+    join(GROK_HOME, 'auth.json'),
+    JSON.stringify({ 'https://auth.x.ai::test': signedIn })
+  );
+  try {
+    const grok = await withEnv({ OFFICE_AGENT: 'grok' }, ask);
+    assert.ok(grok.ok, grok.text);
+    const g = gaveOf(grok.text) as {
+      args: string[];
+      prompt: { type: string; data?: string; mimeType?: string; text?: string }[];
+      env?: unknown;
+    };
+    // With a picture, the message goes as content blocks and never as --single.
+    assert.ok(!g.args.some((a) => a.startsWith('--single=')));
+    // read_file alone in an empty folder, never Grok's whole set, so it answers from the message, at the effort asked.
+    assert.equal(g.args[g.args.indexOf('--tools') + 1], 'read_file');
+    assert.ok(g.args.includes('--reasoning-effort=low'), g.args.join(' '));
+    assert.deepEqual(g.prompt[0], { type: 'image', data: picture.data, mimeType: 'image/png' });
+    assert.match(String(g.prompt[1].text), /^Draw a desk for /);
+    assert.equal(g.env, undefined);
+    assert.deepEqual(readdirSync(runs), []);
+  } finally {
+    rmSync(join(GROK_HOME, 'auth.json'), { force: true });
+  }
+
+  // A sign-in that ran out and cannot renew refuses the run, pointing to setup, not to an Odd's Settings tab.
+  const ended = { expires_at: new Date(Date.now() - 60_000).toISOString() };
+  writeFileSync(join(GROK_HOME, 'auth.json'), JSON.stringify({ 'https://auth.x.ai::test': ended }));
+  try {
+    const refused = await withEnv({ OFFICE_AGENT: 'grok' }, ask);
+    assert.equal(refused.ok, false);
+    assert.match(refused.text, /in Setup, under Your AI/);
+    assert.deepEqual(readdirSync(runs), []);
+  } finally {
+    for (const f of ['auth.json', 'models.log', 'models-args.json'])
+      rmSync(join(GROK_HOME, f), { force: true });
+  }
+});
+
+test('versions compare by their numbers, so 1.0.9 is older than 1.0.62 and 2.1.318 is not older than itself', () => {
+  assert.equal(L.olderThan('0.149.1', '0.166.0'), true);
+  assert.equal(L.olderThan('1.0.9', '1.0.62'), true);
+  assert.equal(L.olderThan('2.1.99', '2.1.318'), true);
+  assert.equal(L.olderThan('2.1.318', '2.1.318'), false);
+  assert.equal(L.olderThan('1.0.70', '1.0.62'), false);
+  assert.equal(L.olderThan('1.0', '1.0.0'), false);
+});
+
+test('a tool older than the office runs shows Update, its runs are refused saying where to update, and Update runs its updater', async () => {
+  const versions = join(folder, 'versions');
+  mkdirSync(versions, { recursive: true });
+  // The office reads a version again only when the tool's file changes, as an update changes it.
+  const touch = () =>
+    utimesSync(join(bin, 'codex'), new Date(), new Date(Date.now() + 1000 * Math.random()));
+  writeFileSync(join(versions, 'codex'), '0.149.1');
+  touch();
+  try {
+    const codex = await toolIn('codex');
+    assert.equal(codex?.version, '0.149.1');
+    assert.equal(codex?.tooOld, L.MIN_VERSIONS.codex);
+    assert.equal(toolAction(codex), 'update');
+
+    const { runAsOffice } = await import('./office-run.ts');
+    const run = await withEnv({ OFFICE_AGENT: 'codex' }, () =>
+      runAsOffice('Hello.', { system: 'Say hello.', kind: 'look', timeoutMs: 60_000 })
+    );
+    assert.deepEqual(run, {
+      ok: false,
+      text: 'Codex 0.149.1 is older than this office runs (0.166.0 or newer). Update it in Setup, under Your AI.'
+    });
+
+    const from = installed().length;
+    const update = await onPlatform('darwin', async () =>
+      follow(await send('POST', 'codex', { action: 'update' }))
+    );
+    await waitFor(() => installed()[from], 'the Codex update');
+    assert.deepEqual(installed()[from], ['npm', 'install', '-g', '@openai/codex@latest']);
+    // The stand-in npm ends once told to.
+    writeFileSync(join(folder, 'npm.go'), '');
+    await update.end();
+  } finally {
+    rmSync(versions, { recursive: true, force: true });
+    touch();
+  }
+  // At the oldest the office runs, nothing to update.
+  const after = await toolIn('codex');
+  assert.equal(after?.version, '0.166.0');
+  assert.equal(after?.tooOld, undefined);
+  assert.notEqual(toolAction(after), 'update');
+});
+
+test("the staff tool server offers its tools though it may not read .env, as inside Grok's sandbox, and a Grok run hands it the office's settings", async () => {
+  // Grok's sandbox shows .env to the server but refuses to open it; a file it may not read stands in.
+  const locked = join(folder, 'locked.env');
+  writeFileSync(locked, 'OFFICE_TIME_ZONE=Europe/Paris\n');
+  chmodSync(locked, 0o000);
+  try {
+    const { spawn } = await import('node:child_process');
+    const server = spawn(process.execPath, [L.STAFF_SERVER], {
+      env: { ...process.env, ODDBORO_ENV: locked, STAFF_ID: 'gus' },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    let out = '';
+    let err = '';
+    server.stderr.on('data', (d) => (err += d));
+    const tools = new Promise<string[]>((done, fail) => {
+      server.stdout.on('data', (d) => {
+        out += d;
+        for (let i = out.indexOf('\n'); i >= 0; i = out.indexOf('\n')) {
+          const m = JSON.parse(out.slice(0, i)) as {
+            id?: number;
+            result?: { tools: { name: string }[] };
+          };
+          out = out.slice(i + 1);
+          if (m.id === 2) done(m.result?.tools.map((t) => t.name) ?? []);
+        }
+      });
+      server.on('close', (code) => fail(new Error(`The server stopped (exit ${code}): ${err}`)));
+    });
+    const send = (m: object) => server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', ...m })}\n`);
+    send({
+      id: 1,
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'test', version: '1' }
+      }
+    });
+    send({ method: 'notifications/initialized' });
+    send({ id: 2, method: 'tools/list' });
+    try {
+      assert.ok((await tools).includes('search_ledger'));
+    } finally {
+      server.kill();
+    }
+  } finally {
+    chmodSync(locked, 0o600);
+    rmSync(locked, { force: true });
+  }
+  // A Grok run's agent file sets the office's settings on the server itself.
+  const gave = await withEnv({ OFFICE_TIME_ZONE: 'Europe/Paris' }, () => chatOf('gus'));
+  assert.equal(gave.env.OFFICE_TIME_ZONE, 'Europe/Paris');
+});
+
+test('only Claude Code on Opus or Codex on Sol or Astra draws a look; on any other a hire builds one from parts, with a portrait from the same parts, that the hire takes', async () => {
+  const { drawsLooks } = await import('@oddboro/ledger/agents');
+  for (const [agent, model, draws] of [
+    ['claude', undefined, true],
+    ['claude', 'opus', true],
+    ['claude', 'claude-fable-5-1', true],
+    ['claude', 'sonnet', false],
+    ['codex', undefined, true],
+    ['codex', 'gpt-6.1-sol', true],
+    ['codex', 'gpt-6-astra', true],
+    ['codex', 'gpt-6-luna', false],
+    ['grok', undefined, false],
+    ['gemini', undefined, false]
+  ] as const)
+    assert.equal(drawsLooks(agent, model), draws, `${agent} on ${model}`);
+
+  const looks = await import('../../routes/api/looks/+server.ts');
+  const parts = await import('../../routes/api/looks/parts/+server.ts');
+  const list = await import('../../routes/api/me/parts/+server.ts');
+  const post = <R extends { POST: (e: never) => unknown }>(r: R, body: unknown) =>
+    r.POST({
+      request: new Request('http://office/api', { method: 'POST', body: JSON.stringify(body) })
+    } as never) as Promise<Response>;
+
+  await withEnv({ OFFICE_AGENT: 'grok' }, async () => {
+    assert.equal(((await listing()) as Listing & { drawsLooks: boolean }).drawsLooks, false);
+    await assert.rejects(post(looks, { description: 'Red hair', name: 'Ida' }), (e: object) => {
+      assert.match(String((e as { body?: { message?: string } }).body?.message), /from parts/);
+      return true;
+    });
+    const p = (await (await list.GET({} as never)).json()) as {
+      hair: string[];
+      top: string[];
+      bottom: string[];
+      colours: Record<string, { name: string }[]>;
+    };
+    const look = {
+      hair: p.hair[0],
+      top: p.top[0],
+      bottom: p.bottom[0],
+      colours: {
+        hair: p.colours.hair[0].name,
+        skin: p.colours.skin[0].name,
+        top: p.colours.cloth[0].name,
+        bottom: p.colours.cloth[1].name,
+        shoes: p.colours.shoes[0].name
+      }
+    };
+    const built = (await (await post(parts, { look })).json()) as {
+      look: object;
+      portraitPx: string;
+      newParts: unknown[];
+      portrait: string;
+      sheet: string;
+      problems: string[];
+    };
+    assert.deepEqual(built.problems, []);
+    assert.deepEqual(built.newParts, []);
+    // A face shape is a part like the rest, and a look may leave it out.
+    assert.deepEqual((p as unknown as { face: string[] }).face.sort(), ['soft', 'strong']);
+    for (const face of ['soft', 'strong']) {
+      const f = (await (await post(parts, { look: { ...look, face } })).json()) as {
+        problems: string[];
+      };
+      assert.deepEqual(f.problems, [], face);
+    }
+    await assert.rejects(post(parts, { look: { ...look, face: 'no-such-face' } }), (e: object) => {
+      assert.equal((e as { status?: number }).status, 400);
+      return true;
+    });
+    assert.match(built.portrait, /^data:image\/png;base64,/);
+    assert.match(built.sheet, /^data:image\/png;base64,/);
+    // The hire's own check takes it as it takes a drawn look.
+    const { drawnFrom, problemsWith } = await import('./looks.ts');
+    assert.deepEqual(await problemsWith(drawnFrom(built)!), []);
+    await assert.rejects(post(parts, { look: { ...look, hair: 'no-such-hair' } }), (e: object) => {
+      assert.equal((e as { status?: number }).status, 400);
+      return true;
+    });
+  });
+  await withEnv({ OFFICE_AGENT: 'codex' }, async () =>
+    assert.equal(((await listing()) as Listing & { drawsLooks: boolean }).drawsLooks, true)
+  );
 });

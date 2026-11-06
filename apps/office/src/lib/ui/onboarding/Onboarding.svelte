@@ -32,51 +32,44 @@
   import type { StaffProfile } from '../../staff/roster.ts';
   import { AgentTools } from '../agent-tools.svelte.ts';
   import { call, follow } from '../api.ts';
-  import ClaudeCard from './ClaudeCard.svelte';
+  import AiCard from './AiCard.svelte';
   import MacCard, { type Setup } from './MacCard.svelte';
   import ManagerCard, { type Custom, type Preset } from './ManagerCard.svelte';
+  import type { Built } from '../OddParts.svelte';
   import SpaceCard from './SpaceCard.svelte';
-  import ToolsCard from './ToolsCard.svelte';
   import { selectOnFocus } from '../select-on-focus.ts';
-  import { offersOtherTools } from '../tool-action.ts';
 
-  // A new owner's first visit, over the live floor: seven cards (Other AI tools
-  // only where this system offers a tool besides Claude Code), then the office
-  // going up on their lot and their manager arriving by bus. The slow parts
+  // A new owner's first visit, over the live floor: six cards, the same on a
+  // Mac, Linux and Windows (hard rule 14), then the office going up on their
+  // lot and their manager arriving by bus. The slow parts
   // start the moment their inputs exist: the office draws from when the owner
   // leaves "Your space", and a described manager from when they leave theirs.
   // So Open the office starts the show at once instead of a wait.
   type Props = { stage: Stage; sample?: World };
   let { stage, sample }: Props = $props();
 
-  const STEPS = ['mac', 'you', 'claude', 'tools', 'manager', 'space', 'go'] as const;
+  const STEPS = ['mac', 'you', 'ai', 'manager', 'space', 'go'] as const;
   type Step = (typeof STEPS)[number];
   const TITLE: Record<Step, string> = {
     mac: 'Your computer',
     you: 'You',
-    claude: 'Your Claude',
-    tools: 'Other AI tools',
+    ai: 'Your AI',
     manager: 'Your office manager',
     space: 'Your space',
     go: 'Open the office'
   };
   let step = $state<Step>('mac');
   let backward = $state(false);
-  let wantKey = $state(false);
 
-  // Other AI tools, read from the first card on, so the step is known by the time it comes.
+  // The coding tools, read from the first card on, so Your AI shows at once.
   const agentTools = new AgentTools();
-  /** The cards this owner sees: Other AI tools only where this system offers one to sign in to. */
-  const steps: readonly Step[] = $derived(
-    offersOtherTools(agentTools.tools) ? STEPS : STEPS.filter((s) => s !== 'tools')
-  );
 
   function go(to: Step) {
-    backward = steps.indexOf(to) < steps.indexOf(step);
+    backward = STEPS.indexOf(to) < STEPS.indexOf(step);
     step = to;
   }
-  const next = () => go(steps[Math.min(steps.length - 1, steps.indexOf(step) + 1)]);
-  const back = () => go(steps[Math.max(0, steps.indexOf(step) - 1)]);
+  const next = () => go(STEPS[Math.min(STEPS.length - 1, STEPS.indexOf(step) + 1)]);
+  const back = () => go(STEPS[Math.max(0, STEPS.indexOf(step) - 1)]);
 
   // You
   // The Mac's name waits in the field as a suggestion. The lot reads "Your Lot"
@@ -89,18 +82,23 @@
   // Your office manager
   let presets = $state<Preset[]>([]);
   let pick = $state('marshall');
-  /** Sonnet cannot draw a look or design an office, so those cards offer only what is ready. */
+  /** Claude's Sonnet cannot design an office, so that card offers only what is ready. */
   let canDraw = $state(true);
-  function onmodel(m: 'opus' | 'sonnet') {
-    canDraw = m !== 'sonnet';
+  /** Only some tools and models draw a look (`drawsLooks`); on the rest a manager of your own is built from parts. */
+  let canDrawLooks = $state(true);
+  function ondraw(can: boolean, looks: boolean) {
+    canDraw = can;
+    canDrawLooks = looks;
+    if (!looks && pick === 'custom') pick = 'built';
     if (canDraw) return;
-    if (pick === 'custom') pick = 'marshall';
     if (!design) {
       mainStreet = true;
       description = '';
     }
   }
   let custom = $state<Custom>({ name: '', description: '' });
+  /** The manager built from parts, when the owner builds one. */
+  let builtManager = $state<Built | undefined>();
   type Drawn = { look: unknown; portraitPx: string; newParts: unknown[] };
   let look = $state<{
     for: string;
@@ -261,7 +259,9 @@
   }
 
   const managerName = $derived(
-    pick === 'custom' ? custom.name.trim() : (presets.find((p) => p.id === pick)?.name ?? '')
+    pick === 'custom' || pick === 'built'
+      ? custom.name.trim()
+      : (presets.find((p) => p.id === pick)?.name ?? '')
   );
 
   const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -285,7 +285,17 @@
           description: custom.description.trim(),
           drawn: look.drawn
         };
-      } else manager = { preset: pick };
+      } else if (pick === 'built' && builtManager)
+        manager = {
+          name: custom.name.trim(),
+          description: '',
+          drawn: {
+            look: builtManager.look,
+            portraitPx: builtManager.portraitPx,
+            newParts: []
+          }
+        };
+      else manager = { preset: pick };
       const r = await call<{ manager: StaffProfile }>('/api/onboarding', {
         name: name.trim(),
         zone,
@@ -414,14 +424,7 @@
             </p>
           {/if}
           {#if step === 'mac'}
-            <MacCard
-              onnext={next}
-              {onsetup}
-              onkey={() => {
-                wantKey = true;
-                go('claude');
-              }}
-            />
+            <MacCard onnext={next} {onsetup} />
           {:else if step === 'you'}
             <form
               novalidate
@@ -452,16 +455,15 @@
                 <button class="btn primary" disabled={!name.trim()}>That's me</button>
               </div>
             </form>
-          {:else if step === 'claude'}
-            <ClaudeCard onnext={next} onback={back} {wantKey} {onmodel} />
-          {:else if step === 'tools'}
-            <ToolsCard tools={agentTools} onnext={next} onback={back} />
+          {:else if step === 'ai'}
+            <AiCard tools={agentTools} onnext={next} onback={back} {ondraw} />
           {:else if step === 'manager'}
             <ManagerCard
               {presets}
               bind:pick
               bind:custom
-              {canDraw}
+              bind:built={builtManager}
+              canDraw={canDrawLooks}
               drawn={look?.portrait}
               drawing={!!look?.drawing && pick === 'custom'}
               onback={back}

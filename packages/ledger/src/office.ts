@@ -20,11 +20,13 @@ import {
   sql,
   type SQL
 } from 'drizzle-orm';
-import { rmSync } from 'node:fs';
+import { existsSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isAbsolute, join, sep } from 'node:path';
 import { alias } from 'drizzle-orm/pg-core';
 import { db, sql as pg } from './db.ts';
 import { embed } from './embed.ts';
-import { chatSession } from './home.ts';
+import { chatSession, CODE, home } from './home.ts';
 import {
   answeredAll,
   handBack,
@@ -66,14 +68,11 @@ import {
   usage,
   followUps,
   goals,
-  LEVELS,
-  levelAtMost,
   type AccessRequest,
   type FollowUpKind,
   type GoalDraft,
   type GoalPlan,
   type HireProposal,
-  type Level,
   type Outcome,
   type LedgerKind,
   type RunTrigger,
@@ -81,7 +80,22 @@ import {
   type Step,
   type UsageKind
 } from './schema.ts';
-import { AGENT_NAMES, type Agent } from './agents.ts';
+import {
+  AGENT_NAMES,
+  commandsOnline,
+  EFFORT_NAMES,
+  EFFORT_ORDER,
+  effortsOf,
+  MANAGER_EFFORT_FLOOR,
+  MODELS,
+  officeAgentOf,
+  type Agent,
+  type Effort,
+  type GrantedFolder
+} from './agents.ts';
+// Read only inside functions, so the import cycle with managers.ts is safe.
+import { MANAGER_ROLE } from './managers.ts';
+import { levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
@@ -114,13 +128,91 @@ export async function setPermission(id: string, permission: Level): Promise<void
   const before = await staffer(id);
   if (!before || before.permission === permission) return;
   await db.update(staff).set({ permission }).where(eq(staff.id, id));
-  const up = LEVELS.indexOf(permission) > LEVELS.indexOf(before.permission);
+  const up = !levelAtMost(permission, before.permission);
   await record({
     kind: 'access',
     actor: 'owner',
     title: `${up ? 'Raised' : 'Lowered'} ${before.name} from ${before.permission} to ${permission}`
   });
 }
+
+/**
+ * What an access line adds when the change opens or closes the internet to the
+ * Odd's commands. `held` is the line the office records when it holds the
+ * network (`holdNetwork`), and what a change that would open it says while held.
+ */
+export const NETWORK_NOTE = {
+  on: 'Its commands can reach the internet now.',
+  off: 'Its commands are off the internet now.',
+  held: 'This version of Claude Code refuses to let commands reach the whole internet. Commands keep working, with no network. Restarting the office lifts this.'
+} as const;
+
+// Whether this office holds the network: a Claude Code that refuses the open
+// network fails the run that met it, and from then on its runs' commands go
+// with none. In the office's own memory, so a restart tries the open network
+// once more and a refusal costs that one run again. A run's tool server is a
+// process of its own, so the office tells it in its environment
+// (`OFFICE_NETWORK_HELD`, which `heldReach`'s callers there read).
+let held = false;
+
+/** Whether this office has met that refusal since it started. Only the office's own process knows. */
+export function networkHeld(): boolean {
+  return held;
+}
+
+/** Called when a run meets the refusal. Records one Ledger line by the office, the first time. */
+export async function holdNetwork(): Promise<void> {
+  if (held) return;
+  // Held before the write, so two runs refused at once record one line, and
+  // a failed write still keeps commands off the internet.
+  held = true;
+  await record({
+    kind: 'access',
+    actor: 'office',
+    title: "Kept Odds' commands off the internet",
+    body: NETWORK_NOTE.held
+  });
+}
+
+/** For tests only: forgets a refusal, so the next run tries the open network again. */
+export function resetHeldNetwork(): void {
+  held = false;
+}
+
+/**
+ * What an Odd on `agent` reaches while the office holds the network or not
+ * (`officeHeld`): `own` with its network taken away while held. Only a Claude
+ * Code Odd's network is held, since the refusal is Claude Code's. `held` says
+ * the hold applies to this Odd, whether or not it had a network to lose. The
+ * one rule every reader of an Odd's reach goes through: runs, the prompt,
+ * my_access, office_report, the page and the Ledger line of a switch.
+ */
+export function heldReach<T extends { network: boolean }>(
+  agent: Agent,
+  own: T,
+  officeHeld: boolean
+): T & { held: boolean } {
+  const isHeld = agent === 'claude' && officeHeld;
+  return { ...own, network: own.network && !isHeld, held: isHeld };
+}
+
+/**
+ * The body for a change from `before` to `after`: whether its commands reach
+ * the internet changed, so the owner sees the reach a switch or a move opened
+ * or closed, not only the switch. The two sides are compared without the hold,
+ * which would make them equal; a change that opens the network while the
+ * office holds it says the hold's words instead.
+ */
+function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
+  const [was, is] = [before, after].map((s) => commandsOnline(s.agent, process.platform, s));
+  if (was === is) return {};
+  if (!is) return { body: NETWORK_NOTE.off };
+  const opened = heldReach(after.agent, { network: is }, networkHeld()).network;
+  return { body: opened ? NETWORK_NOTE.on : NETWORK_NOTE.held };
+}
+
+/** The tool the office runs on, from `.env` as it stands now (`officeAgentOf`). */
+export const officeAgent = (): Agent => officeAgentOf(process.env.OFFICE_AGENT, process.platform);
 
 /**
  * Only the owner moves a staffer to another coding tool. Its chat session
@@ -130,12 +222,14 @@ export async function setPermission(id: string, permission: Level): Promise<void
 export async function setAgent(id: string, agent: Agent): Promise<void> {
   const before = await staffer(id);
   if (!before || before.agent === agent) return;
-  await db.update(staff).set({ agent }).where(eq(staff.id, id));
+  // An account belongs to one tool, so the Odd starts the new one on its Office account.
+  await db.update(staff).set({ agent, account: null }).where(eq(staff.id, id));
   rmSync(chatSession(id), { force: true });
   await record({
     kind: 'access',
     actor: 'owner',
-    title: `Moved ${before.name} from ${AGENT_NAMES[before.agent]} to ${AGENT_NAMES[agent]}`
+    title: `Moved ${before.name} from ${AGENT_NAMES[before.agent]} to ${AGENT_NAMES[agent]}`,
+    ...networkNote(before, { ...before, agent })
   });
 }
 
@@ -153,6 +247,226 @@ export async function setTool(id: string, tool: string, on: boolean): Promise<vo
     title: on ? `Gave ${before.name} ${found.name}` : `Took ${found.name} from ${before.name}`,
     body: found.does
   });
+}
+
+/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
+/**
+ * Set how hard an Odd's runs think, from the levels its tool takes
+ * (`EFFORTS`). The Office Manager never goes below Medium. Takes effect on its
+ * next run.
+ */
+export async function setEffort(
+  id: string,
+  effort: Effort
+): Promise<{ refused: string } | undefined> {
+  const before = await staffer(id);
+  if (!before) return { refused: 'No such Odd' };
+  const menu = effortsOf(before.agent, before.model);
+  if (!menu.includes(effort))
+    return {
+      refused: menu.length
+        ? `${AGENT_NAMES[before.agent]} takes ${menu.map((e) => EFFORT_NAMES[e]).join(', ')}`
+        : `${AGENT_NAMES[before.agent]} has no thinking levels to pick`
+    };
+  if (
+    before.role === MANAGER_ROLE &&
+    EFFORT_ORDER.indexOf(effort) < EFFORT_ORDER.indexOf(MANAGER_EFFORT_FLOOR)
+  )
+    return {
+      refused: `The ${MANAGER_ROLE} thinks at ${EFFORT_NAMES[MANAGER_EFFORT_FLOOR]} or more`
+    };
+  if (before.effort === effort) return;
+  await db.update(staff).set({ effort }).where(eq(staff.id, id));
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: `Set ${before.name} to think at ${EFFORT_NAMES[effort]}`
+  });
+}
+
+/**
+ * Set the model an Odd's runs use on its tool, from the ones it offers
+ * (`MODELS`), or null for the office's. Takes effect on its next run.
+ */
+export async function setModel(
+  id: string,
+  model: string | null
+): Promise<{ refused: string } | undefined> {
+  const before = await staffer(id);
+  if (!before) return { refused: 'No such Odd' };
+  const menu = MODELS[before.agent];
+  const picked = model === null ? undefined : menu.find((m) => m.id === model);
+  if (model !== null && !picked)
+    return {
+      refused: menu.length
+        ? `${AGENT_NAMES[before.agent]} runs ${menu.map((m) => m.name).join(', ')}`
+        : `${AGENT_NAMES[before.agent]} has no models to pick`
+    };
+  if (before.model === model) return;
+  await db.update(staff).set({ model }).where(eq(staff.id, id));
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: picked
+      ? `Set ${before.name} to run on ${picked.name}`
+      : `Set ${before.name} to run on the office's model`
+  });
+}
+
+export async function setOwnTool(
+  id: string,
+  which: 'commands' | 'web',
+  on: boolean
+): Promise<void> {
+  const before = await staffer(id);
+  if (!before || before[which] === on) return;
+  await db
+    .update(staff)
+    .set({ [which]: on })
+    .where(eq(staff.id, id));
+  const n = before.name;
+  const title =
+    which === 'commands'
+      ? on
+        ? `Let ${n} run commands`
+        : `Stopped ${n} running commands`
+      : on
+        ? `Let ${n} browse the web`
+        : `Stopped ${n} browsing the web`;
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title,
+    ...networkNote(before, { ...before, [which]: on })
+  });
+}
+
+/**
+ * Only the owner gives an Odd a folder outside the office, to read or to read
+ * and change, or takes it back (`access` null). `path` is the real path
+ * `checkFolder` gave, or, to take one back, the path as stored, so a folder
+ * deleted from the disk can still be taken back. A folder is the same one
+ * when its real path is (`real`), so a level change replaces it, even one
+ * stored in another case. A new folder inside or holding one the Odd already
+ * has is refused (`FOLDER_REFUSED.nested`): one would carry two levels.
+ * Takes effect on the next run.
+ */
+export async function setFolder(
+  id: string,
+  path: string,
+  access: 'read' | 'write' | null
+): Promise<{ refused: string } | undefined> {
+  const before = await staffer(id);
+  if (!before) return;
+  const at = real(path);
+  const same = (f: { path: string }) => real(f.path) === at;
+  const had = before.folders.find(same);
+  const write = access === 'write';
+  if (access === null ? !had : had?.write === write) return;
+  const rest = before.folders.filter((f) => !same(f));
+  if (access !== null && rest.some((f) => within(at, real(f.path)) || within(real(f.path), at)))
+    return { refused: FOLDER_REFUSED.nested };
+  const folders = access === null ? rest : [...rest, { path, write }];
+  await db.update(staff).set({ folders }).where(eq(staff.id, id));
+  const shown = shownFolder(path);
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title:
+      access === null
+        ? `Took ${shown} from ${before.name}`
+        : `Let ${before.name} ${write ? 'read and change' : 'read'} ${shown}`
+  });
+}
+
+/**
+ * Secret stores in the home folder, by name: keys, sign-ins and settings,
+ * including those other apps on this computer keep there, like the Google
+ * Workspace MCP server's, and each coding tool's own home. AppData is where
+ * Windows apps keep theirs. No run reads them (`unreadable` in the office's
+ * staff.ts), and no folder given to an Odd holds or sits in one (`checkFolder`).
+ */
+export const SECRET_STORES: string[] = [
+  '.ssh',
+  '.aws',
+  '.gnupg',
+  '.config',
+  'Library',
+  'AppData',
+  '.claude',
+  '.claude.json',
+  '.google_workspace_mcp',
+  '.grok',
+  '.codex',
+  '.gemini'
+];
+
+/** What the owner reads when a folder cannot be given to an Odd. */
+export const FOLDER_REFUSED = {
+  missing: 'No such folder.',
+  home: 'Pick a folder inside your home, not the whole home.',
+  secrets: 'That folder holds your keys or sign-ins.',
+  code: "That folder holds Oddboro's own code.",
+  nested: 'That folder is inside one this Odd already has, or holds one.',
+  glob: (char: string) => `That folder's path has a character an Odd's tool can't take: ${char}`
+} as const;
+
+/**
+ * The characters Codex 0.166 refuses in a folder's path, since it reads them
+ * as a glob and takes a glob only to deny; it refuses both ways of escaping
+ * one too (`\\[` and `[[]`), so no Odd's run could start with such a folder.
+ * Refused for every Odd, since an Odd can move to Codex later. `{` and `}`
+ * stay allowed: Codex 0.166 takes them (measured twice), and Claude Code's
+ * sandbox reads `{` as a plain character.
+ */
+export const GLOB = /[*?[\]]/;
+
+/**
+ * A path by its real one when it exists, so it compares with a real path. The
+ * system's own realpath spells each name as the disk keeps it, so on a Mac's
+ * disk, which ignores case, `~/.SSH` and `~/.ssh` come out the same.
+ */
+const real = (p: string): string => (existsSync(p) ? realpathSync.native(p) : p);
+
+/** Whether `p` is `parent` or sits inside it. A Windows disk ignores case. */
+export function within(p: string, parent: string): boolean {
+  const [a, b] =
+    process.platform === 'win32' ? [p.toLowerCase(), parent.toLowerCase()] : [p, parent];
+  return a === b || a.startsWith(b.endsWith(sep) ? b : b + sep);
+}
+
+/** A path as the owner reads it, the home folder written `~`. */
+export function shownFolder(path: string): string {
+  for (const h of new Set([homedir(), real(homedir())]))
+    if (within(path, h)) return `~${path.slice(h.length)}`;
+  return path;
+}
+
+/**
+ * Whether `path`, as the owner typed it, may be given to an Odd, and its real
+ * path when it may. A folder inside the home that holds or sits in none of
+ * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
+ * code: a deny inside a folder a run reads is not held by every tool, so a
+ * folder that holds one is refused at the door. A real path with a character
+ * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
+ * what a run is given. Only the folder route calls this, so a folder given
+ * before that rule is not checked again.
+ */
+export function checkFolder(path: string): { real: string } | { refused: string } {
+  const typed = path.trim();
+  const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
+  if (!isAbsolute(expanded) || !existsSync(expanded)) return { refused: FOLDER_REFUSED.missing };
+  const p = real(expanded);
+  if (!statSync(p).isDirectory()) return { refused: FOLDER_REFUSED.missing };
+  const h = real(homedir());
+  if (p === h || !within(p, h)) return { refused: FOLDER_REFUSED.home };
+  const either = (q: string) => within(p, q) || within(q, p);
+  if ([...SECRET_STORES.map((s) => real(join(h, s))), real(home())].some(either))
+    return { refused: FOLDER_REFUSED.secrets };
+  if (either(real(CODE))) return { refused: FOLDER_REFUSED.code };
+  const glob = GLOB.exec(p)?.[0];
+  if (glob) return { refused: FOLDER_REFUSED.glob(glob) };
+  return { real: p };
 }
 
 export type Hire = Pick<
@@ -235,7 +549,8 @@ export async function hire(h: Hire): Promise<StaffRow> {
   const { newParts, ...values } = h;
   const [row] = await db
     .insert(staff)
-    .values({ ...values, id, tools: tools ?? STARTER_TOOLS })
+    // With no tool picked, the hire runs on the office's own.
+    .values({ ...values, agent: values.agent ?? officeAgent(), id, tools: tools ?? STARTER_TOOLS })
     .returning();
   await saveParts(newParts, id);
   await record({

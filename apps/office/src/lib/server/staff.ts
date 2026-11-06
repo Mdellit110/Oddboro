@@ -2,21 +2,26 @@
 // or Gemini for an Odd the owner moved to one (cli.ts), run headless, with the staffer's job
 // description from Postgres added to the system prompt. Server only.
 //
-// A Claude Code run gets five file tools (Read, Glob, Grep, Write, Edit), may
-// read only its own folder, the owner's data folder and, on a thread, the
-// thread's folder (see `readable`), may write only inside the staffer's own folder and
-// its own part of that thread's, except its tools' own instructions
-// (`INSTRUCTIONS` in files.ts) and, reading the owner's edit, that file (`deniedEdits`),
-// loads no project settings, skills or plugins, and
-// is denied anything not pre-approved. It always gets the office server (asks,
+// A Claude Code run gets five file tools (Read, Glob, Grep, Write, Edit), and
+// with the owner's switches as its tool takes them (`OwnTools`), Bash in
+// Claude Code's sandbox and WebSearch and WebFetch. It may read only its own
+// folder, the owner's data folder, on a thread the thread's folder, and the
+// folders the owner gave it (see `readable`), may write only inside the
+// staffer's own folder, its own part of that thread's and the folders the
+// owner gave it to change, except its tools' own instructions (`INSTRUCTIONS`
+// in files.ts), git's usual places in a folder the owner gave it (hooks, the
+// config file, submodules' copies: `REPO_RUNS`, which says what they do not
+// stop) and, reading the owner's edit, that file (`deniedEdits`),
+// loads no project settings, skills or plugins, and is denied anything not
+// pre-approved. It always gets the office server (asks,
 // tasks, the ledger), plus whatever access the owner granted: servers at read
 // level (the tools the owner ticked as read-only) or at write level (every
 // tool). Hosted servers get a fresh OAuth token per run.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import {
   DATABASE_URL,
   goal as findGoal,
@@ -46,6 +51,7 @@ import {
   type ThreadLine,
   type ThreadStory,
   HEALTH_WORDS,
+  handsOff,
   hasTool,
   jobsFor,
   levelAtMost,
@@ -56,6 +62,8 @@ import {
   outsideLines,
   ownerName,
   ownerNoteOf,
+  firstQuestionIn,
+  FIRST_QUESTIONS,
   recordUsage,
   setPlanLimits,
   startFirstDay,
@@ -95,10 +103,26 @@ import {
   zoneName,
   STAFF_SERVER,
   AGENT_NAMES,
+  folderLines,
+  heldReach,
+  holdNetwork,
+  networkHeld,
+  ownTools,
+  ownToolsSaid,
+  runsOnLine,
+  SECRET_STORES,
+  type OwnTools,
   chatSession,
   home,
   rulePath,
-  toolCommand
+  toolCommand,
+  effortFor,
+  MANAGER_ROLE,
+  modelFor,
+  accountOf,
+  accountsHome,
+  OFFICE_ACCOUNT,
+  toolHome
 } from '@oddboro/ledger';
 import { workPath } from '@oddboro/ledger/work-paths';
 import { bus, emit } from './events.ts';
@@ -106,15 +130,25 @@ import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
 import { getSecret, headerSecret } from './keychain.ts';
 import { bearer } from './oauth.ts';
-import { apiKey, claudeSettings, cleanEnv, modelArgs } from './claude.ts';
+import {
+  apiKey,
+  claudeAccountOf,
+  claudeRunHome,
+  claudeSettings,
+  cleanEnv,
+  modelArgs
+} from './claude.ts';
 import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
-import { catchUp, NOW, parseSession, saveSession, sectionsOf } from './resume.ts';
+import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
+import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
 import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
-import { endedEarly, LAUNCHES, OWN_TOOLS, streamTools, type Launch } from './cli.ts';
-import { stopGroups } from './launch.ts';
+import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
+import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups } from './launch.ts';
+import { tooOldLine } from './versions.ts';
+import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
 
@@ -370,14 +404,39 @@ export function pluginsOff(): Record<string, false> {
  * A clean environment: the owner's Claude login, or the API key they gave the
  * office, and never a key or settings that leaked in from a parent session.
  */
-export function staffEnv(): NodeJS.ProcessEnv {
+export function staffEnv(claudeDir?: string): NodeJS.ProcessEnv {
   const env = cleanEnv();
   delete env.ANTHROPIC_API_KEY;
   if (claudeSettings().auth === 'key') env.ANTHROPIC_API_KEY = apiKey();
+  // The account's own Claude Code folder: its login, settings and sessions.
+  if (claudeDir) env.CLAUDE_CONFIG_DIR = claudeDir;
   return env;
 }
 
+/**
+ * The tool folder an Odd's runs use: its account's (accounts.ts), or '' for
+ * the owner's own Claude login, which an Office account not yet signed in
+ * keeps (`claudeRunHome`). A saved session counts only in the folder it was
+ * made in.
+ */
+export async function runHomeOf(who: StaffRow): Promise<string> {
+  const account = await accountOf(who);
+  if (who.agent === 'claude') return (await claudeRunHome(account)) ?? '';
+  return toolHome(who.agent, account);
+}
+
 type Server = Record<string, unknown>;
+
+/**
+ * The office's own settings from .env that the staff tool server reads, set
+ * on the server itself. Grok's sandbox holds that server too and will not
+ * open .env, so the server never depends on reading it.
+ */
+const OFFICE_SETTINGS = ['OFFICE_TIME_ZONE', 'OFFICE_AGENT'] as const;
+const officeSettings = (): Record<string, string> =>
+  Object.fromEntries(
+    OFFICE_SETTINGS.flatMap((k) => (process.env[k] ? [[k, process.env[k] as string]] : []))
+  );
 
 /**
  * The servers and tool permissions one run gets: the outside tools
@@ -390,7 +449,7 @@ async function access(who: StaffRow, ceiling: Level) {
     office: {
       command: process.execPath,
       args: [STAFF_SERVER],
-      env: { STAFF_ID: who.id, DATABASE_URL }
+      env: { STAFF_ID: who.id, DATABASE_URL, ...officeSettings() }
     }
   };
   const allowed = ['mcp__office'];
@@ -483,7 +542,7 @@ async function taught(who: StaffRow): Promise<string> {
     '- When {owner} corrects your work or says how they want something done from now on, call keep_lesson once, with their words. Only a chat, a run carrying a note {owner} left on an ask or a task, or a run reading their edit to one of your files has their words; in any other run keep_lesson refuses, so tell them in your reply instead. The lesson is enough: it beats your job steps where they disagree, so do not also edit your job for the same correction unless they ask you to.',
     '- Only the lessons listed here are yours. A correction {owner} gave another Odd, which you may see in the ledger, is not a lesson for you.',
     '- How the whole office should work is a lesson for every Odd. When {owner} says how much the office should do without checking with them, or how they want to hear how things are going, keep it with scope everyone, in their words, even when they do not say it is for everyone. If the answer is too vague to act on, like "just be helpful", ask one follow-up question, and keep nothing if that is still vague. If they skip the question, keep nothing: the office\'s own way stands.',
-    `- A lesson can make you more careful, never more permitted. It never widens your level or your tools, and nothing leaves the office on a lesson alone: it still needs {owner}'s yes on that exact action, ${ACT_WRITE}. If their words ask for more than you hold, such as "send emails without asking", keep only what makes you more careful, and tell them plainly that more access is the Access tab's job, not a lesson's.`,
+    `- A lesson can make you more careful, never more permitted. It never widens your level or your tools, and nothing leaves the office on a lesson alone: it still needs {owner}'s yes on that exact action, ${ACT_WRITE}. If their words ask for more than you hold, such as "send emails without asking", keep only what makes you more careful, and tell them plainly that more access is the Settings tab's job, not a lesson's.`,
     ...(live.length
       ? [
           '- Follow every lesson below wherever it applies. A lesson marked "only in" applies only there; one with no mark applies everywhere. Where two disagree, the newer one wins. Where one disagrees with your job steps, the lesson wins.',
@@ -499,15 +558,36 @@ async function taught(who: StaffRow): Promise<string> {
   ].join('\n');
 }
 
-/** What this run can do: its level, where it writes, its own tools, and each outside tool it holds or was granted. */
-function canDo(caps: Capabilities, owner: string, agent: Agent): string {
+/**
+ * What this run can do: its level, the tool its runs go through, where it
+ * writes, its own tools, and each outside tool it holds or was granted.
+ * `officeHeld` says this office holds the network, which its own tools' line
+ * applies as my_access does (`ownToolsSaid`).
+ */
+function canDo(
+  caps: Capabilities,
+  owner: string,
+  agent: Agent,
+  own: OwnTools,
+  officeHeld: boolean
+): string {
   const lines = outsideLines(caps, owner);
+  const writes = own.granted.some((f) => f.write)
+    ? 'You write files only in your folder, on work you share with colleagues in your part of its folder, and in the folders {owner} gave you to change.'
+    : 'You write files only in your folder, or, on work you share with colleagues, in your part of its folder.';
+  const reach = [
+    'the outside tools below',
+    ...(own.web ? ['the web'] : []),
+    ...(own.granted.length ? ['the folders {owner} gave you'] : [])
+  ];
+  const beyond = `Beyond the office, you reach only ${reach.length > 1 ? `${reach.slice(0, -1).join(', ')} and ${reach.at(-1)}` : reach[0]}.`;
   return [
     '',
     '## What you can do',
     '',
     `- ${levelLine(caps.level, owner)}`,
-    `- You write files only in your folder, or, on work you share with colleagues, in your part of its folder. ${OWN_TOOLS[agent]} The outside tools below are your only reach beyond the office.`,
+    `- ${runsOnLine(agent)}`,
+    `- ${[writes, ...ownToolsSaid(agent, caps.own, officeHeld), beyond].join(' ')}`,
     '- If a brief names tools you do not have, do the work with your own tools.',
     '- Outside tools:',
     ...(lines.length ? lines.map((l) => `  - ${l}`) : ['  - None yet.']),
@@ -518,7 +598,8 @@ function canDo(caps: Capabilities, owner: string, agent: Agent): string {
 /**
  * The system prompt. A run on no thread, such as a chat or a job, lists the
  * threads the staffer leads, so it can continue one rather than open another;
- * a run on a thread hands on in that one. A chat also lists the threads it
+ * a run on a thread hands on in that one, and a run that cannot hand on is
+ * told none (`leads`). A chat also lists the threads it
  * works on and does not lead, so what {owner} says there about one reaches
  * its lead. `led` are the stories of the threads it leads that the run is
  * told in full (`ledStories`): the lead's run on its thread is told how to
@@ -534,12 +615,16 @@ async function prompt(
     chat: boolean;
     led: ThreadStory[];
     shown?: number[];
+    own: OwnTools;
+    /** Whether this office holds the network (`networkHeld`), read once as the run starts. */
+    officeHeld: boolean;
+    /** Whether the run is told the threads it leads, by the tool server's own rule (`handsOff`). */
+    leads: boolean;
   }
 ): Promise<string> {
-  const { dir } = opts;
+  const { dir, own, leads } = opts;
   // run() fills in the time, so the rest can be compared with what a resumed session saw.
   const now = NOW;
-  const leads = !opts.thread && hasTool(who.tools, 'hand_off');
   const updating = installsAt();
   return (
     who.desk +
@@ -563,7 +648,12 @@ async function prompt(
       updatesAt: updating === undefined ? undefined : clockTime(updating)
     }) +
     `\n## Where things are\n\n- Your folder: ${dir}\n- Your notes: ${join(dir, 'notes')}\n- {owner}'s data folder: ${DATA}\n` +
-    canDo(opts.caps, opts.owner, who.agent)
+    (own.granted.length
+      ? `- Folders {owner} gave you:\n${folderLines(own)
+          .map((l) => `  - ${l}\n`)
+          .join('')}`
+      : '') +
+    canDo(opts.caps, opts.owner, who.agent, own, opts.officeHeld)
   );
 }
 
@@ -591,16 +681,33 @@ export async function notePlan(info: unknown): Promise<void> {
 /**
  * What a staffer's file tools may read: its own folder, the owner's data
  * folder, Claude Code's folder for this run's sessions (long tool results
- * land there), and the folder of each thread the run reads (`reads`). Read
- * rules govern Glob and Grep too, and dontAsk turns down every other path.
+ * land there), the folder of each thread the run reads (`reads`), and the
+ * folders the owner gave it (`granted`). Read rules govern Glob and Grep too,
+ * and dontAsk turns down every other path. With Run commands, the sandbox
+ * reads the same list.
  */
-function readable(dir: string, reads: number[]): string[] {
-  return [
-    dir,
-    DATA,
-    join(homedir(), '.claude', 'projects', sessionsOf(dir)),
-    ...reads.map(threadFolder)
-  ];
+function readable(dir: string, reads: number[], granted: string[], claude: string): string[] {
+  return [dir, DATA, sessionsFolder(dir, claude), ...reads.map(threadFolder), ...granted];
+}
+
+/**
+ * What a run reads beyond its own: `readable` less the run's folder, which
+ * each tool reaches already as its working folder, and Claude Code's sessions
+ * folder, which is Claude Code's own. Every tool's launch, and Claude Code's
+ * `--add-dir` without commands, read this one list, in `readable`'s order.
+ */
+function readsBeyond(dir: string, reads: number[], granted: string[], claude: string): string[] {
+  const own = [dir, sessionsFolder(dir, claude)];
+  return readable(dir, reads, granted, claude).filter((p) => !own.includes(p));
+}
+
+/**
+ * Claude Code's folder for the sessions of a run in `dir`, where long tool
+ * results land, in its account's folder (`claude`): ~/.claude for the owner's
+ * own login.
+ */
+function sessionsFolder(dir: string, claude: string): string {
+  return join(claude, 'projects', sessionsOf(dir));
 }
 
 /** Claude Code names a working folder's sessions folder after its path. */
@@ -614,9 +721,14 @@ function sessionsOf(dir: string): string {
  * office's folder and other staffers' folders, and the rest of Claude Code's
  * folder, sessions included. Each is denied with everything under it (`denyRules`).
  */
-function unreadable(id: string, dir: string, threads: number[]): string[] {
-  const reads = readable(dir, threads);
-  const claude = join(homedir(), '.claude');
+function unreadable(
+  id: string,
+  dir: string,
+  threads: number[],
+  granted: string[],
+  claude: string
+): string[] {
+  const reads = readable(dir, threads, granted, claude);
   const besides = (parent: string, keep: string[]) => {
     try {
       return readdirSync(parent)
@@ -626,25 +738,23 @@ function unreadable(id: string, dir: string, threads: number[]): string[] {
       return [];
     }
   };
-  // Secret stores in the home folder, including the sign-ins other apps on this
-  // computer keep there, like the Google Workspace MCP server's. AppData is
-  // where Windows apps keep theirs.
   const paths = [
-    ...[
-      '.ssh',
-      '.aws',
-      '.gnupg',
-      '.config',
-      'Library',
-      'AppData',
-      '.claude.json',
-      '.google_workspace_mcp'
-    ].map((p) => join(homedir(), p)),
+    // ~/.claude among them, which this run's sessions folder, read, keeps open:
+    // the two lines at the end shut the rest of it.
+    ...SECRET_STORES.map((p) => join(homedir(), p)),
     ...besides(home(), ['staff', 'data', ...(threads.length ? ['threads'] : [])]),
     ...besides(HOMES, [id]),
     // Every other thread's folder. Claude Code takes a read rule on a folder
     // to cover writes too, so none may cover this run's own part.
     ...(threads.length ? besides(dirname(threadFolder(threads[0])), threads.map(String)) : []),
+    // An account's Claude folder sits in the office's accounts folder, which
+    // its sessions folder keeps open: shut every other tool's and account's.
+    ...(claude.startsWith(`${accountsHome()}${sep}`)
+      ? [
+          ...besides(accountsHome(), ['claude']),
+          ...besides(join(accountsHome(), 'claude'), [basename(claude)])
+        ]
+      : []),
     ...besides(claude, ['projects']),
     ...besides(join(claude, 'projects'), [sessionsOf(dir)])
   ];
@@ -707,10 +817,17 @@ async function run(
   }
 ): Promise<Run> {
   const dir = homeOf(who.id);
-  const saved =
+  // The account its tool signs in with, and that account's folder. A session
+  // saved in another folder (the Odd moved accounts) cannot resume here.
+  const account = await accountOf(who);
+  const toolDir = await runHomeOf(who);
+  const read =
     opts.sessionFile && existsSync(opts.sessionFile)
       ? parseSession(readFileSync(opts.sessionFile, 'utf8'))
       : undefined;
+  const saved = read && (read.home ?? '') === toolDir ? read : undefined;
+  /** Claude Code's folder for this run: the account's, or ~/.claude for the owner's own login. */
+  const claudeDir = toolDir || join(homedir(), '.claude');
   const ceiling = opts.draftOnly && levelAtMost('draft', who.permission) ? 'draft' : who.permission;
   const { servers, allowed, caps } = await access(who, ceiling);
   // Prompts name the owner as {owner}: each install's staff use its own name.
@@ -729,6 +846,21 @@ async function run(
       ? await ledStories(who.id, 'chat')
       : [];
   const reads = opts.threadId ? [opts.threadId] : led.map((s) => s.thread.id);
+  // The owner's switches and folders as this run's tool takes them (the
+  // ledger's `ownTools`, which `capabilities` worked out once), less a network
+  // this office holds back after Claude Code refused the open one. Read once,
+  // so the run, its prompt and its tool server agree.
+  const officeHeld = networkHeld();
+  const own = heldReach(who.agent, caps.own, officeHeld);
+  const extraReads = own.granted.map((f) => f.path);
+  const extraWrites = own.granted.filter((f) => f.write).map((f) => f.path);
+  // From the facts officeEnv hands the tool server, so the prompt lists the
+  // threads a run leads only when that run is offered hand_off.
+  const { leads } = handsOff(who.tools, {
+    thread: !!opts.threadId,
+    handOff: !!opts.handOffId,
+    lesson: !!opts.lessonRun
+  });
   const system = say(
     (await prompt(who, {
       dir,
@@ -737,7 +869,10 @@ async function run(
       thread: opts.threadId,
       chat: inChat,
       led,
-      shown: opts.shown
+      shown: opts.shown,
+      own,
+      officeHeld,
+      leads
     })) + (opts.extra ?? '')
   );
   const sections = sectionsOf(system, say(who.desk));
@@ -761,14 +896,44 @@ async function run(
       ceiling: ceiling !== who.permission ? ceiling : undefined,
       handOffId: opts.handOffId,
       threadId: opts.threadId,
-      lessonRun: !!opts.lessonRun
+      lessonRun: !!opts.lessonRun,
+      // Every run while held, whatever its own tool or switches: its
+      // office_report speaks of other Odds too.
+      networkHeld: officeHeld
     })
   );
   // On a thread, the run writes only its own part of the thread's folder.
   const part = opts.threadId ? threadPart(opts.threadId, who.id) : undefined;
   if (part) mkdirSync(part, { recursive: true });
-  const writes = part ? [dir, part] : [dir];
-  function claudeArgs(): string[] {
+  const writes = [dir, ...(part ? [part] : []), ...extraWrites];
+  const denied = deniedEdits({
+    dir,
+    writes,
+    granted: extraWrites,
+    edited: opts.ownerEdit?.path
+  });
+  // Bash writes in every folder Claude Code works in (the cwd and each
+  // --add-dir), whatever the Edit rules say. So with commands, only the
+  // folders the run writes are added, and the sandbox's denyWrite, which beats
+  // them, holds the data folder and what `deniedEdits` names: never a folder the
+  // run only reads, since one may hold a folder it writes (measured on Claude
+  // Code 2.1.318). A data folder that is not there is left out: it sits in
+  // the office's home, which is neither the cwd nor added, so nothing in the
+  // run can make it.
+  const data = existsSync(DATA) ? [DATA] : [];
+  // Commands get a temp folder of their own: short, since a long one falls
+  // back to the folder every run shares, and spelt /private/tmp, since /tmp
+  // broke every command (both measured). Commands are on only on a Mac.
+  const tmp = own.commands ? `/private/tmp/ob-${key.slice(0, 8)}` : undefined;
+  // The temp folder comes last: npm keeps its cache there (`shellEnv`), and
+  // without it in --add-dir the sandbox refuses npm's writes (measured).
+  const workIn = tmp
+    ? [...data, ...(part ? [part] : []), ...extraWrites, tmp]
+    : readsBeyond(dir, reads, extraReads, claudeDir);
+  // The owner's pick for this Odd, or Medium; never below Medium for the Office Manager.
+  const model = modelFor(who.agent, who.model);
+  const effort = effortFor(who.agent, who.effort, who.role === MANAGER_ROLE, model);
+  function claudeArgs(env: NodeJS.ProcessEnv): string[] {
     return [
       '-p',
       '--output-format',
@@ -776,17 +941,21 @@ async function run(
       '--verbose',
       '--include-partial-messages',
       '--tools',
-      'Read,Glob,Grep,Write,Edit',
+      [
+        'Read,Glob,Grep,Write,Edit',
+        ...(own.commands ? ['Bash'] : []),
+        ...(own.web ? ['WebSearch,WebFetch'] : [])
+      ].join(','),
       '--allowedTools',
-      ...readable(dir, reads).map((p) => `Read(${rulePath(p)}/**)`),
+      ...readable(dir, reads, extraReads, claudeDir).map((p) => `Read(${rulePath(p)}/**)`),
       // Edit rules cover every file-writing tool; Claude Code ignores Write(path).
       ...writes.map((w) => `Edit(${rulePath(w)}/**)`),
+      ...(own.commands ? ['Bash'] : []),
+      ...(own.web ? ['WebSearch', 'WebFetch'] : []),
       ...allowed,
       '--disallowedTools',
-      ...unreadable(who.id, dir, reads),
-      ...deniedEdits(dir, writes, opts.ownerEdit?.path).flatMap((p) =>
-        denyRules(['Edit'], rulePath(p))
-      ),
+      ...unreadable(who.id, dir, reads, extraReads, claudeDir),
+      ...denied.flatMap((p) => denyRules(['Edit'], rulePath(p))),
       '--permission-mode',
       'dontAsk',
       '--setting-sources',
@@ -796,34 +965,86 @@ async function run(
       JSON.stringify({ mcpServers: servers }),
       '--disable-slash-commands',
       '--settings',
-      JSON.stringify({ enabledPlugins: pluginsOff() }),
-      '--add-dir',
-      DATA,
-      ...reads.flatMap((t) => ['--add-dir', threadFolder(t)]),
-      ...modelArgs(),
+      JSON.stringify({
+        enabledPlugins: pluginsOff(),
+        ...(tmp
+          ? {
+              sandbox: claudeSandbox({
+                reads: readable(dir, reads, extraReads, claudeDir).filter(
+                  (p) => p !== DATA || data.length
+                ),
+                tmp,
+                denyWrite: [...data, ...denied],
+                network: own.network,
+                env
+              })
+            }
+          : {})
+      }),
+      ...workIn.flatMap((p) => ['--add-dir', p]),
+      // The Odd's own model, or the office's Opus or Sonnet from setup.
+      ...(model ? ['--model', model] : modelArgs()),
+      ...(effort ? ['--effort', effort] : []),
       '--append-system-prompt',
       system.replaceAll(NOW, time),
       ...(prior ? ['--resume', prior] : ['--session-id', randomUUID()])
     ];
   }
   const input = preface + say(message);
+  /** A Claude Code run; with commands, their temp folder and the git template in it, made now and removed when the run ends. */
+  function claudeLaunch(): Launch {
+    const env = staffEnv(toolDir || undefined);
+    if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: () => {} };
+    mkdirSync(tmp, { recursive: true, mode: 0o700 });
+    const shell = shellEnv(tmp);
+    mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
+    // The office's git and npm settings (`shellEnv`), and none of the office's
+    // own node options, which every node a command starts would take as its own.
+    delete env.NODE_OPTIONS;
+    Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, ...shell });
+    return {
+      args: claudeArgs(env),
+      env,
+      stdin: input,
+      done: () => rmSync(tmp, { recursive: true, force: true })
+    };
+  }
+  // An added Claude account nobody signed in to: say where to sign in, rather than Claude Code's own advice.
+  if (who.agent === 'claude' && account !== OFFICE_ACCOUNT && !(await claudeAccountOf(account))) {
+    const line = `Claude Code ${NOT_SIGNED_IN}`;
+    opts.onEvent?.({ type: 'error', message: line });
+    return { ok: false, text: line };
+  }
+  // A tool older than the office runs fails on a switch it does not know, so it never starts.
+  const tooOld = await tooOldLine(who.agent, SIGN_IN_WHERE);
+  if (tooOld) {
+    opts.onEvent?.({ type: 'error', message: tooOld });
+    return { ok: false, text: tooOld };
+  }
   const launch: Launch | { refused: string } =
     who.agent === 'claude'
-      ? { args: claudeArgs(), env: staffEnv(), stdin: input, done: () => {} }
+      ? claudeLaunch()
       : await LAUNCHES[who.agent]({
           key,
           staffId: who.id,
           dir,
-          reads: [DATA, ...reads.map(threadFolder)],
+          reads: readsBeyond(dir, reads, extraReads, claudeDir),
           part,
           writes,
+          granted: extraWrites,
           edited: opts.ownerEdit?.path,
           system: system.replaceAll(NOW, time),
           input,
           resume: prior,
           servers,
           allowed,
-          timeoutMs: opts.timeoutMs
+          timeoutMs: opts.timeoutMs,
+          web: own.web,
+          commands: own.commands,
+          network: own.network,
+          effort,
+          model,
+          account
         });
   if ('refused' in launch) {
     opts.onEvent?.({ type: 'error', message: launch.refused });
@@ -855,15 +1076,31 @@ async function run(
     let last = '';
     let session: string | undefined;
     let finished = false;
-    const finish = (r: Run) => {
+    const finish = (end: Run) => {
       if (finished) return;
       finished = true;
+      // A Claude Code that refuses the open network fails this run: the owner
+      // is told plainly, and from now on this office's Claude Code runs keep
+      // their commands off the internet (`holdNetwork`).
+      const refused =
+        !end.ok &&
+        who.agent === 'claude' &&
+        own.network &&
+        NETWORK_REFUSED.test(`${end.text}\n${stderr}`);
+      if (refused)
+        void holdNetwork().catch((e: unknown) =>
+          console.error("Could not record that Odds' commands stay off the internet:", e)
+        );
+      // Keyed on the owner's message, not the kind: a new hire's hello is a
+      // chat run the owner sent nothing to.
+      const line = NETWORK_REFUSED_LINE[opts.ownerSaid === undefined ? 'unsent' : 'sent'];
+      const r = refused ? { ok: false, text: line.replaceAll('{name}', who.name) } : end;
       clearTimeout(timer);
       runsGoing.delete(key);
       launch.done();
       bus.emit(RUN_ENDED);
       if (session && opts.sessionFile)
-        saveSession(opts.sessionFile, { sessionId: session, seen: sections });
+        saveSession(opts.sessionFile, { sessionId: session, seen: sections, home: toolDir });
       opts.onEvent?.(r.ok ? { type: 'done', text: r.text } : { type: 'error', message: r.text });
       done(r);
     };
@@ -959,6 +1196,18 @@ export async function chat(
   // Stamped when sent, so what the staffer delivers while replying lands between the two.
   const sent = new Date().toISOString();
   try {
+    // An answer to a manager's first or second question (`FIRST_QUESTIONS`):
+    // the office asks the next one itself, at once and with no run. The third
+    // answer runs the manager, which reads all three in the chat.
+    const last = history(id).at(-1);
+    const asked = last?.from === 'staff' ? firstQuestionIn(last.text) : -1;
+    if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1) {
+      const next = FIRST_QUESTIONS[asked + 1].ask;
+      addToChat(id, { at: sent, from: 'owner', text: message });
+      addToChat(id, { at: new Date().toISOString(), from: 'staff', text: next, told: true });
+      onEvent({ type: 'done', text: next });
+      return;
+    }
     // Lines the office wrote in the chat, and work put on the desk, since the
     // owner last wrote are not in the session: say so, so an answer to the
     // hello, "How did the call go?" or "What about Thursday?" makes sense to
@@ -967,9 +1216,29 @@ export async function chat(
     const landed = (await deliveries(id, 20)).filter(
       (d) => !(d.kind === re?.ref.kind && d.id === re.ref.id)
     );
-    const prompt = [...chatPreface(history(id), landed), ...(re ? [re.brief] : []), message].join(
-      '\n\n'
-    );
+    const past = history(id);
+    // A new session (the Odd moved to another tool, or its session is gone)
+    // never saw the chat: it gets the latest of it word for word. The preface
+    // leaves out the told and poke lines the replay holds, and keeps those the
+    // budget cut, so each line since the owner last wrote is said once.
+    const kept = sessionIdIn(chatSession(id), await runHomeOf(who)) ? [] : replayed(past);
+    const inReplay = new Set(replayedAt(past, kept));
+    const since = replaySince(past, kept);
+    // The Odd writes only its own folder and the given folders it may change, so only those are walked.
+    const writable = ownTools(who, process.platform)
+      .granted.filter((f) => f.write)
+      .map((f) => f.path);
+    const prompt = [
+      ...(since
+        ? [replay(past, changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable))]
+        : []),
+      ...chatPreface(
+        past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
+        landed
+      ),
+      ...(re ? [re.brief] : []),
+      message
+    ].join('\n\n');
     const r = await run(who, prompt, {
       kind: 'chat',
       ownerSaid: message,

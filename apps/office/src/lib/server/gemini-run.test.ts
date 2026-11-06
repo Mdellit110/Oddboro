@@ -23,7 +23,8 @@ import {
   assertKeychainUntouched,
   ownerData,
   plain,
-  runOf
+  runOf,
+  writeRule
 } from './office-under-test.ts';
 
 // After the office under test set its home and secret store, so the launch reads those.
@@ -45,34 +46,11 @@ async function chatError(id: string, message = 'Hello.'): Promise<string> {
   });
   return error;
 }
-/** A new chat session for `id`, as if it never chatted. */
-const forget = (id: string) => rmSync(L.chatSession(id), { force: true });
-/**
- * Whether a rule of a run's policy with `decision` matches a write to `path`,
- * as Gemini matches it: the arguments as JSON, each pair between NULs. Each
- * value the office writes is a JSON string, one key a line.
- */
-function writeRule(policy: string, decision: 'allow' | 'deny', path: string): boolean {
-  const args = `{\0"content":"x"\0,\0"file_path":${JSON.stringify(path)}\0}`;
-  return policy
-    .split('[[rule]]\n')
-    .filter(Boolean)
-    .map(
-      (block) =>
-        Object.fromEntries(
-          block
-            .trim()
-            .split('\n')
-            .map((l) => [l.slice(0, l.indexOf(' = ')), JSON.parse(l.slice(l.indexOf(' = ') + 3))])
-        ) as Record<string, unknown>
-    )
-    .some(
-      (r) =>
-        r.decision === decision &&
-        typeof r.argsPattern === 'string' &&
-        new RegExp(r.argsPattern).test(args)
-    );
-}
+/** A new chat session for `id`, as if it never chatted: no session, and no chat for a replay to carry a stand-in's words into. */
+const forget = (id: string) => {
+  rmSync(L.chatSession(id), { force: true });
+  rmSync(L.home('staff', id, 'chat.jsonl'), { force: true });
+};
 
 test("a Gemini Odd's first chat starts gemini with stream-json, the run's own policy and the owner's data folder to read, its message on stdin", async () => {
   forget('gemma');
@@ -164,15 +142,20 @@ test('a Gemini run starts as a process group of its own, so its MCP servers stop
   const dir = join(folder, 'staff', 'gemma');
   const launch = await LAUNCHES.gemini({
     key: 'own-group',
+    account: 'office',
     staffId: 'gemma',
     dir,
     reads: [],
     writes: [dir],
+    granted: [],
+    commands: false,
+    network: false,
     system: 'You are Gemma.',
     input: 'Hello.',
     servers: {},
     allowed: [],
-    timeoutMs: 60_000
+    timeoutMs: 60_000,
+    web: false
   });
   assert.ok('args' in launch, JSON.stringify(launch));
   launch.done();
@@ -231,7 +214,7 @@ test("a Gemini result that fails ends the run with Gemini's own words", async ()
   assert.equal(await chatError('gemma', 'End in error'), 'Quota used up.');
 });
 
-test('with no Gemini key in the office, the run points to its Access tab to add one, and starts nothing; a key added there reaches the next run', async () => {
+test('with no Gemini key in the office, the run points to its Settings tab to add one, and starts nothing; a key added there reaches the next run', async () => {
   const launches = () => readFileSync(join(GEMINI_HOME, 'launches.log'), 'utf8').length;
   const before = launches();
   // Google stood in for: it takes every key, since the key's trial is not under test here.
@@ -241,7 +224,7 @@ test('with no Gemini key in the office, the run points to its Access tab to add 
     clearGeminiKey();
     assert.equal(
       await chatError('gemma'),
-      "Gemini has no API key in this office. Add one on this Odd's Access tab, under Runs on."
+      "Gemini has no API key in this office. Add one on this Odd's Settings tab, under Model."
     );
     assert.equal(launches(), before, 'gemini started');
     assert.deepEqual(await setGeminiKey('added-later-key-for-tests-01'), { ok: true });
@@ -279,15 +262,15 @@ test('"Runs on" offers Gemini on no system until its live test, and no Odd moves
 });
 
 test('once its list names this system, "Runs on" offers Gemini and an Odd moves to it', async () => {
-  const before = L.AGENT_PLATFORMS.gemini;
-  L.AGENT_PLATFORMS.gemini = [process.platform];
+  const before = L.AGENT_PLATFORMS.gemini.runs;
+  L.AGENT_PLATFORMS.gemini.runs = [process.platform];
   try {
     assert.ok(L.agentsOn(process.platform).includes('gemini'));
     assert.ok((await offered()).includes('gemini'));
     assert.equal((await patch('sam', { agent: 'gemini' })).status, 200);
     assert.equal((await L.staffer('sam'))?.agent, 'gemini');
   } finally {
-    L.AGENT_PLATFORMS.gemini = before;
+    L.AGENT_PLATFORMS.gemini.runs = before;
     await patch('sam', { agent: 'claude' });
   }
 });

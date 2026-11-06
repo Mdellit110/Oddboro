@@ -32,6 +32,7 @@ import {
   currentOffice,
   gave,
   hireRoute,
+  nodeBin,
   history,
   bin,
   chat,
@@ -71,18 +72,22 @@ test("a colleague's run on a hand-off works at Draft, and its key is held while 
   assert.equal(L.runsGoing.size, 0, 'the key is still held after the run ended');
 });
 
-test("a run that reads the owner's no for a lesson works at Draft and hands nothing on; a carry-out does neither", async () => {
+test("a run that reads the owner's no for a lesson works at Draft, hands nothing on and is not told the work its Odd leads; a carry-out is told it and does neither", async () => {
+  // Work Lena leads, so a run that may hand on has a thread to be told of.
+  await L.pg`insert into threads (title, hub_id, holder_id) values ('Plan the picnic', 'lead', 'lead')`;
   const no = await L.raiseAsk('lead', { title: 'Book the band', why: 'w', ifApproved: 'i' });
   await L.decideAsk(no.ask.id, 'deny', 'Never book on a Friday.');
   const lesson = await runOf(await startedBy(no.ask.id, 'denied'), no.ask.id);
   assert.equal(lesson.env.LESSON_RUN, '1');
   assert.equal(lesson.env.CEILING, 'draft');
+  assert.doesNotMatch(lesson.system, /Plan the picnic/);
   const yes = await L.raiseAsk('lead', { title: 'Book the hall', why: 'w', ifApproved: 'i' });
   await L.decideAsk(yes.ask.id, 'approve', null);
   const carry = await runOf(await startedBy(yes.ask.id, 'carry_out'), yes.ask.id);
   assert.equal(carry.env.LESSON_RUN, undefined);
   assert.equal(carry.env.CEILING, undefined);
   assert.equal(carry.env.APPROVED_ASK, String(yes.ask.id));
+  assert.match(carry.system, /Plan the picnic/);
 });
 
 test("the colleague's run a yes to keep going starts is handed the held work as the lead wrote it", async () => {
@@ -158,6 +163,7 @@ test("a Claude Code Odd's chat gets the arguments it always had, plus the new in
         `Edit(${p}/**)`
       ])
     ),
+    // No repository's hooks or config: those are refused only in a folder the owner gave it (`repoRunPaths`).
     '--permission-mode',
     'dontAsk',
     '--setting-sources',
@@ -172,6 +178,9 @@ test("a Claude Code Odd's chat gets the arguments it always had, plus the new in
     '<home>/data',
     '--model',
     'opus',
+    // No level picked: Medium (`effortFor`).
+    '--effort',
+    'medium',
     '--append-system-prompt',
     '<append-system-prompt>',
     '--session-id',
@@ -186,7 +195,8 @@ test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the f
   const shown = plain((await chatOf('gus')).args).map((a) =>
     a.replace(/^(--single|--rules)=[^]*$/, '$1=<$1>')
   );
-  // The instruction files are pinned below; the rest is compared whole.
+  // The instruction files are pinned below; the rest is compared whole, so a
+  // repository's hooks or config in its own folder, which no rule refuses, would show there.
   const own = (a: string) =>
     /^(Edit|Write)\(<home>\/staff\/gus\/.*(CLAUDE|\.claude|\.grok|AGENTS|\.mcp\.json|\.codex|\.agents|GEMINI|\.gemini)/.test(
       a
@@ -208,14 +218,18 @@ test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the f
       '--sandbox',
       'odd-gus',
       '--agent',
-      '<home>/grok/runs/<id>.md',
+      '<home>/accounts/grok/office/runs/<id>.md',
       '--permission-mode',
       'dontAsk',
       '--no-subagents',
       '--no-auto-update',
       '--tools',
       'read_file,list_dir,grep,write,search_replace',
+      // No level picked: Medium (`effortFor`).
+      '--reasoning-effort=medium',
       ...[
+        // Every account's folder, and Grok's old home before accounts.
+        '<home>/accounts',
         '<home>/grok',
         '<node>',
         '<code>/packages',
@@ -234,12 +248,9 @@ test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the f
         '<home>/rg-bin',
         '<home>/rg-real'
       ].flatMap((p) => ['--deny', `Read(${p})`, '--deny', `Read(${p}/**)`]),
-      ...['Edit', 'Write'].flatMap((t) => [
-        '--deny',
-        `${t}(<home>/grok)`,
-        '--deny',
-        `${t}(<home>/grok/**)`
-      ]),
+      ...['<home>/accounts', '<home>/grok'].flatMap((p) =>
+        ['Edit', 'Write'].flatMap((t) => ['--deny', `${t}(${p})`, '--deny', `${t}(${p}/**)`])
+      ),
       '--allow',
       'Edit(<home>/staff/gus/**)',
       '--allow',
@@ -284,7 +295,7 @@ test('a message or job description that starts with a dash reaches grok whole, n
 
 test('a Grok run gets grep only where ripgrep is on PATH, and then the kernel reads its folder', async () => {
   const path = process.env.PATH;
-  process.env.PATH = `${bin}:${dirname(process.execPath)}`;
+  process.env.PATH = `${bin}:${nodeBin}`;
   try {
     const run = await chatOf('gus');
     assert.equal(
@@ -303,8 +314,8 @@ test('a Grok run gets grep only where ripgrep is on PATH, and then the kernel re
 test("a Grok run's environment switches off every other tool's setup, and carries no key or node options from the office's own", async () => {
   const { grokEnv } = await chatOf('gus');
   assert.deepEqual(grokEnv, {
-    GROK_HOME: join(folder, 'grok'),
-    TMPDIR: join(folder, 'grok', 'tmp'),
+    GROK_HOME: join(folder, 'accounts', 'grok', 'office'),
+    TMPDIR: join(folder, 'accounts', 'grok', 'office', 'tmp'),
     GROK_CLAUDE_AGENTS_ENABLED: 'false',
     GROK_CLAUDE_HOOKS_ENABLED: 'false',
     GROK_CLAUDE_MCPS_ENABLED: 'false',
@@ -361,11 +372,11 @@ test("a Grok run's servers come from an agent file only the owner reads, which g
   const run = await chatOf('gus');
   assert.equal(run.agentMode, 0o600);
   assert.ok(run.env.RUN_KEY, 'the tool server got no key');
-  assert.deepEqual(readdirSync(join(folder, 'grok', 'runs')), []);
+  assert.deepEqual(readdirSync(join(folder, 'accounts', 'grok', 'office', 'runs')), []);
 });
 
 test("the office's Grok home is the owner's alone, and an agent file a run that died with the office left goes at the next run", async () => {
-  const grok = join(folder, 'grok');
+  const grok = join(folder, 'accounts', 'grok', 'office');
   const stale = join(grok, 'runs', 'died-with-the-office.md');
   mkdirSync(join(grok, 'runs'), { recursive: true });
   writeFileSync(stale, '---\nmcpServers: []\n---\n');
@@ -376,7 +387,7 @@ test("the office's Grok home is the owner's alone, and an agent file a run that 
 });
 
 test('the office keeps a config.toml it did not write, and writes one only into a home with none', async () => {
-  const config = join(folder, 'grok', 'config.toml');
+  const config = join(folder, 'accounts', 'grok', 'office', 'config.toml');
   await chatOf('gus');
   assert.match(readFileSync(config, 'utf8'), /\[compat\.codex\]\nsessions = false/);
   writeFileSync(config, '[auth.oauth2]\nprincipal_type = "Team"\n');
@@ -405,7 +416,7 @@ test("a Grok Odd's run on a thread reads the thread's folder and writes only its
     `[profiles.${name}]`,
     'extends = "strict"',
     `read_only = ${JSON.stringify([dirname(process.execPath), code('packages'), code('node_modules'), rgBin, realpathSync(rgReal), ownerData, thread])}`,
-    `read_write = ${JSON.stringify([join(folder, 'grok', 'tmp'), part])}`
+    `read_write = ${JSON.stringify([join(folder, 'accounts', 'grok', 'office', 'tmp'), part])}`
   ]);
   // The kernel shuts what `strict` reads that no Odd needs, by its real path.
   for (const p of [join(homedir(), 'Library'), '/Library', '/tmp', '/var'].filter(existsSync))
@@ -416,7 +427,7 @@ test("a Grok Odd's run on a thread reads the thread's folder and writes only its
   );
   // The next Grok run drops the profile of a run that ended.
   await chatOf('gus');
-  const sandbox = readFileSync(join(folder, 'grok', 'sandbox.toml'), 'utf8');
+  const sandbox = readFileSync(join(folder, 'accounts', 'grok', 'office', 'sandbox.toml'), 'utf8');
   assert.ok(!sandbox.includes(name), sandbox);
   assert.ok(sandbox.includes('[profiles.odd-gus]'));
 });
@@ -441,7 +452,7 @@ test('a Grok Odd on a Mac without grok fails its run naming Grok, and never runs
   }
 });
 
-test("a Grok run from an office Grok home nobody signed in to points to its Access tab to sign in, one past Grok's plan limit says so in the office's words with no link, and another early end says what went wrong", async () => {
+test("a Grok run from an office Grok home nobody signed in to points to its Settings tab to sign in, one past Grok's plan limit says so in the office's words with no link, and another early end says what went wrong", async () => {
   const ended = async (errors: string[]) => {
     const stream = join(folder, 'ended.jsonl');
     writeFileSync(
@@ -464,7 +475,7 @@ test("a Grok run from an office Grok home nobody signed in to points to its Acce
     await ended([
       'Not signed in. To authenticate without a browser, run:\n  grok login --device-code\n\nAlternatively, set the XAI_API_KEY environment variable or run `grok login` on a machine with a browser.'
     ]),
-    "Grok is not signed in for this office. Sign in on this Odd's Access tab, under Runs on."
+    "Grok is not signed in for this office. Sign in on this Odd's Settings tab, under Model."
   );
   // The line the walk on 2026-11-04 saw (its upsell link stood in for), and
   // the error under it in Grok's log.
@@ -492,7 +503,7 @@ async function withGrokSignIn(
   sets: { auth: number; renewed?: number },
   fn: () => Promise<void>
 ): Promise<void> {
-  const grok = join(folder, 'grok');
+  const grok = join(folder, 'accounts', 'grok', 'office');
   const signIn = (inMs: number) =>
     JSON.stringify({
       'https://auth.x.ai::test': {
@@ -513,7 +524,7 @@ async function withGrokSignIn(
 }
 /** How many times the office ran `grok models`, which renews the sign-in. */
 const renewals = () => {
-  const log = join(folder, 'grok', 'models.log');
+  const log = join(folder, 'accounts', 'grok', 'office', 'models.log');
   return existsSync(log) ? readFileSync(log, 'utf8').length : 0;
 };
 const HOUR = 60 * 60_000;
@@ -533,7 +544,7 @@ test('a Grok run whose sign-in could run out before it ends renews it outside th
   });
 });
 
-test('a Grok run whose sign-in ran out and could not be renewed is refused at once pointing to its Access tab to sign in, and starts nothing', async () => {
+test('a Grok run whose sign-in ran out and could not be renewed is refused at once pointing to its Settings tab to sign in, and starts nothing', async () => {
   await withGrokSignIn({ auth: -HOUR }, async () => {
     const started = Date.now();
     let error = '';
@@ -542,7 +553,7 @@ test('a Grok run whose sign-in ran out and could not be renewed is refused at on
     });
     assert.equal(
       error,
-      "Grok is not signed in for this office. Sign in on this Odd's Access tab, under Runs on."
+      "Grok is not signed in for this office. Sign in on this Odd's Settings tab, under Model."
     );
     assert.equal(renewals(), 1);
     assert.ok(Date.now() - started < 10_000, 'the refused run did not end at once');
@@ -563,7 +574,7 @@ test('Grok runs starting together share one renewal of their sign-in', async () 
 
 test('a renewal that hangs and ignores SIGTERM is killed at 30 seconds, and the run goes on', async () => {
   const { grokSignedOut } = await import('./grok.ts');
-  const hang = join(folder, 'grok', 'hang.pid');
+  const hang = join(folder, 'accounts', 'grok', 'office', 'hang.pid');
   // 0 until grok models starts; process.kill reads 0 as this whole process group.
   const pid = () => Number(readFileSync(hang, 'utf8'));
   await withGrokSignIn({ auth: 12 * 60_000 }, async () => {
@@ -619,8 +630,19 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
     );
     assert.deepEqual(await res.json(), {
       computer: 'Mac',
+      office: 'claude',
+      drawsLooks: true,
+      // No account added beyond each tool's Office account.
+      accounts: [],
+      later: [{ id: 'gemini', name: 'Gemini', why: 'Coming soon. We are still testing it.' }],
       tools: [
-        { id: 'claude', name: 'Claude Code', installed: true },
+        // The office's own Claude Code folder is not signed in, and neither is this stand-in.
+        {
+          id: 'claude',
+          name: 'Claude Code',
+          installed: true,
+          signIn: { how: 'browser', installing: false, signedIn: false }
+        },
         {
           id: 'grok',
           name: 'Grok',
@@ -672,9 +694,15 @@ require(${JSON.stringify(join(bin, 'claude'))});
   const picker = async () =>
     (await agents.GET({} as Parameters<typeof agents.GET>[0])).json() as Promise<{
       computer: string;
+      office: string;
       tools: { id: string; installed: boolean }[];
+      later: { id: string; why: string }[];
     }>;
-  const installed = [{ id: 'claude', name: 'Claude Code', installed: true }];
+  // Its version read through the same command a run starts, npm's script under this Node too.
+  const out = { how: 'browser', installing: false, signedIn: false };
+  const installed = [
+    { id: 'claude', name: 'Claude Code', installed: true, signIn: out, version: '2.1.318' }
+  ];
   try {
     // Away from home, so the Mac's own ~/.local/bin, where Windows' installer puts claude.exe, is never read.
     await awayFromHome(() =>
@@ -682,7 +710,22 @@ require(${JSON.stringify(join(bin, 'claude'))});
         process.env.PATH = shims;
         assert.deepEqual(await picker(), {
           computer: 'computer',
-          tools: [{ id: 'claude', name: 'Claude Code', installed: false }]
+          office: 'claude',
+          drawsLooks: true,
+          accounts: [],
+          tools: [
+            {
+              id: 'claude',
+              name: 'Claude Code',
+              installed: false,
+              signIn: { how: 'browser', installing: false, signedIn: false }
+            }
+          ],
+          later: [
+            { id: 'grok', name: 'Grok', why: 'Mac only for now.' },
+            { id: 'codex', name: 'Codex', why: 'Mac only for now.' },
+            { id: 'gemini', name: 'Gemini', why: 'Coming soon. We are still testing it.' }
+          ]
         });
         // A shim alone first, then npm's, with Claude Code's script run under this Node.
         process.env.PATH = [shims, npm].join(delimiter);
@@ -696,7 +739,10 @@ require(${JSON.stringify(join(bin, 'claude'))});
         ]);
         process.env.PATH = [shims, native].join(delimiter);
         assert.deepEqual(agentCommand('claude'), [join(native, 'claude.exe'), []]);
-        assert.deepEqual((await picker()).tools, installed);
+        // Installed. This Mac cannot run a stand-in claude.exe, so it has no version to say.
+        assert.deepEqual((await picker()).tools, [
+          { id: 'claude', name: 'Claude Code', installed: true, signIn: out }
+        ]);
       })
     );
   } finally {
@@ -817,7 +863,7 @@ test("a recorded Grok chat replays as it ran: the floor sees each tool by Claude
       if (e.type === 'error') text = e.message;
     });
     const args = JSON.parse(
-      readFileSync(join(folder, 'grok', 'replay-args.json'), 'utf8')
+      readFileSync(join(folder, 'accounts', 'grok', 'office', 'replay-args.json'), 'utf8')
     ) as string[];
     return { tools, text, args };
   };
@@ -832,8 +878,9 @@ test("a recorded Grok chat replays as it ran: the floor sees each tool by Claude
     assert.ok(!two.args.includes('-s'), 'the second message started a new session');
     assert.equal(two.text, 'pelican');
   } finally {
-    // Later Grok chats start a session of their own.
+    // Later Grok chats start a session of their own, and replay no "Replay" line to the stand-in.
     rmSync(L.chatSession('gus'), { force: true });
+    rmSync(L.home('staff', 'gus', 'chat.jsonl'), { force: true });
   }
 });
 
@@ -987,4 +1034,183 @@ test("a lead woken by a colleague's tell_lead is told the work is its to decide 
 
 test('no test reached the keychain', () => {
   assertKeychainUntouched();
+});
+
+test("a manager's first three questions come one at a time: the office asks the next at once with no run, and the third answer runs the manager with all three in its chat", async () => {
+  const { sayInChat } = await import('./staff.ts');
+  await L.pg`insert into staff ${L.pg([odd('mona', 'Mona')])}`;
+  sayInChat('mona', L.MANAGERS[0].hello('Ada'));
+  const said: { type: string; text?: string }[] = [];
+  const answer = (text: string) => chat('mona', text, (e) => said.push(e));
+
+  // A tap and a typed answer go the same way: no run, and the next question at once.
+  await answer(L.FIRST_QUESTIONS[0].answers[1]);
+  await answer('Mostly keep my calendar sane');
+  assert.deepEqual(said, [
+    { type: 'done', text: L.FIRST_QUESTIONS[1].ask },
+    { type: 'done', text: L.FIRST_QUESTIONS[2].ask }
+  ]);
+  assert.deepEqual(
+    history('mona').map((e) => [e.from, e.text]),
+    [
+      ['staff', L.MANAGERS[0].hello('Ada')],
+      ['owner', L.FIRST_QUESTIONS[0].answers[1]],
+      ['staff', L.FIRST_QUESTIONS[1].ask],
+      ['owner', 'Mostly keep my calendar sane'],
+      ['staff', L.FIRST_QUESTIONS[2].ask]
+    ]
+  );
+
+  // The third answer is a real run, and the manager hears every question and answer.
+  const run = await chatOf('mona', L.FIRST_QUESTIONS[2].answers[0]);
+  for (const line of [
+    L.FIRST_QUESTIONS[0].ask,
+    L.FIRST_QUESTIONS[0].answers[1],
+    L.FIRST_QUESTIONS[1].ask,
+    'Mostly keep my calendar sane',
+    L.FIRST_QUESTIONS[2].ask
+  ])
+    assert.ok(run.message.includes(line), `the manager's run hears "${line}"`);
+  assert.ok(run.message.endsWith(L.FIRST_QUESTIONS[2].answers[0]));
+});
+
+test("each Odd thinks at the level the owner picks from its tool's own levels, Medium until then, and the Office Manager never below Medium", async () => {
+  const levelOf = async (id: string) => {
+    const { args } = await chatOf(id);
+    const at = args.indexOf('--effort');
+    return at >= 0 ? args[at + 1] : args.find((a) => a.startsWith('--reasoning-effort='));
+  };
+  // Tests before this one move Odds between tools: each keeps the tool it had.
+  const before = await L.pg<{ id: string; agent: string; role: string }[]>`
+    select id, agent, role from staff where id in ('sam', 'gus', 'paige')`;
+  await L.pg`update staff set agent = 'claude' where id in ('sam', 'paige')`;
+  await L.pg`update staff set agent = 'grok' where id = 'gus'`;
+  try {
+    // Claude Code: `--effort`, Medium until the owner picks.
+    assert.equal(await levelOf('sam'), 'medium');
+    await patch('sam', { effort: 'xhigh' });
+    assert.equal(await levelOf('sam'), 'xhigh');
+    // A level its tool does not take, or no level at all, is refused.
+    await assert.rejects(async () => patch('sam', { effort: 'ultra' }), refused(400));
+    await assert.rejects(async () => patch('sam', { effort: 'loud' }), refused(400));
+    // Grok takes Low to High; a level kept from another tool becomes the nearest it takes.
+    await patch('gus', { effort: 'low' });
+    assert.equal(await levelOf('gus'), '--reasoning-effort=low');
+    await L.pg`update staff set effort = 'max' where id = 'gus'`;
+    assert.equal(await levelOf('gus'), '--reasoning-effort=high');
+
+    // The Office Manager: Low is refused, and a Low stored before still runs at Medium.
+    await L.pg`update staff set role = ${L.MANAGER_ROLE} where id = 'paige'`;
+    await assert.rejects(
+      async () => patch('paige', { effort: 'low' }),
+      (e: unknown) => {
+        assert.equal((e as { status?: number }).status, 400);
+        assert.match(
+          String((e as { body?: { message?: string } }).body?.message),
+          /Medium or more/
+        );
+        return true;
+      }
+    );
+    await L.pg`update staff set effort = 'low' where id = 'paige'`;
+    assert.equal(await levelOf('paige'), 'medium');
+    await patch('paige', { effort: 'high' });
+    assert.equal(await levelOf('paige'), 'high');
+  } finally {
+    for (const o of before)
+      await L.pg`update staff set effort = null, agent = ${o.agent}, role = ${o.role} where id = ${o.id}`;
+  }
+});
+
+test("each Odd runs on the model the owner picks from its tool's own list, the office's until then", async () => {
+  const before = await L.pg<{ id: string; agent: string }[]>`
+    select id, agent from staff where id in ('sam', 'gus')`;
+  await L.pg`update staff set agent = 'claude' where id = 'sam'`;
+  await L.pg`update staff set agent = 'grok' where id = 'gus'`;
+  const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
+  try {
+    // Claude Code: the office's Opus from setup until the owner picks.
+    assert.equal(after((await chatOf('sam')).args, '--model'), 'opus');
+    await patch('sam', { model: 'claude-fable-5-1' });
+    assert.equal(after((await chatOf('sam')).args, '--model'), 'claude-fable-5-1');
+    // A model from another tool's list, or none at all, is refused.
+    await assert.rejects(async () => patch('sam', { model: 'grok-4.6' }), refused(400));
+    await assert.rejects(async () => patch('sam', { model: 7 }), refused(400));
+    // Back to the office's.
+    await patch('sam', { model: null });
+    assert.equal(after((await chatOf('sam')).args, '--model'), 'opus');
+    // Grok: `-m`, only once picked.
+    assert.ok(!(await chatOf('gus')).args.includes('-m'));
+    await patch('gus', { model: 'grok-4.6' });
+    assert.equal(after((await chatOf('gus')).args, '-m'), 'grok-4.6');
+    // A model kept from another tool does not carry over.
+    await L.pg`update staff set agent = 'claude' where id = 'gus'`;
+    assert.equal(after((await chatOf('gus')).args, '--model'), 'opus');
+  } finally {
+    for (const o of before)
+      await L.pg`update staff set model = null, agent = ${o.agent} where id = ${o.id}`;
+  }
+});
+
+test("an Odd signs in through the account it is on: its own folder for each, the owner's own Claude login only until the office's is signed in, and a move starts a session that hears the chat", async () => {
+  const { forgetClaudeAccount } = await import('./claude.ts');
+  const accounts = join(folder, 'accounts');
+  const signIn = (dir: string, email: string) => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'signed-in'), email);
+  };
+  const before = await L.pg<{ id: string; agent: string; account: string | null }[]>`
+    select id, agent, account from staff where id in ('sam', 'gus')`;
+  await L.pg`update staff set agent = 'claude', account = null where id = 'sam'`;
+  await L.pg`update staff set agent = 'grok', account = null where id = 'gus'`;
+  const added: string[] = [];
+  try {
+    // Claude Code's Office account, not signed in: the owner's own login, no folder of its own.
+    forgetClaudeAccount();
+    assert.equal((await chatOf('sam')).configDir, null);
+    // Signed in: its own folder from the next run on.
+    signIn(join(accounts, 'claude', 'office'), 'office@example.com');
+    forgetClaudeAccount();
+    assert.equal((await chatOf('sam')).configDir, join(accounts, 'claude', 'office'));
+
+    // An added Claude account: refused until signed in, saying where.
+    const work = await L.addAccount('claude', 'Work');
+    added.push(work.id);
+    await patch('sam', { account: work.id });
+    let said = '';
+    await chat('sam', 'Hello.', (e) => {
+      if (e.type === 'error') said = e.message;
+    });
+    assert.match(
+      said,
+      /^Claude Code is not signed in for this office\. Sign in on this Odd's Settings tab/
+    );
+    signIn(join(accounts, 'claude', work.id), 'work@example.com');
+    forgetClaudeAccount(work.id);
+    const onWork = await chatOf('sam');
+    assert.equal(onWork.configDir, join(accounts, 'claude', work.id));
+    // Its own sessions stay readable; every other account's folder does not.
+    const denied = plain(onWork.args.slice(onWork.args.indexOf('--disallowedTools')));
+    assert.ok(denied.includes('Read(/<home>/accounts/codex)'), denied.join(' '));
+    assert.ok(denied.includes('Read(/<home>/accounts/claude/office)'), denied.join(' '));
+
+    // Another tool's account is not one this Odd may use.
+    const personal = await L.addAccount('grok', 'Personal');
+    added.push(personal.id);
+    await assert.rejects(async () => patch('sam', { account: personal.id }), refused(400));
+
+    // Grok: the account's own home, and a move starts a new session that hears the chat so far.
+    await chatOf('gus', 'Remember the word marigold.');
+    await patch('gus', { account: personal.id });
+    const moved = await chatOf('gus');
+    assert.equal(moved.grokEnv?.GROK_HOME, join(accounts, 'grok', personal.id));
+    assert.match(moved.message, /This is a new session/);
+    assert.match(moved.message, /marigold/);
+  } finally {
+    for (const o of before)
+      await L.pg`update staff set agent = ${o.agent}, account = ${o.account} where id = ${o.id}`;
+    for (const id of added) await L.removeAccount(id);
+    rmSync(join(accounts, 'claude', 'office', 'signed-in'), { force: true });
+    forgetClaudeAccount();
+  }
 });

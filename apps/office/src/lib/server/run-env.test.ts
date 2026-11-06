@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { officeEnv } from './run-env.ts';
 
-const plain = { key: 'k1', signedOut: [], lessonRun: false };
+const plain = { key: 'k1', signedOut: [], lessonRun: false, networkHeld: false };
 
 test('every run carries its key, so a thread it hands off on holds its pick-ups while it goes', () => {
   assert.equal(officeEnv(plain).RUN_KEY, 'k1');
@@ -36,7 +36,8 @@ test("a run below the Odd's level names its level, and the rest only when set", 
       ownerEdit: 'New text',
       ceiling: 'draft',
       handOffId: 3,
-      threadId: 7
+      threadId: 7,
+      networkHeld: true
     }),
     {
       RUN_KEY: 'k1',
@@ -47,7 +48,8 @@ test("a run below the Odd's level names its level, and the rest only when set", 
       OWNER_EDIT: 'New text',
       CEILING: 'draft',
       HAND_OFF_ID: '3',
-      THREAD_ID: '7'
+      THREAD_ID: '7',
+      OFFICE_NETWORK_HELD: '1'
     }
   );
 });

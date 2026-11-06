@@ -1,6 +1,7 @@
-// The coding tools this system offers an Odd, and each one's sign-in in the
-// office (`/api/agents`), with the calls that install a tool or change a
-// sign-in (`/api/agents/[tool]`). Onboarding's Other AI tools card, the Setup
+// The coding tools this system offers an Odd, each one's sign-in in the
+// office, the tool the office runs on and the tools coming later
+// (`/api/agents`), with the calls that pick the office's tool, install a tool
+// or change a sign-in (`/api/agents/[tool]`). Setup's Your AI card, the Setup
 // window and the "Runs on" picker each make their own, so all show and do the
 // same.
 //
@@ -9,7 +10,7 @@
 // page's address, and, through the component's window focus, while a sign-in
 // waits on its page or an install started before a refresh runs.
 import type { Agent } from '@oddboro/ledger/agents';
-import type { AgentTool } from '../../routes/api/agents/+server.ts';
+import type { AccountState, AgentTool, LaterTool } from '../../routes/api/agents/+server.ts';
 import { call, stream } from './api.ts';
 
 /** Bumped when an install or a sign-in changed, so every list on the page reads it again. */
@@ -21,6 +22,20 @@ export class AgentTools {
   /** What the server calls this computer: Mac on a Mac, computer elsewhere. */
   computer = $state('computer');
   tools = $state<AgentTool[]>([]);
+  /** The tool the office runs on: its own runs and every new hire. */
+  office = $state<Agent>('claude');
+  /** Whether the office's tool, on its model, draws an Odd's look. Otherwise a hire builds one from parts. */
+  drawsLooks = $state(false);
+  /** The accounts the owner added beyond each tool's Office account, with their sign-ins. */
+  accounts = $state<AccountState[]>([]);
+  /** Tools this system does not offer yet, with why. */
+  later = $state<LaterTool[]>([]);
+  /** Read once, so a card can wait for the real list before it shows one. */
+  loaded = $state(false);
+  /** Claude Code is installing or updating from setup. */
+  installingClaude = $state(false);
+  /** Tools whose running command is an update, not an install. */
+  updating = $state<Partial<Record<Agent, boolean>>>({});
   /** The tool whose sign-out or key is being saved. */
   busy = $state<Agent | undefined>();
   /** What went wrong, by tool. */
@@ -38,9 +53,21 @@ export class AgentTools {
 
   async load() {
     try {
-      const a = await call<{ computer: string; tools: AgentTool[] }>('/api/agents');
+      const a = await call<{
+        computer: string;
+        office: Agent;
+        drawsLooks: boolean;
+        tools: AgentTool[];
+        accounts: AccountState[];
+        later: LaterTool[];
+      }>('/api/agents');
       this.computer = a.computer;
+      this.office = a.office;
+      this.drawsLooks = a.drawsLooks;
       this.tools = a.tools;
+      this.accounts = a.accounts;
+      this.later = a.later;
+      this.loaded = true;
     } catch {
       // The page keeps the list it had; the next change or focus reads it again.
     }
@@ -58,30 +85,37 @@ export class AgentTools {
   }
 
   /**
-   * Install the tool with its own installer, which runs to its end. Once it
-   * ends the list reads it again, so an installed tool moves on to Sign in, and
-   * a failed one stays on Install with the installer's last line.
+   * Install the tool with its own installer, or update it with its own
+   * updater, which runs to its end. Claude Code goes through setup's own
+   * route. Once it ends the list reads it again, so an installed tool moves on
+   * to Sign in and an updated one shows its new version, and a failed one
+   * stays as it was with the command's last line.
    */
-  async install(id: Agent) {
+  async install(id: Agent, action: 'install' | 'update' = 'install') {
     const mine = this.#begin(id);
-    // The server holds the install from the moment the request lands, so the row shows it at once.
+    // The server holds the command from the moment the request lands, so the tile shows it at once.
     const t = this.tools.find((t) => t.id === id);
     if (t?.signIn) t.signIn.installing = true;
+    if (id === 'claude') this.installingClaude = true;
+    this.updating[id] = action === 'update';
     let last = '';
     let ok = false;
     try {
       await stream<{ line?: string; done?: boolean; ok?: boolean }>(
-        `/api/agents/${id}`,
-        { action: 'install' },
+        id === 'claude' ? '/api/setup/claude' : `/api/agents/${id}`,
+        { action },
         (l) => {
           if (l.line) last = l.line;
           if (l.done) ok = !!l.ok;
           if (l.done && !l.ok && mine === this.#attempts[id])
-            this.problems[id] = last || 'The install stopped.';
+            this.problems[id] = last || `The ${action} stopped.`;
         }
       );
     } catch (e) {
       if (mine === this.#attempts[id]) this.problems[id] = message(e);
+    } finally {
+      if (id === 'claude') this.installingClaude = false;
+      this.updating[id] = false;
     }
     await this.load();
     changes++;
@@ -96,16 +130,18 @@ export class AgentTools {
    * Start the tool's browser sign-in; its own page finishes it. Pressed again
    * while one waits, it starts over with a fresh page.
    */
-  async signIn(id: Agent) {
+  async signIn(id: Agent, account?: string) {
     const mine = this.#begin(id);
     // The server holds the sign-in from the moment the request lands, so the row shows Cancel at once.
-    const t = this.tools.find((t) => t.id === id);
-    if (t?.signIn) t.signIn.waiting = {};
+    const s = account
+      ? this.accounts.find((a) => a.id === account)?.signIn
+      : this.tools.find((t) => t.id === id)?.signIn;
+    if (s) s.waiting = {};
     let last = '';
     try {
       await stream<{ line?: string; url?: string; done?: boolean; ok?: boolean }>(
         `/api/agents/${id}`,
-        { action: 'sign-in' },
+        { action: 'sign-in', ...(account ? { account } : {}) },
         (l) => {
           if (l.line) last = l.line;
           if (l.url) changes++;
@@ -120,6 +156,64 @@ export class AgentTools {
     }
   }
 
+  /**
+   * Add an account for `id` named `label`, then sign it in on its maker's
+   * page. Its id, so the caller can move an Odd to it.
+   */
+  async addAccount(id: Agent, label: string): Promise<string | undefined> {
+    this.#begin(id);
+    try {
+      const a = await call<{ id: string }>('/api/accounts', { agent: id, label });
+      await this.load();
+      void this.signIn(id, a.id);
+      return a.id;
+    } catch (e) {
+      this.problems[id] = message(e);
+      return undefined;
+    }
+  }
+
+  /** Rename an account the owner added. True when it took the name. */
+  async renameAccount(id: Agent, account: string, label: string): Promise<boolean> {
+    this.#begin(id);
+    try {
+      await call('/api/accounts', { id: account, label }, 'PATCH');
+      return true;
+    } catch (e) {
+      this.problems[id] = message(e);
+      return false;
+    } finally {
+      changes++;
+    }
+  }
+
+  /** Sign an account out and take it away; its Odds go back to the Office account. */
+  async removeAccount(id: Agent, account: string) {
+    this.#begin(id);
+    this.busy = id;
+    try {
+      await call('/api/accounts', { id: account }, 'DELETE');
+    } catch (e) {
+      this.problems[id] = message(e);
+    } finally {
+      this.busy = undefined;
+      changes++;
+    }
+  }
+
+  /** Pick the tool the office runs on. */
+  async pickOffice(id: Agent) {
+    const was = this.office;
+    this.office = id;
+    try {
+      await call('/api/agents', { office: id }, 'PUT');
+    } catch (e) {
+      this.office = was;
+      this.problems[id] = message(e);
+    }
+    changes++;
+  }
+
   /** Stop a sign-in that waits on its page, from this page or one before a refresh. */
   async cancel(id: Agent) {
     this.#begin(id);
@@ -131,11 +225,11 @@ export class AgentTools {
     changes++;
   }
 
-  async signOut(id: Agent) {
+  async signOut(id: Agent, account?: string) {
     this.#begin(id);
     this.busy = id;
     try {
-      await call(`/api/agents/${id}`, { action: 'sign-out' });
+      await call(`/api/agents/${id}`, { action: 'sign-out', ...(account ? { account } : {}) });
     } catch (e) {
       this.problems[id] = message(e);
     } finally {

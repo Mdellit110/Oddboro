@@ -16,13 +16,15 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   L,
+  OFFICE_PROCESS_GIT,
   assertKeychainUntouched,
   bin,
   chat,
@@ -33,8 +35,10 @@ import {
   goal,
   odd,
   ownerData,
+  ownerHome,
   plain,
-  runOf
+  runOf,
+  withEnv
 } from './office-under-test.ts';
 
 const { mcpServers } = await import('./codex.ts');
@@ -43,10 +47,11 @@ const { stopGroups } = await import('./launch.ts');
 await L.pg`insert into staff ${L.pg([
   { ...odd('cody', 'Cody'), agent: 'codex' },
   { ...odd('cass', 'Cass'), agent: 'codex' },
-  { ...odd('cole', 'Cole'), agent: 'codex' }
+  { ...odd('cole', 'Cole'), agent: 'codex' },
+  { ...odd('cora', 'Cora'), agent: 'codex' }
 ])}`;
 
-const CODEX_HOME = join(folder, 'codex');
+const CODEX_HOME = join(folder, 'accounts', 'codex', 'office');
 /** The names no run may write in a folder it writes, as files.ts has them. */
 const INSTRUCTIONS = [
   'CLAUDE.md',
@@ -74,7 +79,8 @@ const plainPaths = (fs: Record<string, string>) =>
 /** The `-c` values too long to compare whole, as stand-ins. */
 const hideSets = (args: string[]) =>
   args.map((a, i) =>
-    args[i - 1] === '-c' && /^(developer_instructions|permissions|mcp_servers)=/.test(a)
+    args[i - 1] === '-c' &&
+    /^(developer_instructions|permissions|mcp_servers|shell_environment_policy\.set)=/.test(a)
       ? `${a.slice(0, a.indexOf('='))}=<…>`
       : a
   );
@@ -86,8 +92,11 @@ async function chatError(id: string, message = 'Hello.'): Promise<string> {
   });
   return error;
 }
-/** A new chat session for `id`, as if it never chatted. */
-const forget = (id: string) => rmSync(L.chatSession(id), { force: true });
+/** A new chat session for `id`, as if it never chatted: no session, and no chat for a replay to carry a stand-in's words into. */
+const forget = (id: string) => {
+  rmSync(L.chatSession(id), { force: true });
+  rmSync(L.home('staff', id, 'chat.jsonl'), { force: true });
+};
 
 test("a Codex Odd's first chat starts codex exec with every switch the office sets, its message on stdin", async () => {
   const run = await chatOf('cody');
@@ -99,7 +108,6 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
     '--ignore-rules',
     ...[
       'approval_policy="never"',
-      'web_search="disabled"',
       'agents.enabled=false',
       'allow_login_shell=false',
       'shell_environment_policy.inherit="core"',
@@ -129,10 +137,15 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
         'tool_suggest',
         'sleep_tool'
       ].map((f) => `features.${f}=false`),
+      'shell_environment_policy.set=<…>',
+      // Browse the web is off for a new Odd.
+      'web_search="disabled"',
       'developer_instructions=<…>',
       'permissions=<…>',
       'default_permissions="odd"',
-      'mcp_servers=<…>'
+      'mcp_servers=<…>',
+      // No level picked: Medium (`effortFor`).
+      'model_reasoning_effort="medium"'
     ].flatMap((c) => ['-c', c]),
     '-'
   ]);
@@ -140,23 +153,117 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
   assert.ok(run.message.endsWith('Hello.'), run.message);
 });
 
-test("a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network", async () => {
-  const run = await chatOf('cody');
-  assert.ok(run.system.includes(`data folder: ${ownerData}`), run.system);
-  assert.deepEqual(run.permissions?.network, { enabled: false });
-  assert.deepEqual(plainPaths(run.permissions?.filesystem ?? {}), {
-    ':root': 'deny',
-    ':minimal': 'read',
-    ':slash_tmp': 'deny',
-    '/Library/Developer/CommandLineTools': 'read',
-    '/private/var/db/xcode_select_link': 'read',
-    '<home>/Applications/Xcode.app/Contents/Developer': 'read',
-    '/System/Library/OpenSSL/openssl.cnf': 'read',
-    '<home>/data': 'read',
-    '<home>/staff/cody': 'write',
-    '<home>/codex-tmp/<id>': 'write',
-    ...shut('<home>/staff/cody')
-  });
+test("a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network", () =>
+  // An empty home, so this Mac's own developer tool folders are not read.
+  ownerHome(async () => {
+    const run = await chatOf('cody');
+    assert.ok(run.system.includes(`data folder: ${ownerData}`), run.system);
+    assert.deepEqual(run.permissions?.network, { enabled: false });
+    assert.deepEqual(plainPaths(run.permissions?.filesystem ?? {}), {
+      ':root': 'deny',
+      ':minimal': 'read',
+      ':slash_tmp': 'deny',
+      '/Library/Developer/CommandLineTools': 'read',
+      '/private/var/db/xcode_select_link': 'read',
+      '<home>/Applications/Xcode.app/Contents/Developer': 'read',
+      '/System/Library/OpenSSL/openssl.cnf': 'read',
+      '<home>/data': 'read',
+      '<home>/staff/cody': 'write',
+      '<home>/codex-tmp/<id>': 'write',
+      ...shut('<home>/staff/cody')
+    });
+  }));
+
+test("Codex's commands stay off the internet, Browse the web or not", async () => {
+  const owner = await L.ownerName();
+  const offline = `a shell confined to your folders and ${owner}'s developer tools (read only), with no network`;
+  await L.pg`update staff set web = true where id = 'cole'`;
+  try {
+    const on = await chatOf('cole');
+    assert.deepEqual(on.permissions?.network, { enabled: false });
+    assert.ok(on.system.includes(offline), on.system);
+  } finally {
+    await L.pg`update staff set web = false where id = 'cole'`;
+  }
+  assert.deepEqual((await chatOf('cole')).permissions?.network, { enabled: false });
+});
+
+test("a Codex run reads the developer tool folders that exist and never their credential files, nor a link's folder, nor its file in a secret store or with a glob character in its path", () =>
+  ownerHome(async (home) => {
+    const h = realpathSync(home);
+    /** A link in ~/.local/bin named `name`, to a file of that name in `folder`. */
+    const link = (name: string, folder: string) => {
+      mkdirSync(join(h, folder), { recursive: true });
+      writeFileSync(join(h, folder, name), '');
+      symlinkSync(join(h, folder, name), join(h, '.local/bin', name));
+    };
+    for (const d of ['.npm', '.cargo', '.local/bin']) mkdirSync(join(h, d), { recursive: true });
+    link('x', '.local/share/x/bin');
+    link('y', '.config/y');
+    link('z', '.local/share/z[1]/bin');
+    // A credential file in each folder whose entries Codex has listed one by one, and a file beside it.
+    const controls = [
+      '.volta/tools/image/node/v1.0.0/bin/node',
+      '.gradle/wrapper/gradle-wrapper.properties',
+      'go/pkg/mod/cache/vcs/0a1b/HEAD',
+      '.cargo/git/db/dep-0a1b/HEAD'
+    ];
+    for (const f of [
+      '.volta/tools/image/node/v1.0.0/etc/npmrc',
+      '.gradle/init.d/proxy.gradle',
+      'go/pkg/mod/cache/vcs/0a1b/config',
+      '.cargo/git/db/dep-0a1b/config',
+      ...controls
+    ]) {
+      mkdirSync(dirname(join(h, f)), { recursive: true });
+      writeFileSync(join(h, f), '');
+    }
+    const profile = (await chatOf('cora')).permissions?.filesystem ?? {};
+    const mine = Object.entries(profile).filter(([p]) => p.startsWith(h + '/'));
+    assert.deepEqual(mine, [
+      [join(h, '.npm'), 'read'],
+      [join(h, '.volta'), 'read'],
+      [join(h, '.cargo'), 'read'],
+      [join(h, 'go'), 'read'],
+      [join(h, '.gradle'), 'read'],
+      [join(h, '.local/bin'), 'read'],
+      [join(h, '.local/share/x/bin/x'), 'read'],
+      [join(h, '.cargo/credentials'), 'deny'],
+      [join(h, '.cargo/credentials.toml'), 'deny'],
+      [join(h, '.cargo/config'), 'deny'],
+      [join(h, '.cargo/config.toml'), 'deny'],
+      [join(h, '.gradle/gradle.properties'), 'deny'],
+      [join(h, '.gradle/init.gradle'), 'deny'],
+      [join(h, '.gradle/init.gradle.kts'), 'deny'],
+      [join(h, '.gradle/init.d'), 'deny'],
+      [join(h, '.volta/tools/image/node/v1.0.0/etc/npmrc'), 'deny'],
+      [join(h, '.gradle/init.d/proxy.gradle'), 'deny'],
+      [join(h, 'go/pkg/mod/cache/vcs/0a1b/config'), 'deny'],
+      [join(h, '.cargo/git/db/dep-0a1b/config'), 'deny']
+    ]);
+    for (const f of controls)
+      assert.ok(
+        !mine.some(([p, how]) => how === 'deny' && L.within(join(h, f), p)),
+        `${f} is shut`
+      );
+  }));
+
+test("every glob in a Codex run's profile is a deny, and it names no repository, since Codex refuses to start on a glob it reads or writes and keeps each write folder's own .git read only itself", async () => {
+  const w = join(realpathSync(folder), 'given', 'cora-repo');
+  const r = join(realpathSync(folder), 'given', 'cora-read');
+  for (const f of [w, r]) mkdirSync(join(f, '.git'), { recursive: true });
+  await L.pg`update staff set folders = ${JSON.stringify([
+    { path: w, write: true },
+    { path: r, write: false }
+  ])}::jsonb where id = 'cora'`;
+  const fs = (await chatOf('cora')).permissions?.filesystem ?? {};
+  assert.equal(fs[w], 'write', 'the granted folder did not reach the run');
+  // Codex takes `<p>/**` as the subtree of an exact path; any other `*` is a glob.
+  const globs = Object.keys(fs).filter((p) => p.replace(/\/\*\*$/, '').includes('*'));
+  assert.ok(globs.length > 0, 'no glob to check');
+  for (const p of globs) assert.equal(fs[p], 'deny', `${p} is a glob Codex refuses as ${fs[p]}`);
+  const repo = Object.keys(fs).filter((p) => p.includes('/.git/') || p.endsWith('/.git'));
+  assert.deepEqual(repo, []);
 });
 
 test('a Codex run reads the developer folder xcode-select names by its real path, never the link it named', async () => {
@@ -211,13 +318,39 @@ test("a Codex run reading the owner's edit may read that file and never write it
   assert.equal(fs[join(dir, 'plan.md', '**')], 'read');
 });
 
-test("a Codex run's environment has the office's Codex home and the run's own temp folder, and no key, Codex setting or node options from the office's own", async () => {
+test("a Codex run's environment has the office's Codex home and the run's own temp folder, and no key, Codex setting, git variable or node options from the office's own", () =>
+  withEnv(OFFICE_PROCESS_GIT, async () => {
+    const run = await chatOf('cody');
+    assert.deepEqual(run.codexEnv, {
+      CODEX_HOME,
+      TMPDIR: join(folder, 'codex-tmp', run.env.RUN_KEY)
+    });
+    assert.equal(run.temp, true, 'the temp folder was not there while the run went');
+  }));
+
+test("a Codex run's shell gets the office's git settings and npm's cache in its temp folder through one shell_environment_policy.set, never on codex's own environment, with an empty git template in its temp folder", async () => {
   const run = await chatOf('cody');
-  assert.deepEqual(run.codexEnv, {
-    CODEX_HOME,
-    TMPDIR: join(folder, 'codex-tmp', run.env.RUN_KEY)
+  const temp = join(folder, 'codex-tmp', run.env.RUN_KEY);
+  assert.deepEqual(run.git, {
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_TEMPLATE_DIR: join(temp, 'git-template'),
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.excludesFile',
+    GIT_CONFIG_VALUE_0: '/dev/null',
+    GIT_CONFIG_KEY_1: 'core.attributesFile',
+    GIT_CONFIG_VALUE_1: '/dev/null',
+    npm_config_cache: join(temp, 'npm'),
+    npm_config_userconfig: join(temp, 'npmrc'),
+    npm_config_globalconfig: join(temp, 'npmrc-global')
   });
-  assert.equal(run.temp, true, 'the temp folder was not there while the run went');
+  // A second set would replace the first.
+  assert.equal(run.args.filter((a) => a.startsWith('shell_environment_policy.set=')).length, 1);
+  assert.equal(run.gitTemplate, true, 'the git template was missing or not empty as the run went');
+  // The shell inherits only the core variables, so one set on codex itself never reaches it.
+  assert.deepEqual(
+    Object.keys(run.codexEnv ?? {}).filter((k) => k.startsWith('GIT_')),
+    []
+  );
 });
 
 test("a Codex run's temp folder goes when it ends, and one a run that died with the office left goes at the next run", async () => {
@@ -271,13 +404,38 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
-test('a Codex Odd is told it has a shell confined to its folders with no network, never that it has no shell', async () => {
-  const run = await chatOf('cody');
-  assert.match(
-    run.system,
-    /Your own tools are a shell and file edits, confined to your folders, with no network and no web\./
+test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not, never that it has no shell", async () => {
+  const owner = await L.ownerName();
+  const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;
+  const off = await chatOf('cody');
+  assert.ok(
+    off.system.includes(`Your own tools work on files, plus ${shell}, with no network. No web.`),
+    off.system
   );
-  assert.doesNotMatch(run.system, /no shell/);
+  assert.doesNotMatch(off.system, /no shell/);
+  await L.pg`update staff set web = true where id = 'cody'`;
+  try {
+    const on = await chatOf('cody');
+    assert.ok(
+      on.system.includes(
+        `Your own tools work on files, plus ${shell}, with no network, and web search.`
+      ),
+      on.system
+    );
+  } finally {
+    await L.pg`update staff set web = false where id = 'cody'`;
+  }
+});
+
+test("Browse the web turns Codex's web search on", async () => {
+  const search = (args: string[]) => args.find((a) => a.startsWith('web_search='));
+  await L.pg`update staff set web = true where id = 'cole'`;
+  try {
+    assert.equal(search((await chatOf('cole')).args), 'web_search="live"');
+  } finally {
+    await L.pg`update staff set web = false where id = 'cole'`;
+  }
+  assert.equal(search((await chatOf('cole')).args), 'web_search="disabled"');
 });
 
 test('a recorded Codex turn replays as it ran: the floor sees the office call, the file change and the shell command once each, the reply is the last message, and the next chat resumes its thread', async () => {
@@ -382,7 +540,7 @@ test("the office keeps a config.toml it did not write, so the owner's workspace 
   assert.equal(readFileSync(config, 'utf8'), pinned);
 });
 
-test('a Codex run from an office Codex home nobody signed in to points to its Access tab to sign in to that home, which keeps the sign-in as a file, and starts nothing', async () => {
+test('a Codex run from an office Codex home nobody signed in to points to its Settings tab to sign in to that home, which keeps the sign-in as a file, and starts nothing', async () => {
   const auth = join(CODEX_HOME, 'auth.json');
   const config = join(CODEX_HOME, 'config.toml');
   const before = codexLaunches().length;
@@ -391,7 +549,7 @@ test('a Codex run from an office Codex home nobody signed in to points to its Ac
   try {
     assert.equal(
       await chatError('cody'),
-      "Codex is not signed in for this office. Sign in on this Odd's Access tab, under Runs on."
+      "Codex is not signed in for this office. Sign in on this Odd's Settings tab, under Model."
     );
     assert.equal(codexLaunches().length, before, 'codex started without a sign-in');
     assert.match(readFileSync(config, 'utf8'), /^cli_auth_credentials_store = "file"$/m);

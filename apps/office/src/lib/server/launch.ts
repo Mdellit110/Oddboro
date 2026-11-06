@@ -2,7 +2,8 @@
 // same way as it starts: files replaced in one step, files a run that died
 // with the office left behind cleared away, an environment with nothing of the
 // office's own keys or node options in it, TOML values, and the MCP grants
-// read from access()'s names. What run() in staff.ts takes from a tool's own
+// read from access()'s names. The git and npm environment of every run with a
+// shell, Claude Code's too. What run() in staff.ts takes from a tool's own
 // stream, how a run with a shell stops, and where a run refused for its
 // sign-in points the owner. Server only.
 import { execFileSync } from 'node:child_process';
@@ -12,7 +13,7 @@ import { runsGoing, type ModelUsage } from '@oddboro/ledger';
 import { cleanEnv } from './claude.ts';
 
 /** Where the owner signs a tool in for the office: beside the Odd's "Runs on" picker. */
-export const SIGN_IN_WHERE = "on this Odd's Access tab, under Runs on";
+export const SIGN_IN_WHERE = "on this Odd's Settings tab, under Model";
 /** What a run refused for its tool's sign-in says after the tool's name. */
 export const NOT_SIGNED_IN = `is not signed in for this office. Sign in ${SIGN_IN_WHERE}.`;
 
@@ -45,6 +46,9 @@ export function mcpGrant(allowed: string): { server: string; tool?: string } {
   const at = name.indexOf('__');
   return at < 0 ? { server: name } : { server: name.slice(0, at), tool: name.slice(at + 2) };
 }
+
+/** A picture an office run sends with its message (`runAsOffice`), as a file in the run's folder. */
+export type RunImage = { path: string; mediaType: string };
 
 /** What run() takes from one line of a tool's own stream (`read` on a `Launch` in cli.ts). */
 export type RunEvent =
@@ -94,6 +98,56 @@ export function vendorEnv(prefixes: readonly string[]): NodeJS.ProcessEnv {
   delete env.NODE_OPTIONS;
   for (const k of Object.keys(env)) if (prefixes.some((p) => k.startsWith(p))) delete env[k];
   return env;
+}
+
+/**
+ * The git environment of every run with a shell (`shellEnv` carries it with
+ * npm's settings); its names alone let git's settings past the sandbox's
+ * secret filter (`OFFICE_GIT` in sandbox.ts). The owner's git settings never
+ * shape an Odd's git: the sandbox shuts the home they sit in, and git that
+ * cannot read `~/.gitconfig` exits 128. So no global config, and the two files git
+ * otherwise reads under `~/.config/git` (`ignore`, `attributes`) point at
+ * nothing, which leaves no "unable to access" warning. These are env config,
+ * which outranks a repository's own, so a repository's `core.excludesFile`
+ * is ignored for Odds; its `.gitignore` still works. No `XDG_CONFIG_HOME`:
+ * Claude Code reads its own config from there, and `GIT_CONFIG_GLOBAL`
+ * already keeps git from `$XDG_CONFIG_HOME/git/config`. `GIT_TEMPLATE_DIR` is
+ * an empty folder in the run's own temp folder (`temp`), which the caller
+ * makes before the run and removes with that folder, so `git init` copies no
+ * sample hooks: a Codex Odd's repository in a subfolder of its own folder
+ * starts with none. For Claude Code it matters only if Claude Code later
+ * lets git write a `.git/config`, which its sandbox refuses today (2.1.318),
+ * so `git init` stops there first; its sandbox refuses every write under a
+ * `.git/hooks` too, and git stops when it cannot copy one.
+ */
+export function gitEnv(temp: string): Record<string, string> {
+  return {
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_TEMPLATE_DIR: join(temp, 'git-template'),
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.excludesFile',
+    GIT_CONFIG_VALUE_0: '/dev/null',
+    GIT_CONFIG_KEY_1: 'core.attributesFile',
+    GIT_CONFIG_VALUE_1: '/dev/null'
+  };
+}
+
+/**
+ * The environment every run's commands get, for Claude Code's launch env and
+ * Codex's one `shell_environment_policy.set` alike, from this one place so
+ * the two cannot drift: the office's git settings (`gitEnv`), and npm's cache
+ * in the run's temp folder (`temp`), since the sandbox shuts `~/.npm` to
+ * writes. npm's user and global configs name files that are never made, so
+ * neither the owner's `~/.npmrc` nor the `etc/npmrc` beside the node that
+ * runs npm, either of which may hold a registry token, is read.
+ */
+export function shellEnv(temp: string): Record<string, string> {
+  return {
+    ...gitEnv(temp),
+    npm_config_cache: join(temp, 'npm'),
+    npm_config_userconfig: join(temp, 'npmrc'),
+    npm_config_globalconfig: join(temp, 'npmrc-global')
+  };
 }
 
 /**

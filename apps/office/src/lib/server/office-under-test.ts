@@ -34,20 +34,45 @@ const port = await new Promise<number>((done) => {
   });
 });
 // The stand-in for Claude Code: it reads the message, then reports one tool
-// call and a result that carries what the office gave the run. A message
-// that says "Hold until <file> exists." keeps the run going until it does.
+// call and a result that carries what the office gave the run, the variables
+// Run commands sets among it, and whether the git template folder those name
+// was there and empty as it ran (`done()` removes it after), and npm's
+// settings. A message that says "Hold until <file> exists." keeps the run
+// going until it does. One that says "Refuse the open network", in a run
+// whose sandbox opens every host, gets the words Claude Code's binary refuses
+// that with, on stderr, and exit 1, after any hold.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
 // waits on the owner.
 export const bin = join(folder, 'bin');
 mkdirSync(bin);
+/**
+ * Node alone, for the stand-ins, never node's own bin folder: a tool the
+ * owner installed with npm (a real grok or codex) lives there, and a test
+ * that found it would start it for real, a sign-in page in their browser.
+ */
+export const nodeBin = join(folder, 'node-bin');
+mkdirSync(nodeBin);
+symlinkSync(process.execPath, join(nodeBin, 'node'));
 writeFileSync(
   join(bin, 'claude'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/claude in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'claude'))};
+  process.stdout.write('' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '2.1.318') + '\\n');
+  process.exit(0);
+}
 const [verb, sub] = process.argv.slice(2);
 if (verb === 'auth' && sub === 'status') {
-  process.stdout.write('{"loggedIn":false}\\n');
+  // Signed in only in an account's folder holding a "signed-in" file, which names the email.
+  const mark = (process.env.CLAUDE_CONFIG_DIR ?? '/nowhere') + '/signed-in';
+  process.stdout.write(
+    fs.existsSync(mark)
+      ? JSON.stringify({ loggedIn: true, email: fs.readFileSync(mark, 'utf8').trim() }) + '\\n'
+      : '{"loggedIn":false}\\n'
+  );
   process.exit(0);
 }
 if (verb === 'auth' && sub === 'login') {
@@ -59,9 +84,29 @@ let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
   const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(message)?.[1];
-  if (!hold) return reply();
-  const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), reply()), 20);
+  if (!hold) return answer();
+  const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), answer()), 20);
 });
+/** After any hold, so two runs can be refused at once. */
+function answer() {
+  // Only a staff run carries --settings, so it is read only for the trigger.
+  const settings = () => JSON.parse(process.argv[process.argv.indexOf('--settings') + 1]);
+  if (
+    message.includes('Refuse the open network') &&
+    settings().sandbox?.network?.allowedDomains?.includes('*')
+  ) {
+    process.stderr.write('Overly broad patterns like "*" are not allowed\\n');
+    process.exit(1);
+  }
+  reply();
+}
+function emptyFolder(p) {
+  try {
+    return fs.readdirSync(p).length === 0;
+  } catch {
+    return false;
+  }
+}
 function reply() {
   const args = process.argv.slice(2);
   const after = (flag) => args[args.indexOf(flag) + 1];
@@ -71,7 +116,17 @@ function reply() {
     system: after('--append-system-prompt'),
     message,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
-    autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null
+    autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
+    tmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
+    git: Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('GIT_'))),
+    gitTemplate: emptyFolder(process.env.GIT_TEMPLATE_DIR),
+    npm: {
+      npm_config_cache: process.env.npm_config_cache ?? null,
+      npm_config_userconfig: process.env.npm_config_userconfig ?? null
+    },
+    nodeOptions: process.env.NODE_OPTIONS ?? null,
+    apiKey: process.env.ANTHROPIC_API_KEY ?? null,
+    configDir: process.env.CLAUDE_CONFIG_DIR ?? null
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
@@ -81,7 +136,7 @@ function reply() {
 );
 chmodSync(join(bin, 'claude'), 0o755);
 // The stand-in for Grok, which reads no input: it sends back its arguments, the
-// Grok and key variables it got, the tool server's environment from its agent
+// Grok, git and key variables it got, the tool server's environment from its agent
 // file, and its sandbox profile. Then one MCP call the way Grok streams it
 // (through use_tool), and a result. A message that says "Replay <file>"
 // gets that recorded stream instead, and its arguments go in replay-args.json.
@@ -97,6 +152,12 @@ writeFileSync(
   join(bin, 'grok'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/grok in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'grok'))};
+  process.stdout.write('grok ' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '1.0.62') + '\\n');
+  process.exit(0);
+}
 const args = process.argv.slice(2);
 const home = process.env.GROK_HOME;
 if (args[0] === 'login') {
@@ -152,13 +213,14 @@ const profile = fs
 const gave = {
   args,
   grokEnv: Object.fromEntries(
-    Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS)/.test(k))
+    Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
   ),
-  env: JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]).find((s) => s.office).office.env,
+  env: JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]).find((s) => s.office)?.office.env,
   agentMode: fs.statSync(after('--agent')).mode & 0o777,
   profile,
   system: joined('--rules'),
-  message: joined('--single')
+  message: joined('--single'),
+  prompt: joined('--prompt-json') && JSON.parse(joined('--prompt-json'))
 };
 const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
 line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'use_tool' } } });
@@ -168,8 +230,10 @@ line({ type: 'result', subtype: 'success', result: JSON.stringify(gave) + '\\nOu
 );
 chmodSync(join(bin, 'grok'), 0o755);
 // The stand-in for Codex, which reads the message on stdin: it sends back its
-// arguments, the Codex and key variables it got, and what its `-c` values set
-// (the MCP servers, the permission profile, the instructions), in the item
+// arguments, the Codex, git and key variables it got, what its `-c` values set
+// (the MCP servers, the permission profile, the instructions, its shell's git
+// environment), and whether the git template folder that names was there and
+// empty as it ran (`done()` removes it after), in the item
 // shapes `codex exec --json` prints (exec_events.rs): a shell command, an MCP
 // call, a file change, two messages and the turn's tokens. A message that
 // says "Replay <file>" gets that recorded stream instead, and one that says
@@ -184,6 +248,12 @@ writeFileSync(
   join(bin, 'codex'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/codex in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'codex'))};
+  process.stdout.write('codex-cli ' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '0.166.0') + '\\n');
+  process.exit(0);
+}
 const args = process.argv.slice(2);
 const home = process.env.CODEX_HOME;
 if (args[0] === 'login') {
@@ -206,6 +276,13 @@ if (args[0] === 'logout') {
   process.exit(0);
 }
 fs.appendFileSync(process.env.CODEX_HOME + '/launches.jsonl', JSON.stringify(args) + '\\n');
+function emptyFolder(p) {
+  try {
+    return fs.readdirSync(p).length === 0;
+  } catch {
+    return false;
+  }
+}
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
@@ -227,10 +304,14 @@ process.stdin.on('end', () => {
   const gave = {
     args,
     codexEnv: Object.fromEntries(
-      Object.entries(process.env).filter(([k]) => /^(CODEX_|OPENAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS)/.test(k))
+      Object.entries(process.env).filter(([k]) => /^(CODEX_|OPENAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
     ),
-    env: set.mcp_servers.office.env,
+    git: set['shell_environment_policy.set'],
+    gitTemplate: emptyFolder(set['shell_environment_policy.set']?.GIT_TEMPLATE_DIR),
+    env: set.mcp_servers.office?.env,
     servers: set.mcp_servers,
+    // Whether each picture was there as the run read it (an office run's).
+    pictures: args.filter((a) => a.startsWith('--image=')).map((a) => fs.existsSync(a.slice(8))),
     permissions: set.permissions[set.default_permissions],
     system: set.developer_instructions,
     message,
@@ -257,7 +338,7 @@ process.stdin.on('end', () => {
 chmodSync(join(bin, 'codex'), 0o755);
 // The stand-in for Gemini, which reads the message on stdin: like Gemini, it
 // runs a message that starts with "/" as a command of its own, and fails it.
-// Else it sends back its arguments, the Gemini and key variables it got, its
+// Else it sends back its arguments, the Gemini, git and key variables it got, its
 // run folder's policy, settings and instructions, and the message, in the
 // event shapes `gemini -o stream-json` prints: the session, an echo of the
 // message, a reply in pieces, a file tool and an MCP call, the reply's last
@@ -268,6 +349,12 @@ writeFileSync(
   join(bin, 'gemini'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/gemini in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'gemini'))};
+  process.stdout.write('' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '0.66.0') + '\\n');
+  process.exit(0);
+}
 const path = require('node:path');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.GEMINI_CLI_HOME + '/launches.log', '.');
@@ -286,7 +373,7 @@ process.stdin.on('end', () => {
   const gave = {
     args,
     geminiEnv: Object.fromEntries(
-      Object.entries(process.env).filter(([k]) => /^(GEMINI_|GOOGLE_|ANTHROPIC_API_KEY|NODE_OPTIONS)/.test(k))
+      Object.entries(process.env).filter(([k]) => /^(GEMINI_|GOOGLE_|ANTHROPIC_API_KEY|NODE_OPTIONS|GIT_)/.test(k))
     ),
     env: settings.mcpServers.office.env,
     settings,
@@ -382,12 +469,14 @@ Object.assign(process.env, {
   ODDBORO_DB_PORT: String(port),
   // A file that does not exist, so no .env reaches this office.
   ODDBORO_ENV: join(folder, 'none.env'),
+  // No tool's maker is asked for its newest version (versions.ts).
+  ODDBORO_NO_LATEST: '1',
   DATABASE_URL: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
   ODDBORO_LOCAL_DB: '1',
   OLLAMA_URL: 'http://127.0.0.1:9',
   // The stand-ins, node for them, and the system's own tools: never the Mac's
   // own claude, grok, codex, gemini, xcode-select or security.
-  PATH: `${bin}:${rgBin}:${installers}:${dirname(process.execPath)}:/usr/bin:/bin`,
+  PATH: `${bin}:${rgBin}:${installers}:${nodeBin}:/usr/bin:/bin`,
   // Never handed to a Grok run.
   XAI_API_KEY: 'from-the-parent',
   ANTHROPIC_API_KEY: 'from-the-parent',
@@ -478,6 +567,19 @@ export type Gave = {
   message: string;
   claudeMds: string | null;
   autoMemory: string | null;
+  /** The Claude Code run's CLAUDE_CODE_TMPDIR and NODE_OPTIONS, which Run commands sets. */
+  tmpdir?: string | null;
+  nodeOptions?: string | null;
+  /** The git environment a run's shell gets: Claude Code's GIT_ variables, or Codex's `-c shell_environment_policy.set`. */
+  git?: Record<string, string>;
+  /** The Claude Code folder the run got (`CLAUDE_CONFIG_DIR`): its account's, or none for the owner's own login. */
+  configDir?: string | null;
+  /** Whether that environment's GIT_TEMPLATE_DIR was there and empty while the run went. */
+  gitTemplate?: boolean;
+  /** The Claude Code run's npm cache and user config, which Run commands sets (`shellEnv`). */
+  npm?: { npm_config_cache: string | null; npm_config_userconfig: string | null };
+  /** The Claude Code run's ANTHROPIC_API_KEY, which only a key sign-in sets. */
+  apiKey?: string | null;
   grokEnv?: Record<string, string>;
   agentMode?: number;
   profile?: string;
@@ -537,20 +639,51 @@ export async function onPlatform<T>(
     if (real) Object.defineProperty(process, 'platform', real);
   }
 }
+/** `fn`, run with `vars` set in the office's own environment, which is then put back. */
+export async function withEnv<T>(
+  vars: Record<string, string>,
+  fn: () => T | Promise<T>
+): Promise<T> {
+  const real = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(real))
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+  }
+}
+/** `fn`, run with HOME at `home`, which is then put back. */
+const withHome = <T>(home: string, fn: (home: string) => T | Promise<T>): Promise<T> =>
+  withEnv({ HOME: home }, () => fn(home));
+/**
+ * Git variables the office's own environment may hold, from the owner's shell
+ * or a git hook: each would point an Odd's git elsewhere, and none may reach a run.
+ */
+export const OFFICE_PROCESS_GIT = {
+  GIT_DIR: '/nonexistent',
+  GIT_CONFIG_PARAMETERS: "'x.y=z'",
+  GIT_EDITOR: 'true'
+};
 /**
  * `fn`, run with HOME at an empty folder of its own, so the Mac's own
  * ~/.grok/bin, where `grokCommand` also looks, is never found. Only around a
  * test: the office reads HOME as it loads for paths it shuts.
  */
-export async function awayFromHome<T>(fn: (home: string) => T | Promise<T>): Promise<T> {
-  const real = process.env.HOME;
-  const home = mkdtempSync(join(folder, 'home-'));
-  process.env.HOME = home;
+export const awayFromHome = <T>(fn: (home: string) => T | Promise<T>): Promise<T> =>
+  withHome(mkdtempSync(join(folder, 'home-')), fn);
+/**
+ * `fn`, run with HOME at an empty folder under the system's temp folder,
+ * removed after. `awayFromHome`'s sits in the office's home, where
+ * `checkFolder` refuses every folder; a folder in this one can be given.
+ */
+export async function ownerHome<T>(fn: (home: string) => T | Promise<T>): Promise<T> {
+  const home = mkdtempSync(join(tmpdir(), 'oddboro-owner-'));
   try {
-    return await fn(home);
+    return await withHome(home, fn);
   } finally {
-    if (real === undefined) delete process.env.HOME;
-    else process.env.HOME = real;
+    rmSync(home, { recursive: true, force: true });
   }
 }
 /** No test reached the system's secret store: `security` here is the stand-in, and nothing ran it. */
@@ -587,6 +720,33 @@ export const plain = (args: string[]) =>
 export const hide = (args: string[], ...flags: string[]) =>
   args.map((a, i) => (flags.includes(args[i - 1]) ? `<${args[i - 1].replace(/^-+/, '')}>` : a));
 
+/**
+ * Whether a rule of a Gemini run's policy with `decision` matches a write to
+ * `path`, as Gemini matches it: the arguments as JSON, each pair between NULs.
+ * Each value the office writes is a JSON string, one key a line.
+ */
+export function writeRule(policy: string, decision: 'allow' | 'deny', path: string): boolean {
+  const args = `{\0"content":"x"\0,\0"file_path":${JSON.stringify(path)}\0}`;
+  return policy
+    .split('[[rule]]\n')
+    .filter(Boolean)
+    .map(
+      (block) =>
+        Object.fromEntries(
+          block
+            .trim()
+            .split('\n')
+            .map((l) => [l.slice(0, l.indexOf(' = ')), JSON.parse(l.slice(l.indexOf(' = ') + 3))])
+        ) as Record<string, unknown>
+    )
+    .some(
+      (r) =>
+        r.decision === decision &&
+        typeof r.argsPattern === 'string' &&
+        new RegExp(r.argsPattern).test(args)
+    );
+}
+
 /** Every Codex launch so far, as its stand-in logged its arguments. */
 export const codexLaunches = (): string[][] => {
   const log = join(folder, 'codex', 'launches.jsonl');
@@ -612,3 +772,36 @@ export async function gave(...a: Parameters<typeof give>): Promise<{ id: number;
   assert.ok('id' in h, JSON.stringify(h));
   return h;
 }
+/** An Odd's switches and folders as the owner left them; anything not named is off. */
+export async function setOwn(
+  id: string,
+  o: { commands?: boolean; web?: boolean; folders?: { path: string; write: boolean }[] }
+): Promise<void> {
+  await L.pg`
+    update staff set commands = ${o.commands ?? false}, web = ${o.web ?? false},
+      folders = ${JSON.stringify(o.folders ?? [])}::jsonb where id = ${id}`;
+}
+/** The owner's PATCH of an Odd from its card. */
+export const patch = (id: string, body: unknown) =>
+  PATCH({
+    params: { id },
+    request: new Request(`http://office/api/staff/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    })
+  } as unknown as Parameters<typeof PATCH>[0]);
+/** What the route said when it refused a PATCH. */
+export async function refusal(
+  body: ReturnType<typeof patch>
+): Promise<{ status: number; message: string }> {
+  try {
+    await body;
+  } catch (e) {
+    const h = e as { status: number; body: { message: string } };
+    return { status: h.status, message: h.body.message };
+  }
+  assert.fail('the route took it');
+}
+/** Whether the ledger holds a line with this title. */
+export const recorded = async (title: string) =>
+  (await L.pg`select 1 from ledger where title = ${title}`).length === 1;

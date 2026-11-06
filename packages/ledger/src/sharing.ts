@@ -7,10 +7,12 @@
 // the owner with raise_ask first, and hands off after the yes. Writing: the
 // colleague is told which of its own tools someone on the thread lacks, never
 // to write their contents into its part or its reply, and to ask the owner if
-// the work needs them.
+// the work needs them. Tools here are outside tools, the web, and each folder
+// the owner gave an Odd: all three bring in content the others may not see.
 import { and, eq, inArray } from 'drizzle-orm';
-import { accessOf } from './capabilities.ts';
+import { accessOf, ownTools } from './capabilities.ts';
 import { db } from './db.ts';
+import { shownFolder, within } from './office.ts';
 import { connectors, followUps, grants, staff, type HandOff, type HeldHandOff } from './schema.ts';
 import type { Db } from './threads.ts';
 
@@ -18,9 +20,17 @@ export type Tool = { id: string; name: string };
 /** One tool an Odd holds, and whether its runs get it now. */
 export type Held = Tool & { staffId: string; inForce: boolean };
 
+/** A folder's id among held tools: its real path, after this. */
+export const FOLDER = 'folder:';
+/** The web's id among held tools. */
+export const WEB = 'web';
+
 /**
- * Every grant the given Odds hold, in force or not. In force means `accessOf`
- * holds nothing back, the rule `capabilities` loads a run's tools by.
+ * Every grant the given Odds hold, in force or not, then the web and each
+ * folder the owner gave them. A grant is in force when `accessOf` holds
+ * nothing back, the rule `capabilities` loads a run's tools by; the web and a
+ * folder when `ownTools` gives a run them, so a folder deleted from the disk
+ * is held but not in force.
  */
 export async function heldTools(staffIds: string[], q: Db = db): Promise<Held[]> {
   const rows = await q
@@ -30,25 +40,49 @@ export async function heldTools(staffIds: string[], q: Db = db): Promise<Held[]>
     .innerJoin(staff, eq(grants.staffId, staff.id))
     .where(inArray(grants.staffId, staffIds))
     .orderBy(connectors.name);
-  return rows.map(({ grant, connector, permission }) => ({
-    staffId: grant.staffId,
-    id: connector.id,
-    name: connector.name,
-    inForce: !accessOf({ ...grant, connector }, permission).heldBack
-  }));
+  const odds = await q.select().from(staff).where(inArray(staff.id, staffIds));
+  return [
+    ...rows.map(({ grant, connector, permission }) => ({
+      staffId: grant.staffId,
+      id: connector.id,
+      name: connector.name,
+      inForce: !accessOf({ ...grant, connector }, permission).heldBack
+    })),
+    ...odds.flatMap((o) => {
+      const own = ownTools(o, process.platform);
+      return [
+        ...(o.web ? [{ staffId: o.id, id: WEB, name: 'the web', inForce: own.web }] : []),
+        ...o.folders.map((f) => ({
+          staffId: o.id,
+          id: FOLDER + f.path,
+          name: shownFolder(f.path),
+          inForce: own.granted.some((g) => g.path === f.path)
+        }))
+      ];
+    })
+  ];
 }
 
 /**
  * What `reader` lacks of what the Odds in `from` hold: their tools its runs
  * do not get now. Every tool they hold counts, in force or not, since what
  * they read while a grant was in force can still be in their notes; only
- * what the reader's runs get now counts as its own.
+ * what the reader's runs get now counts as its own. A folder the reader has
+ * covers the same folder and every folder inside it.
  */
 export function lacking(rows: Held[], reader: string, from: string[]): Tool[] {
-  const own = new Set(rows.filter((r) => r.staffId === reader && r.inForce).map((r) => r.id));
+  const own = rows.filter((r) => r.staffId === reader && r.inForce).map((r) => r.id);
+  const covered = (id: string) =>
+    own.some(
+      (o) =>
+        o === id ||
+        (o.startsWith(FOLDER) &&
+          id.startsWith(FOLDER) &&
+          within(id.slice(FOLDER.length), o.slice(FOLDER.length)))
+    );
   const lacks = new Map<string, Tool>();
   for (const r of rows)
-    if (from.includes(r.staffId) && !own.has(r.id)) lacks.set(r.id, { id: r.id, name: r.name });
+    if (from.includes(r.staffId) && !covered(r.id)) lacks.set(r.id, { id: r.id, name: r.name });
   return [...lacks.values()];
 }
 

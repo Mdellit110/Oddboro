@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Check } from '@oddboro/ledger/checks';
-  import { call, stream } from '../api.ts';
+  import { call } from '../api.ts';
 
   // The first card: what the Mac has, ticked off one at a time. Anything
   // missing gets a button that fixes it from here. The owner moves on with
@@ -15,11 +15,12 @@
     /** Whether the office can show its own notifications on this computer. */
     notify?: boolean;
   };
-  type Props = { onnext: () => void; onkey: () => void; onsetup: (s: Setup) => void };
-  let { onnext, onkey, onsetup }: Props = $props();
+  type Props = { onnext: () => void; onsetup: (s: Setup) => void };
+  let { onnext, onsetup }: Props = $props();
 
   // Docker, uv and the login service are for later; Node is right or setup would not have run.
-  const SHOWN = ['mac', 'claude', 'database', 'pgvector', 'notify', 'ollama'];
+  // Claude Code is on the Your AI card, beside the other tools the office can run on.
+  const SHOWN = ['mac', 'database', 'pgvector', 'notify', 'ollama'];
   let checks = $state<Check[] | undefined>();
   /** In the Mac app, which shows its own notifications and has no browser tab. */
   let app = $state(false);
@@ -29,10 +30,6 @@
   const computer = $derived(system === 'mac' ? 'Your Mac' : 'This computer');
   const thisComputer = $derived(system === 'mac' ? 'this Mac' : 'this computer');
   let problem = $state('');
-  let fixing = $state<'install' | 'sign-in' | undefined>();
-  /** Counts fixes, so a sign-in that was started over or cancelled no longer changes the card. */
-  let attempt = 0;
-  let log = $state<string[]>([]);
 
   async function load() {
     problem = '';
@@ -51,45 +48,7 @@
     void load();
   });
 
-  /** Install Claude Code, or sign it in. Signing in again while one waits starts over. */
-  async function fix(action: 'install' | 'sign-in') {
-    const mine = ++attempt;
-    fixing = action;
-    problem = '';
-    log = [];
-    try {
-      await stream<{ line?: string; done?: boolean; ok?: boolean }>(
-        '/api/setup/claude',
-        { action },
-        (l) => {
-          if (l.line && mine === attempt) log = [...log.slice(-2), l.line];
-        }
-      );
-    } catch (e) {
-      if (mine === attempt) problem = e instanceof Error ? e.message : String(e);
-    } finally {
-      if (mine === attempt) {
-        fixing = undefined;
-        await load();
-      }
-    }
-  }
-
-  /** Stop a sign-in that is waiting on its page. */
-  async function cancelSignIn() {
-    attempt++;
-    fixing = undefined;
-    log = [];
-    try {
-      await call('/api/setup/claude', undefined, 'DELETE');
-    } catch (e) {
-      problem = e instanceof Error ? e.message : String(e);
-    }
-    await load();
-  }
-
   const missing = $derived(checks?.filter((c) => c.state === 'missing').length ?? 0);
-  const claude = $derived(checks?.find((c) => c.id === 'claude'));
   const MARK = { ok: '✓', optional: '!', missing: '✗' } as const;
   const TONE = { ok: 'text-moss', optional: 'text-ember', missing: 'text-coral' } as const;
 
@@ -175,33 +134,12 @@
         <span class="font-bold {TONE[c.state]}" aria-label={c.state}>{MARK[c.state]}</span>
         <span>{c.name}</span>
         <span class="min-w-0 text-muted">{c.found}</span>
-        {#if c.state !== 'ok' && c.fix && c.id !== 'claude'}
+        {#if c.state !== 'ok' && c.fix}
           <span class="col-start-2 col-end-4 text-xs text-faint">{c.fix.replaceAll('`', '')}</span>
         {/if}
       </li>
     {/each}
   </ul>
-  {#if claude?.state === 'missing'}
-    <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
-      {#if fixing === 'install'}
-        <span class="text-muted">Installing Claude Code.</span>
-      {:else if fixing}
-        <span class="text-muted">Finish signing in on the page that opened.</span>
-        <button class="link" onclick={() => fix('sign-in')}>Open it again</button>
-        <button class="link" onclick={cancelSignIn}>Cancel</button>
-      {:else if claude.found === 'Not installed'}
-        <button class="btn" onclick={() => fix('install')}>Install Claude Code</button>
-      {:else}
-        <button class="btn" onclick={() => fix('sign-in')}>Sign in with Claude</button>
-      {/if}
-      <span class="text-muted">
-        or <button class="link" onclick={onkey}>use an API key</button>
-      </span>
-    </div>
-    {#if log.length}
-      <pre class="mt-2 overflow-x-auto text-xs text-faint">{log.join('\n')}</pre>
-    {/if}
-  {/if}
 {/if}
 
 {#if checks && addr}

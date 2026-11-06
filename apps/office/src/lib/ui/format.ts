@@ -21,6 +21,26 @@ export function when(at: string | Date): string {
   return `${d.toLocaleDateString('en-US', { timeZone: PT, month: 'short', day: 'numeric' })}, ${time}`;
 }
 
+/**
+ * When something comes next, in words, in the office's time zone: "today at
+ * 3:00 PM", "tomorrow at 7:00 AM", or "Fri, Nov 7 at 7:00 AM".
+ */
+export function nextWhen(at: string | Date, now: Date = new Date()): string {
+  const PT = zone();
+  const d = new Date(at);
+  const day = (x: Date) => x.toLocaleDateString('en-US', { timeZone: PT });
+  const time = d.toLocaleTimeString('en-US', { timeZone: PT, hour: 'numeric', minute: '2-digit' });
+  if (day(d) === day(now)) return `today at ${time}`;
+  if (day(d) === day(new Date(now.getTime() + 86_400_000))) return `tomorrow at ${time}`;
+  const date = d.toLocaleDateString('en-US', {
+    timeZone: PT,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  });
+  return `${date} at ${time}`;
+}
+
 /** Big counts as the owner reads them: 1.2K, 3.4M. */
 export const compact = new Intl.NumberFormat('en-US', {
   notation: 'compact',

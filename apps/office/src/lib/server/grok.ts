@@ -11,16 +11,17 @@
 // node and the tool server's code, Grok's home and the system folders Grok
 // needs to start. It writes the Odd's folder, Grok's own temp folder and
 // Grok's sessions folder, which holds every Grok Odd's sessions. It adds the
-// folders the run reads besides its own (the owner's data folder, and its
-// thread's or a lead's goals') to read, and on a thread the Odd's part of it
-// to write.
+// folders the run reads besides its own (the owner's data folder, its
+// thread's or a lead's goals', and the folders the owner gave the Odd) to
+// read, and the given folders it may change, and on a thread the Odd's part
+// of it, to write.
 // Deny rules hold the rest: no Odd reads anything of the kernel's allowance
 // but its own folders (`UNREADABLE`), and none writes in Grok's home. A custom
 // profile that cannot apply stops Grok from starting, so a run is never left
 // unconfined. The profile holds the whole grok process, its own sign-in
 // renewal included, so the office renews the sign-in before a run that could
 // outlast it (`grokSignedOut`).
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import {
   accessSync,
   chmodSync,
@@ -33,29 +34,45 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { CODE, home, runsGoing } from '@oddboro/ledger';
+import {
+  accountsHome,
+  CODE,
+  home,
+  OFFICE_ACCOUNT,
+  runsGoing,
+  toolHome,
+  type Effort
+} from '@oddboro/ledger';
 import { andBelow, denyRules, instructionPaths } from './files.ts';
-import { mcpGrant, NOT_SIGNED_IN, replace, sweep, vendorEnv } from './launch.ts';
+import { mcpGrant, NOT_SIGNED_IN, replace, sweep, vendorEnv, type RunImage } from './launch.ts';
 import { onPath } from './on-path.ts';
 import { GROK_FILE_TOOLS } from '../staff/work.ts';
 
-export const GROK_HOME = home('grok');
-const SANDBOX = join(GROK_HOME, 'sandbox.toml');
-const CONFIG = join(GROK_HOME, 'config.toml');
-/** Each run's MCP servers, in an agent file of its own (Grok has no --mcp-config). */
-const RUNS = join(GROK_HOME, 'runs');
-/** Grok's own temp folder, so it needs none of the temp folders every app shares (`SHUT`). */
-const TEMP = join(GROK_HOME, 'tmp');
 /**
- * The sign-in: per account, its tokens, its `email` and when they run out
- * (`expires_at`). Sign out from the page removes it (agent-sign-in.ts).
+ * One account's Grok home (`toolHome`) and what Grok keeps in it: its
+ * sandbox profiles, its config, each run's agent file (Grok has no
+ * --mcp-config), its own temp folder (so it needs none of the temp folders
+ * every app shares, `SHUT`), the sign-in (per xAI account, its tokens, its
+ * `email` and when they run out, `expires_at`; Sign out from the page
+ * removes it), and the leader socket every grok outside a run talks to
+ * (Grok's default is ~/.grok/leader.sock, the owner's own Grok, whatever
+ * GROK_HOME says).
  */
-export const GROK_AUTH = join(GROK_HOME, 'auth.json');
-/**
- * The leader socket every grok outside a run talks to. Grok's default is
- * ~/.grok/leader.sock, the owner's own Grok, whatever GROK_HOME says.
- */
-const LEADER = join(GROK_HOME, 'leader.sock');
+export function grokHome(account: string = OFFICE_ACCOUNT) {
+  const dir = toolHome('grok', account);
+  return {
+    dir,
+    sandbox: join(dir, 'sandbox.toml'),
+    config: join(dir, 'config.toml'),
+    runs: join(dir, 'runs'),
+    temp: join(dir, 'tmp'),
+    auth: join(dir, 'auth.json'),
+    leader: join(dir, 'leader.sock')
+  };
+}
+type GrokHome = ReturnType<typeof grokHome>;
+/** Every Grok home there is or was: no run may read or change one. */
+const GROK_HOMES = () => [accountsHome(), home('grok')];
 /** How long before a run could end its sign-in must still hold, past the run's own time limit. */
 const SIGN_IN_MARGIN_MS = 10 * 60_000;
 /**
@@ -130,7 +147,7 @@ const STRICT_READS = [
  * dontAsk, so these deny rules, on each folder and everything in it, keep the
  * Odd's own reads to its folders.
  */
-const UNREADABLE = [GROK_HOME, ...SERVER_CODE, ...STRICT_READS];
+const UNREADABLE = () => [...GROK_HOMES(), ...SERVER_CODE, ...STRICT_READS];
 
 /**
  * The folders ripgrep runs from when it is on PATH: the folder PATH names and,
@@ -179,14 +196,16 @@ skills = false
 type GrokRun = {
   /** The run's key (`runsGoing`), which names its agent file and, on a thread, its profile. */
   key: string;
+  /** The account whose Grok home the run uses (accounts.ts). */
+  account: string;
   staffId: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
-  /** On a thread: the Odd's own part of it, which it writes. */
+  /** On a thread: the Odd's own part of it, which names the run's own profile. */
   part?: string;
-  /** The folders the run writes. */
+  /** The folders the run writes: its own (the cwd), and any of its part of a thread and the folders the owner gave the Odd to change. */
   writes: string[];
   /** The paths the run may not write (`deniedEdits`). */
   deniedEdits: string[];
@@ -198,7 +217,37 @@ type GrokRun = {
   servers: Record<string, unknown>;
   /** The MCP tools the run may call, as access() names them for Claude Code (`mcp__server` or `mcp__server__tool`). */
   allowed: string[];
+  /** The owner's Browse the web switch: Grok's web_search and web_fetch. */
+  web: boolean;
+  /** Pictures sent ahead of the message (an office run only). */
+  images?: RunImage[];
+  /** An office run: no file or web tools, only the message and its pictures. */
+  bare?: boolean;
+  /** How hard the model thinks, as `--reasoning-effort`: an Odd's level or an office run's. */
+  effort?: Effort;
+  /** The Odd's own model; without one, the office's (`OFFICE_GROK_MODEL`) or the tool's default. */
+  model?: string;
 };
+
+/**
+ * The message as Grok takes it, joined to its flag, so a message or job
+ * description that starts with "-" is never read as a flag: grok takes no
+ * "--" before a value and reads no input (both measured on Grok 1.0.46).
+ * With pictures, the message goes as ACP content blocks, each picture an
+ * `image` block of base64 and its type (the shape grok 1.0.62 accepts).
+ */
+function messageArg(message: string, images: RunImage[] = []): string {
+  if (!images.length) return `--single=${message}`;
+  const blocks = [
+    ...images.map((i) => ({
+      type: 'image',
+      data: readFileSync(i.path).toString('base64'),
+      mimeType: i.mediaType
+    })),
+    { type: 'text', text: message }
+  ];
+  return `--prompt-json=${JSON.stringify(blocks)}`;
+}
 
 type GrokLaunch = { args: string[]; env: NodeJS.ProcessEnv; done: () => void };
 
@@ -228,9 +277,9 @@ function profileToml(name: string, p: Profile): string {
  * key is going. All of it happens in one tick, so runs starting side by side
  * cannot drop each other's profile.
  */
-function setProfile(name: string, p: Profile): void {
+function setProfile(h: GrokHome, name: string, p: Profile): void {
   const blocks = new Map<string, string>();
-  const text = existsSync(SANDBOX) ? readFileSync(SANDBOX, 'utf8') : '';
+  const text = existsSync(h.sandbox) ? readFileSync(h.sandbox, 'utf8') : '';
   for (const block of text.split(/^(?=\[profiles\.)/m)) {
     const found = /^\[profiles\.([^\]]+)\]/.exec(block)?.[1];
     if (!found) continue;
@@ -239,7 +288,7 @@ function setProfile(name: string, p: Profile): void {
   }
   blocks.set(name, profileToml(name, p));
   const next = [...blocks.values()].join('\n\n') + '\n';
-  if (next !== text) replace(SANDBOX, next, 0o644);
+  if (next !== text) replace(h.sandbox, next, 0o644);
 }
 
 /** `mcp__office` and `mcp__c__t`, as Grok's `MCPTool(office__*)` and `MCPTool(c__t)`. */
@@ -257,10 +306,10 @@ const EDITS = ['Edit', 'Write'];
  * owner may read it, and it goes when the run ends. A file a run that died
  * with the office left behind goes at the next Grok run.
  */
-function agentFile(key: string, servers: Record<string, unknown>): string {
-  mkdirSync(RUNS, { recursive: true, mode: 0o700 });
-  sweep(RUNS, '.md', key);
-  const file = join(RUNS, `${key}.md`);
+function agentFile(h: GrokHome, key: string, servers: Record<string, unknown>): string {
+  mkdirSync(h.runs, { recursive: true, mode: 0o700 });
+  sweep(h.runs, '.md', key);
+  const file = join(h.runs, `${key}.md`);
   // Grok takes a list here, one `{name: server}` per entry, and refuses to start on a map.
   const list = Object.entries(servers).map(([name, server]) => ({ [name]: server }));
   replace(
@@ -276,21 +325,20 @@ function agentFile(key: string, servers: Record<string, unknown>): string {
  * this run used.
  */
 export function grokLaunch(r: GrokRun): GrokLaunch {
-  grokHomeReady();
+  const h = grokHome(r.account);
+  grokHomeReady(h);
   const sandbox = r.part ? `run-${r.key}` : `odd-${r.staffId}`;
   const rg = ripgrep();
-  setProfile(sandbox, {
+  setProfile(h, sandbox, {
     readOnly: [...SERVER_CODE, ...rg, ...r.reads],
-    readWrite: [TEMP, ...(r.part ? [r.part] : [])],
+    // `strict` already writes the cwd, the Odd's own folder.
+    readWrite: [h.temp, ...r.writes.filter((w) => w !== r.dir)],
     deny: [...instructionPaths(r.writes), ...SHUT].flatMap(andBelow)
   });
-  const agent = agentFile(r.key, r.servers);
-  const model = process.env.OFFICE_GROK_MODEL;
+  const agent = agentFile(h, r.key, r.servers);
+  const model = r.model ?? process.env.OFFICE_GROK_MODEL;
   const args = [
-    // Joined to its flag, so a message or job description that starts with
-    // "-" is never read as a flag: grok takes no "--" before a value and reads
-    // no input (both measured on Grok 1.0.46).
-    `--single=${r.message}`,
+    messageArg(r.message, r.images),
     '--output-format',
     'streaming-messages-json',
     '--include-partial-messages',
@@ -302,19 +350,29 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     'dontAsk',
     '--no-subagents',
     '--no-auto-update',
-    // The five file tools a Claude Code run gets, grep only where ripgrep is.
-    // Grok keeps its MCP tools (search_tool, use_tool) beside them; no shell,
-    // web or image tool.
+    // The five file tools a Claude Code run gets, grep only where ripgrep is,
+    // and Grok's web tools with Browse the web on. Grok keeps its MCP tools
+    // (search_tool, use_tool) beside them, and no image tool. Never a shell:
+    // its launch refuses a run with commands (`LAUNCHES.grok` in cli.ts), since
+    // Grok's sandbox keeps a command off the network on Linux only.
+    // An office run gets read_file alone, in a folder of its own with nothing
+    // in it. Grok has no "no tools": an empty list gave a 1.0.62 run every
+    // tool, its shell too, which dontAsk refused, and a refused call ended the
+    // turn before the answer (seen 2026-11-05).
     '--tools',
-    Object.keys(GROK_FILE_TOOLS)
-      .filter((tool) => tool !== 'grep' || rg.length)
-      .join(','),
-    ...[...UNREADABLE, ...rg]
+    r.bare
+      ? 'read_file'
+      : [
+          ...Object.keys(GROK_FILE_TOOLS).filter((tool) => tool !== 'grep' || rg.length),
+          ...(r.web ? ['web_search', 'web_fetch'] : [])
+        ].join(','),
+    ...(r.effort ? [`--reasoning-effort=${r.effort}`] : []),
+    ...[...UNREADABLE(), ...rg]
       .flatMap((p) => denyRules(['Read'], p))
       .flatMap((rule) => ['--deny', rule]),
     // The kernel lets a run write Grok's sessions folder, every Grok Odd's
     // sessions, and dontAsk alone would refuse it: these rules hold it too.
-    ...[GROK_HOME, ...r.deniedEdits]
+    ...[...GROK_HOMES(), ...r.deniedEdits]
       .flatMap((p) => denyRules(EDITS, p))
       .flatMap((rule) => ['--deny', rule]),
     ...r.writes
@@ -325,7 +383,44 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     `--rules=${r.system}`,
     ...(r.resume ? ['-r', r.resume] : ['-s', r.newSession])
   ];
-  return { args, env: grokEnv(), done: () => rmSync(agent, { force: true }) };
+  // web_fetch is off in every other grok the office starts (`grokEnv`).
+  const env = r.web ? { ...grokEnv(h), GROK_WEB_FETCH: '1' } : grokEnv(h);
+  return { args, env, done: () => rmSync(agent, { force: true }) };
+}
+
+/**
+ * The newest Grok xAI has out, from Grok's own check (`grok update --check
+ * --json`) on the office's home and leader socket, or nothing when it cannot
+ * say.
+ */
+export function grokLatest(): Promise<string | undefined> {
+  const h = grokHome();
+  grokHomeReady(h);
+  return new Promise((done) =>
+    execFile(
+      grokCommand() ?? 'grok',
+      ['update', '--check', '--json', '--leader-socket', h.leader],
+      { cwd: h.dir, env: grokEnv(h), timeout: 15_000, windowsHide: true },
+      (_e, out) => {
+        try {
+          const v = (JSON.parse(String(out)) as { latestVersion?: unknown }).latestVersion;
+          done(typeof v === 'string' && v ? v : undefined);
+        } catch {
+          done(undefined);
+        }
+      }
+    )
+  );
+}
+
+/**
+ * Update Grok to xAI's newest with its own updater, where xAI's installer put
+ * it, as Install does: with no GROK_ setting, so Grok's own home. With the
+ * office's home, `grok update` put the new grok in that home's `bin` and left
+ * the one the office runs as it was (seen 2026-11-05).
+ */
+export function grokUpdate(): { args: string[]; env: NodeJS.ProcessEnv } {
+  return { args: ['update'], env: vendorEnv(['GROK_', 'XAI_']) };
 }
 
 /**
@@ -353,11 +448,11 @@ export function grokCommand(): string | undefined {
  * The office's Grok home, shut to everyone but the owner, with its temp
  * folder and a config.toml if it had none. Runs and the sign-in use it.
  */
-function grokHomeReady(): void {
-  mkdirSync(GROK_HOME, { recursive: true, mode: 0o700 });
-  chmodSync(GROK_HOME, 0o700);
-  mkdirSync(TEMP, { recursive: true, mode: 0o700 });
-  if (!existsSync(CONFIG)) replace(CONFIG, FIRST_CONFIG);
+function grokHomeReady(h: GrokHome): void {
+  mkdirSync(h.dir, { recursive: true, mode: 0o700 });
+  chmodSync(h.dir, 0o700);
+  mkdirSync(h.temp, { recursive: true, mode: 0o700 });
+  if (!existsSync(h.config)) replace(h.config, FIRST_CONFIG);
 }
 
 /**
@@ -365,17 +460,21 @@ function grokHomeReady(): void {
  * (agent-sign-in.ts). Outside any sandbox, so it names the home's own leader
  * socket, never the owner's.
  */
-export function grokSignIn(): { args: string[]; env: NodeJS.ProcessEnv } {
-  grokHomeReady();
-  return { args: ['login', '--oauth', '--leader-socket', LEADER], env: grokEnv() };
+export function grokSignIn(account: string = OFFICE_ACCOUNT): {
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  const h = grokHome(account);
+  grokHomeReady(h);
+  return { args: ['login', '--oauth', '--leader-socket', h.leader], env: grokEnv(h) };
 }
 
 /** The environment every `grok` the office starts gets: the office's Grok home, and no key or setup of the office's own. */
-function grokEnv(): NodeJS.ProcessEnv {
+function grokEnv(h: GrokHome): NodeJS.ProcessEnv {
   const env = vendorEnv(['GROK_', 'XAI_']);
   return Object.assign(env, COMPAT_OFF, {
-    GROK_HOME,
-    TMPDIR: TEMP,
+    GROK_HOME: h.dir,
+    TMPDIR: h.temp,
     GROK_MEMORY: '0',
     GROK_SUBAGENTS: '0',
     GROK_WORKFLOWS: '0',
@@ -387,9 +486,9 @@ function grokEnv(): NodeJS.ProcessEnv {
 }
 
 /** The accounts in the office's Grok sign-in, none when the home has no sign-in file Grok can read. */
-function accounts(): unknown[] {
+function accounts(h: GrokHome): unknown[] {
   try {
-    const auth: unknown = JSON.parse(readFileSync(GROK_AUTH, 'utf8'));
+    const auth: unknown = JSON.parse(readFileSync(h.auth, 'utf8'));
     return Object.values(auth && typeof auth === 'object' ? auth : {});
   } catch {
     // No file, or one half written: no account to show, and nothing to renew.
@@ -401,8 +500,8 @@ function accounts(): unknown[] {
  * Who the office's Grok home is signed in as, for the page: undefined with
  * no account in its sign-in, else the first account's email when it has one.
  */
-export function grokAccount(): { email?: string } | undefined {
-  const all = accounts();
+export function grokAccount(account: string = OFFICE_ACCOUNT): { email?: string } | undefined {
+  const all = accounts(grokHome(account));
   if (!all.length) return undefined;
   const email = all
     .map((a) => (a as { email?: unknown } | null)?.email)
@@ -416,8 +515,8 @@ export function grokAccount(): { email?: string } | undefined {
  * Grok can read, or no `expires_at` in it: the run then starts, and Grok's
  * own stream says "Not signed in" (`endedEarly` in cli.ts).
  */
-function signInEnds(): number | undefined {
-  const ends = accounts()
+function signInEnds(h: GrokHome): number | undefined {
+  const ends = accounts(h)
     .map((account: unknown) =>
       Date.parse(String((account as { expires_at?: unknown })?.expires_at))
     )
@@ -425,8 +524,8 @@ function signInEnds(): number | undefined {
   return ends.length ? Math.max(...ends) : undefined;
 }
 
-/** The renewal going now, which every run starting meanwhile waits on. */
-let renewing: Promise<void> | undefined;
+/** The renewal going now in each home, which every run starting meanwhile on it waits on. */
+const renewing = new Map<string, Promise<void>>();
 
 /**
  * Renew the sign-in outside any sandbox. Grok has no command made for it, and
@@ -439,22 +538,23 @@ let renewing: Promise<void> | undefined;
  * past RENEW_MS is killed, since a grok that ignores SIGTERM would hold every
  * run back with no word to the owner.
  */
-function renew(): Promise<void> {
-  renewing ??= new Promise<void>((done) => {
+function renew(h: GrokHome): Promise<void> {
+  const going = renewing.get(h.dir);
+  if (going) return going;
+  const next = new Promise<void>((done) => {
     // Outside the sandbox, so on the home's own leader socket, never the owner's.
-    const child = spawn(grokCommand() ?? 'grok', ['models', '--leader-socket', LEADER], {
-      cwd: GROK_HOME,
-      env: grokEnv(),
+    const child = spawn(grokCommand() ?? 'grok', ['models', '--leader-socket', h.leader], {
+      cwd: h.dir,
+      env: grokEnv(h),
       stdio: 'ignore',
       timeout: RENEW_MS,
       killSignal: 'SIGKILL'
     });
     child.on('error', () => done());
     child.on('close', () => done());
-  }).finally(() => {
-    renewing = undefined;
-  });
-  return renewing;
+  }).finally(() => renewing.delete(h.dir));
+  renewing.set(h.dir, next);
+  return next;
 }
 
 /**
@@ -467,10 +567,14 @@ function renew(): Promise<void> {
  * run ends is renewed first, and a run whose sign-in has still run out is
  * refused at once.
  */
-export async function grokSignedOut(lastsMs: number): Promise<string | undefined> {
-  const ends = signInEnds();
+export async function grokSignedOut(
+  lastsMs: number,
+  account: string = OFFICE_ACCOUNT
+): Promise<string | undefined> {
+  const h = grokHome(account);
+  const ends = signInEnds(h);
   if (ends === undefined || ends > Date.now() + lastsMs + SIGN_IN_MARGIN_MS) return undefined;
-  await renew();
-  const renewed = signInEnds();
+  await renew(h);
+  const renewed = signInEnds(h);
   return renewed !== undefined && renewed > Date.now() ? undefined : GROK_SIGN_IN;
 }

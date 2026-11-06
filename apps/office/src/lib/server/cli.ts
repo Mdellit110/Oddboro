@@ -1,14 +1,13 @@
 // What a staffer's run does by the coding tool it runs on, apart from Claude
 // Code's own arguments, which run() in staff.ts builds: how a run on Grok,
-// Codex or Gemini starts (grok.ts, codex.ts, gemini.ts), what each tool's own
-// file tools reach as the run's prompt says it, the tools a line of Claude
-// Code's stream names (Grok streams in that shape), and why a run ended
-// early. Server only.
+// Codex or Gemini starts (grok.ts, codex.ts, gemini.ts), the tools a line of
+// Claude Code's stream names (Grok streams in that shape), and why a run
+// ended early. Server only.
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { Agent } from '@oddboro/ledger';
+import { COMMANDS_WHY, type Agent, type Effort } from '@oddboro/ledger';
 import { deniedEdits } from './files.ts';
-import type { RunEvent } from './launch.ts';
+import type { RunEvent, RunImage } from './launch.ts';
 import { GROK_PLAN_LIMIT, GROK_SIGN_IN, grokLaunch, grokSignedOut } from './grok.ts';
 import { codexLaunch, codexReader, codexSignedOut } from './codex.ts';
 import { geminiKeyMissing, geminiLaunch, geminiReader } from './gemini.ts';
@@ -39,12 +38,20 @@ export type CliRun = {
   staffId: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
-  /** The folders the run reads besides its own: the owner's data folder, and its thread's or those of the goals a lead's chat leads. */
+  /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
   reads: string[];
   /** On a thread: the Odd's own part of it. */
   part?: string;
-  /** The folders the run writes: its own, and on a thread its part of it. */
+  /** The folders the run writes: its own, on a thread its part of it, and the folders the owner gave the Odd to change. */
   writes: string[];
+  /** The folders the owner gave the Odd to change, some of `writes`, empty if none: only there are git's usual places never written (`repoRunPaths`). */
+  granted: string[];
+  /** The owner's Browse the web switch: the tool's own web search and fetch. */
+  web: boolean;
+  /** A shell, decided in run() from commandsHow; a launch whose tool cannot hold it refuses. */
+  commands: boolean;
+  /** Whether those commands reach the internet (commandsOnline, less a held network). */
+  network: boolean;
   /** The file the owner edited, by its path inside `dir`, which a run reading that edit may not write. */
   edited?: string;
   system: string;
@@ -57,46 +64,69 @@ export type CliRun = {
   allowed: string[];
   /** The longest the run may take before the office cuts it. */
   timeoutMs: number;
+  /** Pictures sent with the message: an office run's (`runAsOffice`), never an Odd's. */
+  images?: RunImage[];
+  /** An office run: Grok gets no tools (Codex keeps its shell, its only way to read). */
+  bare?: boolean;
+  /** How hard the model thinks: an Odd's level (`effortFor`) or an office run's. */
+  effort?: Effort;
+  /** The Odd's own model (`modelFor`); without one, the office's. */
+  model?: string;
+  /** The account whose home the tool runs with (`accountOf`): Office for an office run. */
+  account: string;
 };
 
 /**
  * Each tool but Claude Code, whose arguments run() builds from its own
  * rules. Every one has an entry, so a new tool fails the type check until it
- * is handled. A tool that cannot start says why instead (`refused`).
+ * is handled. A tool that cannot start says why instead (`refused`), and so
+ * does one handed a run its tool cannot hold, Grok or Gemini with commands
+ * and Codex without, first, so a change to `commandsHow` alone fails the run
+ * rather than silently dropping or adding the shell.
  */
 export const LAUNCHES: Record<
   Exclude<Agent, 'claude'>,
   (r: CliRun) => Promise<Launch | { refused: string }>
 > = {
   grok: async (r) => {
-    const signedOut = await grokSignedOut(r.timeoutMs);
+    if (r.commands) return { refused: COMMANDS_WHY.grok };
+    const signedOut = await grokSignedOut(r.timeoutMs, r.account);
     if (signedOut) return { refused: signedOut };
     return {
       ...grokLaunch({
         key: r.key,
+        account: r.account,
         staffId: r.staffId,
         dir: r.dir,
         reads: r.reads,
         part: r.part,
         writes: r.writes,
-        deniedEdits: deniedEdits(r.dir, r.writes, r.edited),
+        deniedEdits: deniedEdits(r),
         system: r.system,
         message: r.input,
         resume: r.resume,
         newSession: randomUUID(),
         servers: r.servers,
-        allowed: r.allowed
+        allowed: r.allowed,
+        web: r.web,
+        images: r.images,
+        bare: r.bare,
+        effort: r.effort,
+        model: r.model
       }),
       // Grok takes its message as an argument and reads no input.
       stdin: ''
     };
   },
   codex: async (r) => {
-    const signedOut = codexSignedOut();
+    if (!r.commands)
+      return { refused: 'Codex reads files through its commands, so it cannot run without them.' };
+    const signedOut = codexSignedOut(r.account);
     if (signedOut) return { refused: signedOut };
     return {
       ...codexLaunch({
         key: r.key,
+        account: r.account,
         dir: r.dir,
         reads: r.reads,
         writes: r.writes,
@@ -105,13 +135,19 @@ export const LAUNCHES: Record<
         input: r.input,
         resume: r.resume,
         servers: r.servers,
-        allowed: r.allowed
+        allowed: r.allowed,
+        web: r.web,
+        network: r.network,
+        images: r.images,
+        effort: r.effort,
+        model: r.model
       }),
-      read: codexReader(process.env.OFFICE_CODEX_MODEL ?? 'codex'),
+      read: codexReader(r.model ?? process.env.OFFICE_CODEX_MODEL ?? 'codex'),
       ownGroup: true
     };
   },
   gemini: async (r) => {
+    if (r.commands) return { refused: COMMANDS_WHY.gemini };
     const missing = geminiKeyMissing();
     if (missing) return { refused: missing };
     return {
@@ -120,33 +156,20 @@ export const LAUNCHES: Record<
         dir: r.dir,
         reads: r.reads,
         writes: r.writes,
+        granted: r.granted,
         edited: r.edited,
         system: r.system,
         input: r.input,
         resume: r.resume,
         servers: r.servers,
-        allowed: r.allowed
+        allowed: r.allowed,
+        web: r.web
       }),
       read: geminiReader(Object.keys(r.servers)),
       // Its MCP servers are processes of their own, which stop with the run.
       ownGroup: true
     };
   }
-};
-
-const FILES_ONLY = 'Your own tools work on files only: no shell and no web.';
-/**
- * What a run's own tools reach, by the tool it runs on: Claude Code, Grok and
- * Gemini get file tools only, and Codex its shell, which the kernel holds to
- * the run's folders with the network off (codex.ts). Gemini's policy allows a
- * write only by its full path (gemini.ts).
- */
-export const OWN_TOOLS: Record<Agent, string> = {
-  claude: FILES_ONLY,
-  grok: FILES_ONLY,
-  gemini: `${FILES_ONLY} Give each file tool the file's full path.`,
-  codex:
-    'Your own tools are a shell and file edits, confined to your folders, with no network and no web.'
 };
 
 /**

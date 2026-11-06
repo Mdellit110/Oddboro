@@ -16,7 +16,7 @@
   import { threadTag, type HeldThread } from '#lib/staff/thread-tags.ts';
   import StaffCard from '#lib/ui/StaffCard.svelte';
   import { chatRequest, type Delivered } from '#lib/ui/chat-about.svelte.ts';
-  import AgentsPanel from '#lib/ui/AgentsPanel.svelte';
+  import OddsRail, { ODDS_RAIL } from '#lib/ui/OddsRail.svelte';
   import type { Work } from '#lib/staff/work.ts';
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
@@ -38,9 +38,9 @@
     type Win
   } from '#lib/ui/windows.svelte.ts';
   import type { AskRow } from '@oddboro/ledger';
-  import SidePanel, { RAIL } from '#lib/ui/SidePanel.svelte';
+  import SidePanel from '#lib/ui/SidePanel.svelte';
+  import { fly } from 'svelte/transition';
   import { placesFor, type Place } from '#lib/staff/places.ts';
-  import Pixel from '#lib/ui/Pixel.svelte';
   import PixelPencil from '#lib/ui/PixelPencil.svelte';
   import { call } from '#lib/ui/api.ts';
   import { setZone, zone, zoneName, zoneShort } from '@oddboro/ledger/time';
@@ -128,7 +128,7 @@
   let working = $state<Record<string, string>>({});
   /** Each staffer's work in progress. */
   let inProgress = $state<Record<string, Work[]>>({});
-  /** A request for the card to open on a tab, from the agents list. */
+  /** A request for the card to open on a tab, from the Odds rail's list. */
   let cardShow = $state<{ id: string; tab: 'work'; n: number } | undefined>();
   /** Bumps when jobs, runs, access, goals, threads or lessons change, so the card's tabs and the Goals and Lessons windows reload. */
   let version = $state(0);
@@ -145,8 +145,8 @@
   /** Below this the panels cover the floor instead of sitting beside it. */
   const wide = $derived(innerWidth > 720);
 
+  // Every Odd is on the rail at the end edge (OddsRail.svelte), not here.
   const SECTIONS = [
-    { id: 'agents', label: 'Odds' },
     { id: 'desk', label: 'Desk' },
     { id: 'goals', label: 'Goals' },
     { id: 'lessons', label: 'Lessons' },
@@ -158,6 +158,7 @@
   /** Select a staffer, opening its panel if it was folded away. */
   function select(id: string | undefined) {
     selected = id;
+    railAsked = false;
     letGo = false;
     if (id) rightCollapsed = false;
   }
@@ -211,7 +212,23 @@
   /** Screen space each panel takes from the floor, margin included. */
   // The first run's cards live in the start panel too.
   const leftSpace = $derived((leftOpen || firstRun) && wide ? leftWidth + 16 : 0);
-  const rightSpace = $derived(profile && wide ? (rightCollapsed ? RAIL : rightWidth) + 16 : 0);
+  /** An Odd's panel is open (not folded away). */
+  const cardOpen = $derived(!!profile && !rightCollapsed);
+  /** ⌘K while a card is open brings the rail back over it, until an Odd is picked or the list closes. */
+  let railAsked = $state(false);
+  /**
+   * The Odds rail, beside the floor once the office has an Odd. It slides off
+   * the screen while an Odd's panel is open, and back when it closes or folds.
+   */
+  const showRail = $derived(!firstRun && staff.length > 0 && (!cardOpen || railAsked));
+  const rightSpace = $derived(
+    (showRail && !cardOpen ? ODDS_RAIL + 16 : 0) + (cardOpen && wide ? rightWidth + 8 : 0)
+  );
+  /** The Odd's panel slides in from the screen's edge (the left in a right-to-left page). */
+  const fromEdge = (far = 48) => ({
+    x: (getComputedStyle(document.documentElement).direction === 'rtl' ? -1 : 1) * far,
+    duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200
+  });
   const selectedActivity = $derived(tags.find((t) => t.id === selected)?.activity ?? 'home');
   const clock = $derived(
     now.toLocaleTimeString('en-US', { ...PT, hour: 'numeric', minute: '2-digit' })
@@ -511,7 +528,6 @@
   /** A section's button: brings its window forward, or folds the panel when it already is. */
   function toggle(id: (typeof SECTIONS)[number]['id']) {
     if (leftOpen && front?.kind === id) return hide();
-    if (id === 'agents') return open({ id: 'agents', kind: 'agents' });
     if (id === 'desk') return void openDesk();
     if (id === 'ledger') return open({ id: 'ledger', kind: 'ledger' });
     if (id === 'goals') return open({ id: 'goals', kind: 'goals' });
@@ -532,7 +548,6 @@
   }
 
   function winTitle(w: Win): string {
-    if (w.kind === 'agents') return 'Odds';
     if (w.kind === 'desk') return 'Desk';
     if (w.kind === 'ledger') return 'Ledger';
     if (w.kind === 'goals') return 'Goals';
@@ -550,9 +565,6 @@
   onMount(() => {
     let disposed = false;
     seen = keys(desk);
-    // The agents list is where the office opens, when there is room beside the floor.
-    if (!wins.list.length && window.innerWidth > 720 && !firstRun)
-      open({ id: 'agents', kind: 'agents' });
     // A new owner's first visit opens on its own song; later visits play if the owner left the music on.
     startMusic(firstRun);
     try {
@@ -925,14 +937,14 @@
     renaming = undefined;
   }
 
-  /** Bumps to put the cursor in the agents search. */
+  /** Bumps to open the Odds list on the rail with the cursor in its search. */
   let findAgent = $state(0);
 
   function onkey(e: KeyboardEvent) {
-    // Cmd+K finds a staffer from anywhere, the box included.
+    // Cmd+K finds an Odd from anywhere, the box included.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !firstRun) {
       e.preventDefault();
-      open({ id: 'agents', kind: 'agents' });
+      railAsked = true;
       findAgent++;
       return;
     }
@@ -1176,22 +1188,7 @@
         <div class="min-h-0 flex-1 border-t border-hairline">
           {#each wins.list as w (w.id)}
             <div class="h-full min-h-0" class:hidden={wins.active !== w.id} role="tabpanel">
-              {#if w.kind === 'agents'}
-                <AgentsPanel
-                  {staff}
-                  {status}
-                  {waiting}
-                  {inProgress}
-                  {selected}
-                  find={findAgent}
-                  onselect={select}
-                  onchat={(id) => chatAbout(id, '')}
-                  onwork={(id) => {
-                    select(id);
-                    cardShow = { id, tab: 'work', n: (cardShow?.n ?? 0) + 1 };
-                  }}
-                />
-              {:else if w.kind === 'desk'}
+              {#if w.kind === 'desk'}
                 <DeskDrawer
                   {desk}
                   {staff}
@@ -1290,66 +1287,57 @@
     </button>
   </div>
 
-  <!-- The end side: the selected staffer, resizable, and collapsible to a rail -->
-  {#if profile}
+  <!-- The end side: every Odd on the rail, and the picked one's panel beside it.
+       Folding the panel (») leaves the rail, where the Odd's avatar opens it again. -->
+  {#if showRail}
+    <!-- Fills the screen so the rail keeps its place while it slides toward the edge. -->
+    <div class="pointer-events-none absolute inset-0 z-20" transition:fly={fromEdge(80)}>
+      <OddsRail
+        {staff}
+        {status}
+        {waiting}
+        {inProgress}
+        selected={profile && !rightCollapsed ? selected : undefined}
+        find={findAgent}
+        searching={railAsked}
+        onleave={() => (railAsked = false)}
+        onselect={select}
+        onchat={(id) => chatAbout(id, '')}
+      />
+    </div>
+  {/if}
+  {#if profile && !rightCollapsed}
     <SidePanel
       side="end"
       label="Selected Odd"
       bind:width={rightWidth}
-      bind:collapsed={rightCollapsed}
+      inset={0}
       min={360}
       max={1000}
       storageKey="oddboro.panel.end"
     >
-      {#snippet rail()}
-        <div class="flex w-full flex-col items-center gap-3 py-3">
-          <button
-            class="rounded-xl p-1 hover:bg-raise"
-            aria-label={`Open ${profile.name}'s panel`}
-            title="Expand"
-            onclick={() => (rightCollapsed = false)}
-          >
-            <Pixel
-              src={profile.look?.portrait}
-              frame={`${profile.portrait}/default`}
-              fallback={`${profile.sprite}@${profile.variant}/idle-down-0`}
-              scale={1}
-              label={profile.name}
-              class="flex size-10 items-center justify-center overflow-hidden rounded-lg bg-sea-deep"
-            />
-          </button>
-          <button
-            class="rounded-full px-2 py-1 text-muted hover:text-ink"
-            aria-label="Expand the panel"
-            onclick={() => (rightCollapsed = false)}>«</button
-          >
-          <button
-            class="rounded-full px-2 py-1 text-muted hover:text-ink"
-            aria-label="Close"
-            onclick={() => select(undefined)}>✕</button
-          >
-        </div>
-      {/snippet}
       {#key profile.id}
-        <StaffCard
-          {profile}
-          activity={selectedActivity}
-          {version}
-          working={working[profile.id]}
-          work={inProgress[profile.id] ?? []}
-          show={cardShow?.id === profile.id ? cardShow : undefined}
-          {places}
-          manual={!!manual[profile.id]}
-          sentTo={manual[profile.id]}
-          {held}
-          onsend={(place) => send(profile.id, place)}
-          onschedule={() => backToSchedule(profile.id)}
-          onchatstart={() => chatStart(profile.id)}
-          onchatend={() => chatEnd(profile.id)}
-          oncollapse={() => (rightCollapsed = true)}
-          onclose={() => select(undefined)}
-          onitem={(d) => openDelivered(profile.id, d)}
-        />
+        <div class="h-full" in:fly={fromEdge()}>
+          <StaffCard
+            {profile}
+            activity={selectedActivity}
+            {version}
+            working={working[profile.id]}
+            work={inProgress[profile.id] ?? []}
+            show={cardShow?.id === profile.id ? cardShow : undefined}
+            {places}
+            manual={!!manual[profile.id]}
+            sentTo={manual[profile.id]}
+            {held}
+            onsend={(place) => send(profile.id, place)}
+            onschedule={() => backToSchedule(profile.id)}
+            onchatstart={() => chatStart(profile.id)}
+            onchatend={() => chatEnd(profile.id)}
+            oncollapse={() => (rightCollapsed = true)}
+            onclose={() => select(undefined)}
+            onitem={(d) => openDelivered(profile.id, d)}
+          />
+        </div>
       {/key}
     </SidePanel>
   {/if}

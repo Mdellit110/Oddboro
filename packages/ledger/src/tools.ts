@@ -1,6 +1,6 @@
 // The office's own tools, in plain words. Every staffer has the ones marked
 // `always`: they are how it asks the owner for things and sees what it holds.
-// The owner grants the rest one staffer at a time, from the Access tab. Safe to
+// The owner grants the rest one staffer at a time, from the Settings tab. Safe to
 // import in the browser.
 import type { AskKind, Step } from './schema.ts';
 

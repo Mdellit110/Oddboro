@@ -52,6 +52,26 @@ export const INSTRUCTIONS = [
   '.gemini'
 ];
 
+/**
+ * git's usual places for code that runs the next time git runs in a
+ * repository: its hooks, its config file, which can name a program, and the
+ * copies of both a submodule keeps in `.git/modules`, which `git status` in
+ * the repository above runs too. A run never writes them in a folder the
+ * owner gave it to change, but reads them, since git cannot run without
+ * reading `.git/config`. So they are never shut both ways like
+ * `INSTRUCTIONS`. All of `.git/modules` is shut to writes, so an Odd cannot
+ * update a submodule there either: its objects sit in the same folder.
+ * Claude Code, Grok and Gemini take them as write refusals. Codex gets none:
+ * it keeps each write folder's own `.git` read only by itself, and a
+ * repository further in is not covered for Codex, since it takes a glob only
+ * as `deny`, which would stop git reading (`filesystem` in codex.ts).
+ * They do not stop every way code in a project can run later: a `.git`
+ * pointer file or `.git/commondir` can name a config elsewhere, and code
+ * sits in project files such as package scripts, a Makefile or tests. The
+ * owner looks at what an Odd changed before running that project's tools.
+ */
+export const REPO_RUNS = ['.git/hooks', '.git/config', '.git/modules'];
+
 export type StaffFile = { staff: string; path: string; content: string; mtime: number };
 export type FileName = { staff: string; path: string };
 
@@ -311,13 +331,54 @@ export function instructionPaths(writes: string[]): string[] {
 }
 
 /**
- * The paths a run may not write in the folders it writes (`writes`): no run
- * writes its tools' own instructions, and a run reading the owner's edit to a
- * file in its folder (`dir`) may not write that file. Each tool turns them
- * into its own rules.
+ * git's usual places (`REPO_RUNS`: hooks, the config file, submodules'
+ * copies) in the folders the owner gave a run to change (`granted`), as path
+ * globs, at the top and in any repository further in; not every way code
+ * there can run later (`REPO_RUNS` says which). Only those folders, as the
+ * owner ruled: the Odd's own folder and its part of a thread are the
+ * office's, not the owner's projects. A Codex Odd can start a repository in
+ * a subfolder of its own folder. A Claude Code Odd cannot start one anywhere:
+ * Claude Code's own sandbox refuses every `.git/config` write, and its
+ * sandbox setting that allows git config did not change that on 2.1.318
+ * (measured in a live run). So in a granted repository a Claude Code Odd's write to
+ * `.git/config` is refused by these paths and by Claude Code itself (a live
+ * run: exit 1, the file unchanged).
  */
-export function deniedEdits(dir: string, writes: string[], edited?: string): string[] {
-  return [...instructionPaths(writes), ...(edited ? [join(dir, edited)] : [])];
+export function repoRunPaths(granted: string[]): string[] {
+  return REPO_RUNS.flatMap((p) => granted.flatMap((w) => [`${w}/${p}`, `${w}/**/${p}`]));
+}
+
+/**
+ * The paths a run may not write: its tools' own instructions in every folder
+ * it writes (`writes`), for a run reading the owner's edit to a file in its
+ * folder (`dir`) that file, and a repository's hooks, config and submodules
+ * in the folders the owner gave it to change (`granted`, some of `writes`).
+ * Those shut git's usual places; they do not stop every way code in a
+ * project can run later: a `.git` pointer file or `.git/commondir` naming a
+ * config elsewhere, a nested repository for Codex, and code in project files
+ * such as package scripts, a Makefile or tests. The owner looks at what an
+ * Odd changed before running that project's tools.
+ * `granted` is required, empty when the owner gave none, so a caller that
+ * leaves it out fails the type check rather than protecting nothing; the
+ * argument is named because `writes` and `granted` swapped would type-check.
+ * Each tool turns the paths into its own rules.
+ */
+export function deniedEdits({
+  dir,
+  writes,
+  granted,
+  edited
+}: {
+  dir: string;
+  writes: string[];
+  granted: string[];
+  edited?: string;
+}): string[] {
+  return [
+    ...instructionPaths(writes),
+    ...repoRunPaths(granted),
+    ...(edited ? [join(dir, edited)] : [])
+  ];
 }
 
 /**
