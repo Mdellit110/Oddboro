@@ -19,6 +19,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, mock, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { ownerWords } from '../../../../../packages/ledger/test/owner-words.ts';
 
 const folder = mkdtempSync(join(tmpdir(), 'oddboro-thread-files-'));
@@ -394,7 +395,7 @@ async function lenasTools() {
   await client.connect(
     new StdioClientTransport({
       command: process.execPath,
-      args: [new URL('../../../../../packages/ledger/src/mcp.ts', import.meta.url).pathname],
+      args: [fileURLToPath(new URL('../../../../../packages/ledger/src/mcp.ts', import.meta.url))],
       env: { ...env, STAFF_ID: 'lena', THREAD_ID: String(gameWork), RUN_KEY: 'k-lena' },
       stderr: 'ignore'
     })
