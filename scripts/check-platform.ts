@@ -3,20 +3,11 @@
 // `process.platform` in the office's and the packages' source, so a test that
 // fakes the system reaches every reader. Tests read it to fake it, so they are
 // left out; so are comments, which may name it.
-import { read, repoFiles, report } from './lib/files.ts';
+import { read, repoFiles, report, withoutComments } from './lib/files.ts';
 
 const HOME = 'packages/ledger/src/platform.ts';
 const SOURCE = /^(apps\/office\/src|packages\/[^/]+\/src)\//;
 const READ = /\bprocess\.platform\b/;
-
-/**
- * The text with comments taken out, keeping each line where it was so a
- * failure names the right one (a `//` after a colon is a URL).
- */
-const code = (text: string) =>
-  text
-    .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ''))
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 const files = repoFiles().filter(
   (f) =>
@@ -27,11 +18,11 @@ const files = repoFiles().filter(
 );
 
 const failures: string[] = [];
-if (!files.includes(HOME) || !READ.test(code(read(HOME))))
+if (!files.includes(HOME) || !READ.test(withoutComments(read(HOME))))
   failures.push(`found no read in ${HOME}: nothing to check`);
 for (const file of files) {
   if (file === HOME) continue;
-  code(read(file))
+  withoutComments(read(file))
     .split('\n')
     .forEach((line, i) => {
       if (READ.test(line))

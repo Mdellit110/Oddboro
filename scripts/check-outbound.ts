@@ -5,7 +5,7 @@
 // Matches call names in text, with comments taken out, because the guards take
 // no dependencies. It cannot see inside a library whose own calls start from a
 // name not listed here.
-import { read, repoFiles, report } from './lib/files.ts';
+import { read, repoFiles, report, withoutComments } from './lib/files.ts';
 import { OUTBOUND } from './outbound.ts';
 
 const OFFICE =
@@ -17,20 +17,10 @@ const TS_CALLS =
   /(?<![.\w$])fetch\(|\bglobalThis\.fetch\(|\bnew (?:StreamableHTTPClientTransport|SSEClientTransport|WebSocket)\(|\bhttps?\.(?:request|get)\(|\bSentry\.init\(/g;
 const RS_CALLS = /\bsentry::init\(|\breqwest::|\.updater_builder\(/g;
 
-/**
- * The text with comments taken out, keeping each line where it was so a
- * failure names the right one (a `//` after a colon is a URL). Rust's
- * comments take the same shapes.
- */
-const code = (text: string) =>
-  text
-    .replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ''))
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
-
 /** Each call site in the file, as `file:line`. */
 function callsIn(file: string): string[] {
   const calls = file.endsWith('.rs') ? RS_CALLS : TS_CALLS;
-  return code(read(file))
+  return withoutComments(read(file))
     .split('\n')
     .flatMap((line, i) => (line.match(calls) ?? []).map(() => `${file}:${i + 1}`));
 }
