@@ -133,6 +133,8 @@
   let cardShow = $state<{ id: string; tab: 'work'; n: number } | undefined>();
   /** Bumps when jobs, runs, access, goals, threads or lessons change, so the card's tabs and the Goals and Lessons windows reload. */
   let version = $state(0);
+  /** Bumped on a change to the ledger's rows, so the Ledger window searches again. */
+  let ledgerVersion = $state(0);
   /** What the page does when each table changes, by the name the event carries. */
   const ON_CHANGE = new Map<string, LiveTable['page']>(
     Object.entries(LIVE_TABLES).map(([table, live]) => [table, live.page])
@@ -620,6 +622,7 @@
       if (page.includes('reload')) return firstRun || landing ? void refresh() : location.reload();
       if (page.includes('refresh')) refresh();
       if (page.includes('version')) version++;
+      if (page.includes('ledger')) ledgerVersion++;
     };
 
     (async () => {
@@ -1186,7 +1189,7 @@
               {:else if w.kind === 'lessons'}
                 <LessonsLibrary {staff} {version} bind:filter={w.filter} />
               {:else if w.kind === 'ledger'}
-                <LedgerPanel {staff} />
+                <LedgerPanel {staff} version={ledgerVersion} />
               {:else if w.kind === 'setup'}
                 <Welcome
                   office={office.name}
