@@ -86,6 +86,7 @@ npm run sprites             # recompile the art after editing a .px file
 npm run render -- main-street  # render the Main Street floor to packages/world/out/
 npm run lint                # guards, prettier, then each workspace
 npm run check-types         # tsc and svelte-check everywhere
+npm test                    # every workspace's tests, sprites first
 npm run format              # prettier write
 npm run bundle -w @oddboro/desktop   # build Oddboro.app and the .dmg from apps/desktop/stage
 npm run shell -w @oddboro/desktop    # the desktop shell against a running office (ODDBORO_SERVER_URL)
