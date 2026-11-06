@@ -10,12 +10,13 @@ import {
   odd,
   OFFICE_PROCESS_GIT,
   onPlatform,
+  ownerHome,
   setOwn,
   withEnv,
   type Gave
 } from './office-under-test.ts';
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Agent } from '@oddboro/ledger';
@@ -101,9 +102,13 @@ const WALLS: Record<Agent, (gave: Gave) => { reads: string[]; network: boolean }
       }
     ).sandbox;
     return {
-      reads: listAfter(g.args, '--allowedTools')
-        .filter((a) => a.startsWith('Read(/'))
-        .map((a) => a.slice('Read(/'.length, -'/**)'.length)),
+      // Its Read allow rules, and the folders it works in besides its own.
+      reads: [
+        ...listAfter(g.args, '--allowedTools')
+          .filter((a) => a.startsWith('Read(/'))
+          .map((a) => a.slice('Read(/'.length, -'/**)'.length)),
+        ...each(g.args, '--add-dir')
+      ],
       network:
         each(g.args, '--tools')[0]
           .split(',')
@@ -138,15 +143,20 @@ const listed = (name: string, names: readonly (string | RegExp)[], platform: Nod
       : n.test(name)
   );
 
-/** One chat with each tool on each system it runs on, from the hostile office, with a read folder and web off. */
+/**
+ * One chat with each tool on each system it runs on, from the hostile office,
+ * with a read folder, any `stored` folders besides, and web off.
+ */
 async function eachLaunch(
-  check: (gave: Gave, agent: Agent, platform: NodeJS.Platform) => void
+  check: (gave: Gave, agent: Agent, platform: NodeJS.Platform) => void,
+  stored: string[] = []
 ): Promise<number> {
   const read = join(folder, 'contract-read');
   mkdirSync(read, { recursive: true });
+  const folders = [read, ...stored].map((path) => ({ path, write: false }));
   let launches = 0;
   for (const agent of L.AGENTS) {
-    await setOwn(ODDS[agent], { web: false, folders: [{ path: read, write: false }] });
+    await setOwn(ODDS[agent], { web: false, folders });
     for (const platform of L.AGENT_PLATFORMS[agent].runs) {
       const gave = await withEnv({ ...HOSTILE, ...PROXIED, ...SERVER_ONLY }, () =>
         onPlatform(platform, () => chatOf(ODDS[agent]))
@@ -198,3 +208,26 @@ test("an owner's proxy and certificate settings reach every run", async () => {
       assert.ok(listed(n, gave.envNames, platform), `${agent} on ${platform} lost ${n}`);
   });
 });
+
+test('a secret store stored as a folder never reaches any run, in any case the disk ignores', () =>
+  ownerHome(async (home) => {
+    for (const s of ['.ssh', '.docker']) mkdirSync(join(home, s));
+    // Stored straight to the table, as a folder given before a rule named
+    // its store was, which the folder check no longer sees.
+    const stored = ['.ssh', '.SSH', '.docker'].map((s) => join(home, s));
+    const stores = ['.ssh', '.docker'].map((s) => realpathSync.native(join(home, s)));
+    const real = (p: string) => (existsSync(p) ? realpathSync.native(p) : p);
+    const given: string[] = [];
+    const launches = await eachLaunch((gave, agent, platform) => {
+      const reads = WALLS[agent](gave).reads.map(real);
+      assert.ok(
+        reads.includes(real(join(folder, 'contract-read'))),
+        `${agent} lost its read folder`
+      );
+      for (const r of new Set(reads))
+        if (stores.some((s) => r === s || r.startsWith(s + '/')))
+          given.push(`${agent} on ${platform}: ${r.slice(real(home).length)}`);
+    }, stored);
+    assert.deepEqual(given, [], 'a run was given a secret store');
+    assert.ok(launches > 0, 'no tool runs anywhere: nothing was checked');
+  }));

@@ -504,8 +504,25 @@ export function shownFolder(path: string): string {
  * folder that holds one is refused at the door. A real path with a character
  * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
  * what a run is given. Only `setFolder` calls this, as a folder is given, so a
- * folder given before a rule was added is not checked again.
+ * folder given before a rule was added is not checked again, but for the
+ * secret stores, which every run checks again (`touchesSecretStore`).
  */
+/**
+ * Whether the folder at `path`, by its real path, is a secret store
+ * (`SECRET_STORES`), sits in one or holds one. `checkFolder` refuses such a
+ * folder as it is given, and `ownTools` leaves out one stored before its
+ * store was listed, or written past `setFolder`, so no run is given it. By
+ * real path, so on a disk that ignores case `~/.SSH` is `~/.ssh`.
+ */
+export function touchesSecretStore(path: string): boolean {
+  const p = real(path);
+  const h = real(homedir());
+  return SECRET_STORES.some((s) => {
+    const store = real(join(h, s));
+    return within(p, store) || within(store, p);
+  });
+}
+
 export function checkFolder(path: string): { real: string } | { refused: string } {
   const typed = path.trim();
   const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
@@ -515,8 +532,7 @@ export function checkFolder(path: string): { real: string } | { refused: string 
   const h = real(homedir());
   if (p === h || !within(p, h)) return { refused: FOLDER_REFUSED.home };
   const either = (q: string) => within(p, q) || within(q, p);
-  if ([...SECRET_STORES.map((s) => real(join(h, s))), real(home())].some(either))
-    return { refused: FOLDER_REFUSED.secrets };
+  if (touchesSecretStore(p) || either(real(home()))) return { refused: FOLDER_REFUSED.secrets };
   if (either(real(CODE))) return { refused: FOLDER_REFUSED.code };
   const glob = GLOB.exec(p)?.[0];
   if (glob) return { refused: FOLDER_REFUSED.glob(glob) };

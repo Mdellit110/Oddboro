@@ -222,7 +222,10 @@ hand-off or number, which ledger tests and the office's format test share.
   Each setter holds its own checks, whoever calls it: `setOwnTool()` refuses
   Run commands, on or off and a repeat included, for a tool that does not
   follow the switch on this system, and `setFolder()` runs `checkFolder()` on
-  a folder given and stores its real path.
+  a folder given and stores its real path. A stored folder in or holding a
+  secret store reaches no run, even one given before its store was listed:
+  `ownTools()` leaves it out by `touchesSecretStore()`, the test
+  `checkFolder()` makes too. The Settings tab still lists it, to take back.
   The stored value is the owner's choice; whether a run gets a shell also
   depends on its tool (`commandsHow()`: Claude Code on a Mac follows the
   switch, Codex always has one, Grok and Gemini never), so a tool switch never

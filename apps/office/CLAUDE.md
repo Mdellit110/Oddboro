@@ -345,7 +345,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    a level change or Remove sends the path as stored. `run()` takes the
    switches and folders as its tool takes them from `capabilities()`
    (`caps.own`), less a held network, and passes the given folders still on
-   the disk; the prompt lists them under "Where things are", and "What you
+   the disk and in no secret store (`touchesSecretStore` in the ledger); the prompt lists them under "Where things are", and "What you
    can do" says what the Odd's own tools reach and, for Run commands or
    Browse the web when it lacks one, whether the owner can switch it on in
    its Settings tab (`ownToolsSaid` in the ledger's `capabilities.ts`, held

@@ -29,7 +29,14 @@ import {
   type CommandsHow,
   type GrantedFolder
 } from './agents.ts';
-import { grantsFor, heldReach, type ConnectorRow, type GrantRow, type StaffRow } from './office.ts';
+import {
+  grantsFor,
+  heldReach,
+  touchesSecretStore,
+  type ConnectorRow,
+  type GrantRow,
+  type StaffRow
+} from './office.ts';
 import { hasTool, OFFICE_TOOLS } from './tools.ts';
 import { currentPlatform } from './platform.ts';
 
@@ -55,7 +62,7 @@ export type OwnTools = {
   web: boolean;
   /** Whether its commands reach the internet (`commandsOnline`). */
   network: boolean;
-  /** The folders the owner gave it that are still on the disk. */
+  /** The folders the owner gave it that are still on the disk and in no secret store. */
   granted: GrantedFolder[];
 };
 
@@ -69,8 +76,9 @@ export function ownTools(
     commandsHow: commandsHow(who.agent, platform),
     web: who.web,
     network: commandsOnline(who.agent, platform, who),
-    // A folder deleted since the owner gave it reaches no tool.
-    granted: who.folders.filter((f) => existsSync(f.path))
+    // A folder deleted since the owner gave it reaches no tool, nor one in or
+    // holding a secret store, given before its store was listed.
+    granted: who.folders.filter((f) => existsSync(f.path) && !touchesSecretStore(f.path))
   };
 }
 
