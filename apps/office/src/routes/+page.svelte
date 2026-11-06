@@ -42,7 +42,7 @@
   import { fly } from 'svelte/transition';
   import { placesFor, type Place } from '#lib/staff/places.ts';
   import PixelPencil from '#lib/ui/PixelPencil.svelte';
-  import { call } from '#lib/ui/api.ts';
+  import { call, type ApiUrl } from '#lib/ui/api.ts';
   import { setZone, zone, zoneName, zoneShort } from '@oddboro/ledger/time';
   import { LIVE_TABLES, type LiveTable } from '@oddboro/ledger/live-tables';
 
@@ -593,7 +593,7 @@
     const timer = setInterval(() => (now = new Date()), 15_000);
 
     // One live line from the server. Changes arrive as they happen.
-    const events = new EventSource('/api/events');
+    const events = new EventSource('/api/events' satisfies ApiUrl);
     events.onmessage = (m) => {
       const e = JSON.parse(m.data) as OfficeEvent;
       if (e.type === 'working') {

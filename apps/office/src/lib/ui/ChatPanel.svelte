@@ -6,7 +6,7 @@
   import { clockTime } from '@oddboro/ledger/time';
   import Markdown from './Markdown.svelte';
   import Lesson from './Lesson.svelte';
-  import { call } from './api.ts';
+  import { call, type ApiUrl } from './api.ts';
   import { when, workLine } from './format.ts';
   import { chatRequest, takeDraft, type Delivered } from './chat-about.svelte.ts';
   import type { StaffProfile } from '../staff/roster.ts';
@@ -175,7 +175,7 @@
   let upcoming = $state<PokeRow[]>([]);
 
   function load(id: string) {
-    fetch(`/api/staff/${id}/chat`)
+    fetch(`/api/staff/${id}/chat` satisfies ApiUrl)
       .then((r) => r.json())
       .then((d: { history: ChatEntry[]; busy: boolean }) => {
         lines = d.history.map((h) => ({ ...h }));
@@ -248,7 +248,7 @@
     scrollDown();
     onstart();
     try {
-      const res = await fetch(`/api/staff/${profile.id}/chat`, {
+      const res = await fetch(`/api/staff/${profile.id}/chat` satisfies ApiUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message, re: re && { kind: re.kind, id: re.id } })
