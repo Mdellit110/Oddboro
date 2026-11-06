@@ -2,7 +2,7 @@
 
 Effective date: November 3, 2026
 
-> **The short version.** Oddboro is open source software that runs on your own computer: a Mac, Windows or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that stores your office's data. If you say yes, the software sends error and tracing reports through New Altitude's relay to Sentry, which stores them; it sends nothing of the kind until you do, and you can say no again in Setup. If you already have a New Altitude account, you can sign in to it from the office. Signing in is optional. It sends your sign-in to New Altitude, and the office keeps only your account's id, name and email, with the sign-in, in your system's secret store. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today the only personal data we can hold about you is the approximate location in error reports you chose to send and, if you sign in to a New Altitude account, the record of that sign-in. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
+> **The short version.** Oddboro is open source software that runs on your own computer: a Mac, Windows or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that stores your office's data. If you sign in to a New Altitude account and say yes, the software sends error and tracing reports through New Altitude's relay, which checks your sign-in, to Sentry, which stores them without your account; it sends nothing of the kind until you do, and you can say no again in Setup. If you already have a New Altitude account, you can sign in to it from the office. Signing in is optional. It sends your sign-in to New Altitude, and the office keeps only your account's id, name and email, with the sign-in, in your system's secret store. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today the only personal data we can hold about you is the approximate location in error reports you chose to send and, if you sign in to a New Altitude account, the record of that sign-in, and a record if our relay ever turns your account away. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
 
 ## 1. Who we are
 
@@ -68,14 +68,16 @@ You may point the office at a different Postgres database by setting `DATABASE_U
 
 ### What never happens
 
-- **No reports without your yes.** The software sends error and tracing reports only after you say yes, in your first visit, on the Desk, or in Setup. Until then it sends none, and saying no stops them at once.
-- **No New Altitude server holds your office.** There is no sync and no cloud copy, and you need no account with us. The software reaches New Altitude only in two ways you choose: the error report relay after your yes (see "Error and tracing reports" below), and signing in to a New Altitude account you already have (see "Your New Altitude account" in section 5).
+- **No reports without your yes.** The software sends error and tracing reports only after you say yes, in your first visit, on the Desk, or in Setup. Until then it sends none, and saying no stops them at once. Reports also need a New Altitude sign-in: while you are signed out the software sends none, and when you sign in again your earlier answer holds.
+- **No New Altitude server holds your office.** There is no sync and no cloud copy, and you need no account with us to use the office. The software reaches New Altitude only in two ways you choose: the error report relay after your yes, while you are signed in (see "Error and tracing reports" below), and signing in to a New Altitude account you already have (see "Your New Altitude account" in section 5).
 - **No remote access.** The office listens on `127.0.0.1` only, so nothing outside your computer can reach it. Its built-in database does the same. If you choose the `https://local.oddboro.com` address during setup, the Caddy proxy that serves it listens on ports 80 and 443 and answers only for that name, which resolves to `127.0.0.1`.
 - **No sale or sharing.** We never receive your office's data, so we cannot sell it, share it, rent it or use it to train anything. Error reports you choose to send are used only to fix Oddboro.
 
 ### Error and tracing reports (only if you say yes)
 
 When something in Oddboro breaks, a report helps us fix it. You choose whether the software sends them.
+
+Reports need a New Altitude sign-in. The software sends them only while you are signed in to a New Altitude account (see "Your New Altitude account" in section 5), and stops when you sign out.
 
 What a report holds:
 
@@ -85,11 +87,11 @@ What a report holds:
 
 What a report never holds: your IP address, your computer's name, cookies, request headers or bodies, web address query strings, your chats, your Odds' prompts or work, the tools they use and what they send them, the addresses of other services or computers the office reaches, the names of your folders, what is in your files, your family's details, or your name. An error's message is included only when Oddboro's code wrote it or it follows a fixed pattern: a JavaScript engine error (such as "x is not a function", with any data in it removed), a system error's code (such as "ENOENT open", without the file it names), or a database error's code with the names of the table, column and constraint it touched.
 
-Where it goes: the app sends each report to a relay New Altitude runs on Cloudflare, which adds our Sentry key and passes it to Sentry, the service that stores our error reports. The relay keeps no report and no IP address. Sentry does not store your IP address. It keeps the approximate location (city and country) the address points to. Sentry keeps reports for 90 days, then deletes them.
+Where it goes: the app sends each report, with your sign-in's access token, to a relay New Altitude runs on Cloudflare. The relay checks that the token belongs to a New Altitude account, removes it, adds our Sentry key and passes the report to Sentry, the service that stores our error reports. Sentry never receives your token or your account. The relay keeps no report, no IP address and no record of which account sent it; if it turns an account away, New Altitude keeps a record of that refusal under the New Altitude Privacy Policy. Sentry does not store your IP address. It keeps the approximate location (city and country) the address points to. Sentry keeps reports for 90 days, then deletes them.
 
-If you run Oddboro from source, it sends no reports unless you name your own Sentry address in `.env` as `ODDBORO_DIAGNOSTICS_DSN`. Then it sends straight to your Sentry, never to us.
+If you run Oddboro from source, it sends no reports unless you name your own Sentry address in `.env` as `ODDBORO_DIAGNOSTICS_DSN`. Then it sends straight to your Sentry, never to us. It needs no New Altitude sign-in and sends none.
 
-To stop: open Setup and turn off "Send error and tracing reports to New Altitude". The office stops at once.
+To stop: open Setup and turn off "Send error and tracing reports to New Altitude". The office stops at once. Signing out stops them too.
 
 ### Local search embeddings
 
@@ -124,12 +126,13 @@ Anthropic processes all of this under your agreement with Anthropic: its [Consum
 
 ### Your New Altitude account (only if you sign in)
 
-If New Altitude gave you an account, you can sign in to it from the office: on your first visit, or later in Setup under Account. Nothing in the office needs it.
+If you have a New Altitude account, you can sign in to it from the office: on your first visit, or later in Setup under Account. Only error reports need it.
 
 - Signing in opens New Altitude's own sign-in page in your browser. You sign in there, and you may be asked to accept New Altitude's Beta Terms.
 - The office then asks New Altitude who you are. It keeps only your account's id, name and email, with the sign-in, in your system's secret store.
 - New Altitude keeps a record that your account signed in from Oddboro, under the [New Altitude Privacy Policy](https://newaltitude.ai/privacy).
 - Signing in sends nothing from your office to New Altitude: no chats, no Odds, no files.
+- If you also said yes to error reports, each report goes to New Altitude's relay with your sign-in, as "Error and tracing reports" describes.
 - To sign out, open Setup and choose Sign out under Account. The office tells New Altitude to end the sign-in, then deletes it from your computer.
 
 ### Ollama

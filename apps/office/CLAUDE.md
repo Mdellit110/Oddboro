@@ -379,7 +379,8 @@ owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Cu
 a description or a chip, and starts the design job), New Altitude
 (`AccountCard`, an optional sign-in to the owner's account, with Skip; see "A
 New Altitude account"), Help fix Oddboro
-(`DiagnosticsCard`, only when the office has somewhere to send reports: Send
+(`DiagnosticsCard`, only when the office has somewhere to send reports and, for
+New Altitude's address, is signed in (`shown()`; see "Diagnostics"): Send
 reports or Don't send, each kept at once; Next works without an answer, and the
 Desk asks once the office is open), and Open the office. `POST /api/onboarding` keeps the time zone, finishes the
 welcome, hires the manager (`hireManager`), writes their hello into their chat
@@ -456,7 +457,9 @@ into the page (scripts, styles, images) are served before the check.
 
 ## Diagnostics
 
-Error and trace reports go to Sentry only after the owner's yes.
+Error and trace reports go to Sentry only after the owner's yes, and those
+through New Altitude only while the office is signed in to a New Altitude
+account.
 
 1. The address is `ODDBORO_DIAGNOSTICS_DSN`, from the environment or `.env`.
    The app's shell passes its own (`apps/desktop/CLAUDE.md`). With none,
@@ -495,14 +498,29 @@ Error and trace reports go to Sentry only after the owner's yes.
    (`infer_ip: 'never'`), and `fitDoor` cuts an envelope to the door's size
    limit.
 
-4. The relay: the page's SDK (`hooks.client.ts`) posts to
+4. The sign-in: reports to New Altitude's own address over https, or to the
+   account site when `ODDBORO_ACCOUNT_SITE` names one (`needsSignIn` in
+   `src/lib/diagnostics.ts`; the shell's `needs_sign_in` is the same rule,
+   and both are tested against `src/lib/needs-sign-in.cases.json`), go only
+   while the office is signed in, each with the account's access token in
+   its `authorization` header. Signed out, the gate drops them, the page
+   offers no reports (`shown()`) and its traces follow a no (`pageAnswer()`).
+   Any other address never gets the token. The gate gets it from
+   `accountToken()` and reuses it for `TOKEN_REUSE_MS`, under the refresh
+   margin, within one sign-in: a burst of reports reads the secret store
+   once, and a new sign-in never sends the old token. It imports
+   `account.ts` when a report goes, never at the top, because that brings
+   in Postgres (step 7). `flush` waits for every send from its start,
+   including one still waiting on a token refresh, so the SDK's flush before
+   a crash ends the office loses none.
+5. The relay: the page's SDK (`hooks.client.ts`) posts to
    `/api/diagnostics/envelope`, never to Sentry. The route scrubs each event
    and span again and sends them through the office's own transport, so the
    gate applies to them too.
-5. Traces: about one in ten (`TRACE_SAMPLE_RATE`). `QUIET_ROUTES` are never
+6. Traces: about one in ten (`TRACE_SAMPLE_RATE`). `QUIET_ROUTES` are never
    traced: `/api/events` stays open as long as the page, `/api/update` is the
    shell's poll, and the relay would trace itself.
-6. `instrumentation.server.ts` loads before the server, so
+7. `instrumentation.server.ts` loads before the server, so
    `src/lib/server/diagnostics.ts` and `src/lib/server/hosts.ts` import
    nothing that brings in Postgres.
 
@@ -510,7 +528,8 @@ Error and trace reports go to Sentry only after the owner's yes.
 
 An owner who already has a New Altitude account can sign in to it, on the
 first visit (`AccountCard`) or in Setup (`AccountSection`); both show
-`AccountSignIn.svelte`. Nothing in the office needs it.
+`AccountSignIn.svelte`. Error reports to New Altitude need it; nothing else
+does.
 
 1. The site is `ODDBORO_ACCOUNT_SITE`, `https://members.newaltitude.ai` when
    unset. The issuer comes from that site's protected resource document; the
