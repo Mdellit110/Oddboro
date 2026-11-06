@@ -158,6 +158,7 @@ import {
 } from './launch.ts';
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
+import { sandboxPaths } from './sandbox-paths.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
 import { followUpBrief } from './follow-up-brief.ts';
@@ -920,9 +921,9 @@ async function run(
   // run can make it.
   const data = existsSync(DATA) ? [DATA] : [];
   // Commands get a temp folder of their own: short, since a long one falls
-  // back to the folder every run shares, and spelt /private/tmp, since /tmp
-  // broke every command (both measured). Commands are on only on a Mac.
-  const tmp = own.commands ? `/private/tmp/ob-${key.slice(0, 8)}` : undefined;
+  // back to the folder every run shares (measured), under this system's temp
+  // root (`SANDBOX_PATHS`).
+  const tmp = own.commands ? join(sandboxPaths().tmpRoot, `ob-${key.slice(0, 8)}`) : undefined;
   // The temp folder comes last: npm keeps its cache there (`shellEnv`), and
   // without it in --add-dir the sandbox refuses npm's writes (measured).
   const workIn = tmp

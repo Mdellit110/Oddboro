@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { home, OFFICE_ACCOUNT, OFFICE_MODEL_VAR, toolHome, type Effort } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
 import { devReads } from './sandbox.ts';
+import { sandboxPaths } from './sandbox-paths.ts';
 import {
   mcpGrant,
   NOT_SIGNED_IN,
@@ -164,10 +165,7 @@ type CodexLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; done
  * 0.166.0). The folder xcode-select uses by default, and the link it reads
  * when the owner switched it elsewhere; /var is itself a link.
  */
-const DEVELOPER_TOOLS = [
-  '/Library/Developer/CommandLineTools',
-  '/private/var/db/xcode_select_link'
-];
+const developerToolFolders = () => sandboxPaths().codexReads;
 
 /**
  * The OpenSSL config node reads as it starts, at the folder its OpenSSL was
@@ -178,13 +176,13 @@ const DEVELOPER_TOOLS = [
  * node reads its own OPENSSLDIR under the Homebrew prefix instead, which is
  * not granted, so an Odd's JavaScript fails there the same way.
  */
-const NODE_OPENSSL = '/System/Library/OpenSSL/openssl.cnf';
+const nodeOpenssl = () => sandboxPaths().opensslConf;
 
-/** DEVELOPER_TOOLS and the developer folder in use, once found. */
+/** `developerToolFolders` and the developer folder in use, once found. */
 let developerTools: string[] | undefined;
 
 /**
- * DEVELOPER_TOOLS, and the developer folder xcode-select picks as a real path,
+ * `developerToolFolders`, and the developer folder xcode-select picks as a real path,
  * which is Xcode.app's own on a Mac that uses Xcode. Asked once, as the first
  * run's profile is built, and without DEVELOPER_DIR, which a run's shell does
  * not inherit, so it names the folder the shims in the run go to.
@@ -201,9 +199,9 @@ function developerReads(): string[] {
       picked = [realpathSync(out.trim())];
     } catch {
       // No xcode-select, or no developer folder: a shim has nothing more to
-      // read, so the profile reads DEVELOPER_TOOLS alone.
+      // read, so the profile reads `developerToolFolders` alone.
     }
-    developerTools = [...DEVELOPER_TOOLS, ...picked];
+    developerTools = [...developerToolFolders(), ...picked];
   }
   return developerTools;
 }
@@ -211,7 +209,7 @@ function developerReads(): string[] {
 /**
  * The kernel's allowlist for one run, every path a real one. `:root` shuts
  * everything not named; `:minimal` reads what a command needs to start,
- * `developerReads` what the shims in /usr/bin need, NODE_OPENSSL what
+ * `developerReads` what the shims in /usr/bin need, `nodeOpenssl` what
  * node needs, and `devReads` the owner's developer tools; /tmp,
  * which Codex lets a run write by default, is shut. Instruction files in the
  * folders the run writes are shut both ways, each path and what is under it.
@@ -232,7 +230,7 @@ function filesystem(r: CodexRun, temp: string): Record<string, string> {
     ':minimal': 'read',
     ':slash_tmp': 'deny',
     ...Object.fromEntries(
-      [...developerReads(), NODE_OPENSSL, ...dev.reads, ...r.reads].map((p) => [p, 'read'])
+      [...developerReads(), nodeOpenssl(), ...dev.reads, ...r.reads].map((p) => [p, 'read'])
     ),
     // After the reads, so each deny shuts one file in a folder read above.
     ...Object.fromEntries(dev.denies.map((p) => [p, 'deny'])),

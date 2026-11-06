@@ -386,8 +386,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    passes the office's switches as `-c` (`SWITCHES`) under `--strict-config`.
    A Codex Odd has a shell, held by one kernel permission profile per run
    (`filesystem` in `codex.ts`): everything shut but the system's own folders
-   and Apple's developer tools (`DEVELOPER_TOOLS`, and the folder `xcode-select -p`
-   names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`NODE_OPENSSL`), read, `/tmp` shut, its thread folders, the owner's data folder, the folders the owner gave it
+   and Apple's developer tools (`codexReads` in `SANDBOX_PATHS`, and the folder `xcode-select -p`
+   names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`opensslConf`), read, `/tmp` shut, its thread folders, the owner's data folder, the folders the owner gave it
    and the owner's developer tool folders (`devReads` in `sandbox.ts`, as
    Claude Code's commands read them) read, their listed credential files shut
    but not their env files or projects' git configs, its

@@ -7,6 +7,7 @@ import { existsSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir, hostname, networkInterfaces } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { CODE, GLOB, home, SECRET_STORES, within } from '@oddboro/ledger';
+import { sandboxPaths } from './sandbox-paths.ts';
 import { gitEnv } from './launch.ts';
 
 /** Every host, for commands when Run commands and Browse the web are both on (measured on Claude Code 2.1.318). */
@@ -124,16 +125,7 @@ export function claudeSandbox(o: {
     allowUnsandboxedCommands: false,
     filesystem: {
       // Every home folder and every other disk, not only the owner's home.
-      denyRead: [
-        '~/',
-        '/Users',
-        '/Volumes',
-        '/private/tmp',
-        '/tmp',
-        '/private/var/folders',
-        ...dev.denies,
-        ...dev.globDenies
-      ],
+      denyRead: ['~/', ...sandboxPaths().denyReadRoots, ...dev.denies, ...dev.globDenies],
       allowRead: [
         ...o.reads,
         o.tmp,

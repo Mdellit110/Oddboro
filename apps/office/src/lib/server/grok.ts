@@ -47,13 +47,14 @@ import {
 import { andBelow, denyRules, instructionPaths } from './files.ts';
 import { mcpGrant, NOT_SIGNED_IN, replace, sweep, vendorEnv, type RunImage } from './launch.ts';
 import { onPath } from './on-path.ts';
+import { sandboxPaths } from './sandbox-paths.ts';
 import { GROK_FILE_TOOLS } from '../staff/work.ts';
 
 /**
  * One account's Grok home (`toolHome`) and what Grok keeps in it: its
  * sandbox profiles, its config, each run's agent file (Grok has no
  * --mcp-config), its own temp folder (so it needs none of the temp folders
- * every app shares, `SHUT`), the sign-in (per xAI account, its tokens, its
+ * every app shares, `shut`), the sign-in (per xAI account, its tokens, its
  * `email` and when they run out, `expires_at`; Sign out from the page
  * removes it), and the leader socket every grok outside a run talks to
  * (Grok's default is ~/.grok/leader.sock, the owner's own Grok, whatever
@@ -122,9 +123,9 @@ const SERVER_CODE = [
  * deny path that cannot be bound stops Grok from starting. /etc stays: Grok
  * refuses to start without it.
  */
-const SHUT = [
+const shut = () => [
   ...new Set(
-    [join(homedir(), 'Library'), '/Library', '/tmp', '/var']
+    [join(homedir(), 'Library'), ...sandboxPaths().grokShut]
       .filter((p) => existsSync(p))
       .map((p) => realpathSync(p))
   )
@@ -133,12 +134,9 @@ const SHUT = [
 /**
  * What `strict` reads besides the run's cwd and Grok's home, as Grok 1.0.46
  * on macOS logged it (ProfileApplied in its sessions' sandbox-events.jsonl).
- * Grok and node need what `SHUT` leaves of it to start.
+ * Grok and node need what `shut` leaves of it to start.
  */
-const STRICT_READS = [
-  ...['/usr', '/bin', '/sbin', '/etc', '/dev', '/System', '/Library', '/private', '/tmp', '/var'],
-  join(homedir(), 'Library')
-];
+const strictReads = () => [...sandboxPaths().strictReads, join(homedir(), 'Library')];
 
 /**
  * Everything the kernel may let a Grok run read besides the Odd's own
@@ -148,7 +146,7 @@ const STRICT_READS = [
  * dontAsk, so these deny rules, on each folder and everything in it, keep the
  * Odd's own reads to its folders.
  */
-const UNREADABLE = () => [...GROK_HOMES(), ...SERVER_CODE, ...STRICT_READS];
+const UNREADABLE = () => [...GROK_HOMES(), ...SERVER_CODE, ...strictReads()];
 
 /**
  * The folders ripgrep runs from when it is on PATH: the folder PATH names and,
@@ -334,7 +332,7 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     readOnly: [...SERVER_CODE, ...rg, ...r.reads],
     // `strict` already writes the cwd, the Odd's own folder.
     readWrite: [h.temp, ...r.writes.filter((w) => w !== r.dir)],
-    deny: [...instructionPaths(r.writes), ...SHUT].flatMap(andBelow)
+    deny: [...instructionPaths(r.writes), ...shut()].flatMap(andBelow)
   });
   const agent = agentFile(h, r.key, r.servers);
   const model = r.model ?? process.env[OFFICE_MODEL_VAR.grok];
