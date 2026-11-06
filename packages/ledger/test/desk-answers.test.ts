@@ -100,27 +100,74 @@ const cellOf = (kind: AskKind, decision: Decision) =>
   (OWNER_ANSWERS.ask[kind] as AskAnswer)[decision];
 
 /**
- * What each effect leaves behind, for an ask Ada raised. `hub` is the Odd on
- * the thread the answer goes to, if any.
+ * Each answer pinned by hand, so a wrong cell in OWNER_ANSWERS fails here
+ * rather than moving the office and its test together: the cell as written,
+ * and what reaches an Odd when the ask was raised on a thread and on none
+ * (left out for a kind always raised on one). An answer to the usage window's
+ * ask changes nothing an Odd sees on a no, so only its cell can hold it.
  */
-function expected(kind: AskKind, decision: Decision, hub: string | undefined): string[] {
-  const out: string[] = [];
-  for (const e of effectsOf(cellOf(kind, decision))) {
-    if (typeof e === 'object') continue;
-    if (e === 'carry_out' || e === 'rework') out.push(`${e}:ada`);
-    if (e === 'denied_lesson') out.push('denied:ada');
-    // Gmail is connected already, so the work that waited on it starts at once.
-    if (e === 'grant_access') out.push('grant:ada', 'carry_out:ada');
-    if (e === 'start_held') out.push('hand_off:ivy');
-    if (e === 'answer_back' && hub) out.push(`resume:${hub}`);
-    if (e === 'answer_hand_offs') out.push(`resume:${hub}`);
-    if (e === 'answer_window' && decision === 'approve') out.push(`resume:${hub}`);
-    if (e === 'approval_work') out.push(kind === 'goal' ? 'goal:max' : 'serves:ivy');
+type Pin = { cell: AskAnswer[Decision]; onThread: string[]; onNone?: string[] };
+const OFF_A_THREAD = { none: 'NEW-1715' };
+const NO: Pin = {
+  cell: ['answer_back', 'denied_lesson', OFF_A_THREAD],
+  onThread: ['denied:ada', 'resume:ada'],
+  onNone: ['denied:ada']
+};
+const REWORK: Pin = { cell: ['rework'], onThread: ['rework:ada'], onNone: ['rework:ada'] };
+const REFUSED: Pin = { cell: 'refused', onThread: [] };
+const PINNED: Record<AskKind, Record<Decision, Pin>> = {
+  approval: {
+    approve: { cell: ['carry_out'], onThread: ['carry_out:ada'], onNone: ['carry_out:ada'] },
+    deny: NO,
+    iterate: REWORK
+  },
+  // Gmail is connected already, so the work that waited on it starts at once.
+  access: {
+    approve: {
+      cell: ['grant_access'],
+      onThread: ['carry_out:ada', 'grant:ada'],
+      onNone: ['carry_out:ada', 'grant:ada']
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  hire: {
+    approve: {
+      cell: { by: 'hiring', then: ['answer_back', OFF_A_THREAD] },
+      onThread: ['resume:ada'],
+      onNone: []
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  goal: {
+    approve: {
+      cell: ['approval_work', 'answer_back', OFF_A_THREAD],
+      onThread: ['goal:max', 'resume:ada'],
+      onNone: ['goal:max']
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  // On its goal's thread, which Max leads; the plan's part makes Ivy serve the goal.
+  plan: {
+    approve: { cell: ['approval_work', 'answer_back'], onThread: ['resume:max', 'serves:ivy'] },
+    deny: { cell: ['answer_back', 'denied_lesson'], onThread: ['denied:ada', 'resume:max'] },
+    iterate: { cell: ['rework'], onThread: ['rework:ada'] }
+  },
+  hand_offs: {
+    approve: { cell: ['start_held', 'answer_hand_offs'], onThread: ['hand_off:ivy', 'resume:ada'] },
+    deny: { cell: ['answer_hand_offs', 'denied_lesson'], onThread: ['denied:ada', 'resume:ada'] },
+    iterate: REFUSED
+  },
+  window: {
+    approve: { cell: ['answer_window'], onThread: ['resume:ada'] },
+    deny: { cell: ['answer_window'], onThread: [] },
+    iterate: REFUSED
   }
-  return out.sort();
-}
+};
 
-type Raised = { id: number; hub?: string };
+type Raised = { id: number };
 /** An open ask of each kind, raised as the office raises it, on a thread of Ada's or on none. */
 const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
   approval: async (on) => {
@@ -131,7 +178,7 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       ifApproved: 'i',
       threadId
     });
-    return { id: ask.id, hub: on ? 'ada' : undefined };
+    return { id: ask.id };
   },
   access: async (on) => {
     const threadId = on ? await thread() : undefined;
@@ -143,7 +190,7 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       threadId
     });
     await db.delete(grants);
-    return { id: ask.id, hub: on ? 'ada' : undefined };
+    return { id: ask.id };
   },
   hire: async (on) => {
     const threadId = on ? await thread() : undefined;
@@ -160,7 +207,7 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       },
       threadId
     });
-    return { id: ask.id, hub: on ? 'ada' : undefined };
+    return { id: ask.id };
   },
   goal: async (on) => {
     const threadId = on ? await thread() : undefined;
@@ -172,7 +219,7 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       goal: { title: `Run the fair ${Math.random()}`, horizon: 'ongoing', area: 'home' },
       threadId
     });
-    return { id: ask.id, hub: on ? 'ada' : undefined };
+    return { id: ask.id };
   },
   // A plan always goes on its goal's one thread, which the manager leads.
   plan: async () => {
@@ -184,7 +231,7 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       kind: 'plan',
       plan: { goalId, items: [{ kind: 'assign', staff: 'ivy', part: 'Bake' }] }
     });
-    return { id: ask.id, hub: 'max' };
+    return { id: ask.id };
   },
   // Past the round's limit, Ada's next hand-off to Ivy waits for the owner.
   hand_offs: async () => {
@@ -196,7 +243,7 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       thread: { id }
     });
     assert.ok('asked' in r, JSON.stringify(r));
-    return { id: r.asked, hub: 'ada' };
+    return { id: r.asked };
   },
   // The usage window's ask holds a thread of Ada's until the owner answers.
   window: async () => {
@@ -206,20 +253,9 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       .returning({ id: asks.id });
     const id = await thread();
     await db.update(threads).set({ heldBy: a.id }).where(eq(threads.id, id));
-    return { id: a.id, hub: 'ada' };
+    return { id: a.id };
   }
 };
-/** The ways an ask of each kind is raised: on a thread, and on none where it can be. */
-const PLACES: Record<AskKind, readonly boolean[]> = {
-  approval: [true, false],
-  access: [true, false],
-  hire: [true, false],
-  goal: [true, false],
-  plan: [true],
-  hand_offs: [true],
-  window: [true]
-};
-
 /** The owner's decision, through the function the office answers each with. */
 async function answer(
   kind: AskKind,
@@ -246,21 +282,23 @@ async function answer(
   else await decideAsk(id, decision, reason);
 }
 
-test("every ask kind's yes, no and send-back reaches the Odd the way its row says", async () => {
+test("every ask kind's yes, no and send-back has the row pinned here, and reaches the Odd as pinned, on a thread and on none", async () => {
   for (const kind of ASK_KINDS)
-    for (const decision of DECISIONS)
-      for (const onThread of PLACES[kind]) {
+    for (const decision of DECISIONS) {
+      const pin = PINNED[kind][decision];
+      assert.deepEqual(cellOf(kind, decision), pin.cell, `${kind} ${decision}`);
+      const places = pin.onNone ? [true, false] : [true];
+      for (const onThread of places) {
         const where = `${kind} ${decision} ${onThread ? 'on a thread' : 'on none'}`;
-        const { id, hub } = await raise[kind](onThread);
+        const want = onThread ? pin.onThread : pin.onNone;
+        const { id } = await raise[kind](onThread);
         const mark = await markNow();
-        if (cellOf(kind, decision) === 'refused') {
+        if (pin.cell === 'refused')
           await assert.rejects(answer(kind, decision, id, 'Because.'), /Say yes or no/, where);
-          assert.deepEqual(await reached(mark), [], where);
-          continue;
-        }
-        await answer(kind, decision, id, 'Because.');
-        assert.deepEqual(await reached(mark), expected(kind, decision, hub), where);
+        else await answer(kind, decision, id, 'Because.');
+        assert.deepEqual(await reached(mark), want, where);
       }
+    }
 });
 
 /** Each answer that tells the Odd nothing when its ask was raised on no thread. */
@@ -290,7 +328,11 @@ test('a yes to a hire or a goal, or a no with no reason, to an ask raised on no 
   assert.deepEqual(naming.sort(), SILENT_OFF_A_THREAD.map(([k, d]) => `${k} ${d}`).sort());
 });
 
-test("a done or dropped task, a done task with no Odd, and a goal's pause, met or drop do what their rows say, and a none names its Linear row", async () => {
+test("a done or dropped task, a done task with no Odd, and a goal's pause, met or drop have the rows pinned here and reach the Odd as pinned, and a none names its Linear row", async () => {
+  assert.deepEqual(OWNER_ANSWERS.task, {
+    done: { fromAccess: ['carry_out'], other: ['task_done'], noOdd: [] },
+    dropped: ['answer_back', { none: 'NEW-1703' }]
+  });
   const steps: Step[] = [{ text: 'Do it', done: false }];
   // A connect task from Ada's access ask.
   const { ask: access } = await raiseAsk('ada', {
@@ -305,18 +347,12 @@ test("a done or dropped task, a done task with no Odd, and a goal's pause, met o
     .returning();
   let mark = await markNow();
   await finishTask(connect.id, true, null);
-  assert.deepEqual(
-    await reached(mark),
-    OWNER_ANSWERS.task.done.fromAccess.map((e) => `${e}:ada`)
-  );
+  assert.deepEqual(await reached(mark), ['carry_out:ada']);
 
   const other = await giveTask('ada', { title: 'Pick a blue', why: 'w', steps: ['Pick one'] });
   mark = await markNow();
   await finishTask(other.id, true, 'Navy.');
-  assert.deepEqual(
-    await reached(mark),
-    OWNER_ANSWERS.task.done.other.map((e) => `${e}:ada`)
-  );
+  assert.deepEqual(await reached(mark), ['task_done:ada']);
 
   const [nobodys] = await db
     .insert(tasks)
@@ -324,10 +360,9 @@ test("a done or dropped task, a done task with no Odd, and a goal's pause, met o
     .returning();
   mark = await markNow();
   await finishTask(nobodys.id, true, null);
-  assert.deepEqual(await reached(mark), OWNER_ANSWERS.task.done.noOdd);
+  assert.deepEqual(await reached(mark), []);
 
   // A dropped task goes back to the thread it was given on, and on none reaches nobody.
-  const dropped = OWNER_ANSWERS.task.dropped;
   for (const onThread of [true, false]) {
     const threadId = onThread ? await thread() : undefined;
     const t = await giveTask('ada', {
@@ -338,10 +373,9 @@ test("a done or dropped task, a done task with no Odd, and a goal's pause, met o
     });
     mark = await markNow();
     await finishTask(t.id, false, 'Not needed.');
-    const want = dropped.flatMap((e) => (e === 'answer_back' && onThread ? ['resume:ada'] : []));
+    const want = onThread ? ['resume:ada'] : [];
     assert.deepEqual(await reached(mark), want, onThread ? 'on a thread' : 'on none');
   }
-  assert.ok(dropped.some((e) => typeof e === 'object' && /^NEW-\d+$/.test(e.none)));
 
   // Ada serves a goal the owner pauses, meets or drops: nothing reaches her.
   for (const status of ['paused', 'met', 'dropped'] as const) {
