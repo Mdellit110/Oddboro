@@ -21,7 +21,7 @@ import { oneThreadPerGoal } from './one-thread.ts';
 
 const { connectors, goals, grants, staff, threads } = await import('../src/schema.ts');
 const { eq, inArray } = await import('drizzle-orm');
-const { OFFICE_TOOLS, STARTER_TOOLS } = await import('../src/tools.ts');
+const { OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
 const { HAND_OFF_LIMIT, LEADS_NONE } = await import('../src/threads.ts');
 afterEach(() => oneThreadPerGoal(sql, MANAGER_ROLE));
@@ -425,6 +425,55 @@ test('every office tool refuses a key it does not take, and says which keys it d
   );
   assert.deepEqual(await raisedBy('all'), { asks: [], tasks: [] });
   assert.deepEqual(await db.select().from(threads).where(eq(threads.hubId, 'all')), []);
+});
+
+// Three Odds serving the bake sale Mo leads, holding no office tool, one, and
+// every one. A chat with the owner's words offers tell_lead, and a run on the
+// sale's thread offers resume_at.
+const HOLDERS: Record<string, readonly string[]> = {
+  nil: [],
+  uno: ['poke_owner'],
+  tot: OFFICE_TOOLS.map((t) => t.id)
+};
+await db
+  .insert(staff)
+  .values(
+    Object.entries(HOLDERS).map(([id, tools]) => ({ ...odd(id, `Odd ${id}`), tools: [...tools] }))
+  );
+await db
+  .insert(staffGoals)
+  .values(Object.keys(HOLDERS).map((staffId) => ({ staffId, goalId: fair.id, part: 'Some' })));
+const RUNS = { chat, thread: { THREAD_ID: String(sale.id) } };
+type Run = keyof typeof RUNS;
+/** A tool offered in one kind of run only, whoever holds it. */
+const ONLY_IN: Record<string, Run> = { tell_lead: 'chat', resume_at: 'thread' };
+const registered = async (staffId: string, run: Run) => {
+  const c = await toolServer(staffId, { ...RUNS[run], RUN_KEY: `k-${staffId}-${run}` });
+  return (await c.listTools()).tools.map((t) => t.name).sort();
+};
+
+test('every tool the server registers is a listed office tool or rides with one', async () => {
+  const listed = new Set<string>([...OFFICE_TOOLS.map((t) => t.id), ...Object.keys(RIDES_WITH)]);
+  for (const run of ['chat', 'thread'] as const)
+    assert.deepEqual(
+      (await registered('tot', run)).filter((n) => !listed.has(n)),
+      [],
+      run
+    );
+});
+
+test("an Odd's registered tools are exactly the always tools, the ones it holds and the ones that ride with them", async () => {
+  for (const [id, holds] of Object.entries(HOLDERS))
+    for (const run of ['chat', 'thread'] as const) {
+      const offered = new Set<string>(
+        OFFICE_TOOLS.filter((t) => t.always || holds.includes(t.id)).map((t) => t.id)
+      );
+      const riding = Object.entries(RIDES_WITH).filter(([, rides]) => offered.has(rides));
+      const want = [...offered, ...riding.map(([name]) => name)]
+        .filter((name) => (ONLY_IN[name] ?? run) === run)
+        .sort();
+      assert.deepEqual(await registered(id, run), want, `${id} in a ${run}`);
+    }
 });
 
 test("the hand_off tool names what each colleague lacks of the lead's tools once, in plain words", async () => {
