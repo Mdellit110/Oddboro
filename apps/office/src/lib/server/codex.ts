@@ -32,6 +32,7 @@ import {
   sweep,
   toml,
   vendorEnv,
+  type McpServer,
   type RunEvent,
   type RunImage,
   type Toml
@@ -139,7 +140,7 @@ type CodexRun = {
   input: string;
   /** The session to resume, else a new one. */
   resume?: string;
-  servers: Record<string, Record<string, unknown>>;
+  servers: Record<string, McpServer>;
   /** The MCP tools the run may call, as access() names them for Claude Code (`mcp__server` or `mcp__server__tool`). */
   allowed: string[];
   /** The owner's Browse the web switch: Codex's own web search, which works with the network off. */
@@ -260,14 +261,22 @@ export function mcpServers(
       const grants = allowed.map(mcpGrant).filter((g) => g.server === name);
       const whole = grants.some((g) => !g.tool);
       const tools = grants.flatMap((g) => (g.tool ? [g.tool] : []));
-      const server: Record<string, Toml> =
-        s.type === 'http'
-          ? { url: s.url as string, http_headers: s.headers as Record<string, string> }
-          : {
-              command: s.command as string,
-              args: (s.args as string[] | undefined) ?? [],
-              env: (s.env as Record<string, string> | undefined) ?? {}
-            };
+      let server: Record<string, Toml>;
+      switch (s.type) {
+        case 'http':
+          server = { url: s.url, http_headers: s.headers };
+          break;
+        case 'stdio':
+          server = { command: s.command, args: s.args, env: s.env };
+          break;
+        default: {
+          // A kind with no case here fails the type check; the cast only names it.
+          const missed: never = s;
+          throw new Error(
+            `No way to give Codex the ${name} server, a ${(missed as McpServer).type} one`
+          );
+        }
+      }
       return [
         name,
         {

@@ -29,7 +29,7 @@ import {
 
 // After the office under test set its home and secret store, so the launch reads those.
 const { LAUNCHES } = await import('./cli.ts');
-const { clearGeminiKey, setGeminiKey } = await import('./gemini.ts');
+const { clearGeminiKey, mcpServers, setGeminiKey } = await import('./gemini.ts');
 
 await L.pg`insert into staff ${L.pg([
   { ...odd('gemma', 'Gemma'), agent: 'gemini' },
@@ -90,6 +90,19 @@ test("a Gemini run's settings pick the API key, skip every .env in its folder an
   assert.deepEqual(Object.keys(mcpServers ?? {}), ['office']);
   assert.equal(run.settingsMode, 0o600);
   assert.equal(run.runMode, 0o700);
+});
+
+test("a Gemini run's settings give a command server and a hosted one in the shape they always had", () => {
+  assert.deepEqual(
+    mcpServers({
+      office: { type: 'stdio', command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } },
+      notes: { type: 'http', url: 'https://notes.example/mcp', headers: { Authorization: 'a' } }
+    }),
+    {
+      office: { command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } },
+      notes: { httpUrl: 'https://notes.example/mcp', headers: { Authorization: 'a' } }
+    }
+  );
 });
 
 test("a Gemini run's folder goes when it ends, and one a run that died with the office left goes at the next run", async () => {

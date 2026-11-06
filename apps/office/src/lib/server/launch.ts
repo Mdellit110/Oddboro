@@ -51,6 +51,27 @@ type McpServerOf = {
 export type McpServer = { [K in ConnectorKind]: { type: K } & McpServerOf[K] }[ConnectorKind];
 
 /**
+ * A server as Claude Code's `--mcp-config` takes it. Its config has never
+ * named a command's kind (it reads a server with no `type` as one), so the
+ * kind stays the office's own word and the file a run gets does not change.
+ */
+export function asClaudeServer(s: McpServer): Record<string, unknown> {
+  switch (s.type) {
+    case 'http':
+      return s;
+    case 'stdio': {
+      const { type, ...command } = s;
+      return command;
+    }
+    default: {
+      // A kind with no case here fails the type check; the cast only names it.
+      const missed: never = s;
+      throw new Error(`No way to give Claude Code a ${(missed as McpServer).type} server`);
+    }
+  }
+}
+
+/**
  * One MCP grant as access() names it for Claude Code: `mcp__office` is the
  * whole server, `mcp__c__t` one tool of server `c`.
  */

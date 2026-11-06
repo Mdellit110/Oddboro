@@ -54,6 +54,7 @@ import {
 } from './office-under-test.ts';
 // After the office under test is set up, as its own imports are: the office reads where everything is as it loads.
 const { agentCommand } = await import('./agent-sign-in.ts');
+const { asClaudeServer } = await import('./launch.ts');
 
 test("a colleague's run on a hand-off works at Draft, and its key is held while it goes and only then", async () => {
   const h = await L.handOff({
@@ -119,6 +120,24 @@ test("the colleague's run a yes to keep going starts is handed the held work as 
   assert.match(told, /Lena handed you a piece of work/);
   assert.match(told, /- What: Plan a stall/);
   assert.match(told, /Plan it\./);
+});
+
+test("a Claude Code run's MCP config gives a command server and a hosted one in the shape it always had", async () => {
+  const { args } = await chatOf('cleo');
+  const config = JSON.parse(args[args.indexOf('--mcp-config') + 1]);
+  assert.deepEqual(Object.keys(config.mcpServers.office), ['command', 'args', 'env']);
+  assert.deepEqual(
+    asClaudeServer({ type: 'stdio', command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } }),
+    { command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } }
+  );
+  assert.deepEqual(
+    asClaudeServer({
+      type: 'http',
+      url: 'https://notes.example/mcp',
+      headers: { Authorization: 'a' }
+    }),
+    { type: 'http', url: 'https://notes.example/mcp', headers: { Authorization: 'a' } }
+  );
 });
 
 test("a Claude Code Odd's chat gets the arguments it always had, plus the new instruction files' denies", async () => {

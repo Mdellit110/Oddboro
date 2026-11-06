@@ -147,7 +147,14 @@ import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
-import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups, type McpServer } from './launch.ts';
+import {
+  asClaudeServer,
+  NOT_SIGNED_IN,
+  shellEnv,
+  SIGN_IN_WHERE,
+  stopGroups,
+  type McpServer
+} from './launch.ts';
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
@@ -952,7 +959,11 @@ async function run(
       'user',
       '--strict-mcp-config',
       '--mcp-config',
-      JSON.stringify({ mcpServers: servers }),
+      JSON.stringify({
+        mcpServers: Object.fromEntries(
+          Object.entries(servers).map(([name, s]) => [name, asClaudeServer(s)])
+        )
+      }),
       '--disable-slash-commands',
       '--settings',
       JSON.stringify({
