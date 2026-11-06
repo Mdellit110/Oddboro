@@ -15,6 +15,8 @@ export type ChatRef = { kind: DeskItem; id: number; title: string };
  * a thread the staffer leads, holding each hand-off it gave on it. A `lesson`
  * line is one the staffer kept, where it kept it. A `failed` line is the error a
  * chat run ended with, saved in place of its reply: the staffer never said it.
+ * `inSession` on it means the run's tool named a session before it failed, so
+ * that session holds the owner's line before it.
  */
 export type ChatEntry = {
   at: string;
@@ -23,6 +25,7 @@ export type ChatEntry = {
   poke?: true;
   told?: true;
   failed?: true;
+  inSession?: true;
   re?: ChatRef;
   item?: ChatRef & { status: string };
   lesson?: LessonLine;

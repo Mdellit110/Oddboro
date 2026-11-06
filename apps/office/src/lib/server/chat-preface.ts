@@ -1,7 +1,7 @@
 // What a chat message tells the staffer's chat session before the owner's
-// words: the lines in its chat that no run of the session wrote, what the
-// owner said in a chat whose run failed, the work it put on the desk, and the
-// asks the owner decided, since the session last heard. Without it, an answer to a
+// words: the lines in its chat that no run of the session wrote, the owner's
+// messages whose run failed, the work it put on the desk, and the asks the
+// owner decided, since the session last heard. Without it, an answer to a
 // new manager's hello, or "How did the call go?" after a poke, means nothing
 // to the session.
 import type { ChatEntry } from '../staff/chat.ts';
@@ -19,17 +19,29 @@ const DECIDED: Record<string, string> = {
   revise: 'sent back'
 };
 
-export function chatPreface(past: ChatEntry[], landed: Landed[]): string[] {
-  // The owner's line of a chat whose run failed never reached the session.
-  // The office saves the failed line right after it (`chat` in staff.ts).
-  const unheard = (i: number) => past[i].from === 'owner' && past[i + 1]?.failed === true;
-  const heard = past.findLastIndex((e, i) => e.from === 'owner' && !unheard(i)) + 1;
+/**
+ * `session` says whether the chat resumes the session saved last. That
+ * session holds a failed run's owner line when the run's tool named a session
+ * (`inSession`): the run saved it, and a later run that saved one resumed it.
+ * A new session, or one no failed run saved, never had the line.
+ */
+export function chatPreface(
+  past: ChatEntry[],
+  landed: Landed[],
+  session: 'resumed' | 'new'
+): string[] {
+  // The office saves a failed run's error right after the owner's line (`chat` in staff.ts).
+  const failedOn = (i: number) => past[i].from === 'owner' && past[i + 1]?.failed === true;
+  const took = (i: number) => session === 'resumed' && past[i + 1]?.inSession === true;
+  const heard = past.findLastIndex((e, i) => e.from === 'owner' && !failedOn(i)) + 1;
   const since = past.slice(heard);
   const told = since.filter((e) => e.told);
   const poked = since.filter((e) => e.poke);
-  const missed = since.filter((_, i) => unheard(heard + i));
+  const failed = since.flatMap((_, i) => (failedOn(heard + i) ? [heard + i] : []));
+  const missed = failed.filter((i) => !took(i)).map((i) => past[i]);
+  const ran = failed.filter(took).length;
   // The session saw what it delivered up to the end of its last reply.
-  const last = past.findLast((e, i) => !unseen(e) && !unheard(i))?.at ?? '';
+  const last = past.findLast((e, i) => !unseen(e) && !failedOn(i))?.at ?? '';
   const put = landed.filter((d) => d.at.toISOString() > last);
   // Without this, a resumed session says an ask still waits after the owner decided it.
   const decided = landed.filter((d) => d.decidedAt && d.decidedAt.toISOString() > last);
@@ -42,6 +54,14 @@ export function chatPreface(past: ChatEntry[], landed: Landed[]): string[] {
     ...(poked.length
       ? [
           `(Since {owner} last wrote, the office delivered your pokes to them: ${poked.map((e) => `"${e.text}"`).join(', ')}.)`
+        ]
+      : []),
+    // The session holds these messages, but not that its run on them failed.
+    ...(ran
+      ? [
+          ran === 1
+            ? "(Your run on {owner}'s last message you saw before this one failed, so they have no reply from you to it.)"
+            : `(Your runs on {owner}'s last ${ran} messages you saw before this one failed, so they have no reply from you to them.)`
         ]
       : []),
     ...(missed.length

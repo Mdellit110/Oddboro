@@ -33,7 +33,9 @@ const { clearGeminiKey, mcpServers, setGeminiKey } = await import('./gemini.ts')
 
 await L.pg`insert into staff ${L.pg([
   { ...odd('gemma', 'Gemma'), agent: 'gemini' },
-  { ...odd('gina', 'Gina'), agent: 'gemini' }
+  { ...odd('gina', 'Gina'), agent: 'gemini' },
+  { ...odd('gwen', 'Gwen'), agent: 'gemini' },
+  { ...odd('gale', 'Gale'), agent: 'gemini' }
 ])}`;
 
 const GEMINI_HOME = join(folder, 'gemini');
@@ -289,6 +291,38 @@ test('once its list names this system, "Runs on" offers Gemini and an Odd moves 
     L.AGENT_PLATFORMS.gemini.runs = before;
     await patch('sam', { agent: 'claude' });
   }
+});
+
+test("after a failed run that took the owner's message, the resumed session hears that the run failed, not the message again", async () => {
+  // The stand-in names its session, then fails: the office saves the session, as for Claude Code.
+  assert.equal(await chatError('gwen', 'Plan the week. End in error'), 'Quota used up.');
+  const { args, message } = await chatOf('gwen', 'Still there?');
+  assert.deepEqual(args.slice(-2), ['--resume', '0a0a0a0a-0000-4000-8000-00000000ce01']);
+  assert.ok(!message.includes('Plan the week'), `the session heard its message again: ${message}`);
+  assert.match(
+    message,
+    new RegExp(`Your run on ${await L.ownerName()}'s last message you saw before this one failed`)
+  );
+});
+
+test('after a failed run that started nothing, the resumed session hears the message it never took, once', async () => {
+  await chatOf('gale');
+  // Google stood in for: it takes every key, since the key's trial is not under test here.
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}');
+  try {
+    // With no key the run starts nothing, so no session took the message.
+    clearGeminiKey();
+    assert.match(await chatError('gale', 'Plan the week.'), /no API key/);
+  } finally {
+    assert.deepEqual(await setGeminiKey(OFFICE_GEMINI_KEY), { ok: true });
+    globalThis.fetch = fetch;
+  }
+  const { args, message } = await chatOf('gale', 'Still there?');
+  assert.deepEqual(args.slice(-2), ['--resume', '0a0a0a0a-0000-4000-8000-00000000ce01']);
+  assert.match(message, /your run failed each time, so you never saw it: "Plan the week\."/);
+  assert.equal(message.split('Plan the week').length - 1, 1, 'the message was said more than once');
+  assert.ok(!message.includes('Your run on'), 'it heard of a run on a message it never took');
 });
 
 test('no test reached the keychain', () => {

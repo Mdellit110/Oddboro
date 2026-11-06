@@ -11,7 +11,7 @@ const told = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text
 const poke = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, poke: true });
 
 test("a line the office said in the staffer's name since the owner last wrote is told to the session", () => {
-  const lines = chatPreface([told('2026-11-03T09:00:00Z', 'Three questions?')], []);
+  const lines = chatPreface([told('2026-11-03T09:00:00Z', 'Three questions?')], [], 'resumed');
   assert.deepEqual(lines, ['(Before this, you said to {owner} in chat: "Three questions?".)']);
 });
 
@@ -21,7 +21,7 @@ test('a told line from before the owner last wrote is not told again', () => {
     owner('2026-11-03T09:05:00Z', 'Check with me first.'),
     reply('2026-11-03T09:06:00Z', 'Got it.')
   ];
-  assert.deepEqual(chatPreface(past, []), []);
+  assert.deepEqual(chatPreface(past, [], 'resumed'), []);
 });
 
 test('only the told lines since the owner last wrote are told, beside the pokes delivered', () => {
@@ -32,7 +32,7 @@ test('only the told lines since the owner last wrote are told, beside the pokes 
     told('2026-11-03T10:00:00Z', 'new line'),
     poke('2026-11-03T11:00:00Z', 'How did the call go?')
   ];
-  assert.deepEqual(chatPreface(past, []), [
+  assert.deepEqual(chatPreface(past, [], 'resumed'), [
     '(Before this, you said to {owner} in chat: "new line".)',
     '(Since {owner} last wrote, the office delivered your pokes to them: "How did the call go?".)'
   ]);
@@ -48,7 +48,7 @@ test('work put on the desk since the last reply is told, even with a told line a
     { kind: 'ask', title: 'Before the reply', at: new Date('2026-11-03T09:00:30Z') },
     { kind: 'task', title: 'After the reply', at: new Date('2026-11-03T09:30:00Z') }
   ];
-  assert.deepEqual(chatPreface(past, landed), [
+  assert.deepEqual(chatPreface(past, landed, 'resumed'), [
     '(Before this, you said to {owner} in chat: "a line".)',
     '(Since {owner} last wrote, you put these on their desk: task "After the reply".)'
   ]);
@@ -81,7 +81,42 @@ test('an ask the owner decided since the last reply is told, and one decided bef
     },
     { kind: 'ask', title: 'Still open', at, status: 'open', decidedAt: null }
   ];
-  assert.deepEqual(chatPreface(past, landed), [
+  assert.deepEqual(chatPreface(past, landed, 'resumed'), [
     '(Since your last reply, {owner} decided your asks: "Book the hall" approved, "Call the band" sent back. my_asks has their reasons.)'
+  ]);
+});
+
+const failed = (at: string, text: string, inSession?: true): ChatEntry => ({
+  at,
+  from: 'staff',
+  text,
+  failed: true,
+  ...(inSession ? { inSession } : {})
+});
+
+test('a resumed session hears that its runs failed on messages it took, and each message it never took, once', () => {
+  const past = [
+    owner('2026-11-06T09:00:00Z', 'Plan the week.'),
+    reply('2026-11-06T09:01:00Z', 'Planned.'),
+    owner('2026-11-06T09:02:00Z', 'Book the hall.'),
+    failed('2026-11-06T09:07:00Z', 'No reply after 5 minutes.', true),
+    owner('2026-11-06T09:08:00Z', 'Call the band.'),
+    failed('2026-11-06T09:08:01Z', 'Could not start Gemini.'),
+    owner('2026-11-06T09:09:00Z', 'Order the cake.'),
+    failed('2026-11-06T09:10:00Z', 'Quota used up.', true)
+  ];
+  assert.deepEqual(chatPreface(past, [], 'resumed'), [
+    "(Your runs on {owner}'s last 2 messages you saw before this one failed, so they have no reply from you to them.)",
+    '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Call the band.".)'
+  ]);
+});
+
+test('a new session never had a failed message, whatever session its run took it into', () => {
+  const past = [
+    owner('2026-11-06T09:02:00Z', 'Book the hall.'),
+    failed('2026-11-06T09:07:00Z', 'No reply after 5 minutes.', true)
+  ];
+  assert.deepEqual(chatPreface(past, [], 'new'), [
+    '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Book the hall.".)'
   ]);
 });

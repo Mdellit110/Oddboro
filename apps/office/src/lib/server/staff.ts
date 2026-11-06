@@ -642,7 +642,11 @@ async function prompt(
   );
 }
 
-type Run = { ok: boolean; text: string };
+/**
+ * How a run ended. `saved` means its tool named a session, which went in the
+ * session file, so a later run that resumes it holds this run's message.
+ */
+type Run = { ok: boolean; text: string; saved?: true };
 
 type Window = { utilization?: number; resetsAt?: number };
 
@@ -1085,10 +1089,12 @@ async function run(
       runsGoing.delete(key);
       launch.done();
       bus.emit(RUN_ENDED);
+      // Saved however the run ended: once the tool names a session, it holds the message.
+      const saved = !!(session && opts.sessionFile);
       if (session && opts.sessionFile)
         saveSession(opts.sessionFile, { sessionId: session, seen: sections, home: toolDir });
       opts.onEvent?.(r.ok ? { type: 'done', text: r.text } : { type: 'error', message: r.text });
-      done(r);
+      done(saved ? { ...r, saved } : r);
     };
     const timer = setTimeout(() => {
       stop();
@@ -1210,7 +1216,8 @@ export async function chat(
       // never saw the chat: it gets the latest of it word for word. The preface
       // leaves out the told and poke lines the replay holds, and keeps those the
       // budget cut, so each line since the owner last wrote is said once.
-      const kept = sessionIdIn(chatSession(id), await runHomeOf(who)) ? [] : replayed(past);
+      const resumed = !!sessionIdIn(chatSession(id), await runHomeOf(who));
+      const kept = resumed ? [] : replayed(past);
       const inReplay = new Set(replayedAt(past, kept));
       const since = replaySince(past, kept);
       // The Odd writes only its own folder and the given folders it may change, so only those are walked.
@@ -1228,7 +1235,8 @@ export async function chat(
           : []),
         ...chatPreface(
           past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
-          landed
+          landed,
+          resumed ? 'resumed' : 'new'
         ),
         ...(re ? [re.brief] : []),
         message
@@ -1254,7 +1262,7 @@ export async function chat(
       at: new Date().toISOString(),
       from: 'staff',
       text: r.text,
-      ...(r.ok ? {} : { failed: true })
+      ...(r.ok ? {} : { failed: true, ...(r.saved ? { inSession: true } : {}) })
     });
     if (r.ok && re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
   } finally {

@@ -122,7 +122,7 @@ test('the next chat after a failed one still hears what the Odd put on the desk 
   ];
   const landed = [{ kind: 'ask', title: 'Book the room', at: new Date('2026-11-06T09:02:00Z') }];
   assert.ok(
-    chatPreface(chat, landed).some((line) => line.includes('ask "Book the room"')),
+    chatPreface(chat, landed, 'resumed').some((line) => line.includes('ask "Book the room"')),
     'the ask put on the desk before the failed run went untold'
   );
 });
