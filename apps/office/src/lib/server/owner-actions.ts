@@ -2,8 +2,11 @@
 // ledger. Every POST, PUT, PATCH and DELETE handler under src/routes has one
 // row, keyed `<METHOD> <route id>`; the staff PATCH takes several actions, one
 // per body key, so it has a row per key `PATCH_KEY` does not class as a
-// qualifier. owner-actions.test.ts fails on a handler with no row, and drives
-// each `records` row to check it writes exactly one ledger row of that kind.
+// qualifier. A GET reads, so the test cannot find one that changes something:
+// such a GET, or a page's `load`, gets a row by hand. owner-actions.test.ts
+// fails on a handler with no row and on a GET row whose handler is gone, and
+// drives each `records` row to check it writes exactly one ledger row of that
+// kind.
 import type { LedgerKind } from '@oddboro/ledger';
 
 /** The Linear row that owes a ledger line for each action that writes none today. */
@@ -95,7 +98,10 @@ export const OWNER_ACTIONS = {
   'POST /api/update': {
     notAnAction: "The app's shell reporting an update, and the owner picking when it installs."
   },
-  'PUT /api/update': { notAnAction: "The owner's update window, a setting of the app." }
+  'PUT /api/update': { notAnAction: "The owner's update window, a setting of the app." },
+  // A hosted server's sign-in comes back here: its tokens go in the keychain
+  // and the task's sign-in step ticks.
+  'GET /connect/callback': { none: NO_ROW }
 } as const satisfies Record<string, OwnerAction>;
 
 /** Each action that writes a ledger row. */

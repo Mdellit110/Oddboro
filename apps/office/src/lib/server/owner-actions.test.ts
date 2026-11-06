@@ -15,20 +15,31 @@ const ROUTES = fileURLToPath(new URL('../../routes', import.meta.url));
 const ACTIONS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const STAFF = '/api/staff/[id]';
 
-/** Each `+server.ts` under src/routes, by its route id. */
-function routeIds(dir = ROUTES): string[] {
+/** Each route under src/routes with this file (`+server.ts` or `+page.server.ts`), by its route id. */
+function routeIds(file: string, dir = ROUTES): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) return routeIds(path);
-    return name === '+server.ts' ? [`/${relative(ROUTES, dir).split('\\').join('/')}`] : [];
+    if (statSync(path).isDirectory()) return routeIds(file, path);
+    return name === file ? [`/${relative(ROUTES, dir).split('\\').join('/')}`] : [];
   });
 }
 
-/** Every action the owner's page can take, as OWNER_ACTIONS keys them. */
+/**
+ * Every action the owner's page can take, as OWNER_ACTIONS keys them. A GET
+ * only reads, unless OWNER_ACTIONS declares it: a page's `load` or a GET
+ * handler that changes something is declared by hand, and counts here only
+ * while that handler exists.
+ */
 async function handlers(): Promise<string[]> {
+  const declaredGet = (route: string) => `GET ${route}` in OWNER_ACTIONS;
+  const exports = async (route: string, file: string) =>
+    (await import(join(ROUTES, route, file))) as Record<string, unknown>;
   const keys: string[] = [];
-  for (const route of routeIds()) {
-    const module = (await import(join(ROUTES, route, '+server.ts'))) as Record<string, unknown>;
+  for (const route of routeIds('+page.server.ts').filter(declaredGet))
+    if ('load' in (await exports(route, '+page.server.ts'))) keys.push(`GET ${route}`);
+  for (const route of routeIds('+server.ts')) {
+    const module = await exports(route, '+server.ts');
+    if ('GET' in module && declaredGet(route)) keys.push(`GET ${route}`);
     for (const method of ACTIONS.filter((m) => m in module)) {
       if (method === 'PATCH' && route === STAFF)
         keys.push(
