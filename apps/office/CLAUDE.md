@@ -229,7 +229,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `failed` (`ChatEntry`), so a reload shows both as the chat showed them live;
    the next message tells the session what the owner wrote that it never had,
    and only that the run failed on a message it has: a resumed session has
-   one when the failed run's tool named a session (`inSession`, `chatPreface`). Its input grows with the text
+   each one up to the last failed run whose tool named a session (`inSession`,
+   `chatPreface`), since that run's message carried the earlier ones. Its input grows with the text
    up to 60% of the chat, and the bar above it drags it taller; that height is
    remembered per viewer. Every run's system prompt opens with "Who you work
    for" (`whoFor` in `staff.ts`): the owner, `data/people.json` when it

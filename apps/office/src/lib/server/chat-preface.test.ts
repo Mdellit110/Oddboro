@@ -100,14 +100,26 @@ test('a resumed session hears that its runs failed on messages it took, and each
     reply('2026-11-06T09:01:00Z', 'Planned.'),
     owner('2026-11-06T09:02:00Z', 'Book the hall.'),
     failed('2026-11-06T09:07:00Z', 'No reply after 5 minutes.', true),
-    owner('2026-11-06T09:08:00Z', 'Call the band.'),
-    failed('2026-11-06T09:08:01Z', 'Could not start Gemini.'),
     owner('2026-11-06T09:09:00Z', 'Order the cake.'),
-    failed('2026-11-06T09:10:00Z', 'Quota used up.', true)
+    failed('2026-11-06T09:10:00Z', 'Quota used up.', true),
+    owner('2026-11-06T09:11:00Z', 'Call the band.'),
+    failed('2026-11-06T09:11:01Z', 'Could not start Gemini.')
   ];
   assert.deepEqual(chatPreface(past, [], 'resumed'), [
     "(Your runs on {owner}'s last 2 messages you saw before this one failed, so they have no reply from you to them.)",
     '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Call the band.".)'
+  ]);
+});
+
+test('a resumed session holds a message whose run started nothing once a later run that took the session was told it', () => {
+  const past = [
+    owner('2026-11-06T09:00:00Z', 'Plan the week.'),
+    failed('2026-11-06T09:00:01Z', 'Gemini has no API key in this office.'),
+    owner('2026-11-06T09:02:00Z', 'Book the hall.'),
+    failed('2026-11-06T09:03:00Z', 'Quota used up.', true)
+  ];
+  assert.deepEqual(chatPreface(past, [], 'resumed'), [
+    "(Your runs on {owner}'s last 2 messages you saw before this one failed, so they have no reply from you to them.)"
   ]);
 });
 

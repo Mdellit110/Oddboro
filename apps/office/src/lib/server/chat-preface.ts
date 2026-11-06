@@ -32,14 +32,15 @@ export type Session = 'resumed' | { replayed: Set<number> };
 export function chatPreface(past: ChatEntry[], landed: Landed[], session: Session): string[] {
   // The office saves a failed run's error right after the owner's line (`chat` in staff.ts).
   const failedOn = (i: number) => past[i].from === 'owner' && past[i + 1]?.failed === true;
-  // A new session holds what its replay keeps. A resumed one holds a failed
-  // run's owner line when the run's tool named a session (`inSession`): the
-  // run saved it, and a later run that saved one resumed it. It never holds a
-  // told or poke line, which no run of it wrote.
+  // The last failed run whose tool named a session (`inSession`): the session
+  // a resumed chat takes up is the one it saved.
+  const saved = past.findLastIndex((_, i) => failedOn(i) && past[i + 1].inSession === true);
+  // A new session holds what its replay keeps. A resumed one holds every
+  // failed run's owner line up to that run's: the run took its own line, and
+  // its preface carried each earlier one the session did not hold. It never
+  // holds a told or poke line, which no run of it wrote.
   const holds = (i: number) =>
-    session === 'resumed'
-      ? failedOn(i) && past[i + 1]?.inSession === true
-      : session.replayed.has(i);
+    session === 'resumed' ? failedOn(i) && i <= saved : session.replayed.has(i);
   const heard = past.findLastIndex((e, i) => e.from === 'owner' && !failedOn(i)) + 1;
   const since = past.flatMap((e, i) => (i >= heard && !holds(i) ? [e] : []));
   const told = since.filter((e) => e.told);

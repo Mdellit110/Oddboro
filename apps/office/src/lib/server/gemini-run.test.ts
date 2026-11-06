@@ -35,7 +35,8 @@ await L.pg`insert into staff ${L.pg([
   { ...odd('gemma', 'Gemma'), agent: 'gemini' },
   { ...odd('gina', 'Gina'), agent: 'gemini' },
   { ...odd('gwen', 'Gwen'), agent: 'gemini' },
-  { ...odd('gale', 'Gale'), agent: 'gemini' }
+  { ...odd('gale', 'Gale'), agent: 'gemini' },
+  { ...odd('gail', 'Gail'), agent: 'gemini' }
 ])}`;
 
 const GEMINI_HOME = join(folder, 'gemini');
@@ -323,6 +324,35 @@ test('after a failed run that started nothing, the resumed session hears the mes
   assert.match(message, /your run failed each time, so you never saw it: "Plan the week\."/);
   assert.equal(message.split('Plan the week').length - 1, 1, 'the message was said more than once');
   assert.ok(!message.includes('Your run on'), 'it heard of a run on a message it never took');
+});
+
+test("after a failed run that started nothing, then one that took the owner's message into the session, the resumed session hears both runs failed and that it saw both messages", async () => {
+  await chatOf('gail');
+  // Google stood in for: it takes every key, since the key's trial is not under test here.
+  const fetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('{}');
+  try {
+    clearGeminiKey();
+    assert.match(await chatError('gail', 'Plan the week.'), /no API key/);
+  } finally {
+    assert.deepEqual(await setGeminiKey(OFFICE_GEMINI_KEY), { ok: true });
+    globalThis.fetch = fetch;
+  }
+  // This run resumes the session, hears "Plan the week." in its preface, names its session, then fails.
+  assert.equal(await chatError('gail', 'Book the hall. End in error'), 'Quota used up.');
+  const { args, message } = await chatOf('gail', 'Still there?');
+  assert.deepEqual(args.slice(-2), ['--resume', '0a0a0a0a-0000-4000-8000-00000000ce01']);
+  assert.ok(
+    !message.includes('never saw'),
+    `the session was told it never saw a message it holds: ${message}`
+  );
+  assert.ok(!message.includes('Plan the week'), `the session heard its message again: ${message}`);
+  assert.match(
+    message,
+    new RegExp(
+      `Your runs on ${await L.ownerName()}'s last 2 messages you saw before this one failed`
+    )
+  );
 });
 
 test('no test reached the keychain', () => {
