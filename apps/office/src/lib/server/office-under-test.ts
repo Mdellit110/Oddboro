@@ -37,10 +37,11 @@ const port = await new Promise<number>((done) => {
 // call and a result that carries what the office gave the run, the variables
 // Run commands sets among it, and whether the git template folder those name
 // was there and empty as it ran (`done()` removes it after), and npm's
-// settings. A message that says "Hold until <file> exists." keeps the run
-// going until it does. One that says "Refuse the open network", in a run
-// whose sandbox opens every host, gets the words Claude Code's binary refuses
-// that with, on stderr, and exit 1, after any hold.
+// settings. A message whose last line says "Hold until <file> exists." keeps
+// the run going until it does. One whose last line says "Refuse the open
+// network", in a run whose sandbox opens every host, gets the words Claude
+// Code's binary refuses that with, on stderr, and exit 1, after any hold.
+// Only the last line, since a later prompt can quote an earlier message.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
 // waits on the owner.
@@ -81,9 +82,11 @@ if (verb === 'auth' && sub === 'login') {
   return;
 }
 let message = '';
+/** The owner's words in a chat, or a job's instructions, which come last. */
+const lastLine = () => message.trimEnd().split('\\n').at(-1);
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
-  const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(message)?.[1];
+  const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(lastLine())?.[1];
   if (!hold) return answer();
   const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), answer()), 20);
 });
@@ -92,7 +95,7 @@ function answer() {
   // Only a staff run carries --settings, so it is read only for the trigger.
   const settings = () => JSON.parse(process.argv[process.argv.indexOf('--settings') + 1]);
   if (
-    message.includes('Refuse the open network') &&
+    lastLine().includes('Refuse the open network') &&
     settings().sandbox?.network?.allowedDomains?.includes('*')
   ) {
     process.stderr.write('Overly broad patterns like "*" are not allowed\\n');

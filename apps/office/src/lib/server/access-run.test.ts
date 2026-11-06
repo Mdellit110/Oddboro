@@ -369,6 +369,30 @@ test(
 );
 
 test(
+  'a chat after a refused one opens the network again once the office restarts, though its prompt quotes the refused message',
+  onMac,
+  async () => {
+    await setOwn('dee', { commands: true, web: true });
+    try {
+      let refused = '';
+      await chat('dee', 'Refuse the open network.', (e) => {
+        if (e.type === 'error') refused = e.message;
+      });
+      assert.match(refused, /will not let commands reach the internet/);
+      // As a restart does.
+      resetHeldNetwork();
+      // The stand-in reads only the end of its message, as the owner's words
+      // come last, so the quoted message does not make it refuse again.
+      const next = await chatOf('dee', 'Count the chairs.');
+      assert.ok(next.message.includes('Refuse the open network.'), next.message);
+      assert.ok(sandboxOf(next)?.network.allowedDomains.includes('*'));
+    } finally {
+      resetHeldNetwork();
+    }
+  }
+);
+
+test(
   "a run with its network closed that fails with Claude Code's refusal words keeps its own words and holds no network",
   onMac,
   async () => {
