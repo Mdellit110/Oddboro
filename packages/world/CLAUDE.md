@@ -47,8 +47,9 @@ order: remove an item, move one to a tile, add an extra at a tile. Moving or
 removing the first of a group takes the group. An add or a move lands on the
 tile it names, or the nearest one within three that fits (`nearby`); one that
 fits nowhere near is left out, and the build notes say so. An edit marked
-`hand` is the owner dragging or tapping in arrange mode, and goes exactly where
-they put it: only what keeps the office working is checked (on the room's
+`hand` was the owner's own, from the office's arranging by hand, which it no
+longer offers; a layout saved then still carries its own. It goes exactly where the owner
+put it: only what keeps the office working is checked (on the room's
 floor, off the doorway unless it lies flat like a rug or a mat, off other things, every seat reachable), and the note
 says which one it broke. What moves with a dragged thing is what stands on it,
 at its seats, or as a chair facing it (on the tile above it); the rest of its
