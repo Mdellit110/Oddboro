@@ -4,7 +4,7 @@
 // heard. Without it, an answer to a
 // new manager's hello, or "How did the call go?" after a poke, means nothing
 // to the session.
-import type { ChatEntry } from './staff.ts';
+import type { ChatEntry } from '../staff/chat.ts';
 
 /** A line the session never saw: a poke the office delivered, or a line it said in the staffer's name. */
 const unseen = (e: ChatEntry) => e.poke || e.told;

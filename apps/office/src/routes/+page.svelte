@@ -508,15 +508,24 @@
    * else a report on its own. False when there is nothing to open.
    */
   function openDelivered(staffId: string, d: Delivered): boolean {
-    const waiting =
-      d.kind === 'ask'
-        ? desk.asks.some((a) => a.id === d.id)
-        : d.kind === 'task'
-          ? desk.tasks.some((t) => t.id === d.id)
-          : desk.reports.some((r) => r.id === d.id);
-    if (waiting) void openDesk(`${d.kind}-${d.id}`);
-    else if (d.kind === 'report') openReport({ id: d.id, staff: staffId, title: d.title });
-    return waiting || d.kind === 'report';
+    const waiting = (rows: { id: number }[]) => {
+      const found = rows.some((r) => r.id === d.id);
+      if (found) void openDesk(`${d.kind}-${d.id}`);
+      return found;
+    };
+    switch (d.kind) {
+      case 'ask':
+        return waiting(desk.asks);
+      case 'task':
+        return waiting(desk.tasks);
+      case 'report':
+        if (!waiting(desk.reports)) openReport({ id: d.id, staff: staffId, title: d.title });
+        return true;
+      default: {
+        const missed: never = d.kind;
+        throw new Error(`Nothing opens a ${String(missed)}`);
+      }
+    }
   }
 
   /** A thread from the Goals window: the oldest thing it waits on, else its hub's chat, which shows it as a card. */

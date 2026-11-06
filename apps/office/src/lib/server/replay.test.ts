@@ -23,7 +23,7 @@ import {
   replaySince,
   replayed
 } from './replay.ts';
-import type { ChatEntry } from './staff.ts';
+import type { ChatEntry } from '../staff/chat.ts';
 
 const owner = (text: string): ChatEntry => ({
   at: '2026-11-04T09:00:00.000Z',

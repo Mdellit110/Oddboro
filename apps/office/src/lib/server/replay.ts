@@ -9,7 +9,7 @@
 import { opendirSync, statSync, type Dir } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { shownFolder } from '@oddboro/ledger';
-import type { ChatEntry } from './staff.ts';
+import type { ChatEntry } from '../staff/chat.ts';
 
 /** At most this many characters of chat text go into one replay. */
 export const REPLAY_CHARS = 24_000;

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { chatPreface } from './chat-preface.ts';
-import type { ChatEntry } from './staff.ts';
+import type { ChatEntry } from '../staff/chat.ts';
 
 const owner = (at: string, text: string): ChatEntry => ({ at, from: 'owner', text });
 const reply = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text });

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
-  import type { HandOffLine, HandOffStep, LessonLine, PokeRow, ThreadLine } from '@oddboro/ledger';
+  import type { HandOffLine, PokeRow, ThreadLine } from '@oddboro/ledger';
   import { FIRST_QUESTIONS, firstQuestionIn } from '@oddboro/ledger/first-questions';
   import { clockTime } from '@oddboro/ledger/time';
   import Markdown from './Markdown.svelte';
@@ -11,6 +11,7 @@
   import { chatRequest, takeDraft, type Delivered } from './chat-about.svelte.ts';
   import type { StaffProfile } from '../staff/roster.ts';
   import { toolWords } from '../staff/work.ts';
+  import type { ChatEntry, ChatEvent } from '../staff/chat.ts';
 
   type Props = {
     profile: StaffProfile;
@@ -33,36 +34,8 @@
     if (visible) scrollDown();
   });
 
-  type Line = {
-    from: 'owner' | 'staff';
-    text: string;
-    pending?: boolean;
-    failed?: boolean;
-    /** Delivered later by the office, at `at`. */
-    poke?: boolean;
-    at?: string;
-    /** Something the staffer put on the desk, shown where it landed. */
-    item?: Delivered & { status: string };
-    /** What the owner's message replied about. */
-    re?: Delivered;
-    /** A lesson the staffer kept, shown where it kept it. */
-    lesson?: LessonLine;
-    /** One step of work handed to a colleague, or from one. */
-    handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
-    /** A thread the staffer leads, with each hand-off it gave on it. */
-    thread?: { line: ThreadLine; steps: HandOffLine[] };
-  };
-  type Entry = {
-    at: string;
-    from: 'owner' | 'staff';
-    text: string;
-    poke?: true;
-    item?: Delivered & { status: string };
-    re?: Delivered;
-    lesson?: LessonLine;
-    handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
-    thread?: { line: ThreadLine; steps: HandOffLine[] };
-  };
+  /** A chat line as the page keeps it: one sent or streaming has no time yet. */
+  type Line = Omit<ChatEntry, 'at'> & { at?: string; pending?: boolean; failed?: boolean };
 
   /** Where a hand-off stands, in words, and whether the owner has to act. */
   function progress(h: HandOffLine): { text: string; yours: boolean } {
@@ -204,7 +177,7 @@
   function load(id: string) {
     fetch(`/api/staff/${id}/chat`)
       .then((r) => r.json())
-      .then((d: { history: Entry[]; busy: boolean }) => {
+      .then((d: { history: ChatEntry[]; busy: boolean }) => {
         lines = d.history.map((h) => ({ ...h }));
         loaded = true;
         scrollDown();
@@ -292,11 +265,7 @@
           const chunk = buffer.slice(0, cut);
           buffer = buffer.slice(cut + 2);
           if (!chunk.startsWith('data: ')) continue;
-          const ev = JSON.parse(chunk.slice(6)) as
-            | { type: 'delta'; text: string }
-            | { type: 'tool'; name: string }
-            | { type: 'done'; text: string }
-            | { type: 'error'; message: string };
+          const ev = JSON.parse(chunk.slice(6)) as ChatEvent;
           if (ev.type === 'delta') {
             reply.text += ev.text;
             status = '';

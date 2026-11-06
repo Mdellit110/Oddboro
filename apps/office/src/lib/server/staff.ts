@@ -132,6 +132,7 @@ import { workPath } from '@oddboro/ledger/work-paths';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
+import type { ChatEntry, ChatEvent, ChatRef } from '../staff/chat.ts';
 import { getSecret, headerSecret } from './keychain.ts';
 import { bearer } from './oauth.ts';
 import {
@@ -161,37 +162,6 @@ const DATA = home('data');
 const HOMES = home('staff');
 const CHAT_TIMEOUT_MS = 5 * 60_000;
 const JOB_TIMEOUT_MS = 20 * 60_000;
-
-/** Something the staffer put on the owner's desk. */
-export type ChatRef = { kind: 'ask' | 'task' | 'report'; id: number; title: string };
-/**
- * A `poke` line is one the office delivered later, not a reply. A `told` line
- * is one the office said in the staffer's name that no run of its chat session
- * wrote, like a new manager's hello. An `item` line
- * is something the staffer put on the owner's desk, shown where it landed. An
- * owner's line with `re` replied about one of those. A `handOff` line is work
- * the staffer handed a colleague, or a colleague handed it. A `thread` line is
- * a thread the staffer leads, holding each hand-off it gave on it. A `lesson`
- * line is one the staffer kept, where it kept it.
- */
-export type ChatEntry = {
-  at: string;
-  from: 'owner' | 'staff';
-  text: string;
-  poke?: true;
-  told?: true;
-  re?: ChatRef;
-  item?: ChatRef & { status: string };
-  lesson?: LessonLine;
-  /** `back` is which hand-back a reply or pick-up line shows. */
-  handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
-  thread?: { line: ThreadLine; steps: HandOffLine[] };
-};
-export type ChatEvent =
-  | { type: 'delta'; text: string }
-  | { type: 'tool'; name: string }
-  | { type: 'done'; text: string }
-  | { type: 'error'; message: string };
 
 /**
  * Background runs at once per staffer: jobs, follow-ups and drafts. Each
@@ -346,50 +316,58 @@ async function replyBrief(
   id: string,
   re: Pick<ChatRef, 'kind' | 'id'>
 ): Promise<{ ref: ChatRef; brief: string }> {
-  if (re.kind === 'ask') {
-    const a = await askById(re.id);
-    if (a?.staffId !== id) throw new Error('No such ask from this Odd');
-    return {
-      ref: { kind: 'ask', id: a.id, title: a.title },
-      brief: [
-        `({owner} is replying about your ask #${a.id}, "${a.title}", which is ${a.status === 'open' ? 'still open' : a.status}.`,
-        `- Why: ${a.why}`,
-        `- If approved: ${a.ifApproved}`,
-        ...(a.reason ? [`- Their reason: ${a.reason}`] : []),
-        ')'
-      ].join('\n')
-    };
+  switch (re.kind) {
+    case 'ask': {
+      const a = await askById(re.id);
+      if (a?.staffId !== id) throw new Error('No such ask from this Odd');
+      return {
+        ref: { kind: 'ask', id: a.id, title: a.title },
+        brief: [
+          `({owner} is replying about your ask #${a.id}, "${a.title}", which is ${a.status === 'open' ? 'still open' : a.status}.`,
+          `- Why: ${a.why}`,
+          `- If approved: ${a.ifApproved}`,
+          ...(a.reason ? [`- Their reason: ${a.reason}`] : []),
+          ')'
+        ].join('\n')
+      };
+    }
+    case 'task': {
+      const t = await taskById(re.id);
+      if (t?.staffId !== id) throw new Error('No such task from this Odd');
+      return {
+        ref: { kind: 'task', id: t.id, title: t.title },
+        brief: [
+          `({owner} is replying about the task you gave them, "${t.title}", which is ${t.status === 'open' ? 'still open' : t.status}.`,
+          `- Why: ${t.why}`,
+          ...t.steps.map(
+            (st, i) =>
+              `- Step ${i + 1}: ${st.text}${st.done ? ' (done)' : ''}${st.answer ? `. Their answer: ${st.answer}` : ''}`
+          ),
+          ...(t.note ? [`- Their note: ${t.note}`] : []),
+          ')'
+        ].join('\n')
+      };
+    }
+    case 'report': {
+      const r = await reportById(re.id);
+      if (r?.staffId !== id) throw new Error('No such report from this Odd');
+      return {
+        ref: { kind: 'report', id: r.id, title: r.title },
+        brief: [
+          `({owner} is replying about your report "${r.title}". If it is feedback, act on it: work inside the office now, raise_ask before changing one of your jobs, or anything outside the office ${ACT_WRITE}, and give_owner_a_task for anything only they can do.`,
+          '',
+          'The report:',
+          '',
+          r.body.slice(0, 8000),
+          ')'
+        ].join('\n')
+      };
+    }
+    default: {
+      const missed: never = re.kind;
+      throw new Error(`No reply brief for a ${String(missed)}`);
+    }
   }
-  if (re.kind === 'task') {
-    const t = await taskById(re.id);
-    if (t?.staffId !== id) throw new Error('No such task from this Odd');
-    return {
-      ref: { kind: 'task', id: t.id, title: t.title },
-      brief: [
-        `({owner} is replying about the task you gave them, "${t.title}", which is ${t.status === 'open' ? 'still open' : t.status}.`,
-        `- Why: ${t.why}`,
-        ...t.steps.map(
-          (st, i) =>
-            `- Step ${i + 1}: ${st.text}${st.done ? ' (done)' : ''}${st.answer ? `. Their answer: ${st.answer}` : ''}`
-        ),
-        ...(t.note ? [`- Their note: ${t.note}`] : []),
-        ')'
-      ].join('\n')
-    };
-  }
-  const r = await reportById(re.id);
-  if (r?.staffId !== id) throw new Error('No such report from this Odd');
-  return {
-    ref: { kind: 'report', id: r.id, title: r.title },
-    brief: [
-      `({owner} is replying about your report "${r.title}". If it is feedback, act on it: work inside the office now, raise_ask before changing one of your jobs, or anything outside the office ${ACT_WRITE}, and give_owner_a_task for anything only they can do.`,
-      '',
-      'The report:',
-      '',
-      r.body.slice(0, 8000),
-      ')'
-    ].join('\n')
-  };
 }
 
 /** Every plugin in the owner's user settings, switched off for staff sessions. */
