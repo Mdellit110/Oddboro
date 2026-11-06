@@ -1,0 +1,107 @@
+// That "How the office works" (house) and every follow-up's brief name only
+// office tools the Odd reading them holds, for an Odd holding no office tool
+// the owner gives and for one holding each alone. The tool server's own
+// descriptions are held by the ledger's named-tools.test.ts. Run with
+// `npm test -w @oddboro/office`.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import {
+  FOLLOW_UP_KINDS,
+  type AskRow,
+  type FollowUpRow,
+  type GoalRow,
+  type ReportRow,
+  type TaskRow
+} from '@oddboro/ledger';
+import { GRANTABLE_TOOLS, hasTool, OFFICE_TOOLS } from '@oddboro/ledger/tools';
+import { followUpBrief } from './follow-up-brief.ts';
+import { house } from './house.ts';
+
+/**
+ * Office tools a text names though the Odd reading it may not hold them, by
+ * the text. Each is owed to NEW-1716: fixing one changes what an Odd reads,
+ * so it is that row's work. No brief is left out for running only when its
+ * Odd holds a tool: no follow-up checks the Odd's tools before it starts.
+ */
+const NAMES_UNHELD: Record<string, readonly string[]> = {
+  house: ['hand_off'], // NEW-1716
+  'resume brief': [
+    'give_owner_a_task',
+    'hand_off',
+    'poke_owner',
+    'list_goals',
+    'propose_goal_plan'
+  ], // NEW-1716
+  'first_day brief': ['give_owner_a_task', 'ask_for_access'], // NEW-1716
+  'goal brief': [
+    'give_owner_a_task',
+    'find_connectors',
+    'ask_for_access',
+    'office_report',
+    'list_goals',
+    'propose_goal_plan'
+  ], // NEW-1716
+  'task_done brief': ['give_owner_a_task', 'propose_hire', 'propose_goal_plan'], // NEW-1716
+  'carry_out brief': ['give_owner_a_task'], // NEW-1716
+  'rework brief': ['ask_for_access', 'propose_hire', 'propose_goal', 'propose_goal_plan'], // NEW-1716
+  // These four share the feedback brief (`followUpBrief`).
+  'feedback brief': ['give_owner_a_task'], // NEW-1716
+  'hand_off brief': ['give_owner_a_task'], // NEW-1716
+  'handed_back brief': ['give_owner_a_task'], // NEW-1716
+  'edited brief': ['give_owner_a_task'] // NEW-1716
+};
+
+// Only the fields a brief reads are filled in; the rest of each row stays out.
+const asked = { id: 7, title: 'Send it', why: 'Because', ifApproved: 'It goes' };
+/** Every ask a brief words apart: by its kind, its answer, and whether it got access or plans a hire. */
+const ASKS = [
+  { ...asked, kind: 'approval', status: 'approved' },
+  { ...asked, kind: 'access', status: 'approved', access: {} },
+  { ...asked, kind: 'hire', status: 'approved' },
+  { ...asked, kind: 'plan', status: 'approved', plan: { items: [{ kind: 'hire' }] } },
+  { ...asked, kind: 'plan', status: 'denied', plan: { items: [] } }
+] as unknown as AskRow[];
+const report = { id: 3, title: 'Weekly', body: 'All well' } as ReportRow;
+const task = {
+  row: { id: 4, title: 'Sign in', why: 'Needed', steps: [] } as unknown as TaskRow,
+  files: []
+};
+const goal = { id: 2, title: 'More clients', area: 'work', horizon: 'ongoing' } as GoalRow;
+
+/** Every text an Odd may read here, by name: house(), and each kind's brief in every wording it has. */
+const texts = (has: (tool: string) => boolean): Record<string, string> => ({
+  house: house({ has, now: '9:00', zone: 'London time' }),
+  ...Object.fromEntries(
+    FOLLOW_UP_KINDS.map((kind) => [
+      `${kind} brief`,
+      [
+        ...ASKS.flatMap((a) =>
+          followUpBrief({ kind, note: 'Their words' } as FollowUpRow, a, report, task, goal)
+        ),
+        ...followUpBrief({ kind, note: null } as FollowUpRow)
+      ].join('\n')
+    ])
+  )
+});
+
+/** The office tools each Odd was given, beyond the ones every Odd has. */
+const ODDS: string[][] = [[], ...GRANTABLE_TOOLS.map((t) => [t])];
+
+test('house() and every brief name only office tools the Odd holds, except the declared ones', () => {
+  const seen: Record<string, Set<string>> = {};
+  const undeclared: Record<string, string[]> = {};
+  for (const holds of ODDS) {
+    const has = (tool: string) => hasTool(holds, tool);
+    for (const [name, text] of Object.entries(texts(has))) {
+      const unheld = OFFICE_TOOLS.map((t) => t.id).filter(
+        (id) => !has(id) && new RegExp(`\\b${id}\\b`).test(text)
+      );
+      for (const n of unheld) (seen[name] ??= new Set()).add(n);
+      const left = unheld.filter((n) => !NAMES_UNHELD[name]?.includes(n));
+      if (left.length) undeclared[`${name} (holding ${holds.join(', ') || 'none'})`] = left;
+    }
+  }
+  assert.deepEqual(undeclared, {});
+  for (const [name, names] of Object.entries(NAMES_UNHELD))
+    for (const n of names) assert.ok(seen[name]?.has(n), `${name} no longer names ${n}`);
+});
