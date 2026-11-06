@@ -177,9 +177,12 @@ test("while the office holds the network, a change that would open a Claude Code
 });
 
 test('setOwnTool and setFolder record one line each', async () => {
-  await O.setOwnTool('ziva', 'commands', true);
-  await O.setOwnTool('ziva', 'commands', true);
-  await O.setOwnTool('ziva', 'commands', false);
+  // Ziva is on Claude Code, which follows the switch on a Mac only.
+  await onPlatform('darwin', async () => {
+    await O.setOwnTool('ziva', 'commands', true);
+    await O.setOwnTool('ziva', 'commands', true);
+    await O.setOwnTool('ziva', 'commands', false);
+  });
   await O.setOwnTool('ziva', 'web', true);
   await O.setOwnTool('ziva', 'web', true);
   await O.setOwnTool('ziva', 'web', false);
@@ -201,6 +204,79 @@ test('setOwnTool and setFolder record one line each', async () => {
   ]);
   const row = await O.staffer('ziva');
   assert.deepEqual([row?.commands, row?.web, row?.folders], [false, false, []]);
+});
+
+test('Run commands cannot be stored for a tool that does not follow it, from any caller', async () => {
+  const odd = (id: string, agent: Agent, commands: boolean) => ({
+    id,
+    name: id,
+    role: 'r',
+    variant: 'v',
+    portrait: 'p',
+    remit: 'r',
+    desk: 'd',
+    agent,
+    commands
+  });
+  await db
+    .insert(staff)
+    .values([odd('Lin', 'claude', false), odd('Gus', 'grok', false), odd('Gil', 'grok', true)]);
+  const why = (agent: Agent) => ({ refused: COMMANDS_WHY[agent] });
+  await onPlatform('linux', async () => {
+    assert.deepEqual(await O.setOwnTool('Lin', 'commands', true), why('claude'));
+    assert.deepEqual(await O.setAgent('Gus', 'claude', true), why('claude'));
+  });
+  await onPlatform('darwin', async () => {
+    assert.deepEqual(await O.setOwnTool('Gus', 'commands', true), why('grok'));
+    // A repeat of the stored value is refused too, as the owner's click would be.
+    assert.deepEqual(await O.setOwnTool('Gil', 'commands', true), why('grok'));
+    assert.deepEqual(await O.setOwnTool('Gil', 'commands', false), why('grok'));
+    assert.deepEqual(await O.setAgent('Lin', 'grok', true), why('grok'));
+  });
+  const rows = await sql<{ id: string; agent: string; commands: boolean }>`
+    select id, agent, commands from staff where id in ('Lin', 'Gus', 'Gil') order by id`;
+  assert.deepEqual(
+    rows.map((r) => [r.id, r.agent, r.commands]),
+    [
+      ['Gil', 'grok', true],
+      ['Gus', 'grok', false],
+      ['Lin', 'claude', false]
+    ]
+  );
+  assert.deepEqual(await titles(), []);
+  // Where the new tool follows the switch, the move and the switch go together.
+  await onPlatform('darwin', async () => {
+    assert.equal(await O.setAgent('Gus', 'claude', true), undefined);
+  });
+  const gus = await O.staffer('Gus');
+  assert.deepEqual([gus?.agent, gus?.commands], ['claude', true]);
+  assert.deepEqual(await titles(), ['Moved Gus from Grok to Claude Code', 'Let Gus run commands']);
+});
+
+test('a folder the check refuses is never stored, from any caller, and a folder given is stored by its real path', async () => {
+  await db.insert(staff).values({
+    id: 'Fay',
+    name: 'Fay',
+    role: 'r',
+    variant: 'v',
+    portrait: 'p',
+    remit: 'r',
+    desk: 'd'
+  });
+  folder('.ssh');
+  assert.deepEqual(await O.setFolder('Fay', '~/.ssh', 'read'), {
+    refused: O.FOLDER_REFUSED.secrets
+  });
+  assert.deepEqual(await O.setFolder('Fay', join(HOME, '.ssh'), 'write'), {
+    refused: O.FOLDER_REFUSED.secrets
+  });
+  assert.deepEqual(await O.setFolder('Fay', HOME, 'read'), { refused: O.FOLDER_REFUSED.home });
+  assert.deepEqual((await O.staffer('Fay'))?.folders, []);
+  assert.deepEqual(await titles(), []);
+  const notes = folder('notes');
+  symlinkSync(notes, join(HOME, 'notes-link'));
+  assert.equal(await O.setFolder('Fay', '~/notes-link', 'read'), undefined);
+  assert.deepEqual((await O.staffer('Fay'))?.folders, [{ path: notes, write: false }]);
 });
 
 test('checkFolder refuses what holds keys, the home, the office and its code', () => {

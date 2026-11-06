@@ -208,7 +208,8 @@ hand-off or number, which ledger tests and the office's format test share.
   Grok, Codex or Gemini). Only the owner picks it: at hire (`hire()`, before any
   run), and after through `setAgent()`, which also
   removes the Odd's chat session (`chatSession`), since the other tool
-  cannot resume it. `AGENT_PLATFORMS` says, per tool, which systems offer it
+  cannot resume it. A move may set Run commands with it; `setAgent()` refuses
+  that before anything changes when the new tool does not follow the switch. `AGENT_PLATFORMS` says, per tool, which systems offer it
   (`runs`: Claude Code on Mac, Linux and Windows, Grok and Codex on Mac only,
   Gemini on none until a live run holds its walls; `agentsOn()`, and
   `offeredAgent()` for a hire or a move), and where its Run commands switch
@@ -218,6 +219,10 @@ hand-off or number, which ledger tests and the office's format test share.
   web switches, and `staff.folders` the folders outside the office the owner
   gave the Odd, each to read or to read and change, by real path. Only the
   owner sets them (`setOwnTool()`, `setFolder()`), each change one ledger line.
+  Each setter holds its own checks, whoever calls it: `setOwnTool()` refuses
+  Run commands, on or off and a repeat included, for a tool that does not
+  follow the switch on this system, and `setFolder()` runs `checkFolder()` on
+  a folder given and stores its real path.
   The stored value is the owner's choice; whether a run gets a shell also
   depends on its tool (`commandsHow()`: Claude Code on a Mac follows the
   switch, Codex always has one, Grok and Gemini never), so a tool switch never

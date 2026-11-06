@@ -84,6 +84,7 @@ import {
 } from './schema.ts';
 import {
   AGENT_NAMES,
+  commandsHow,
   commandsOnline,
   EFFORT_NAMES,
   EFFORT_ORDER,
@@ -225,22 +226,47 @@ function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
 export const officeAgent = (): Agent => officeAgentOf(process.env.OFFICE_AGENT, currentPlatform());
 
 /**
+ * Why Run commands cannot be stored for `agent` on this system, or nothing
+ * when its tool follows the switch. A stored yes must be the owner's own
+ * choice, or it would turn commands on unasked after a later move to a tool
+ * that follows it.
+ */
+function commandsRefused(agent: Agent): { refused: string } | undefined {
+  const how = commandsHow(agent, currentPlatform());
+  return how.state === 'switch' ? undefined : { refused: how.why };
+}
+
+/**
  * Only the owner moves a staffer to another coding tool. Its chat session
  * belongs to the tool it left, which could not resume it, so the next chat
- * starts a fresh one.
+ * starts a fresh one. With `commands`, the move also sets Run commands (the
+ * one click the Settings tab offers under a switch the Odd's own tool cannot
+ * follow), refused before anything changes when the new tool does not follow
+ * it, so the Odd never moves without the commands it was moved for.
  */
-export async function setAgent(id: string, agent: Agent): Promise<void> {
+export async function setAgent(
+  id: string,
+  agent: Agent,
+  commands?: boolean
+): Promise<{ refused: string } | undefined> {
   const before = await staffer(id);
-  if (!before || before.agent === agent) return;
-  // An account belongs to one tool, so the Odd starts the new one on its Office account.
-  await db.update(staff).set({ agent, account: null }).where(eq(staff.id, id));
-  rmSync(chatSession(id), { force: true });
-  await record({
-    kind: 'access',
-    actor: 'owner',
-    title: `Moved ${before.name} from ${AGENT_NAMES[before.agent]} to ${AGENT_NAMES[agent]}`,
-    ...networkNote(before, { ...before, agent })
-  });
+  if (!before) return;
+  if (commands !== undefined) {
+    const refused = commandsRefused(agent);
+    if (refused) return refused;
+  }
+  if (before.agent !== agent) {
+    // An account belongs to one tool, so the Odd starts the new one on its Office account.
+    await db.update(staff).set({ agent, account: null }).where(eq(staff.id, id));
+    rmSync(chatSession(id), { force: true });
+    await record({
+      kind: 'access',
+      actor: 'owner',
+      title: `Moved ${before.name} from ${AGENT_NAMES[before.agent]} to ${AGENT_NAMES[agent]}`,
+      ...networkNote(before, { ...before, agent })
+    });
+  }
+  if (commands !== undefined) return setOwnTool(id, 'commands', commands);
 }
 
 /** Only the owner grants or removes an office tool. Takes effect on the staffer's next run. */
@@ -322,14 +348,23 @@ export async function setModel(
   });
 }
 
-/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
+/**
+ * Only the owner switches Run commands or Browse the web. Takes effect on the
+ * staffer's next run. Run commands, on or off, is refused for a tool that does
+ * not follow the switch on this system, a repeat included.
+ */
 export async function setOwnTool(
   id: string,
   which: 'commands' | 'web',
   on: boolean
-): Promise<void> {
+): Promise<{ refused: string } | undefined> {
   const before = await staffer(id);
-  if (!before || before[which] === on) return;
+  if (!before) return;
+  if (which === 'commands') {
+    const refused = commandsRefused(before.agent);
+    if (refused) return refused;
+  }
+  if (before[which] === on) return;
   await db
     .update(staff)
     .set({ [which]: on })
@@ -353,9 +388,10 @@ export async function setOwnTool(
 
 /**
  * Only the owner gives an Odd a folder outside the office, to read or to read
- * and change, or takes it back (`access` null). `path` is the real path
- * `checkFolder` gave, or, to take one back, the path as stored, so a folder
- * deleted from the disk can still be taken back. A folder is the same one
+ * and change, or takes it back (`access` null). A folder given is the path as
+ * the owner typed it: `checkFolder` refuses it or gives its real path, which
+ * is what is stored. A folder taken back is the path as stored, unchecked, so
+ * a folder deleted from the disk can still be taken back. A folder is the same one
  * when its real path is (`real`), so a level change replaces it, even one
  * stored in another case. A new folder inside or holding one the Odd already
  * has is refused (`FOLDER_REFUSED.nested`): one would carry two levels.
@@ -368,6 +404,11 @@ export async function setFolder(
 ): Promise<{ refused: string } | undefined> {
   const before = await staffer(id);
   if (!before) return;
+  if (access !== null) {
+    const checked = checkFolder(path);
+    if ('refused' in checked) return checked;
+    path = checked.real;
+  }
   const at = real(path);
   const same = (f: { path: string }) => real(f.path) === at;
   const had = before.folders.find(same);
@@ -459,8 +500,8 @@ export function shownFolder(path: string): string {
  * code: a deny inside a folder a run reads is not held by every tool, so a
  * folder that holds one is refused at the door. A real path with a character
  * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
- * what a run is given. Only the folder route calls this, so a folder given
- * before that rule is not checked again.
+ * what a run is given. Only `setFolder` calls this, as a folder is given, so a
+ * folder given before a rule was added is not checked again.
  */
 export function checkFolder(path: string): { real: string } | { refused: string } {
   const typed = path.trim();

@@ -7,8 +7,6 @@ import { error, json } from '@sveltejs/kit';
 import {
   currentPlatform,
   agentsOn,
-  checkFolder,
-  commandsHow,
   offeredAgent,
   parseLevel,
   setAgent,
@@ -21,21 +19,10 @@ import {
   setTool,
   staffer,
   EFFORT_ORDER,
-  type Agent,
   type Effort
 } from '@oddboro/ledger';
 import { isBusy } from '#lib/server/staff.ts';
 import type { RequestHandler } from './$types';
-
-/**
- * Refuses a Run commands change on a tool that does not follow the switch,
- * with its reason. A stored yes must be the owner's own choice, or it would
- * turn commands on unasked after a later move to a tool that follows it.
- */
-function followsCommands(agent: Agent): void {
-  const how = commandsHow(agent, currentPlatform());
-  if (how.state !== 'switch') error(400, how.why);
-}
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
   const who = await staffer(params.id);
@@ -63,17 +50,19 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     return json({ ok: true });
   }
   // Before the commands branch: a move that turns commands on is checked
-  // against the tool it moves to, not the one it leaves.
+  // against the tool it moves to, not the one it leaves (`setAgent`).
   if (b.agent !== undefined) {
     // Only a tool whose sandbox held on this system (`AGENT_PLATFORMS`).
     const agent = offeredAgent(b.agent, currentPlatform());
     if (!agent) error(400, `Pick ${agentsOn(currentPlatform()).join(' or ')}`);
     // A chat still replying would save its session after the move, for a tool that cannot resume it.
     if (isBusy(params.id)) error(409, 'Wait for the reply to finish, then switch.');
-    // Refused before anything changes, so the Odd never moves without the commands it was moved for.
-    if (typeof b.commands === 'boolean') followsCommands(agent);
-    await setAgent(params.id, agent);
-    if (typeof b.commands === 'boolean') await setOwnTool(params.id, 'commands', b.commands);
+    const moved = await setAgent(
+      params.id,
+      agent,
+      typeof b.commands === 'boolean' ? b.commands : undefined
+    );
+    if (moved) error(400, moved.refused);
     return json({ ok: true });
   }
   // Like a tool, each of these takes effect on the Odd's next run, so none waits for a reply.
@@ -99,8 +88,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     return json({ ok: true });
   }
   if (typeof b.commands === 'boolean') {
-    followsCommands(who.agent);
-    await setOwnTool(params.id, 'commands', b.commands);
+    const set = await setOwnTool(params.id, 'commands', b.commands);
+    if (set) error(400, set.refused);
     return json({ ok: true });
   }
   if (typeof b.web === 'boolean') {
@@ -114,9 +103,7 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
       return json({ ok: true });
     }
     if (b.access !== 'read' && b.access !== 'write') error(400, 'Pick read or write');
-    const checked = checkFolder(b.folder);
-    if ('refused' in checked) error(400, checked.refused);
-    const set = await setFolder(params.id, checked.real, b.access);
+    const set = await setFolder(params.id, b.folder, b.access);
     if (set) error(400, set.refused);
     return json({ ok: true });
   }
