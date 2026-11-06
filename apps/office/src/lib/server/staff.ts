@@ -1194,44 +1194,58 @@ export async function chat(
       onEvent({ type: 'done', text: next });
       return;
     }
-    // Lines the office wrote in the chat, and work put on the desk, since the
-    // owner last wrote are not in the session: say so, so an answer to the
-    // hello, "How did the call go?" or "What about Thursday?" makes sense to
-    // the staffer.
-    const re = replyTo ? await replyBrief(id, replyTo) : undefined;
-    const landed = (await deliveries(id, 20)).filter(
-      (d) => !(d.kind === re?.ref.kind && d.id === re.ref.id)
-    );
-    const past = history(id);
-    // A new session (the Odd moved to another tool, or its session is gone)
-    // never saw the chat: it gets the latest of it word for word. The preface
-    // leaves out the told and poke lines the replay holds, and keeps those the
-    // budget cut, so each line since the owner last wrote is said once.
-    const kept = sessionIdIn(chatSession(id), await runHomeOf(who)) ? [] : replayed(past);
-    const inReplay = new Set(replayedAt(past, kept));
-    const since = replaySince(past, kept);
-    // The Odd writes only its own folder and the given folders it may change, so only those are walked.
-    const writable = ownTools(who, currentPlatform())
-      .granted.filter((f) => f.write)
-      .map((f) => f.path);
-    const prompt = [
-      ...(since
-        ? [replay(past, changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable))]
-        : []),
-      ...chatPreface(
-        past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
-        landed
-      ),
-      ...(re ? [re.brief] : []),
-      message
-    ].join('\n\n');
-    const r = await run(who, prompt, {
-      kind: 'chat',
-      ownerSaid: message,
-      sessionFile: chatSession(id),
-      timeoutMs: CHAT_TIMEOUT_MS,
-      onEvent
-    });
+    let re: Awaited<ReturnType<typeof replyBrief>> | undefined;
+    let r: Run;
+    try {
+      // Lines the office wrote in the chat, and work put on the desk, since the
+      // owner last wrote are not in the session: say so, so an answer to the
+      // hello, "How did the call go?" or "What about Thursday?" makes sense to
+      // the staffer.
+      re = replyTo ? await replyBrief(id, replyTo) : undefined;
+      const landed = (await deliveries(id, 20)).filter(
+        (d) => !(d.kind === re?.ref.kind && d.id === re.ref.id)
+      );
+      const past = history(id);
+      // A new session (the Odd moved to another tool, or its session is gone)
+      // never saw the chat: it gets the latest of it word for word. The preface
+      // leaves out the told and poke lines the replay holds, and keeps those the
+      // budget cut, so each line since the owner last wrote is said once.
+      const kept = sessionIdIn(chatSession(id), await runHomeOf(who)) ? [] : replayed(past);
+      const inReplay = new Set(replayedAt(past, kept));
+      const since = replaySince(past, kept);
+      // The Odd writes only its own folder and the given folders it may change, so only those are walked.
+      const writable = ownTools(who, currentPlatform())
+        .granted.filter((f) => f.write)
+        .map((f) => f.path);
+      const prompt = [
+        ...(since
+          ? [
+              replay(
+                past,
+                changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable)
+              )
+            ]
+          : []),
+        ...chatPreface(
+          past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
+          landed
+        ),
+        ...(re ? [re.brief] : []),
+        message
+      ].join('\n\n');
+      r = await run(who, prompt, {
+        kind: 'chat',
+        ownerSaid: message,
+        sessionFile: chatSession(id),
+        timeoutMs: CHAT_TIMEOUT_MS,
+        onEvent
+      });
+    } catch (err) {
+      // A throw on the way to a reply (a database read, a file the run reads)
+      // fails the chat like a failed run: told now, and saved below.
+      r = { ok: false, text: err instanceof Error ? err.message : String(err) };
+      onEvent({ type: 'error', message: r.text });
+    }
     // Saved however the run ended, so a reload still shows what the owner said
     // and why no reply came. A failed run's error is never the Odd's words:
     // the replay leaves it out, and the next chat's preface says the run failed.

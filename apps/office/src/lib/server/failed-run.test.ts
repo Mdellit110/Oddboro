@@ -3,7 +3,7 @@
 // error, in the place RUN_FAILURE declares for that kind of run. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { renameSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { UsageKind } from '@oddboro/ledger';
@@ -19,7 +19,7 @@ import { chatPreface } from './chat-preface.ts';
 /** What every run says when Claude Code is not on the computer. */
 const GONE = 'Could not start Claude Code: spawn claude ENOENT';
 
-await L.pg`insert into staff ${L.pg([odd('fay', 'Fay'), odd('gil', 'Gil')])}`;
+await L.pg`insert into staff ${L.pg([odd('fay', 'Fay'), odd('gil', 'Gil'), odd('hal', 'Hal')])}`;
 
 /** `fn`, run on a computer without Claude Code: only the stand-ins on PATH, and claude not among them. */
 async function withoutClaude<T>(fn: () => Promise<T>): Promise<T> {
@@ -74,6 +74,28 @@ test('the next chat after a failed one tells the Odd what the owner said and tha
   // the owner's line, never the error as Gil's own.
   assert.match(message, /: Are you there\?\n/);
   assert.ok(!message.includes(`You: ${GONE}`), 'the error was replayed as the Odd speaking');
+});
+
+test("a chat whose run throws keeps the owner's message and the error after a reload", async () => {
+  // A folder where Hal's session file should be: the run throws reading it.
+  mkdirSync(L.chatSession('hal'), { recursive: true });
+  try {
+    const events = await send('hal', 'Are you there?');
+    const last = events.at(-1);
+    assert.equal(last?.type, 'error');
+    const [said, failed] = (await reload('hal')).slice(-2);
+    assert.deepEqual(
+      { from: said.from, text: said.text, failed: said.failed },
+      { from: 'owner', text: 'Are you there?', failed: undefined }
+    );
+    assert.deepEqual(
+      { from: failed.from, text: failed.text, failed: failed.failed },
+      { from: 'staff', text: last?.type === 'error' ? last.message : '', failed: true }
+    );
+    assert.match(failed.text, /EISDIR/);
+  } finally {
+    rmSync(L.chatSession('hal'), { recursive: true });
+  }
 });
 
 test("a new session's replay finds its lines in place when the chat ends in a failed run", () => {

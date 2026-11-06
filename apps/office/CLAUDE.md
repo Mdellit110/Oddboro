@@ -224,8 +224,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    tapped or typed, gets the next question from the office (`chat` in
    `staff.ts`, a `told` line, no run); the third runs the manager, whose new
    session hears all three in its replay. The owner's line is stamped when sent,
-   so what lands during a reply sits between the two. A chat whose run fails
-   keeps the owner's line, and the error in place of the reply, marked
+   so what lands during a reply sits between the two. A chat whose run fails,
+   or throws on the way to a reply, keeps the owner's line, and the error in place of the reply, marked
    `failed` (`ChatEntry`), so a reload shows both as the chat showed them live;
    the next message tells the session what the owner wrote that it never saw
    (`chatPreface`). Its input grows with the text
