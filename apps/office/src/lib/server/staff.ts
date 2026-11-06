@@ -106,15 +106,12 @@ import {
   folderLines,
   heldReach,
   holdNetwork,
-  modelSection,
   networkHeld,
-  officeSection,
   ownTools,
   ownToolsSaid,
   runsOnLine,
   SECRET_STORES,
   settingsTab,
-  SWITCH_NAMES,
   type OwnTools,
   chatSession,
   home,
@@ -128,7 +125,6 @@ import {
   OFFICE_ACCOUNT,
   toolHome
 } from '@oddboro/ledger';
-import { workPath } from '@oddboro/ledger/work-paths';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
@@ -156,6 +152,7 @@ import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house } from './house.ts';
+import { followUpBrief } from './follow-up-brief.ts';
 
 /** The owner's data folder, which every staffer may read, whatever tool it runs on. */
 const DATA = home('data');
@@ -1250,182 +1247,6 @@ export async function runJob(job: JobRow, trigger: RunTrigger = 'schedule'): Pro
       extra: `\n## This run\n\nYou are running your job "${job.name}". {owner} is not in a chat with you.${trigger === 'manual' ? ' They started this run by hand just now, so they are at their screen: send anything the job has for them now (poke_owner with in_minutes 0), whatever quiet hours you keep for them.' : ''} Do the job, then reply with what you did in a few plain lines. Your reply goes in the ledger${job.report ? ' and on their desk as a report' : ''}.\n`
     })
   );
-}
-
-/** The owner's answers a hub picks its thread up with, one a line (`answerThread`). */
-const answers = (note: string | null): string[] =>
-  (note ?? '').split('\n').map((line) => `- ${line}`);
-
-/** What the staffer is told, for each kind of follow-up. */
-function followUpBrief(
-  f: FollowUpRow,
-  a?: AskRow,
-  r?: ReportRow,
-  t?: { row: TaskRow; files: string[] },
-  g?: GoalRow
-): string[] {
-  // The owner answered a plan raised on this thread. Sending one back is a
-  // `rework` instead, so only an approval or a denial reaches a resume.
-  if (f.kind === 'resume' && a?.kind === 'plan') {
-    const plan = g ? `your plan for goal #${g.id}, "${g.title}"` : `"${a.title}"`;
-    const hires = a.plan?.items.some((i) => i.kind === 'hire')
-      ? ' Odds the plan hires are not here yet: you pick up here again as {owner} hires each one, and hand it its first piece then.'
-      : '';
-    if (a.status === 'approved')
-      return [
-        `{owner} approved ${plan}. Start the work now. You lead it, here on the goal.`,
-        '',
-        ...answers(f.note),
-        '',
-        `1. Hand each piece of the work to the colleague who should do it, with hand_off, on the goal.${hires}`,
-        '2. Each time a piece comes back, check it and hand on the next, until the goal is met or the next step waits on a time.',
-        '3. To check a piece of work, prefer a colleague who did not do it.',
-        '4. Tell {owner} only what needs them, with raise_ask or give_owner_a_task, and when something is ready to try, with poke_owner. Never ask them to pass work to an Odd: that is yours to do.'
-      ];
-    if (a.status === 'denied')
-      return [
-        `{owner} said no to ${plan}. Do not start any of it.`,
-        '',
-        ...answers(f.note),
-        '',
-        '1. If their answer says what they want instead, do that. A new plan goes through propose_goal_plan.',
-        '2. Otherwise say so, and stop.'
-      ];
-  }
-  // {owner} hired an Odd a plan of yours proposed, from its hire ask on this thread.
-  if (f.kind === 'resume' && a?.kind === 'hire' && a.status === 'approved' && g)
-    return [
-      `{owner} hired an Odd your plan for goal #${g.id}, "${g.title}", proposed. Carry on leading the work, here on the goal.`,
-      '',
-      ...answers(f.note),
-      '',
-      `1. Find each new Odd with list_goals: it serves goal #${g.id}, under the name {owner} hired it by.`,
-      '2. It starts nothing on its own. Hand it its first piece the plan gives it now, with hand_off, on the goal.',
-      "3. If its part waits on another's work, say so, and stop."
-    ];
-  // Each line says what it is: an answer to something raised on the thread,
-  // what {owner} told a colleague about it in chat (`tellLead`), or the usage
-  // window resetting on a thread it held (`wakeThread`).
-  if (f.kind === 'resume')
-    return f.note
-      ? [
-          'Word came for work you lead, and no run of yours has seen it yet. Pick it back up now.',
-          '',
-          ...answers(f.note)
-        ]
-      : ['The time you set to pick your work back up has come. Pick it up now.'];
-  if (f.kind === 'first_day')
-    return [
-      'You joined the office today, and you just said hello to {owner} in chat. Get started now, so they never have to ask.',
-      '',
-      '1. Read your job description, notes/intake.md if you have one, my_goals and my_jobs.',
-      '2. If you cannot do good work without answers from {owner}, write only the questions your intake did not answer to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop.',
-      `3. If a tool you need is not in my_access, ask for it with ask_for_access. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, follow what my_access says instead.`,
-      '4. Otherwise do the first piece of real work your job calls for, now: the first run of your job, or the first thing your job description says to do, so {owner} sees it today. Work for a goal you serve is not yours to start: the Odd who leads it hands you each piece.',
-      '5. Your reply goes on their desk. Write it to {owner}: what you did, and what comes next.'
-    ];
-  if (f.kind === 'goal' && g)
-    return [
-      `{owner} set a new goal. Plan how the office meets it, and bring them the plan.`,
-      '',
-      `- Goal #${g.id}: ${g.title}`,
-      `- When: ${goalWhen(g)}. Area: ${g.area}.`,
-      ...(g.why ? [`- Why it matters: ${g.why}`] : []),
-      ...(g.doneWhen ? [`- Done when: ${g.doneWhen}`] : []),
-      '',
-      '1. Read the office: office_report for each Odd, what it does, its level and the tools it holds or is waiting on, and list_goals for the goals they already serve.',
-      `2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it. For a tool an Odd lacks, put any level raise in owner_steps, as a step on ${modelSection("that Odd's")}. Have the Odd ask for the tool itself with ask_for_access when its officeTools include it, or put connecting it in owner_steps when they do not. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, put switching it on in ${officeSection("that Odd's")}, in owner_steps only when office_report says {owner} can switch it on for that Odd. Keep every other step only {owner} can do in owner_steps too. Hire only for work nobody here fits.`,
-      '3. If you need answers from {owner} before you can plan it, write the questions to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop. You pick up when they finish it.',
-      "4. Otherwise bring the whole plan in one ask with propose_goal_plan. Write each hire's job description to a file first, and pass any intake as its intake_file.",
-      '5. Once {owner} approves the plan, you pick up here on the goal and lead the work: you hand each piece to the Odd who does it. So its owner steps hold only what truly needs {owner}, such as signing in to a tool, never passing work or a request to an Odd.',
-      '6. If the office already meets this goal as it is, say so and stop.'
-    ];
-  if (f.kind === 'task_done' && t) {
-    const answers = t.row.steps
-      .filter((s) => s.answer)
-      .map((s) => `- They answered "${s.text}" with: ${s.answer}`);
-    return [
-      `{owner} finished the task you gave them: "${t.row.title}". Pick up the work that waited on it now.`,
-      '',
-      `- Why you gave it: ${t.row.why}`,
-      ...answers,
-      ...(f.note ? [`- Their note: ${f.note}`] : []),
-      ...(t.files.length
-        ? [
-            // A file from a thread's folder is named from the office's folder, so the run gets where it is.
-            `- Attached, with anything they filled in: ${t.files.map((f) => (workPath(f) ? home(f) : f)).join(', ')}. Read each one first.`
-          ]
-        : []),
-      '',
-      '1. Read what they gave you: the files above, their answers and their note.',
-      `2. Do the next step you told them would follow, now. When it needs their yes, such as a hire, a change outside the office ${ACT_WRITE}, or a new job, raise it with the tool for it (propose_goal_plan for a goal, propose_hire, raise_ask and the rest).`,
-      '3. If something you need is missing or unclear, put one short question on their desk with give_owner_a_task, then stop.',
-      '4. If nothing was waiting on this task, say so and stop.'
-    ];
-  }
-  const askLines = a
-    ? [
-        `- Ask #${a.id}: ${a.title}`,
-        `- Why: ${a.why}`,
-        `- What you said would happen: ${a.ifApproved}`
-      ]
-    : [];
-  if (f.kind === 'carry_out' && a?.access)
-    return [
-      `{owner} approved your ask #${a.id}, and the access is ready now.`,
-      '',
-      ...askLines,
-      '',
-      '1. Check the tool answers: one small read.',
-      '2. If work was waiting on this access, do it now.',
-      '3. If nothing was waiting, stop there.'
-    ];
-  if (f.kind === 'carry_out')
-    return [
-      `{owner} approved your ask #${a?.id}. Carry it out now.`,
-      '',
-      ...askLines,
-      `- Their reason: ${f.note ?? 'none given'}`,
-      '',
-      '1. Do what they approved, and nothing beyond it.',
-      '2. If you cannot finish without something from {owner}, put it on their desk with raise_ask or give_owner_a_task, with everything needed to finish, then stop.'
-    ];
-  if (f.kind === 'denied')
-    return [
-      `{owner} turned down your ask #${a?.id}, and said why.`,
-      '',
-      ...askLines,
-      `- Their reason: ${f.note}`,
-      '',
-      '1. If the reason tells you how they want things done from now on, keep_lesson with their words.',
-      '2. Do not carry out the ask, and do not raise it again.',
-      '3. If the reason asks for something else instead, raise that as a new ask.'
-    ];
-  if (f.kind === 'rework')
-    return [
-      `{owner} sent your ask #${a?.id} back. Rework it the way they say, then bring it back.`,
-      '',
-      ...askLines,
-      `- What they want changed: ${f.note}`,
-      '',
-      '1. Do any work the new version needs first, such as rewriting a file in your folder.',
-      `2. Raise the new version with the same tool as before (raise_ask, propose_hire, ask_for_access, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
-      '3. Do not carry out the ask itself. They decide the new version.'
-    ];
-  return [
-    `{owner} read your report "${r?.title}" and gave feedback. Work out what it means, then act on it.`,
-    '',
-    `- Their feedback: ${f.note}`,
-    '',
-    'The report:',
-    '',
-    r?.body ?? '',
-    '',
-    '1. Work inside the office that they asked for, such as notes or a file in your folder, do now.',
-    `2. Anything that changes one of your jobs, or something outside the office ${ACT_WRITE}: raise_ask first, one exact action per ask.`,
-    '3. Anything only they can do goes on their desk with give_owner_a_task.',
-    '4. If the feedback needs nothing done, say so.'
-  ];
 }
 
 /** What a staffer is told when it reads the owner's edit to its file, for a lesson. */

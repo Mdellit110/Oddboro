@@ -1,0 +1,62 @@
+// What a follow-up run is told, kind by kind. Run with
+// `npm test -w @oddboro/office`.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import {
+  FOLLOW_UP_KINDS,
+  type AskRow,
+  type FollowUpKind,
+  type FollowUpRow,
+  type GoalRow,
+  type ReportRow,
+  type TaskRow
+} from '@oddboro/ledger';
+import { followUpBrief } from './follow-up-brief.ts';
+
+// Only the fields a brief reads are filled in; the rest of each row stays out.
+const followUp = (kind: FollowUpKind) => ({ kind, note: 'Their words' }) as FollowUpRow;
+const ask = {
+  id: 7,
+  kind: 'approval',
+  status: 'approved',
+  title: 'Send it',
+  why: 'Because',
+  ifApproved: 'It goes'
+} as AskRow;
+const report = { id: 3, title: 'Weekly', body: 'All well' } as ReportRow;
+const task = {
+  row: { id: 4, title: 'Sign in', why: 'Needed', steps: [] } as unknown as TaskRow,
+  files: []
+};
+const goal = {
+  id: 2,
+  title: 'More clients',
+  area: 'work',
+  horizon: 'ongoing',
+  why: null,
+  doneWhen: null
+} as unknown as GoalRow;
+
+const FEEDBACK = /^\{owner\} read your report "Weekly" and gave feedback\./;
+const briefOf = (
+  kind: FollowUpKind,
+  rows: { t?: typeof task; g?: GoalRow } = { t: task, g: goal }
+) => followUpBrief(followUp(kind), ask, report, rows.t, rows.g);
+
+test('every follow-up kind gets its own brief, and feedback gets the feedback brief, as do a hand-off with no hand-off row, a goal with no goal and a task_done with no task', () => {
+  // A hand-off, a hand-back and an edit are briefed before this when their row is there.
+  const feedbackKinds: FollowUpKind[] = ['feedback', 'hand_off', 'handed_back', 'edited'];
+  const firstLines = new Set<string>();
+  for (const kind of FOLLOW_UP_KINDS) {
+    const first = briefOf(kind)[0];
+    if (feedbackKinds.includes(kind)) {
+      assert.match(first, FEEDBACK, kind);
+      continue;
+    }
+    assert.doesNotMatch(first, FEEDBACK, kind);
+    assert.ok(!firstLines.has(first), `${kind} shares its brief with another kind`);
+    firstLines.add(first);
+  }
+  assert.match(briefOf('goal', { t: task })[0], FEEDBACK);
+  assert.match(briefOf('task_done', { g: goal })[0], FEEDBACK);
+});
