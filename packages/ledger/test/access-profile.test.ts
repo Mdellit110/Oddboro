@@ -157,11 +157,12 @@ test('a handed-over run keeps its own commands, web and folders; only outside to
   assert.equal(run.outside[0].level, 'read');
 });
 
-/** The line an Odd hears for each own tool it lacks, when {owner} can switch it on. */
-const SWITCH = {
-  commands: 'No shell: {owner} can switch on Run commands in your Settings tab.',
-  web: 'No web: {owner} can switch on Browse the web in your Settings tab.'
-};
+/** The line an Odd hears for each own tool it lacks, when {owner} can switch it on, by whose card it is. */
+const switchLines = (whose: string) => ({
+  commands: `No shell: {owner} can switch on Run commands in ${whose} Settings tab.`,
+  web: `No web: {owner} can switch on Browse the web in ${whose} Settings tab.`
+});
+const SWITCH = switchLines('your');
 
 test('each Odd is told its own tools, and how to get each one it lacks', () => {
   const shell = "a shell confined to your folders and {owner}'s developer tools (read only)";
@@ -179,7 +180,7 @@ test('each Odd is told its own tools, and how to get each one it lacks', () => {
     const web = agent === 'codex' ? 'web search' : 'web search and fetch';
     // The words for each tool's lists, with a switch that follows the owner; the table below holds the rest.
     const line = (commands: boolean, web: boolean, network: boolean) =>
-      C.ownToolsLine(agent, { commands, commandsHow: { state: 'switch' }, web, network }, 'your');
+      C.ownToolsLine(agent, { commands, commandsHow: { state: 'switch' }, web, network });
     assert.deepEqual(
       {
         neither: line(false, false, false),
@@ -202,6 +203,8 @@ test('an Odd is told the owner can switch on a tool it lacks exactly when the ow
     commands: boolean;
     web: boolean;
     held?: boolean;
+    /** The Odd's name when another Odd reads its line, as in office_report. */
+    about?: string;
     hears: string;
   };
   const rows: Row[] = [
@@ -288,21 +291,54 @@ test('an Odd is told the owner can switch on a tool it lacks exactly when the ow
       web: true,
       held: true,
       hears: `Your own tools work on files, plus ${shell}, with no network, and web search and fetch. ${C.NETWORK_HELD_LINE}`
+    },
+    // Another Odd reads it: every sentence names whose tools, folders and card they are.
+    {
+      agent: 'claude',
+      platform: 'darwin',
+      commands: false,
+      web: false,
+      about: 'Rowan',
+      hears:
+        "Rowan's own tools work on files only. No shell: {owner} can switch on Run commands in Rowan's Settings tab. No web: {owner} can switch on Browse the web in Rowan's Settings tab."
+    },
+    {
+      agent: 'claude',
+      platform: 'darwin',
+      commands: true,
+      web: true,
+      held: true,
+      about: 'Rowan',
+      hears:
+        "Rowan's own tools work on files, plus a shell confined to Rowan's folders and {owner}'s developer tools (read only), with no network, and web search and fetch. This version of Claude Code refuses to let Rowan's commands reach the internet, so they have none."
+    },
+    // The full-path sentence is the Gemini Odd's own instruction, so a reader of its line is not given it.
+    {
+      agent: 'gemini',
+      platform: 'darwin',
+      commands: true,
+      web: false,
+      about: 'Rowan',
+      hears:
+        "Rowan's own tools work on files only. No shell: Gemini can't run commands here. No web: {owner} can switch on Browse the web in Rowan's Settings tab."
     }
   ];
   for (const r of rows) {
-    const said = C.ownToolsSaid(
-      r.agent,
-      C.ownTools(odd(r.agent, r.commands, r.web), r.platform),
-      r.held ?? false,
-      'your'
-    ).join(' ');
+    const own = C.ownTools(odd(r.agent, r.commands, r.web), r.platform);
+    const said = C.ownToolsSaid(r.agent, own, r.held ?? false, r.about).join(' ');
     const row = JSON.stringify({ ...r, hears: undefined });
     assert.equal(said, r.hears, row);
     // The Run commands switch line only where the owner's switch reaches the tool and it is off.
+    const lines = switchLines(r.about === undefined ? 'your' : `${r.about}'s`);
     const switchable = A.commandsHow(r.agent, r.platform).state === 'switch' && !r.commands;
-    assert.equal(said.includes(SWITCH.commands), switchable, row);
-    assert.equal(said.includes(SWITCH.web), !r.web, row);
+    assert.equal(said.includes(lines.commands), switchable, row);
+    assert.equal(said.includes(lines.web), !r.web, row);
+    // Read about another Odd, no row speaks to the reader as if the tools were its own.
+    assert.doesNotMatch(
+      C.ownToolsSaid(r.agent, own, r.held ?? false, 'Rowan').join(' '),
+      /\byour\b/i,
+      row
+    );
   }
 });
 
@@ -311,7 +347,7 @@ test("the Odd is told the card's own tab name, and office_report names whose car
   const [line] = C.ownToolsSaid('claude', off, false);
   assert.ok(line.includes(`in your ${W.SETTINGS_TAB} tab.`), line);
   assert.equal(W.settingsTab("Rowan's"), "Rowan's Settings tab");
-  const [rowans] = C.ownToolsSaid('claude', off, false, "Rowan's");
+  const [rowans] = C.ownToolsSaid('claude', off, false, 'Rowan');
   assert.ok(rowans.includes("can switch on Browse the web in Rowan's Settings tab."), rowans);
   assert.doesNotMatch(rowans, /your Settings tab/);
 });
@@ -405,14 +441,15 @@ test(
   { skip: process.platform !== 'darwin' && 'Run commands runs on a Mac only' },
   async () => {
     const [open, held] = [await ownToolsReported(manager), await ownToolsReported(heldManager)];
-    const shell = "a shell confined to your folders and the owner's developer tools (read only)";
+    // Another Odd reads the report, so each line names whose tools and folders they are.
+    const shell = "a shell confined to Bea's folders and the owner's developer tools (read only)";
     assert.equal(
       open.bea,
-      `Your own tools work on files, plus ${shell}, which can reach the internet, and web search and fetch.`
+      `Bea's own tools work on files, plus ${shell}, which can reach the internet, and web search and fetch.`
     );
     assert.equal(
       held.bea,
-      `Your own tools work on files, plus ${shell}, with no network, and web search and fetch. ${C.NETWORK_HELD_LINE}`
+      `Bea's own tools work on files, plus ${shell}, with no network, and web search and fetch. This version of Claude Code refuses to let Bea's commands reach the internet, so they have none.`
     );
     assert.equal(held.cody, open.cody);
     assert.equal(held.mona, open.mona);
@@ -429,10 +466,10 @@ test("office_report lists each Odd's tool, own tools and folders", async () => {
     [mona.runsOn, mona.ownTools, mona.folders],
     [
       'Claude Code',
-      // Another Odd reads the report, so it names whose card the switch is on.
+      // Another Odd reads the report, so it names whose tools and card they are.
       process.platform === 'darwin'
-        ? "Your own tools work on files, plus web search and fetch. No shell: the owner can switch on Run commands in Mona's Settings tab."
-        : "Your own tools work on files, plus web search and fetch. No shell: Claude Code can't run commands here.",
+        ? "Mona's own tools work on files, plus web search and fetch. No shell: the owner can switch on Run commands in Mona's Settings tab."
+        : "Mona's own tools work on files, plus web search and fetch. No shell: Claude Code can't run commands here.",
       [`${kept} (read only)`]
     ]
   );

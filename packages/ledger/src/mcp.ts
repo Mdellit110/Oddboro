@@ -1380,8 +1380,8 @@ if (has('office_report'))
             level: caps.level,
             runsOn: AGENT_NAMES[caps.agent],
             // As the Odd's own my_access says it, the office's held network included.
-            // Its switches are on its own card, so the reader is told whose Settings tab.
-            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env), `${who.name}'s`)
+            // Another Odd reads it, so it names whose tools, folders and Settings tab.
+            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env), who.name)
               .join(' ')
               .replaceAll('{owner}', OWNER),
             folders: folderLines(caps.own),

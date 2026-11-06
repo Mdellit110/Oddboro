@@ -343,9 +343,12 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    switches and folders as its tool takes them from `capabilities()`
    (`caps.own`), less a held network, and passes the given folders still on
    the disk; the prompt lists them under "Where things are", and "What you
-   can do" says what the Odd's own tools reach (`ownToolsSaid` in the
-   ledger's `capabilities.ts`, held network included), the same line
-   `my_access` and `office_report` give.
+   can do" says what the Odd's own tools reach and, for Run commands or
+   Browse the web when it lacks one, whether the owner can switch it on in
+   its Settings tab (`ownToolsSaid` in the ledger's `capabilities.ts`, held
+   network included), the same line `my_access` gives. `office_report` gives
+   it too, naming the Odd, since another Odd reads it ("Rowan's own tools",
+   "Rowan's Settings tab").
    `src/lib/server/grok.ts` starts a Grok run from the office's own Grok home,
    `~/.oddboro/grok` (`GROK_HOME`), never the owner's `~/.grok`. The owner signs
    in to it from the office's page (`agent-sign-in.ts`, item 18); a run from a

@@ -122,9 +122,15 @@ export function capped(caps: Capabilities, ceiling: Level): Capabilities {
   };
 }
 
-/** What the Odd reads when this office keeps its commands off the internet (`heldReach`). */
-export const NETWORK_HELD_LINE =
-  'This version of Claude Code refuses to let your commands reach the internet, so they have none.';
+/** What an Odd reads when this office keeps `whose` commands off the internet (`heldReach`). */
+const networkHeld = (whose: string): string =>
+  `This version of Claude Code refuses to let ${whose} commands reach the internet, so they have none.`;
+/** That line as the Odd itself reads it. */
+export const NETWORK_HELD_LINE = networkHeld('your');
+
+/** "your" to the Odd itself, or "Rowan's" when another Odd reads about Rowan. */
+const whoseOf = (about: string | undefined): string =>
+  about === undefined ? 'your' : `${about}'s`;
 
 /**
  * What the Odd's own tools reach, as it is told: `ownToolsLine` for its reach
@@ -132,19 +138,19 @@ export const NETWORK_HELD_LINE =
  * `heldReach`), then `NETWORK_HELD_LINE` only when the hold took away a
  * network it would have had, so an Odd is never told of commands it lacks.
  * The prompt, my_access and office_report all say this, so they agree.
- * `whose` names the card its switches are on: "your" to the Odd itself, and
- * the Odd's name in office_report, which another Odd reads.
+ * `about` is the Odd's name when another Odd reads it (office_report), so
+ * every sentence names whose tools, folders and card they are.
  */
 export function ownToolsSaid(
   agent: Agent,
   own: OwnTools,
   officeHeld: boolean,
-  whose = 'your'
+  about?: string
 ): string[] {
   const reach = heldReach(agent, own, officeHeld);
   return [
-    ownToolsLine(agent, reach, whose),
-    ...(reach.held && own.network ? [NETWORK_HELD_LINE] : [])
+    ownToolsLine(agent, reach, about),
+    ...(reach.held && own.network ? [networkHeld(whoseOf(about))] : [])
   ];
 }
 
@@ -242,30 +248,35 @@ export function levelLine(level: Level, owner: string): string {
  * folders and {owner}'s developer tools, read only, and to the internet only
  * when `network` says so, and the tool's own web search (and page fetch, where
  * it has one) when the owner switched Browse the web on. Each one it lacks
- * gets a line saying whether {owner} can switch it on, and where (`whose`
- * card's Settings tab). Gemini's policy allows a write only by its full path.
+ * gets a line saying whether {owner} can switch it on, and where (its card's
+ * Settings tab). Gemini's policy allows a write only by its full path.
+ * `about` names the Odd when another Odd reads the line (`ownToolsSaid`).
  * `{owner}` is left for the caller to fill.
  */
 export function ownToolsLine(
   agent: Agent,
   own: Pick<OwnTools, 'commands' | 'commandsHow' | 'web' | 'network'>,
-  whose: string
+  about?: string
 ): string {
-  const shell = `a shell confined to your folders and {owner}'s developer tools (read only), ${own.network ? 'which can reach the internet' : 'with no network'}`;
+  const whose = whoseOf(about);
+  const shell = `a shell confined to ${whose} folders and {owner}'s developer tools (read only), ${own.network ? 'which can reach the internet' : 'with no network'}`;
   const plus = [
     ...(own.commands ? [shell] : []),
     ...(own.web ? [FETCHES_PAGES[agent] ? 'web search and fetch' : 'web search'] : [])
   ];
+  const opens = `${about === undefined ? 'Your' : whose} own tools work on files`;
   const tab = settingsTab(whose);
   const line = [
-    plus.length
-      ? `Your own tools work on files, plus ${plus.join(', and ')}.`
-      : 'Your own tools work on files only.',
+    plus.length ? `${opens}, plus ${plus.join(', and ')}.` : `${opens} only.`,
     ...(own.commands ? [] : [noShell(agent, own.commandsHow, tab)]),
     // Browse the web follows the owner on every tool.
     ...(own.web ? [] : [`No web: {owner} can switch on Browse the web in ${tab}.`])
   ].join(' ');
-  return agent === 'gemini' ? `${line} Give each file tool the file's full path.` : line;
+  // The full-path sentence tells the Gemini Odd itself how to work; a reader of
+  // another Odd's line has its own tool and its own rules.
+  return agent === 'gemini' && about === undefined
+    ? `${line} Give each file tool the file's full path.`
+    : line;
 }
 
 /**
