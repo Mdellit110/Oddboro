@@ -103,7 +103,7 @@ nothing fails, it says so: name that place in the pull request.
   it runs.
 - **An office tool.** Start at its row in `OFFICE_TOOLS` in
   `packages/ledger/src/tools.ts`, and register it in `mcp.ts` behind
-  `hasTool`. A tool registered beside a listed one goes in `RIDES_WITH`.
+  `has()`. A tool registered beside a listed one goes in `RIDES_WITH`.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in
