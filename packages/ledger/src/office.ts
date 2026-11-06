@@ -433,7 +433,8 @@ export async function setFolder(
 /**
  * Secret stores in the home folder, by name: keys, sign-ins and settings,
  * including those other apps on this computer keep there, like the Google
- * Workspace MCP server's, and each coding tool's own home. AppData is where
+ * Workspace MCP server's, Docker's registry sign-ins and Kubernetes' cluster
+ * keys, and each coding tool's own home. AppData is where
  * Windows apps keep theirs. No run reads them (`unreadable` in the office's
  * staff.ts), and no folder given to an Odd holds or sits in one (`checkFolder`).
  */
@@ -449,7 +450,9 @@ export const SECRET_STORES: string[] = [
   '.google_workspace_mcp',
   '.grok',
   '.codex',
-  '.gemini'
+  '.gemini',
+  '.docker',
+  '.kube'
 ];
 
 /** What the owner reads when a folder cannot be given to an Odd. */

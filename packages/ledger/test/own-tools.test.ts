@@ -348,8 +348,17 @@ test('the secret stores are the ones the office keeps shut', () => {
     '.google_workspace_mcp',
     '.grok',
     '.codex',
-    '.gemini'
+    '.gemini',
+    '.docker',
+    '.kube'
   ]);
+});
+
+test("checkFolder refuses Docker's and Kubernetes' folders, which hold sign-ins and cluster keys", () => {
+  folder('.docker');
+  folder('.kube');
+  assert.deepEqual(O.checkFolder('~/.docker'), { refused: O.FOLDER_REFUSED.secrets });
+  assert.deepEqual(O.checkFolder('~/.kube'), { refused: O.FOLDER_REFUSED.secrets });
 });
 
 test(

@@ -465,7 +465,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `~/.aws`, `~/.gnupg`, `~/.config`, `~/Library`, `~/AppData`,
    `~/.claude.json`, `~/.google_workspace_mcp` (where
    that MCP server keeps its sign-ins for other apps on the Mac), `~/.grok`,
-   `~/.codex` and `~/.gemini`, everything
+   `~/.codex`, `~/.gemini`, `~/.docker` and `~/.kube`, everything
    in `~/.oddboro` besides `staff/` and `data/` (and `threads/<id>/` for a
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
