@@ -30,4 +30,10 @@ export const SECTIONS = [
 ] as const;
 
 /** The pages the sitemap lists. Paths end in a slash, the way the build writes them. */
-export const PAGES = ['/', '/releases/', '/privacy/', '/terms/'] as const;
+export const PAGES = [
+  '/',
+  '/releases/',
+  '/connectors/open-brain/',
+  '/privacy/',
+  '/terms/'
+] as const;

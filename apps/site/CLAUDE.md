@@ -27,6 +27,15 @@ and `preview`, fixed.
   the `oddboro` secret store service, `local.oddboro.com`). Keep them in step
   with the app.
 
+## Connector guides
+
+`/connectors/<name>/` walks the owner through giving an Odd one outside
+service whose setup is not obvious, such as Open Brain's key in the
+`x-brain-key` header. It is the one place the site names tabs and buttons,
+so its steps quote the office's labels exactly (`AccessTab.svelte`,
+`DeskDrawer.svelte`, `connectSteps` in the ledger) and change with them.
+Building the service itself stays in its own docs, which the page links to.
+
 ## Least access, never a yes for everything
 
 The site never promises that nothing leaves without the owner's yes, because an
@@ -289,6 +298,6 @@ src/lib/motion/              The motion helpers above.
 src/lib/hero/                Hero.svelte, HeadlineOdd.svelte, choreo.ts, scene.json.
 src/lib/server/legal.ts      Renders src/content/legal/*.md with markdown-it at prerender.
 src/content/legal/           privacy.md and terms.md. The legal writer owns these.
-src/routes/                  /, /releases/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
+src/routes/                  /, /releases/, /connectors/open-brain/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
 static/                      favicon.svg (a placeholder O roundel until Oddboro has a mark), robots.txt, art/ (night) and art/day/.
 ```
