@@ -885,19 +885,10 @@ its spec as `current`, and a note redraws it from that spec. Each note is
 added to the layout's words as a "Then:" line, so a later change starts from
 everything asked so far. A change in words also shows Claude every room's
 items by id and tile, so it can return room `edits` (remove, move, add) that
-name the very thing. In the large view, **Arrange by hand** turns on arranging: dragging a placed
-thing carries it (the floor's `onMove`, with an outline where it lands) to a
-tile in its own room, or its own area (the halls, the street, the grounds),
-and a tap picks it (`onPick`, `highlight`) to Move or
-Remove. The **Library** panel down the right lists what the office drew for
-itself, then every library piece by the room kind it belongs to
-(`libraryPieces`), the halls, the street and the grounds, searchable; drag one
-onto the floor, or pick one and tap where it goes. Undo steps back. Each change
-is an edit on its room, or under `areas` for one outside the rooms, in the spec,
-kept in the order made; one the office refuses is not kept, and its reason
-shows over the floor. Each is built at once by `POST /api/office/build`
-(`buildOnly`, no Claude run). **Save to the office** in the large view moves in
-at once. For a whole look the library lacks, like a
+name the very thing. The window has no arranging by hand, and no refurnishing
+by the latest rules: both built each change through a route the office never
+had, so they are out until it has one (NEW-1615). **Save to the office** in the
+large view moves in at once. For a whole look the library lacks, like a
 dungeon, Claude makes a theme: it draws stand-ins with `replaces` (drawn over
 the original, keeping its footprint and spots) and maps them in the spec's
 `swaps`, with `windows: false` for a place underground. Once a drawing builds,
@@ -910,8 +901,7 @@ round (`drawAll`), and the office keeps everything it asked for if that
 builds, else only the room edits, else the first version. A change keeps to
 what it touched (`scopeOf`): the look-over sees only rooms whose spec changed,
 and the front and street only if the theme did; its edits elsewhere are
-ignored, and with nothing touched it does not run. The office the owner is in can be refurnished by
-the latest rules, or arranged by hand, the same way. Nothing changes until **Move in**:
+ignored, and with nothing touched it does not run. Nothing changes until **Move in**:
 `POST /api/office/move-in` (`moveInto` in `src/lib/server/move-in.ts`) checks
 the art and builds the spec again on the server, keeps the layout and its art (`saveArt`), and `moveIn` makes it the
 office. Kept art joins the library for every later drawing: `officeLibrary()`
