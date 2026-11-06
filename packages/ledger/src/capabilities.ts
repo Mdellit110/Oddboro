@@ -13,10 +13,8 @@ import {
   GRANT_LABEL,
   LEVEL_NAME,
   levelAtMost,
-  levelRoute,
   officeSection,
   parseLevel,
-  SWITCH_NAMES,
   type Level
 } from './access-words.ts';
 import {
@@ -29,6 +27,7 @@ import {
   type CommandsHow,
   type GrantedFolder
 } from './agents.ts';
+import { OWNER_GRANTS } from './grantable.ts';
 import {
   grantsFor,
   heldReach,
@@ -237,7 +236,7 @@ export function outsideLines(c: Capabilities, owner: string, about?: string): st
     const what = `${a.connector.name} (${GRANT_LABEL[a.level === 'act' ? 'act' : 'read'].toLowerCase()})`;
     switch (a.heldBack) {
       case 'above its level':
-        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${levelRoute(owner, whoseOf(about))}`;
+        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${OWNER_GRANTS.level.missing({ owner, whose: whoseOf(about) })}`;
       case 'still connecting':
         return `${what}: held back until ${owner} finishes connecting it.`;
       case 'sign-in ran out':
@@ -263,7 +262,7 @@ export function levelLine(level: Level, owner: string): string {
  * ask never changes a level: the owner changes it on the card.
  */
 export function askAboveLevel(held: Level, asked: 'read' | 'write', owner: string): string {
-  return `You hold ${held}, so you cannot ask for ${asked}. ${levelRoute(owner, 'your')} If this job needs a higher one, say so in your reply.`;
+  return `You hold ${held}, so you cannot ask for ${asked}. ${OWNER_GRANTS.level.missing({ owner, whose: 'your' })} If this job needs a higher one, say so in your reply.`;
 }
 
 /**
@@ -292,26 +291,16 @@ export function ownToolsLine(
   const where = officeSection(whose);
   const line = [
     plus.length ? `${opens}, plus ${plus.join(', and ')}.` : `${opens} only.`,
-    ...(own.commands ? [] : [noShell(agent, own.commandsHow, where)]),
-    // Browse the web follows the owner on every tool.
-    ...(own.web ? [] : [`No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`])
+    ...(own.commands
+      ? []
+      : [OWNER_GRANTS.commands.missing({ agent, how: own.commandsHow, where })]),
+    ...(own.web ? [] : [OWNER_GRANTS.web.missing({ where })])
   ].join(' ');
   // The full-path sentence tells the Gemini Odd itself how to work; a reader of
   // another Odd's line has its own tool and its own rules.
   return agent === 'gemini' && about === undefined
     ? `${line} Give each file tool the file's full path.`
     : line;
-}
-
-/**
- * What an Odd without a shell hears: the Run commands switch only when it
- * reaches its tool on this system (`commandsHow`), so it is never offered a
- * switch the owner cannot move.
- */
-function noShell(agent: Agent, how: CommandsHow, where: string): string {
-  return how.state === 'switch'
-    ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
-    : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`;
 }
 
 /** One line per folder the owner gave the Odd: its path and what the Odd may do there. */

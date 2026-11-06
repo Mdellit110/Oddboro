@@ -18,7 +18,7 @@ import {
 import type { ArtKind, Place } from '@oddboro/sprites/art';
 import type { LookSpec, PartKind } from '@oddboro/sprites/look';
 import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/world';
-import { STARTER_TOOLS } from './tools.ts';
+import { HIRE_DEFAULTS } from './grantable.ts';
 import type { Agent, Effort, GrantedFolder } from './agents.ts';
 import type { Level } from './access-words.ts';
 
@@ -36,11 +36,11 @@ export const staff = pgTable('staff', {
   portrait: text().notNull(),
   /** The room template it works in. */
   room: text().notNull().default('workspace'),
-  permission: text().$type<Level>().notNull().default('read'),
+  permission: text().$type<Level>().notNull().default(HIRE_DEFAULTS.staff.permission),
   /** The coding tool its runs go through. The owner picks it at hire and on the Settings tab. */
   agent: text().$type<Agent>().notNull().default('claude'),
   /** The office tools the owner granted, beyond the ones every staffer has. See tools.ts. */
-  tools: text().array().notNull().default(STARTER_TOOLS),
+  tools: text().array().notNull().default(HIRE_DEFAULTS.staff.tools),
   /** The account its runs sign in with on its tool (accounts.ts); null is the tool's Office account. */
   account: text(),
   /** The model its runs use on its tool (`MODELS` in agents.ts); null is the office's. */
@@ -48,11 +48,11 @@ export const staff = pgTable('staff', {
   /** How hard its runs think, as the owner picked it; null is Medium (`effortFor` in agents.ts). */
   effort: text().$type<Effort>(),
   /** The owner's Run commands switch. Whether a run gets a shell also depends on its tool (`commandsHow`). */
-  commands: boolean().notNull().default(false),
+  commands: boolean().notNull().default(HIRE_DEFAULTS.staff.commands),
   /** The owner's Browse the web switch. */
-  web: boolean().notNull().default(false),
+  web: boolean().notNull().default(HIRE_DEFAULTS.staff.web),
   /** Folders outside the office the owner lets it read, or read and change, one entry per real path. */
-  folders: jsonb().$type<GrantedFolder[]>().notNull().default([]),
+  folders: jsonb().$type<GrantedFolder[]>().notNull().default(HIRE_DEFAULTS.staff.folders),
   /** One sentence on what it is for, shown on the card. */
   remit: text().notNull(),
   /** The job description its Claude session runs with. */

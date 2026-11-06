@@ -3,6 +3,7 @@
   import type { HireProposal, Schedule } from '@oddboro/ledger';
   import { LEVEL_LABEL, LEVELS, type Level } from '@oddboro/ledger/access';
   import { AGENT_NAMES, hireToolsLine, type Agent } from '@oddboro/ledger/agents';
+  import { HIRE_DEFAULTS } from '@oddboro/ledger/grantable';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import Pixel from './Pixel.svelte';
   import LookStudio, { type Drawn } from './LookStudio.svelte';
@@ -35,7 +36,7 @@
   let brief = $state('');
   let remit = $state('');
   let desk = $state('');
-  let permission = $state<Level>('read');
+  let permission = $state<Level>(HIRE_DEFAULTS.staff.permission);
   /** The tool its runs go through, its hello first: the office's own until the owner picks another. Stored with the hire. */
   const agentTools = new AgentTools();
   let pickedAgent = $state<Agent | undefined>();

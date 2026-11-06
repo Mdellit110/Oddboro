@@ -101,7 +101,8 @@ import { MANAGER_ROLE } from './managers.ts';
 import { currentPlatform } from './platform.ts';
 import { levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
-import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
+import { isGrantable, OFFICE_TOOLS, tickable, yesOrNo } from './tools.ts';
+import { HIRE_DEFAULTS } from './grantable.ts';
 import {
   OWNER_ANSWERS,
   type AskAnswer,
@@ -541,8 +542,10 @@ export function checkFolder(path: string): { real: string } | { refused: string 
 
 export type Hire = Pick<
   StaffRow,
-  'name' | 'role' | 'variant' | 'portrait' | 'room' | 'permission' | 'remit' | 'desk'
+  'name' | 'role' | 'variant' | 'portrait' | 'room' | 'remit' | 'desk'
 > & {
+  /** Its level; `HIRE_DEFAULTS` when left out. */
+  permission?: Level;
   /** The office they work in, by name. */
   office?: string;
   sprite?: string;
@@ -620,7 +623,12 @@ export async function hire(h: Hire): Promise<StaffRow> {
   const [row] = await db
     .insert(staff)
     // With no tool picked, the hire runs on the office's own.
-    .values({ ...values, agent: values.agent ?? officeAgent(), id, tools: tools ?? STARTER_TOOLS })
+    .values({
+      ...values,
+      agent: values.agent ?? officeAgent(),
+      id,
+      tools: tools ?? HIRE_DEFAULTS.staff.tools
+    })
     .returning();
   await saveParts(newParts, id);
   await record({

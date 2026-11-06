@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { OFFICE_SECTION, SETTINGS_TAB } from '@oddboro/ledger/access';
+import { OWNER_GRANTS } from '@oddboro/ledger/grantable';
 import { house } from './house.ts';
 
 const section = house({ has: () => false, now: '9:00', zone: 'London time' });
@@ -69,4 +70,17 @@ test('a run that can ask for access is told where more outside tools come from',
     /reply\. For more outside tools, call ask_for_access\. When an outside tool/
   );
   assert.doesNotMatch(section, /For more outside tools/);
+});
+
+test("a run is told where more outside tools come from in the words of the outside-tools grant's line", () => {
+  for (const held of [['ask_for_access', 'find_connectors'], ['ask_for_access'], []]) {
+    const has = (t: string) => held.includes(t);
+    const more = OWNER_GRANTS.outside_tools.missing({ has });
+    assert.ok(
+      house({ has, now: '9:00', zone: 'London time' }).includes(
+        `say which and why in your reply.${more} When an outside tool`
+      ),
+      held.join(', ')
+    );
+  }
 });

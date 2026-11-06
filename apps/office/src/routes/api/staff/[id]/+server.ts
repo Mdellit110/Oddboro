@@ -21,25 +21,15 @@ import {
   EFFORT_ORDER,
   type Effort
 } from '@oddboro/ledger';
+import type { StaffPatchKey } from '@oddboro/ledger/grantable';
 import { isBusy } from '#lib/server/staff.ts';
 import type { RequestHandler } from './$types';
 
 export const PATCH: RequestHandler = async ({ params, request }) => {
   const who = await staffer(params.id);
   if (!who) error(404, 'No such Odd');
-  const b = (await request.json().catch(() => ({}))) as {
-    permission?: unknown;
-    agent?: unknown;
-    tool?: unknown;
-    on?: unknown;
-    commands?: unknown;
-    web?: unknown;
-    folder?: unknown;
-    access?: unknown;
-    effort?: unknown;
-    model?: unknown;
-    account?: unknown;
-  };
+  // A new key goes in STAFF_PATCH_KEYS first, where PATCH_KEY classes it.
+  const b = (await request.json().catch(() => ({}))) as Partial<Record<StaffPatchKey, unknown>>;
   if (typeof b.tool === 'string') {
     if (typeof b.on !== 'boolean') error(400, 'Say whether to grant or remove it');
     try {
