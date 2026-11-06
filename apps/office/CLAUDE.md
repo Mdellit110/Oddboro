@@ -1034,21 +1034,21 @@ sends every action as JSON, body or not.
 
 ## Where things live
 
-| Path                              | What it holds                                                                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/lib/floor/`                  | The PixiJS floor and the Odds on it                                                                                                  |
-| `src/lib/staff/roster.ts`         | The Odd shape the page gets (`StaffProfile`), hiring looks, and the label for each activity                                          |
-| `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat                                                                            |
-| `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain                                                                      |
-| `src/lib/server/profile.ts`       | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                               |
-| `src/lib/server/sandbox.ts`       | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the refusal line |
-| `src/routes/api/`                 | One folder per thing the page reads or changes                                                                                       |
-| `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to                                                                     |
-| `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow                                                                               |
-| `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music                                                                  |
-| `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                                                                                        |
-| `scripts/office-service.ts`       | The login service                                                                                                                    |
-| `src/app.css`                     | Tokens. Every colour in the chrome reads these.                                                                                      |
+| Path                              | What it holds                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/floor/`                  | The PixiJS floor and the Odds on it                                                                                                   |
+| `src/lib/staff/roster.ts`         | The Odd shape the page gets (`StaffProfile`), hiring looks, and the label for each activity                                           |
+| `src/lib/ui/`                     | The card and its tabs, the Desk, the Ledger, hiring, chat                                                                             |
+| `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain. Where to start a change there: [CLAUDE.md](src/lib/server/CLAUDE.md) |
+| `src/lib/server/profile.ts`       | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                                |
+| `src/lib/server/sandbox.ts`       | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the refusal line  |
+| `src/routes/api/`                 | One folder per thing the page reads or changes                                                                                        |
+| `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to                                                                      |
+| `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow                                                                                |
+| `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music                                                                   |
+| `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                                                                                         |
+| `scripts/office-service.ts`       | The login service                                                                                                                     |
+| `src/app.css`                     | Tokens. Every colour in the chrome reads these.                                                                                       |
 
 ## Rules for this app
 
