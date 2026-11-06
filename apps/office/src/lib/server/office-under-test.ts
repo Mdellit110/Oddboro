@@ -787,15 +787,38 @@ export async function setOwn(
     update staff set commands = ${o.commands ?? false}, web = ${o.web ?? false},
       folders = ${JSON.stringify(o.folders ?? [])}::jsonb where id = ${id}`;
 }
+/** What the owner's page sends one route: its params, its query and its JSON body. */
+export type Call = {
+  params?: Record<string, string>;
+  query?: Record<string, string>;
+  body?: unknown;
+};
+/**
+ * The owner's page calling one of the office's routes, answered by the
+ * route's own handler for `method`. `route` is its id, like `/api/staff/[id]`.
+ * A route that refuses throws, as SvelteKit's `error` does.
+ */
+export async function request(route: string, method: string, call: Call = {}): Promise<Response> {
+  const module = (await import(`../../routes${route}/+server.ts`)) as Record<
+    string,
+    ((event: unknown) => Promise<Response>) | undefined
+  >;
+  const handler = module[method];
+  assert.ok(handler, `${route} has no ${method}`);
+  let path = route;
+  for (const [k, v] of Object.entries(call.params ?? {})) path = path.replace(`[${k}]`, v);
+  const url = new URL(`http://office${path}`);
+  url.search = new URLSearchParams(call.query ?? {}).toString();
+  return handler({
+    params: call.params ?? {},
+    url,
+    request: new Request(url, { method, body: JSON.stringify(call.body ?? {}) }),
+    getClientAddress: () => '127.0.0.1'
+  });
+}
 /** The owner's PATCH of an Odd from its card. */
 export const patch = (id: string, body: unknown) =>
-  PATCH({
-    params: { id },
-    request: new Request(`http://office/api/staff/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body)
-    })
-  } as unknown as Parameters<typeof PATCH>[0]);
+  request('/api/staff/[id]', 'PATCH', { params: { id }, body });
 /** What the route said when it refused a PATCH. */
 export async function refusal(
   body: ReturnType<typeof patch>
