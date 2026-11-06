@@ -7,16 +7,17 @@ import { test } from 'node:test';
 import './pglite.ts';
 
 const { getTableColumns } = await import('drizzle-orm');
-const { officeSection, settingsTab } = await import('../src/access-words.ts');
-const { accessInRun, askAboveLevel, outsideLines, ownToolsLine } =
-  await import('../src/capabilities.ts');
+const { LEVELS, officeSection, settingsTab } = await import('../src/access-words.ts');
+// Through `say` only (below), so each call is noted: the bare names stay out of scope.
+const C = await import('../src/capabilities.ts');
 const G = await import('../src/grantable.ts');
 const { hire, officeAgent } = await import('../src/office.ts');
-const { GRANTABLE_TOOLS } = await import('../src/tools.ts');
+const { GRANTABLE_TOOLS, isGrantable } = await import('../src/tools.ts');
 const { hireManager, MANAGERS } = await import('../src/managers.ts');
 const { staff } = await import('../src/schema.ts');
 type Capabilities = import('../src/capabilities.ts').Capabilities;
 type GrantKind = import('../src/grantable.ts').GrantKind;
+type Hearer = import('../src/grantable.ts').Hearer;
 
 const where = officeSection('your');
 /** A Claude Code Odd on a Mac with both switches off and no folder. */
@@ -43,19 +44,45 @@ const heldBack: Capabilities = {
 };
 
 /**
- * For each grant, what an Odd lacking it hears through each function the
- * list names, and what one holding it hears instead. Keyed by GrantKind, so a
- * new grant fails the type check here until it says how it is heard.
+ * The functions in `Hearer` a ledger test can call. house() is the office's,
+ * and its own test holds the line it says (house.test.ts). A new Hearer fails
+ * the type check here until it is listed or named as the office's.
  */
-const HEARD: Record<GrantKind, () => void> = {
-  commands: () => {
+const SAYERS = {
+  accessInRun: C.accessInRun,
+  askAboveLevel: C.askAboveLevel,
+  outsideLines: C.outsideLines,
+  ownToolsLine: C.ownToolsLine
+} satisfies Record<Exclude<Hearer, 'house'>, unknown>;
+type Say = typeof SAYERS;
+/** `SAYERS`, each adding its own name to `called` as it is called. */
+function noting(called: Set<Hearer>): Say {
+  const note = <F extends (...a: never[]) => unknown>(name: keyof Say, f: F): F =>
+    // The wrapper takes and returns exactly what `f` does, so it is an F.
+    ((...a: Parameters<F>) => (called.add(name), f(...a))) as F;
+  return {
+    accessInRun: note('accessInRun', SAYERS.accessInRun),
+    askAboveLevel: note('askAboveLevel', SAYERS.askAboveLevel),
+    outsideLines: note('outsideLines', SAYERS.outsideLines),
+    ownToolsLine: note('ownToolsLine', SAYERS.ownToolsLine)
+  };
+}
+
+/**
+ * For each grant, what an Odd lacking it hears through each function the
+ * list names, called through `say` so the test sees which, and what one
+ * holding it hears instead. Keyed by GrantKind, so a new grant fails the type
+ * check here until it says how it is heard.
+ */
+const HEARD: Record<GrantKind, (say: Say) => void> = {
+  commands: (say) => {
     const lacks =
       'No shell: {owner} can switch on Run commands in your Settings tab, under Office.';
     assert.equal(
       G.OWNER_GRANTS.commands.missing({ agent: 'claude', how: { state: 'switch' }, where }),
       lacks
     );
-    assert.ok(ownToolsLine('claude', bare).includes(lacks));
+    assert.ok(say.ownToolsLine('claude', bare).includes(lacks));
     // A tool that never follows the switch is never offered it.
     const grok = { ...bare, commandsHow: { state: 'never', why: '' } } as const;
     const never = "No shell: Grok can't run commands here.";
@@ -63,24 +90,25 @@ const HEARD: Record<GrantKind, () => void> = {
       G.OWNER_GRANTS.commands.missing({ agent: 'grok', how: grok.commandsHow, where }),
       never
     );
-    assert.ok(ownToolsLine('grok', grok).includes(never));
-    assert.doesNotMatch(ownToolsLine('claude', { ...bare, commands: true }), /No shell/);
+    assert.ok(say.ownToolsLine('grok', grok).includes(never));
+    assert.doesNotMatch(say.ownToolsLine('claude', { ...bare, commands: true }), /No shell/);
   },
-  web: () => {
+  web: (say) => {
     const lacks =
       'No web: {owner} can switch on Browse the web in your Settings tab, under Office.';
     assert.equal(G.OWNER_GRANTS.web.missing({ where }), lacks);
-    assert.ok(ownToolsLine('claude', bare).includes(lacks));
-    assert.doesNotMatch(ownToolsLine('claude', { ...bare, web: true }), /No web/);
+    assert.ok(say.ownToolsLine('claude', bare).includes(lacks));
+    assert.doesNotMatch(say.ownToolsLine('claude', { ...bare, web: true }), /No web/);
   },
-  folders: () => {
+  folders: (say) => {
     const lacks = 'Sam can give you a folder outside the office in your Settings tab.';
     assert.equal(
       G.OWNER_GRANTS.folders.missing({ owner: 'Sam', where: settingsTab('your') }),
       lacks
     );
     assert.ok(
-      accessInRun(heldBack, 'Sam', {})
+      say
+        .accessInRun(heldBack, 'Sam', {})
         .split('\n')
         .includes(`Sam has given you no folders. ${lacks}`)
     );
@@ -88,18 +116,18 @@ const HEARD: Record<GrantKind, () => void> = {
       ...heldBack,
       own: { ...heldBack.own, granted: [{ path: '/tmp', write: false }] }
     };
-    assert.ok(!accessInRun(given, 'Sam', {}).includes(lacks));
+    assert.ok(!say.accessInRun(given, 'Sam', {}).includes(lacks));
   },
-  office_tools: () => {
+  office_tools: (say) => {
     const lacks =
       'Sam grants other office tools in your Settings tab, under Office; when a job needs one, say which and why in your reply.';
     assert.equal(G.OWNER_GRANTS.office_tools.missing({ owner: 'Sam', where }), lacks);
-    assert.ok(accessInRun(heldBack, 'Sam', {}).split('\n').includes(lacks));
+    assert.ok(say.accessInRun(heldBack, 'Sam', {}).split('\n').includes(lacks));
     // One office tool still not given is enough to hear it.
     const lacksOne = { ...heldBack, office: GRANTABLE_TOOLS.slice(1) };
-    assert.ok(accessInRun(lacksOne, 'Sam', {}).split('\n').includes(lacks));
+    assert.ok(say.accessInRun(lacksOne, 'Sam', {}).split('\n').includes(lacks));
     const holdsAll = { ...heldBack, office: [...GRANTABLE_TOOLS] };
-    assert.ok(!accessInRun(holdsAll, 'Sam', {}).includes('grants other office tools'));
+    assert.ok(!say.accessInRun(holdsAll, 'Sam', {}).includes('grants other office tools'));
   },
   // house() is in the office, which a ledger test cannot import: its own
   // test holds this line (house.test.ts).
@@ -113,18 +141,18 @@ const HEARD: Record<GrantKind, () => void> = {
     assert.equal(said(['ask_for_access']), ' For more outside tools, call ask_for_access.');
     assert.equal(said([]), '');
   },
-  level: () => {
+  level: (say) => {
     const yours = 'Sam sets your level on your Settings tab, under Model.';
     const rowans = "Sam sets Rowan's level on Rowan's Settings tab, under Model.";
     assert.equal(G.OWNER_GRANTS.level.missing({ owner: 'Sam', whose: 'your' }), yours);
     assert.equal(G.OWNER_GRANTS.level.missing({ owner: 'Sam', whose: "Rowan's" }), rowans);
-    assert.ok(outsideLines(heldBack, 'Sam')[0].endsWith(` ${yours}`));
-    assert.ok(outsideLines(heldBack, 'Sam', 'Rowan')[0].endsWith(` ${rowans}`));
-    assert.ok(askAboveLevel('draft', 'write', 'Sam').includes(` ${yours} `));
+    assert.ok(say.outsideLines(heldBack, 'Sam')[0].endsWith(` ${yours}`));
+    assert.ok(say.outsideLines(heldBack, 'Sam', 'Rowan')[0].endsWith(` ${rowans}`));
+    assert.ok(say.askAboveLevel('draft', 'write', 'Sam').includes(` ${yours} `));
     // At its level the grant loads, and no route is said.
     const holds = { ...heldBack, level: 'act' as const };
     holds.outside = [{ ...heldBack.outside[0], heldBack: undefined }];
-    assert.doesNotMatch(outsideLines(holds, 'Sam')[0], /sets your level/);
+    assert.doesNotMatch(say.outsideLines(holds, 'Sam')[0], /sets your level/);
   }
 };
 
@@ -133,7 +161,13 @@ test('an Odd lacking each grantable capability hears its line, word for word, th
     const g = G.OWNER_GRANTS[kind];
     // A grant with a line is heard somewhere; one with none is heard nowhere.
     assert.equal(typeof g.missing === 'function', g.heard.length > 0, kind);
-    HEARD[kind]();
+    const called = new Set<Hearer>();
+    HEARD[kind](noting(called));
+    assert.deepEqual(
+      [...called].sort(),
+      g.heard.filter((h) => h !== 'house').sort(),
+      `${kind} is heard through exactly the functions its row names`
+    );
   }
 });
 
@@ -181,6 +215,17 @@ test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a m
     { agent: row.agent, account: row.account, model: row.model, effort: row.effort },
     { agent: officeAgent(), account: null, model: null, effort: null }
   );
+  // Each grant the list says a hire starts with, the hired Odd holds, and no other.
+  const holds: Record<GrantKind, boolean> = {
+    commands: row.commands,
+    web: row.web,
+    folders: row.folders.length > 0,
+    office_tools: row.tools.some(isGrantable),
+    outside_tools: (await C.capabilities(row)).outside.length > 0,
+    level: LEVELS.includes(row.permission)
+  };
+  for (const kind of G.GRANT_KINDS)
+    assert.equal(G.OWNER_GRANTS[kind].atHire, holds[kind], `${kind} at hire`);
 
   const manager = await hireManager({ preset: MANAGERS[0].id });
   assert.deepEqual(

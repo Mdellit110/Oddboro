@@ -8,7 +8,7 @@ import { levelRoute, SWITCH_NAMES, type Level } from './access-words.ts';
 import { AGENT_NAMES, type Agent, type CommandsHow, type GrantedFolder } from './agents.ts';
 import { OWNER_ANSWERS, type Effect } from './desk-answers.ts';
 import type { AskKind } from './schema.ts';
-import { STARTER_TOOLS, type OfficeToolId } from './tools.ts';
+import { isGrantable, STARTER_TOOLS, type OfficeToolId } from './tools.ts';
 
 /** Every key the staff PATCH route (`/api/staff/[id]`) reads from its body. */
 export const STAFF_PATCH_KEYS = [
@@ -68,97 +68,15 @@ export type OwnerGrant<K extends GrantKind> = {
   route: { ask: AskKind } | { owner: 'settings' };
   /** What approving the route's ask does (its `OWNER_ANSWERS` cell), when the route is an ask. */
   approving?: readonly Effect[];
-  /** Whether a hire starts with it (`HIRE_DEFAULTS`). */
+  /** Whether a hire starts with it, read from `HIRE_DEFAULTS` where that holds it. */
   atHire: boolean;
-};
-
-/** Every grant the owner can make, and how an Odd learns it lacks one. */
-export const OWNER_GRANTS = {
-  commands: {
-    // A move to another tool (`agent`) can switch it on too.
-    control: { patch: ['commands'] },
-    // The switch is offered only when it reaches the tool on this system
-    // (`commandsHow`), so an Odd is never told of one the owner cannot move.
-    missing: ({ agent, how, where }: Readers['commands']) =>
-      how.state === 'switch'
-        ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
-        : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`,
-    heard: ['ownToolsLine'],
-    route: { owner: 'settings' },
-    atHire: false
-  },
-  web: {
-    control: { patch: ['web'] },
-    // Browse the web follows the owner on every tool.
-    missing: ({ where }: Readers['web']) =>
-      `No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`,
-    heard: ['ownToolsLine'],
-    route: { owner: 'settings' },
-    atHire: false
-  },
-  folders: {
-    control: { patch: ['folder', 'access'] },
-    // Said only to an Odd with no folder at all.
-    missing: ({ owner, where }: Readers['folders']) =>
-      `${owner} can give you a folder outside the office in ${where}.`,
-    heard: ['accessInRun'],
-    route: { owner: 'settings' },
-    atHire: false
-  },
-  office_tools: {
-    control: { patch: ['tool', 'on'] },
-    // Said while any office tool the owner can give is still not given.
-    missing: ({ owner, where }: Readers['office_tools']) =>
-      `${owner} grants other office tools in ${where}; when a job needs one, say which and why in your reply.`,
-    heard: ['accessInRun'],
-    route: { owner: 'settings' },
-    atHire: true
-  },
-  outside_tools: {
-    control: { ask: 'access' },
-    // The leading space joins it to the sentence before it in house().
-    missing: ({ has }: Readers['outside_tools']) =>
-      !has('ask_for_access')
-        ? ''
-        : has('find_connectors')
-          ? ' For more outside tools, call find_connectors, then ask_for_access.'
-          : ' For more outside tools, call ask_for_access.',
-    heard: ['house'],
-    route: { ask: 'access' },
-    approving: OWNER_ANSWERS.ask.access.approve,
-    atHire: false
-  },
-  level: {
-    control: { patch: ['permission'] },
-    missing: ({ owner, whose }: Readers['level']) => levelRoute(owner, whose),
-    heard: ['outsideLines', 'askAboveLevel'],
-    route: { owner: 'settings' },
-    atHire: true
-  }
-} as const satisfies { [K in GrantKind]: OwnerGrant<K> };
-
-/**
- * Every PATCH key is the control of a grant, a setting of how the Odd runs,
- * or a qualifier another key needs (`on` for `tool`, `access` for `folder`).
- */
-export const PATCH_KEY: Record<StaffPatchKey, GrantKind | 'run setting' | 'qualifier'> = {
-  permission: 'level',
-  agent: 'run setting',
-  tool: 'office_tools',
-  on: 'qualifier',
-  commands: 'commands',
-  web: 'web',
-  folder: 'folders',
-  access: 'qualifier',
-  effort: 'run setting',
-  model: 'run setting',
-  account: 'run setting'
 };
 
 type Starts = { permission: Level; tools: OfficeToolId[] };
 /**
  * What a hire starts with when the owner picks nothing: the schema's column
- * defaults, `hire()`, the Office Manager's hire and the hire drawer read it.
+ * defaults, `hire()`, the Office Manager's hire, the hire drawer and each
+ * grant's `atHire` read it, so it comes before `OWNER_GRANTS`.
  * The rest have homes that work them out: the tool is the office's own
  * (`officeAgent()` in office.ts), the account its Office account and the
  * model the office's (both null), and thinking `DEFAULT_EFFORT`, never below
@@ -181,4 +99,89 @@ export const HIRE_DEFAULTS: {
       'update_goal'
     ]
   }
+};
+
+/** Every grant the owner can make, and how an Odd learns it lacks one. */
+export const OWNER_GRANTS = {
+  commands: {
+    // A move to another tool (`agent`) can switch it on too.
+    control: { patch: ['commands'] },
+    // The switch is offered only when it reaches the tool on this system
+    // (`commandsHow`), so an Odd is never told of one the owner cannot move.
+    missing: ({ agent, how, where }: Readers['commands']) =>
+      how.state === 'switch'
+        ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
+        : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`,
+    heard: ['ownToolsLine'],
+    route: { owner: 'settings' },
+    atHire: HIRE_DEFAULTS.staff.commands
+  },
+  web: {
+    control: { patch: ['web'] },
+    // Browse the web follows the owner on every tool.
+    missing: ({ where }: Readers['web']) =>
+      `No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`,
+    heard: ['ownToolsLine'],
+    route: { owner: 'settings' },
+    atHire: HIRE_DEFAULTS.staff.web
+  },
+  folders: {
+    control: { patch: ['folder', 'access'] },
+    // Said only to an Odd with no folder at all.
+    missing: ({ owner, where }: Readers['folders']) =>
+      `${owner} can give you a folder outside the office in ${where}.`,
+    heard: ['accessInRun'],
+    route: { owner: 'settings' },
+    atHire: HIRE_DEFAULTS.staff.folders.length > 0
+  },
+  office_tools: {
+    control: { patch: ['tool', 'on'] },
+    // Said while any office tool the owner can give is still not given.
+    missing: ({ owner, where }: Readers['office_tools']) =>
+      `${owner} grants other office tools in ${where}; when a job needs one, say which and why in your reply.`,
+    heard: ['accessInRun'],
+    route: { owner: 'settings' },
+    atHire: HIRE_DEFAULTS.staff.tools.some(isGrantable)
+  },
+  outside_tools: {
+    control: { ask: 'access' },
+    // The leading space joins it to the sentence before it in house().
+    missing: ({ has }: Readers['outside_tools']) =>
+      !has('ask_for_access')
+        ? ''
+        : has('find_connectors')
+          ? ' For more outside tools, call find_connectors, then ask_for_access.'
+          : ' For more outside tools, call ask_for_access.',
+    heard: ['house'],
+    route: { ask: 'access' },
+    approving: OWNER_ANSWERS.ask.access.approve,
+    // hire() grants no outside tool: each comes through an access ask.
+    atHire: false
+  },
+  level: {
+    control: { patch: ['permission'] },
+    missing: ({ owner, whose }: Readers['level']) => levelRoute(owner, whose),
+    heard: ['outsideLines', 'askAboveLevel'],
+    route: { owner: 'settings' },
+    // Every Odd holds a level; a hire's is `HIRE_DEFAULTS.staff.permission`.
+    atHire: true
+  }
+} as const satisfies { [K in GrantKind]: OwnerGrant<K> };
+
+/**
+ * Every PATCH key is the control of a grant, a setting of how the Odd runs,
+ * or a qualifier another key needs (`on` for `tool`, `access` for `folder`).
+ */
+export const PATCH_KEY: Record<StaffPatchKey, GrantKind | 'run setting' | 'qualifier'> = {
+  permission: 'level',
+  agent: 'run setting',
+  tool: 'office_tools',
+  on: 'qualifier',
+  commands: 'commands',
+  web: 'web',
+  folder: 'folders',
+  access: 'qualifier',
+  effort: 'run setting',
+  model: 'run setting',
+  account: 'run setting'
 };
