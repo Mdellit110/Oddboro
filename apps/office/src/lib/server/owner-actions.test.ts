@@ -1,5 +1,6 @@
 // Every owner route that changes something is declared in OWNER_ACTIONS, and
-// each that says it records writes exactly one ledger row of its kind.
+// each that says it records writes exactly one ledger row of its kind. Of the
+// rows that write none, only those in CHANGES are driven.
 import assert from 'node:assert/strict';
 import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -255,7 +256,11 @@ async function tableDigests(): Promise<Map<string, string>> {
   return new Map(digests);
 }
 
-/** Actions that write no ledger row but change a row of the office's: any rows each needs, then its call. */
+/**
+ * Actions that write no ledger row but change a row of the office's: any
+ * rows each needs, then its call. Only these are driven, so another route that
+ * writes and is classed `notAnAction` passes unseen.
+ */
 const CHANGES: Partial<Record<keyof typeof OWNER_ACTIONS, (send: Send) => Promise<void>>> = {
   'POST /api/staff/[id]/pokes': async (send) => {
     await L.pg`insert into pokes (staff_id, at, message, status)
@@ -266,7 +271,7 @@ const CHANGES: Partial<Record<keyof typeof OWNER_ACTIONS, (send: Send) => Promis
   'POST /api/setup': async (send) => send({ body: { name: await L.ownerName() } })
 };
 
-test('an owner action that changes a row of the office is never classed as changing none', async (t) => {
+test('sending a poke, setting the update window and setup each change a row of the office, and none is classed as changing none', async (t) => {
   for (const [key, act] of Object.entries(CHANGES)) {
     await t.test(key, async () => {
       const [method, at] = key.split(' ');
