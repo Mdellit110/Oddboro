@@ -1,6 +1,6 @@
 // Finding MCP servers a staffer could use, in the office catalog first and
 // then the public MCP Registry. Only the search words leave the Mac.
-import { addConnector, connector, type ConnectorRow } from './office.ts';
+import { addConnector, connector, reconfigureConnector, type ConnectorRow } from './office.ts';
 import type { ConnectorConfig, ConnectorKind } from './schema.ts';
 
 const REGISTRY = 'https://registry.modelcontextprotocol.io/v0/servers';
@@ -118,25 +118,59 @@ export const connectorId = (registry: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-/** A catalog connector by id, or a registry server added to the catalog by its name. */
+/** A name an HTTP header can have, like Authorization or x-brain-key. */
+export const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/;
+
+/**
+ * How a hosted server named by its address lets the office in: a sign-in, or
+ * a key the owner pastes, sent in the header named here.
+ */
+export type WayIn = { keyHeader?: string };
+
+/** The config for a hosted server named by its address. */
+const byAddress = (url: string, way: WayIn): ConnectorConfig =>
+  way.keyHeader ? { url, headers: [way.keyHeader], oauth: false } : { url, oauth: true };
+
+/**
+ * A catalog connector by id, or a registry server added to the catalog by its
+ * name, or a hosted server by its https address. `way` says how a server named
+ * by its address lets the office in. Without it, a new one signs in and one
+ * already in the catalog stays as it is.
+ */
 export async function ensureConnector(
-  wanted: string
+  wanted: string,
+  way?: WayIn
 ): Promise<{ connector?: ConnectorRow; problem?: string }> {
-  const own = await connector(wanted);
-  if (own) return { connector: own };
-  if (/^https:\/\/\S+$/.test(wanted)) {
+  if (way?.keyHeader !== undefined && !HEADER_NAME.test(way.keyHeader))
+    return {
+      problem: `"${way.keyHeader}" is not a header name. Use letters, digits and dashes, like x-api-key.`
+    };
+  const isUrl = /^https:\/\/\S+$/.test(wanted);
+  const url = isUrl ? new URL(wanted) : undefined;
+  const id = url ? connectorId(`${url.hostname}${url.pathname}`) : wanted;
+  const own = await connector(id);
+  if (own) {
+    // One named by its address and not connected yet takes the way in asked for now.
+    if (way && own.kind === 'http' && !own.registry && !own.readyAt) {
+      const config = byAddress(own.config.url!, way);
+      if (JSON.stringify(config) !== JSON.stringify(own.config)) {
+        await reconfigureConnector(own.id, config);
+        return { connector: { ...own, config } };
+      }
+    }
+    return { connector: own };
+  }
+  if (url)
     // A hosted server the owner named by its address, not in the registry.
-    const url = new URL(wanted);
     return {
       connector: await addConnector({
-        id: connectorId(`${url.hostname}${url.pathname}`),
+        id,
         name: url.hostname.replace(/^(www|mcp|api)\./, ''),
-        description: `Hosted MCP server at ${url.href}`,
+        description: `Hosted MCP server at ${url.origin}${url.pathname}`,
         kind: 'http',
-        config: { url: url.href, oauth: true }
+        config: byAddress(url.href, way ?? {})
       })
     };
-  }
   const c = await fromRegistry(wanted);
   if (!c) return { problem: `No catalog id or registry server is named "${wanted}".` };
   if (c.unsupported || !c.kind || !c.config)

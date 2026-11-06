@@ -31,7 +31,14 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const level = (['read', 'act'] as Level[]).find((l) => l === b.level);
   if (typeof b.connector !== 'string' || !level) error(400, 'Pick a tool and a level');
-  const found = await ensureConnector(b.connector);
+  // A hosted server named by its address: sent only when the owner chose how it lets the office in.
+  const way = b.way as { keyHeader?: unknown } | undefined;
+  const found = await ensureConnector(
+    b.connector,
+    way && typeof way === 'object'
+      ? { keyHeader: typeof way.keyHeader === 'string' ? way.keyHeader.trim() : undefined }
+      : undefined
+  );
   if (!found.connector) error(400, found.problem ?? 'No such tool');
   try {
     await grantAccess(params.id, { connector: found.connector.id, level });

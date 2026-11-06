@@ -525,6 +525,11 @@ hand-off or number, which ledger tests and the office's format test share.
   Secret Service keyring on Linux through secret-tool, and the Credential
   Manager on Windows through `@napi-rs/keyring`, in pieces of 2,048 bytes,
   since one credential holds at most 2,560.
+- What the office saves in the secret store, it removes. Revoking the last
+  grant to a tool removes its keys and sign-in (`forgetConnector`), and a tool
+  that changes how it lets the office in loses the secrets the old way used
+  (`reconfigureConnector`). A hosted server named by its address takes a key
+  in the header the owner names (`ensureConnector`), or signs in.
 - Start Claude Code through `claudeCommand()` in `src/platform.ts`, never as
   a bare `claude`: on Windows an npm install is a `.cmd` Node will not start,
   so the shim's script runs under this Node instead.
