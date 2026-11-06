@@ -26,6 +26,29 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.0.6',
+    date: '2026-11-05',
+    title: 'Odds pass the work along.',
+    summary:
+      'Your Office Manager hands pieces of a goal to the Odds you hired, and their work comes back to your Desk.',
+    notes: [
+      "Your office and each Odd can run on Claude Code, Codex or Grok. You pick the office's at setup.",
+      'Each Odd can have its own sign-in, model and thinking level.',
+      'Tell an Odd something once, and it keeps it as a lesson.',
+      'You can give an Odd folders on your computer to read or change. It can also run commands and browse the web, once you turn those on.',
+      "Build an Odd's look from parts, or have it drawn.",
+      "Odds can use hosted tools that take a key instead of a sign-in, like Open Brain. The key stays in your computer's password store.",
+      'Fixed a bug that was preventing Revoke access for an Odd from working.'
+    ],
+    builds: ['mac', 'windows-x64', 'windows-arm64', 'linux-x86_64', 'linux-aarch64'],
+    art: {
+      name: 'hand-off',
+      alt: 'Two Odds pass things back and forth in a hallway, a speech bubble for each: a folder ("HAND-OFF!", "HANDS ON!", "FOLDER AND WISER"), a book with an X on it ("CODEX MARKS THE SPOT"), a hop ("GROK ON!"), a sticky note slapped on the wall ("LESSON? IT STUCK."), a key into a brain that lights up ("NO BRAINER!"), and the key taken back ("BACKSIES!").',
+      shareAlt:
+        'In a pixel-art hallway, an Odd holds a glowing brain with a key in it and says "NO BRAINER!", while another Odd watches.'
+    }
+  },
+  {
     version: '0.0.5',
     date: '2026-11-04',
     title: 'Windows, on Windows, on Windows.',
