@@ -64,6 +64,13 @@
       "when": 1793929776239,
       "tag": "0008_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793954333583,
+      "tag": "0009_live-ledger-accounts",
+      "breakpoints": true
     }
   ]
 }

@@ -26,7 +26,9 @@ export type LiveTable = {
 
 export const LIVE_TABLES: Record<TableName, LiveTable> = {
   staff: { trigger: 'all', page: ['refresh'] },
-  accounts: { trigger: { none: 'NEW-1702' }, page: [] },
+  // Once the office is up, every change is the owner's own call on the page, and
+  // the list that made it reads the accounts again (agent-tools.svelte.ts).
+  accounts: { trigger: 'all', page: [] },
   goals: { trigger: 'all', page: ['version'] },
   staff_goals: { trigger: 'all', page: ['version'] },
   goal_progress: { trigger: 'all', page: ['version'] },
@@ -38,7 +40,7 @@ export const LIVE_TABLES: Record<TableName, LiveTable> = {
   pokes: { trigger: 'all', page: ['refresh', 'version'] },
   lessons: { trigger: 'all', page: ['refresh', 'version'] },
   lesson_uses: { trigger: 'all', page: ['version'] },
-  ledger: { trigger: { none: 'NEW-1702' }, page: [] },
+  ledger: { trigger: 'all', page: ['ledger'] },
   connectors: { trigger: 'all', page: ['version'] },
   grants: { trigger: 'all', page: ['version'] },
   jobs: { trigger: 'all', page: ['version'] },
