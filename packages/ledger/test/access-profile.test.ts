@@ -127,12 +127,12 @@ test('ownTools is what a run reaches: the switch as its tool takes it, the web, 
     network: false
   });
   // The network follows the table: a tool marked as holding its walls open gets it.
-  const measured = { ...A.NETWORK_WITH_WEB };
-  A.NETWORK_WITH_WEB.codex = true;
+  const measured = A.AGENT_PLATFORMS.codex.networkWithWeb;
+  A.AGENT_PLATFORMS.codex.networkWithWeb = ['darwin'];
   try {
     assert.equal(on(odd('codex', false, true), 'darwin').network, true);
   } finally {
-    Object.assign(A.NETWORK_WITH_WEB, measured);
+    A.AGENT_PLATFORMS.codex.networkWithWeb = measured;
   }
   assert.deepEqual(on(odd('grok', true, true), 'darwin'), {
     commands: false,
@@ -427,9 +427,12 @@ test('the line under Browse the web says what its commands do with it', () => {
     "Search the web. Codex's commands stay off the internet."
   );
   // The line follows the table, either way.
-  const measured = { ...A.NETWORK_WITH_WEB };
-  A.NETWORK_WITH_WEB.codex = true;
-  A.NETWORK_WITH_WEB.claude = false;
+  const measured = {
+    codex: A.AGENT_PLATFORMS.codex.networkWithWeb,
+    claude: A.AGENT_PLATFORMS.claude.networkWithWeb
+  };
+  A.AGENT_PLATFORMS.codex.networkWithWeb = ['darwin'];
+  A.AGENT_PLATFORMS.claude.networkWithWeb = [];
   try {
     assert.equal(
       A.webLine('codex', 'darwin', false),
@@ -440,7 +443,8 @@ test('the line under Browse the web says what its commands do with it', () => {
       "Search and read web pages. Claude Code's commands stay off the internet."
     );
   } finally {
-    Object.assign(A.NETWORK_WITH_WEB, measured);
+    A.AGENT_PLATFORMS.codex.networkWithWeb = measured.codex;
+    A.AGENT_PLATFORMS.claude.networkWithWeb = measured.claude;
   }
 });
 

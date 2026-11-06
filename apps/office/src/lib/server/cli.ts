@@ -5,7 +5,7 @@
 // ended early. Server only.
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { COMMANDS_WHY, type Agent, type Effort } from '@oddboro/ledger';
+import { COMMANDS_WHY, OFFICE_MODEL_VAR, type Agent, type Effort } from '@oddboro/ledger';
 import { deniedEdits } from './files.ts';
 import { configServers, type McpServer, type RunEvent, type RunImage } from './launch.ts';
 import { GROK_PLAN_LIMIT, GROK_SIGN_IN, grokLaunch, grokSignedOut } from './grok.ts';
@@ -142,7 +142,7 @@ export const LAUNCHES: Record<
         effort: r.effort,
         model: r.model
       }),
-      read: codexReader(r.model ?? process.env.OFFICE_CODEX_MODEL ?? 'codex'),
+      read: codexReader(r.model ?? process.env[OFFICE_MODEL_VAR.codex] ?? 'codex'),
       ownGroup: true
     };
   },

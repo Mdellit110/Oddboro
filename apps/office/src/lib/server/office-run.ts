@@ -23,6 +23,8 @@ import {
   ownerName,
   recordUsage,
   runsGoing,
+  commandsHow,
+  currentPlatform,
   type Agent,
   type ModelUsage,
   type UsageKind
@@ -103,7 +105,7 @@ async function runOn(
     writes: [dir],
     granted: [],
     web: false,
-    commands: agent === 'codex',
+    commands: commandsHow(agent, currentPlatform()).state === 'always',
     network: false,
     system: `${opts.system}\n\n${ONE_REPLY}`,
     input: message,

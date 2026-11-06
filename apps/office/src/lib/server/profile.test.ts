@@ -116,3 +116,13 @@ test("the page's profile carries what runs reach, each folder's ~ form, the offe
     }
   });
 });
+
+test("a Gemini Odd's profile carries the office's Gemini model variable, never Grok's", async () => {
+  const { withEnv } = await import('./office-under-test.ts');
+  const { OFFICE_MODEL_VAR } = await import('@oddboro/ledger');
+  const model = await withEnv(
+    { [OFFICE_MODEL_VAR.gemini]: 'gemini-made-up', [OFFICE_MODEL_VAR.grok]: 'grok-made-up' },
+    async () => (await toProfile(row({ agent: 'gemini' }))).officeModel
+  );
+  assert.equal(model, 'gemini-made-up');
+});

@@ -39,6 +39,7 @@ import {
   CODE,
   home,
   OFFICE_ACCOUNT,
+  OFFICE_MODEL_VAR,
   runsGoing,
   toolHome,
   type Effort
@@ -336,7 +337,7 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     deny: [...instructionPaths(r.writes), ...SHUT].flatMap(andBelow)
   });
   const agent = agentFile(h, r.key, r.servers);
-  const model = r.model ?? process.env.OFFICE_GROK_MODEL;
+  const model = r.model ?? process.env[OFFICE_MODEL_VAR.grok];
   const args = [
     messageArg(r.message, r.images),
     '--output-format',

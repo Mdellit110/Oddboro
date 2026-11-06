@@ -14,14 +14,14 @@
 // the owner's data folder, the thread folders it reads and the folders the
 // owner gave it, writes only its folder, its part of a thread, the folders the
 // owner gave it to change and its own temp folder, never an instruction file
-// in them, and never reaches the internet (`NETWORK_WITH_WEB`). Codex's own
+// in them, and never reaches the internet (`networkWithWeb` in `AGENT_PLATFORMS`). Codex's own
 // web search runs outside the profile, only with Browse the web on. The codex
 // process itself and the MCP servers run outside that profile, so the Codex
 // home, the sign-in and every Codex Odd's sessions stay shut to the model.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { home, OFFICE_ACCOUNT, toolHome, type Effort } from '@oddboro/ledger';
+import { home, OFFICE_ACCOUNT, OFFICE_MODEL_VAR, toolHome, type Effort } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
 import { devReads } from './sandbox.ts';
 import {
@@ -372,7 +372,7 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   const shell = shellEnv(temp);
   mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
   const set = (key: string, value: Toml) => ['-c', `${key}=${toml(value)}`];
-  const model = r.model ?? process.env.OFFICE_CODEX_MODEL;
+  const model = r.model ?? process.env[OFFICE_MODEL_VAR.codex];
   const args = [
     'exec',
     // Joined to its flag: `--image` takes many values, so a bare file after

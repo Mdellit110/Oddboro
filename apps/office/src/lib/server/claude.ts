@@ -13,7 +13,9 @@ import {
 import {
   AGENT_NAMES,
   drawsLooks,
+  MODELS as AGENT_MODELS,
   OFFICE_ACCOUNT,
+  OFFICE_MODEL_VAR,
   officeAgent,
   toolHome,
   type Agent
@@ -41,7 +43,7 @@ export type ClaudeSettings = { auth: 'plan' | 'key'; model: Model };
 export function claudeSettings(): ClaudeSettings {
   return {
     auth: process.env.OFFICE_AUTH === 'key' ? 'key' : 'plan',
-    model: process.env.OFFICE_MODEL === 'sonnet' ? 'sonnet' : 'opus'
+    model: process.env[OFFICE_MODEL_VAR.claude] === 'sonnet' ? 'sonnet' : 'opus'
   };
 }
 
@@ -51,13 +53,16 @@ export const SONNET_CANNOT_DRAW =
 /** Whether the office designs offices: on Grok or Codex always, on Claude Code unless it runs on Sonnet. */
 export const canDraw = () => officeAgent() !== 'claude' || claudeSettings().model !== 'sonnet';
 
-/** The model the office's own runs use, when the office names one. */
-const officeModel = (agent: Agent) =>
-  agent === 'claude'
-    ? claudeSettings().model
-    : agent === 'codex'
-      ? process.env.OFFICE_CODEX_MODEL
-      : undefined;
+/**
+ * The model the office's own runs, and an Odd with none of its own, use on
+ * `agent`, when the office names one: on Claude Code, the id of setup's Opus
+ * or Sonnet; on the others, the model their setting names (`OFFICE_MODEL_VAR`).
+ */
+export function officeModel(agent: Agent): string | undefined {
+  if (agent !== 'claude') return process.env[OFFICE_MODEL_VAR[agent]];
+  const picked = claudeSettings().model;
+  return AGENT_MODELS.claude.find((m) => m.id.includes(picked))?.id;
+}
 
 /** Whether the office draws an Odd's look from words or a headshot (`drawsLooks`). */
 export const officeDrawsLooks = () => drawsLooks(officeAgent(), officeModel(officeAgent()));
@@ -67,7 +72,9 @@ export function cannotDrawLook(): string {
   const agent = officeAgent();
   if (agent === 'claude')
     return 'On Sonnet, the office does not draw looks. Build this one from parts, or pick Opus in Setup.';
-  const on = officeModel(agent);
+  // Only Codex's model is named: naming Grok's or Gemini's here would change
+  // what the owner reads.
+  const on = agent === 'codex' ? officeModel(agent) : undefined;
   return `${AGENT_NAMES[agent]}${on ? ` on ${on}` : ''} does not draw looks here. Build this one from parts, or run the office on Claude Code or Codex in Setup.`;
 }
 

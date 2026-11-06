@@ -21,7 +21,7 @@
 // group that stops whole.
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { home, type ModelUsage } from '@oddboro/ledger';
+import { home, OFFICE_MODEL_VAR, type ModelUsage } from '@oddboro/ledger';
 import { INSTRUCTIONS, REPO_RUNS } from './files.ts';
 import { deleteSecret, getSecret, setSecret } from './keychain.ts';
 import {
@@ -298,7 +298,7 @@ export function geminiLaunch(r: GeminiRun): GeminiLaunch {
     })
   );
   replace(system, r.system);
-  const model = process.env.OFFICE_GEMINI_MODEL;
+  const model = process.env[OFFICE_MODEL_VAR.gemini];
   const args = [
     '-o',
     'stream-json',
