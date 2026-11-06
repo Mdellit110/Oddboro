@@ -44,6 +44,7 @@
   import PixelPencil from '#lib/ui/PixelPencil.svelte';
   import { call } from '#lib/ui/api.ts';
   import { setZone, zone, zoneName, zoneShort } from '@oddboro/ledger/time';
+  import { LIVE_TABLES, type LiveTable } from '@oddboro/ledger/live-tables';
 
   let { data } = $props();
   // Every time on the page is in the office's zone, which only the server knows.
@@ -132,6 +133,10 @@
   let cardShow = $state<{ id: string; tab: 'work'; n: number } | undefined>();
   /** Bumps when jobs, runs, access, goals, threads or lessons change, so the card's tabs and the Goals and Lessons windows reload. */
   let version = $state(0);
+  /** What the page does when each table changes, by the name the event carries. */
+  const ON_CHANGE = new Map<string, LiveTable['page']>(
+    Object.entries(LIVE_TABLES).map(([table, live]) => [table, live.page])
+  );
   /** The start panel is open while it holds windows and the owner has not folded it away. */
   const leftOpen = $derived(wins.shown && wins.list.length > 0);
   const front = $derived(wins.list.find((w) => w.id === wins.active));
@@ -608,45 +613,13 @@
         actors.find((a) => a.profile.id === e.staff)?.pop(LESSON_POP[e.kind]);
         return;
       }
+      const page = ON_CHANGE.get(e.table) ?? [];
       // A move into another layout rebuilds the whole floor.
       // During the first run, and until its last drawn pieces land, the floor
       // already shows the office being moved into.
-      if (e.table === 'offices') return firstRun || landing ? void refresh() : location.reload();
-      if (
-        [
-          'staff',
-          'asks',
-          'tasks',
-          'reports',
-          'room_names',
-          'switched_off',
-          'pokes',
-          'lessons',
-          'threads'
-        ].includes(e.table)
-      )
-        refresh();
-      if (
-        [
-          'jobs',
-          'runs',
-          'grants',
-          'asks',
-          'tasks',
-          'reports',
-          'connectors',
-          'usage',
-          'plan_limits',
-          'pokes',
-          'goals',
-          'staff_goals',
-          'goal_progress',
-          'lessons',
-          'lesson_uses',
-          'threads'
-        ].includes(e.table)
-      )
-        version++;
+      if (page.includes('reload')) return firstRun || landing ? void refresh() : location.reload();
+      if (page.includes('refresh')) refresh();
+      if (page.includes('version')) version++;
     };
 
     (async () => {
