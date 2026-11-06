@@ -111,12 +111,23 @@ test('a resumed session hears that its runs failed on messages it took, and each
   ]);
 });
 
-test('a new session never had a failed message, whatever session its run took it into', () => {
+test('a new session whose replay the budget cut never had a failed message, whatever session its run took it into', () => {
   const past = [
     owner('2026-11-06T09:02:00Z', 'Book the hall.'),
     failed('2026-11-06T09:07:00Z', 'No reply after 5 minutes.', true)
   ];
-  assert.deepEqual(chatPreface(past, [], 'new'), [
+  assert.deepEqual(chatPreface(past, [], { replayed: new Set() }), [
     '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Book the hall.".)'
+  ]);
+});
+
+test('a new session hears a failed message its replay holds once, and only that the run on it failed', () => {
+  const past = [
+    told('2026-11-06T09:00:00Z', 'Three questions?'),
+    owner('2026-11-06T09:02:00Z', 'Book the hall.'),
+    failed('2026-11-06T09:07:00Z', 'No reply after 5 minutes.')
+  ];
+  assert.deepEqual(chatPreface(past, [], { replayed: new Set([0, 1]) }), [
+    "(Your run on {owner}'s last message you saw before this one failed, so they have no reply from you to it.)"
   ]);
 });

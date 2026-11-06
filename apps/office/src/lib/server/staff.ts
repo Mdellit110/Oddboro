@@ -1214,11 +1214,11 @@ export async function chat(
       const past = history(id);
       // A new session (the Odd moved to another tool, or its session is gone)
       // never saw the chat: it gets the latest of it word for word. The preface
-      // leaves out the told and poke lines the replay holds, and keeps those the
-      // budget cut, so each line since the owner last wrote is said once.
+      // leaves out the told, poke and failed run's owner lines the replay holds,
+      // and keeps those the budget cut, so each line since the owner last wrote
+      // is said once.
       const resumed = !!sessionIdIn(chatSession(id), await runHomeOf(who));
       const kept = resumed ? [] : replayed(past);
-      const inReplay = new Set(replayedAt(past, kept));
       const since = replaySince(past, kept);
       // The Odd writes only its own folder and the given folders it may change, so only those are walked.
       const writable = ownTools(who, currentPlatform())
@@ -1234,9 +1234,9 @@ export async function chat(
             ]
           : []),
         ...chatPreface(
-          past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
+          past,
           landed,
-          resumed ? 'resumed' : 'new'
+          resumed ? 'resumed' : { replayed: new Set(replayedAt(past, kept)) }
         ),
         ...(re ? [re.brief] : []),
         message

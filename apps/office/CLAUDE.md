@@ -442,8 +442,10 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    reply: `replaySince`) in the Odd's own folder and the folders the owner
    gave it to change, among the first 2,000 entries of each, 30 named and the
    rest counted (`replay` and `changedSince` in `src/lib/server/replay.ts`).
-   `chatPreface` leaves out the told and poke lines the replay holds and keeps
-   those the budget cut, so each since the owner last wrote is said once.
+   `chatPreface` leaves out the told, poke and failed run's owner lines the
+   replay holds and keeps those the budget cut, so each since the owner last
+   wrote is said once; of a failed run's line the replay holds, it says only
+   that the run failed.
    Nothing on screen shows it.
    The office tells each run's tool server about the run through its
    environment (`officeEnv` in `src/lib/server/run-env.ts`): every run gets a

@@ -20,26 +20,33 @@ const DECIDED: Record<string, string> = {
 };
 
 /**
- * `session` says whether the chat resumes the session saved last. That
- * session holds a failed run's owner line when the run's tool named a session
- * (`inSession`): the run saved it, and a later run that saved one resumed it.
- * A new session, or one no failed run saved, never had the line.
+ * The chat resumes the session saved last, or starts a new one that hears the
+ * lines of `past` at `replayed` word for word (`replay` in replay.ts).
  */
-export function chatPreface(
-  past: ChatEntry[],
-  landed: Landed[],
-  session: 'resumed' | 'new'
-): string[] {
+export type Session = 'resumed' | { replayed: Set<number> };
+
+/**
+ * Each told, poke and failed run's owner line since the owner last wrote is
+ * said once: here only when the session does not hold it already.
+ */
+export function chatPreface(past: ChatEntry[], landed: Landed[], session: Session): string[] {
   // The office saves a failed run's error right after the owner's line (`chat` in staff.ts).
   const failedOn = (i: number) => past[i].from === 'owner' && past[i + 1]?.failed === true;
-  const took = (i: number) => session === 'resumed' && past[i + 1]?.inSession === true;
+  // A new session holds what its replay keeps. A resumed one holds a failed
+  // run's owner line when the run's tool named a session (`inSession`): the
+  // run saved it, and a later run that saved one resumed it. It never holds a
+  // told or poke line, which no run of it wrote.
+  const holds = (i: number) =>
+    session === 'resumed'
+      ? failedOn(i) && past[i + 1]?.inSession === true
+      : session.replayed.has(i);
   const heard = past.findLastIndex((e, i) => e.from === 'owner' && !failedOn(i)) + 1;
-  const since = past.slice(heard);
+  const since = past.flatMap((e, i) => (i >= heard && !holds(i) ? [e] : []));
   const told = since.filter((e) => e.told);
   const poked = since.filter((e) => e.poke);
-  const failed = since.flatMap((_, i) => (failedOn(heard + i) ? [heard + i] : []));
-  const missed = failed.filter((i) => !took(i)).map((i) => past[i]);
-  const ran = failed.filter(took).length;
+  const failed = past.flatMap((_, i) => (i >= heard && failedOn(i) ? [i] : []));
+  const missed = failed.filter((i) => !holds(i)).map((i) => past[i]);
+  const ran = failed.filter(holds).length;
   // The session saw what it delivered up to the end of its last reply.
   const last = past.findLast((e, i) => !unseen(e) && !failedOn(i))?.at ?? '';
   const put = landed.filter((d) => d.at.toISOString() > last);

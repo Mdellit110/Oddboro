@@ -63,16 +63,14 @@ test("a chat whose run fails keeps the owner's message and the error after a rel
   );
 });
 
-test('the next chat after a failed one tells the Odd what the owner said and that the run failed', async () => {
+test('the next chat after a failed one tells the Odd once what the owner said, and that the run failed', async () => {
   await withoutClaude(() => send('gil', 'Are you there?'));
   const { message } = await chatOf('gil', 'Still there?');
-  assert.match(
-    message,
-    /wrote to you before this, but your run failed each time, so you never saw it: "Are you there\?"/
-  );
   // Gil's session never started, so the new one hears the chat word for word:
-  // the owner's line, never the error as Gil's own.
+  // the owner's line once, never the error as Gil's own.
   assert.match(message, /: Are you there\?\n/);
+  assert.equal(message.split('Are you there?').length - 1, 1, 'the owner line was said twice');
+  assert.match(message, /Your run on .*'s last message you saw before this one failed/);
   assert.ok(!message.includes(`You: ${GONE}`), 'the error was replayed as the Odd speaking');
 });
 
