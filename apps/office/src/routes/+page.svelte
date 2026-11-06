@@ -3,11 +3,9 @@
   import { invalidateAll } from '$app/navigation';
   import type { Desk, GoalThread } from '@oddboro/ledger';
   import { TILE, type World } from '@oddboro/world';
-  import { addArt } from '#lib/floor/art.ts';
-  import { Floor, sharedAtlas } from '#lib/floor/engine.ts';
-  import { loadLook } from '#lib/floor/looks.ts';
-  import { StaffActor, type Pop } from '#lib/floor/staff.ts';
-  import { bus, hideBuilding, raise, type Beat } from '#lib/floor/reveal.ts';
+  import type { Floor } from '#lib/floor/engine.ts';
+  import type { StaffActor, Pop } from '#lib/floor/staff.ts';
+  import type { Beat } from '#lib/floor/reveal.ts';
   import Onboarding, { type Stage } from '#lib/ui/onboarding/Onboarding.svelte';
   import FloorControls, { type Light } from '#lib/ui/FloorControls.svelte';
   import { music, musicEnded, startMusic } from '#lib/ui/music.svelte.ts';
@@ -23,7 +21,6 @@
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
   import GoalsPanel from '#lib/ui/GoalsPanel.svelte';
   import LessonsLibrary from '#lib/ui/LessonsLibrary.svelte';
-  import OfficeDesigner from '#lib/ui/OfficeDesigner.svelte';
   import Welcome from '#lib/ui/Welcome.svelte';
   import HireDrawer from '#lib/ui/HireDrawer.svelte';
   import FileViewer from '#lib/ui/FileViewer.svelte';
@@ -67,6 +64,8 @@
 
   let host: HTMLDivElement | undefined = $state();
   let floor: Floor | undefined;
+  /** The floor's PixiJS code (floor/index.ts), loaded as the page mounts, before the floor exists. */
+  let F: typeof import('#lib/floor/index.ts') | undefined;
   let atlasCatalog: Record<string, unknown> = {};
   let actors: StaffActor[] = [];
   let tags = $state<Tag[]>([]);
@@ -398,7 +397,7 @@
   /** Load drawn looks, then put new hires on the floor and take leavers off it. */
   async function syncNow() {
     if (!floor) return;
-    for (const p of staff) wearing[p.id] = await loadLook(floor.atlas, p).catch(() => undefined);
+    for (const p of staff) wearing[p.id] = await F!.loadLook(floor.atlas, p).catch(() => undefined);
     const w = office.world;
     for (const a of actors.filter((a) => !staff.some((p) => p.id === a.profile.id))) a.destroy();
     actors = actors.filter((a) => staff.some((p) => p.id === a.profile.id));
@@ -407,7 +406,7 @@
     for (const p of staff) {
       if (actors.some((a) => a.profile.id === p.id) || !atlasCatalog[p.sprite]) continue;
       if (firstRun && !arrived.has(p.id)) continue;
-      const a = new StaffActor(floor, p, start);
+      const a = new F!.StaffActor(floor, p, start);
       a.wear(wearing[p.id]);
       a.sprite.on('pointertap', () => select(p.id));
       if (opened) a.assign('work', w.spots, taken(a));
@@ -642,16 +641,17 @@
 
     (async () => {
       try {
-        const atlas = await sharedAtlas(office.catalog);
-        await addArt(atlas, office.art);
+        F = await import('#lib/floor/index.ts');
+        const atlas = await F.sharedAtlas(office.catalog);
+        await F.addArt(atlas, office.art);
         if (disposed || !host) return;
         atlasCatalog = atlas.catalog;
-        floor = await Floor.create(host, office.world, atlas);
+        floor = await F.Floor.create(host, office.world, atlas);
         floor.setHour(shownHour);
         // Dev only: lets a browser console poke at the floor.
         if (import.meta.env.DEV) (window as unknown as { floor: Floor }).floor = floor;
         start = arrival(office.world);
-        if (firstRun) hideBuilding(floor);
+        if (firstRun) F.hideBuilding(floor);
         // Land on the whole office, centred on the floor the panels leave showing.
         floor.viewOffsetX = centreOffset();
         floor.viewCover = leftSpace + rightSpace;
@@ -790,18 +790,18 @@
 
   /** What the first run asks of the floor, while the cards and captions run the story. */
   const stage: Stage = {
-    bus: () => (floor ? bus(floor) : undefined),
+    bus: () => (floor && F ? F.bus(floor) : undefined),
     async build(next: World, name: string, onBeat: (b: Beat) => void, art) {
-      if (!floor) return;
+      if (!floor || !F) return;
       // Art drawn for this office goes in the atlas before the floor asks for it.
-      if (art?.sheet) await addArt(floor.atlas, art.sheet, art.catalog);
+      if (art?.sheet) await F.addArt(floor.atlas, art.sheet, art.catalog);
       signs = false;
       floor.swap(next, { fit: true });
       liveWorld = next;
       start = arrival(next);
       // The swap keeps the owner's view, gliding out only if the building would not fit.
-      hideBuilding(floor);
-      await raise(floor, onBeat);
+      F.hideBuilding(floor);
+      await F.raise(floor, onBeat);
       signs = true;
       raisedName = name;
       floor.invalidate();
@@ -1218,12 +1218,15 @@
                   }}
                 />
               {:else if w.kind === 'office'}
-                <OfficeDesigner
-                  id={w.id}
-                  catalog={office.catalog}
-                  staffCount={staff.length}
-                  current={office.name}
-                />
+                <!-- Loaded when opened: it draws with PixiJS, which the first page leaves out. -->
+                {#await import('#lib/ui/OfficeDesigner.svelte') then { default: OfficeDesigner }}
+                  <OfficeDesigner
+                    id={w.id}
+                    catalog={office.catalog}
+                    staffCount={staff.length}
+                    current={office.name}
+                  />
+                {/await}
               {:else if w.kind === 'hire'}
                 <HireDrawer
                   id={w.id}

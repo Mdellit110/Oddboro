@@ -1059,6 +1059,15 @@ sends every action as JSON, body or not.
   rests at those levels.
 - The camera never shows past the grounds' edge: the farthest zoom out still
   fills the screen, and panning stops at the edge.
+- The page loads the floor's PixiJS code with `import()` as it mounts
+  (`src/lib/floor/index.ts`), and the Office designer and an Odd's usage
+  charts load when opened, so the first page carries none of PixiJS or
+  layerchart. Import a floor module's values only through `index.ts`; a
+  type import is free.
+- Third-party packages go under `devDependencies` in `package.json`, even
+  the ones the office runs: the build bundles those, and the app ships only
+  what the workspace packages load (`apps/desktop/scripts/stage.ts`).
+  `dependencies` holds the workspace packages alone.
 - The floor draws only when something on screen changed. Pixi's own
   every-frame draw is off. Anything that changes the picture outside the
   camera calls `floor.invalidate()`. Name tags and room signs move in
