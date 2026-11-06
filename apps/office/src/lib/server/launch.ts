@@ -127,8 +127,9 @@ export function sweep(dir: string, suffix: string, starting: string): void {
 }
 
 /**
- * The office's clean environment (`cleanEnv`) for a tool another company
- * makes: no Anthropic key, no variable of that tool's own (`prefixes`) from
+ * The office's clean environment (`cleanEnv`) for an owner-side launch of a
+ * tool another company makes (an install, a sign-in, an update; a run starts
+ * from `runEnv` instead): no Anthropic key, no variable of that tool's own (`prefixes`) from
  * the office's environment, and no node options, since a preload the office's
  * node was started with sits outside the tool's sandbox and node refuses to
  * start the tool server when it cannot read it.

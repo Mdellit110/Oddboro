@@ -624,15 +624,18 @@ test(
   "with Run commands and Browse the web both on, the office's secrets stay hidden from commands that reach the internet",
   onMac,
   () =>
-    withEnv({ FAKE_OWNER_API_TOKEN: 'x' }, async () => {
+    withEnv({ FAKE_OWNER_API_TOKEN: 'x', ANTHROPIC_AUTH_TOKEN: 'x' }, async () => {
       await setOwn('bo', { commands: true, web: true });
-      const sandbox = sandboxOf(await chatOf('bo'));
+      const run = await chatOf('bo');
+      const sandbox = sandboxOf(run);
+      // An office token outside the allow list never reaches the run at all (`runEnv`).
+      assert.ok(!run.envNames.includes('FAKE_OWNER_API_TOKEN'), 'the token reached the run');
       assert.deepEqual(sandbox?.network, {
         allowedDomains: ['*'],
         deniedDomains: macAddresses(networkInterfaces(), hostname())
       });
       const hidden = sandbox?.credentials.envVars ?? [];
-      for (const name of ['FAKE_OWNER_API_TOKEN', 'ANTHROPIC_API_KEY'])
+      for (const name of ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'])
         assert.ok(
           hidden.some((v) => v.name === name && v.mode === 'deny'),
           `${name} reaches commands: ${JSON.stringify(hidden)}`

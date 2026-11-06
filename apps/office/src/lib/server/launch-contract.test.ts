@@ -1,0 +1,200 @@
+// The launch contract: every AI tool, on every system it runs on, started as
+// the office starts it, from an office whose own environment holds things no
+// run should get. What arrives is read from what the tool's stand-in recorded
+// (office-under-test.ts). A new tool fails the type check here until it has
+// an Odd and a reader of its walls. Run with `npm test -w @oddboro/office`.
+import {
+  chatOf,
+  folder,
+  L,
+  odd,
+  OFFICE_PROCESS_GIT,
+  onPlatform,
+  setOwn,
+  withEnv,
+  type Gave
+} from './office-under-test.ts';
+import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import type { Agent } from '@oddboro/ledger';
+
+const { RUN_ENV_ALLOW, TOOL_SERVER_ENV } = await import('./run-env-allow.ts');
+
+/** The Odd on each tool. */
+const ODDS: Record<Agent, string> = {
+  claude: 'clio',
+  grok: 'gale',
+  codex: 'cora',
+  gemini: 'gemma'
+};
+await L.pg`insert into staff ${L.pg(L.AGENTS.map((agent) => ({ ...odd(ODDS[agent], ODDS[agent]), agent })))}`;
+
+/**
+ * Variables the office may hold that no run gets: its own git settings, an
+ * SSH agent, tokens and keys by name and by look, and two of the office's
+ * own. The test office already holds DATABASE_URL, NODE_OPTIONS and each
+ * tool's own keys and homes from a parent.
+ */
+const HOSTILE = {
+  ...OFFICE_PROCESS_GIT,
+  SSH_AUTH_SOCK: '/nonexistent/agent.sock',
+  SSH_CONNECTION: '127.0.0.1 1 127.0.0.1 22',
+  SOME_SERVICE_TOKEN: 'not-a-token',
+  AWS_SECRET_ACCESS_KEY: 'not-a-key',
+  CARGO_REGISTRY_TOKEN: 'not-a-token',
+  ODDBORO_UNRELATED: '1',
+  ODDBORO_UPDATE_TOKEN: 'not-a-token'
+};
+/** An owner behind a proxy that inspects traffic. */
+const PROXIED = {
+  HTTPS_PROXY: 'http://127.0.0.1:9',
+  https_proxy: 'http://127.0.0.1:9',
+  NO_PROXY: 'localhost',
+  NODE_EXTRA_CA_CERTS: '/nonexistent/proxy.pem',
+  SSL_CERT_FILE: '/nonexistent/proxy.pem'
+};
+/** A setting of the office's own, which only the tool server gets. */
+const SERVER_ONLY = { OFFICE_TIME_ZONE: 'Europe/Paris' };
+
+/**
+ * Two names every run gets from `runEnv` itself, whatever its tool, and one a
+ * stand-in's node gives itself on a Mac however empty its environment
+ * (`env -i` shows it), so it never came from the office.
+ */
+const EVERY_RUN = [
+  'CLAUDE_CODE_DISABLE_CLAUDE_MDS',
+  'CLAUDE_CODE_DISABLE_AUTO_MEMORY',
+  '__CF_USER_TEXT_ENCODING'
+];
+/** The names each tool's launch sets itself, after `runEnv`. */
+const OWN: Record<Agent, readonly (string | RegExp)[]> = {
+  claude: ['CLAUDE_CONFIG_DIR'],
+  // Grok's launch sets a family of its own switches (`grokEnv`).
+  grok: [/^GROK_/],
+  codex: ['CODEX_HOME'],
+  gemini: [
+    'GEMINI_CLI_HOME',
+    'GEMINI_CLI_TRUST_WORKSPACE',
+    'GEMINI_CLI_SYSTEM_SETTINGS_PATH',
+    'GEMINI_SYSTEM_MD',
+    'GEMINI_API_KEY'
+  ]
+};
+
+/** Every value given after `flag`, which may come more than once. */
+const each = (args: string[], flag: string) => args.filter((_, i) => args[i - 1] === flag);
+/** The values after `flag`, up to the next flag. */
+function listAfter(args: string[], flag: string): string[] {
+  const from = args.indexOf(flag) + 1;
+  const end = args.findIndex((a, i) => i >= from && a.startsWith('--'));
+  return args.slice(from, end);
+}
+
+/** Each tool's walls, read from its own shape: the folders a run may read, and whether it reaches the network. */
+const WALLS: Record<Agent, (gave: Gave) => { reads: string[]; network: boolean }> = {
+  claude: (g) => {
+    const sandbox = (
+      JSON.parse(each(g.args, '--settings')[0] ?? '{}') as {
+        sandbox?: { network?: { allowedDomains?: string[] } };
+      }
+    ).sandbox;
+    return {
+      reads: listAfter(g.args, '--allowedTools')
+        .filter((a) => a.startsWith('Read(/'))
+        .map((a) => a.slice('Read(/'.length, -'/**)'.length)),
+      network:
+        each(g.args, '--tools')[0]
+          .split(',')
+          .some((t) => t.startsWith('Web')) || !!sandbox?.network?.allowedDomains?.length
+    };
+  },
+  grok: (g) => ({
+    reads: [...(g.profile ?? '').matchAll(/^read_(?:only|write) = (\[.*\])$/gm)].flatMap(
+      (m) => JSON.parse(m[1]) as string[]
+    ),
+    network: g.grokEnv?.GROK_WEB_FETCH !== '0'
+  }),
+  codex: (g) => ({
+    reads: Object.entries(g.permissions?.filesystem ?? {})
+      .filter(([, how]) => how === 'read' || how === 'write')
+      .map(([path]) => path),
+    network: !!g.permissions?.network.enabled || g.args.includes('web_search="live"')
+  }),
+  gemini: (g) => ({
+    reads: each(g.args, '--include-directories'),
+    network: (g.policy ?? '').includes('google_web_search')
+  })
+};
+
+/** Whether `name` is listed in `names`, as the office matches on `platform`. */
+const listed = (name: string, names: readonly (string | RegExp)[], platform: NodeJS.Platform) =>
+  names.some((n) =>
+    typeof n === 'string'
+      ? platform === 'win32'
+        ? n.toLowerCase() === name.toLowerCase()
+        : n === name
+      : n.test(name)
+  );
+
+/** One chat with each tool on each system it runs on, from the hostile office, with a read folder and web off. */
+async function eachLaunch(
+  check: (gave: Gave, agent: Agent, platform: NodeJS.Platform) => void
+): Promise<number> {
+  const read = join(folder, 'contract-read');
+  mkdirSync(read, { recursive: true });
+  let launches = 0;
+  for (const agent of L.AGENTS) {
+    await setOwn(ODDS[agent], { web: false, folders: [{ path: read, write: false }] });
+    for (const platform of L.AGENT_PLATFORMS[agent].runs) {
+      const gave = await withEnv({ ...HOSTILE, ...PROXIED, ...SERVER_ONLY }, () =>
+        onPlatform(platform, () => chatOf(ODDS[agent]))
+      );
+      check(gave, agent, platform);
+      launches++;
+    }
+  }
+  return launches;
+}
+
+test("every AI tool, on every system it runs on, launches with only the allowed environment, the read grant, web off and the tool server's variables by name", async () => {
+  const launches = await eachLaunch((gave, agent, platform) => {
+    const at = `${agent} on ${platform}`;
+    const allowed = [
+      ...RUN_ENV_ALLOW.all,
+      ...(platform === 'darwin' || platform === 'linux' || platform === 'win32'
+        ? RUN_ENV_ALLOW[platform]
+        : []),
+      ...RUN_ENV_ALLOW.tool[agent],
+      ...EVERY_RUN,
+      ...OWN[agent]
+    ];
+    const strays = gave.envNames.filter((n) => !listed(n, allowed, platform));
+    assert.deepEqual(strays, [], `${at} got variables no list names`);
+    for (const n of [...Object.keys(HOSTILE), ...Object.keys(SERVER_ONLY)])
+      assert.ok(!gave.envNames.includes(n), `${at} got ${n}`);
+    const walls = WALLS[agent](gave);
+    assert.ok(walls.reads.includes(join(folder, 'contract-read')), `${at} lost its read folder`);
+    assert.equal(walls.network, false, `${at} reached the network with web off`);
+    for (const k of TOOL_SERVER_ENV)
+      if (process.env[k] || k in SERVER_ONLY)
+        assert.ok(k in gave.env, `${at}: the tool server's entry lacks ${k}`);
+  });
+  // Claude Code on three systems, Grok and Codex on a Mac: a tool or system
+  // that stopped launching would otherwise pass unseen.
+  assert.equal(
+    launches,
+    L.AGENTS.reduce((n, a) => n + L.AGENT_PLATFORMS[a].runs.length, 0)
+  );
+  assert.ok(launches > 0, 'no tool runs anywhere: nothing was checked');
+});
+
+test("an owner's proxy and certificate settings reach every run", async () => {
+  await eachLaunch((gave, agent, platform) => {
+    // On Windows HTTPS_PROXY and https_proxy are one variable, and a launch
+    // there keeps one spelling of it.
+    for (const n of Object.keys(PROXIED))
+      assert.ok(listed(n, gave.envNames, platform), `${agent} on ${platform} lost ${n}`);
+  });
+});

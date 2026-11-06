@@ -46,6 +46,7 @@ import {
 } from '@oddboro/ledger';
 import { andBelow, denyRules, instructionPaths } from './files.ts';
 import { mcpGrant, NOT_SIGNED_IN, replace, sweep, vendorEnv, type RunImage } from './launch.ts';
+import { runEnv } from './run-env-allow.ts';
 import { onPath } from './on-path.ts';
 import { sandboxPaths } from './sandbox-paths.ts';
 import { GROK_FILE_TOOLS } from '../staff/work.ts';
@@ -383,7 +384,8 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     ...(r.resume ? ['-r', r.resume] : ['-s', r.newSession])
   ];
   // web_fetch is off in every other grok the office starts (`grokEnv`).
-  const env = r.web ? { ...grokEnv(h), GROK_WEB_FETCH: '1' } : grokEnv(h);
+  const env = grokEnv(h, runEnv('grok'));
+  if (r.web) env.GROK_WEB_FETCH = '1';
   return { args, env, done: () => rmSync(agent, { force: true }) };
 }
 
@@ -468,10 +470,14 @@ export function grokSignIn(account: string = OFFICE_ACCOUNT): {
   return { args: ['login', '--oauth', '--leader-socket', h.leader], env: grokEnv(h) };
 }
 
-/** The environment every `grok` the office starts gets: the office's Grok home, and no key or setup of the office's own. */
-function grokEnv(h: GrokHome): NodeJS.ProcessEnv {
-  const env = vendorEnv(['GROK_', 'XAI_']);
-  return Object.assign(env, COMPAT_OFF, {
+/**
+ * The environment every `grok` the office starts gets: the office's Grok
+ * home, and no key or setup of the office's own. A run starts from `base`,
+ * its `runEnv`; the sign-in, its renewal and the version check from the
+ * owner-side `vendorEnv`.
+ */
+function grokEnv(h: GrokHome, base = vendorEnv(['GROK_', 'XAI_'])): NodeJS.ProcessEnv {
+  return Object.assign(base, COMPAT_OFF, {
     GROK_HOME: h.dir,
     TMPDIR: h.temp,
     GROK_MEMORY: '0',

@@ -132,20 +132,14 @@ import type { Work } from '../staff/work.ts';
 import type { ChatEntry, ChatEvent, ChatRef } from '../staff/chat.ts';
 import { getSecret, headerSecret } from './keychain.ts';
 import { bearer } from './oauth.ts';
-import {
-  apiKey,
-  claudeAccountOf,
-  claudeRunHome,
-  claudeSettings,
-  cleanEnv,
-  modelArgs
-} from './claude.ts';
+import { apiKey, claudeAccountOf, claudeRunHome, claudeSettings, modelArgs } from './claude.ts';
 import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
 import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
 import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
 import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
+import { runEnv, toolServerEnv } from './run-env-allow.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
 import {
@@ -389,11 +383,12 @@ export function pluginsOff(): Record<string, false> {
 }
 
 /**
- * A clean environment: the owner's Claude login, or the API key they gave the
- * office, and never a key or settings that leaked in from a parent session.
+ * A Claude Code run's environment: only what `runEnv` lets through, the
+ * owner's Claude login or the API key they gave the office, and never a key
+ * that leaked in from a parent session.
  */
 export function staffEnv(claudeDir?: string): NodeJS.ProcessEnv {
-  const env = cleanEnv();
+  const env = runEnv('claude');
   delete env.ANTHROPIC_API_KEY;
   if (claudeSettings().auth === 'key') env.ANTHROPIC_API_KEY = apiKey();
   // The account's own Claude Code folder: its login, settings and sessions.
@@ -414,17 +409,6 @@ export async function runHomeOf(who: StaffRow): Promise<string> {
 }
 
 /**
- * The office's own settings from .env that the staff tool server reads, set
- * on the server itself. Grok's sandbox holds that server too and will not
- * open .env, so the server never depends on reading it.
- */
-const OFFICE_SETTINGS = ['OFFICE_TIME_ZONE', 'OFFICE_AGENT'] as const;
-const officeSettings = (): Record<string, string> =>
-  Object.fromEntries(
-    OFFICE_SETTINGS.flatMap((k) => (process.env[k] ? [[k, process.env[k] as string]] : []))
-  );
-
-/**
  * The servers and tool permissions one run gets: the outside tools
  * `capabilities` says it holds. A run from a hand-off works at Draft at most
  * (`ceiling`), so a colleague's words never stand in for the owner's yes. Its
@@ -435,7 +419,9 @@ async function access(who: StaffRow, ceiling: Level) {
     type: 'stdio',
     command: process.execPath,
     args: [STAFF_SERVER],
-    env: { STAFF_ID: who.id, DATABASE_URL, ...officeSettings() }
+    // What the server reads as it starts, by name (`TOOL_SERVER_ENV`): the
+    // run's own environment, which the tool passes on, holds little of the office's.
+    env: { ...toolServerEnv(), STAFF_ID: who.id, DATABASE_URL }
   };
   const servers: Record<string, McpServer> = { office };
   const allowed = ['mcp__office'];
@@ -999,9 +985,8 @@ async function run(
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
     const shell = shellEnv(tmp);
     mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
-    // The office's git and npm settings (`shellEnv`), and none of the office's
-    // own node options, which every node a command starts would take as its own.
-    delete env.NODE_OPTIONS;
+    // The office's git and npm settings (`shellEnv`). The office's own node
+    // options never reach a run (`runEnv`), so no node a command starts takes them.
     Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, ...shell });
     return {
       args: claudeArgs(env),

@@ -588,8 +588,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    variables and a second `set` would replace the first. Nor does it write the file a run
    reading the owner's edit is reading. It gets no skills, no
    plugins, none of the owner's own CLAUDE.md files, no Claude Code
-   auto-memory and none of the office process's own `GIT_` variables, which
-   every tool's launch drops (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with
+   auto-memory, and of the office process's own environment only the names
+   `RUN_ENV_ALLOW` lists (`runEnv` in `run-env-allow.ts`; no `GIT_` variable
+   among them). It gets the office's own MCP server (`packages/ledger/src/mcp.ts`) with
    only the office tools the owner ticked under "In the office" on the Settings tab,
    and whatever outside access the owner granted: servers at read (the tools
    the owner ticked as read-only) or write (every tool, only while the Odd

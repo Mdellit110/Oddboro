@@ -38,6 +38,7 @@ import {
   type RunImage,
   type Toml
 } from './launch.ts';
+import { runEnv } from './run-env-allow.ts';
 
 /**
  * One account's Codex home (`toolHome`), its config, and where its sign-in is
@@ -333,9 +334,13 @@ export function codexSignedOut(account: string = OFFICE_ACCOUNT): string | undef
   return codexAccount(account) ? undefined : `Codex ${NOT_SIGNED_IN}`;
 }
 
-/** The environment every `codex` the office starts gets: the office's Codex home, and no key or setup of the office's own. */
-function codexEnv(h: CodexHome): NodeJS.ProcessEnv {
-  return Object.assign(vendorEnv(['OPENAI_', 'CODEX_']), { CODEX_HOME: h.dir });
+/**
+ * The environment every `codex` the office starts gets: the office's Codex
+ * home, and no key or setup of the office's own. A run starts from `base`,
+ * its `runEnv`; the sign-in from the owner-side `vendorEnv`.
+ */
+function codexEnv(h: CodexHome, base = vendorEnv(['OPENAI_', 'CODEX_'])): NodeJS.ProcessEnv {
+  return Object.assign(base, { CODEX_HOME: h.dir });
 }
 
 /**
@@ -400,7 +405,7 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   ];
   return {
     args,
-    env: { ...codexEnv(h), TMPDIR: temp },
+    env: { ...codexEnv(h, runEnv('codex')), TMPDIR: temp },
     stdin: r.input,
     done: () => rmSync(temp, { recursive: true, force: true })
   };

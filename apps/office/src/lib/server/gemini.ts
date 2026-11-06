@@ -30,11 +30,11 @@ import {
   SIGN_IN_WHERE,
   sweep,
   toml,
-  vendorEnv,
   type McpServer,
   type RunEvent,
   type Toml
 } from './launch.ts';
+import { runEnv } from './run-env-allow.ts';
 import { GEMINI_FILE_TOOLS } from '../staff/work.ts';
 
 /** The office's Gemini home: Gemini's own folder in it is `.gemini`, with the sessions. */
@@ -308,7 +308,7 @@ export function geminiLaunch(r: GeminiRun): GeminiLaunch {
     ...(model ? ['-m', model] : []),
     ...(r.resume ? ['--resume', r.resume] : [])
   ];
-  const env = vendorEnv(['GEMINI_', 'GOOGLE_']);
+  const env = runEnv('gemini');
   Object.assign(env, {
     GEMINI_CLI_HOME: GEMINI_HOME,
     // The run's folder is the Odd's own, so Gemini need not ask whether to trust it.

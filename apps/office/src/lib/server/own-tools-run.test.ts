@@ -163,7 +163,8 @@ test(
   "with Run commands, Bash keeps every git setting gitEnv gives it, by name, while an owner's token stays hidden and an owner's GIT_..._TOKEN never reaches the run",
   onMac,
   () =>
-    withEnv({ OWNER_API_TOKEN: 'planted', GIT_ASKPASS_TOKEN: 'planted' }, async () => {
+    // An owner's Anthropic token reaches Claude Code (`RUN_ENV_ALLOW`), so its commands must not see it.
+    withEnv({ ANTHROPIC_AUTH_TOKEN: 'planted', GIT_ASKPASS_TOKEN: 'planted' }, async () => {
       await setOwn('otto', { commands: true });
       const run = await chatOf('otto');
       const denied = (settingsOf(run).sandbox?.credentials.envVars ?? []).map((v) => v.name);
@@ -176,7 +177,7 @@ test(
         git.filter((n) => denied.includes(n)),
         []
       );
-      assert.ok(denied.includes('OWNER_API_TOKEN'), JSON.stringify(denied));
+      assert.ok(denied.includes('ANTHROPIC_AUTH_TOKEN'), JSON.stringify(denied));
       assert.ok(!('GIT_ASKPASS_TOKEN' in (run.git ?? {})), 'the token reached the run');
     })
 );
@@ -194,17 +195,14 @@ test(
       const run = await chatOf('otto');
       const denied = settingsOf(run).sandbox?.credentials.envVars ?? [];
       // Claude Code sets CLAUDE_CODE_MESSAGING_TOKEN itself, so it is in no environment the office passes.
-      for (const name of [
-        'ANTHROPIC_API_KEY',
-        'FAKE_TOKEN',
-        'DATABASE_URL',
-        'XAI_API_KEY',
-        'CLAUDE_CODE_MESSAGING_TOKEN'
-      ])
+      for (const name of ['ANTHROPIC_API_KEY', 'CLAUDE_CODE_MESSAGING_TOKEN'])
         assert.ok(
           denied.some((v) => v.name === name && v.mode === 'deny'),
           `${name} reaches Bash: ${JSON.stringify(denied)}`
         );
+      // The office's own secrets never reach the run at all (`runEnv`).
+      for (const name of ['FAKE_TOKEN', 'DATABASE_URL', 'XAI_API_KEY'])
+        assert.ok(!run.envNames.includes(name), `${name} reached the run`);
       assert.ok(denied.every((v) => v.mode === 'deny'));
       assert.ok(
         !denied.some((v) => v.name === 'PATH' || v.name === 'HOME'),

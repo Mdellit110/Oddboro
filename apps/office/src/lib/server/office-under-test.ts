@@ -112,6 +112,7 @@ function reply() {
   const after = (flag) => args[args.indexOf(flag) + 1];
   const gave = {
     args,
+    envNames: Object.keys(process.env).sort(),
     env: JSON.parse(after('--mcp-config')).mcpServers.office.env,
     system: after('--append-system-prompt'),
     message,
@@ -212,6 +213,7 @@ const profile = fs
   .find((b) => b.startsWith('[profiles.' + after('--sandbox') + ']'));
 const gave = {
   args,
+  envNames: Object.keys(process.env).sort(),
   grokEnv: Object.fromEntries(
     Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
   ),
@@ -303,6 +305,7 @@ process.stdin.on('end', () => {
   });
   const gave = {
     args,
+    envNames: Object.keys(process.env).sort(),
     codexEnv: Object.fromEntries(
       Object.entries(process.env).filter(([k]) => /^(CODEX_|OPENAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
     ),
@@ -372,6 +375,7 @@ process.stdin.on('end', () => {
   const run = path.dirname(settingsPath);
   const gave = {
     args,
+    envNames: Object.keys(process.env).sort(),
     geminiEnv: Object.fromEntries(
       Object.entries(process.env).filter(([k]) => /^(GEMINI_|GOOGLE_|ANTHROPIC_API_KEY|NODE_OPTIONS|GIT_)/.test(k))
     ),
@@ -562,6 +566,8 @@ await L.pg`insert into staff ${L.pg([
 /** What the stand-in says the run gave it. */
 export type Gave = {
   args: string[];
+  /** The names of every variable in the environment the tool was started with. */
+  envNames: string[];
   env: Record<string, string>;
   system: string;
   message: string;

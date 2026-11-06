@@ -84,7 +84,10 @@ export function modelArgs(): string[] {
 }
 
 /**
- * The environment a `claude` run gets: none of a parent Claude Code session's
+ * The environment an owner-side launch gets (an install, a sign-in, a version
+ * check), since the owner's own setup may need more than an Odd's run, which
+ * starts from `runEnv` (run-env-allow.ts) and sets the same two switches
+ * below. None of a parent Claude Code session's
  * settings, none of the owner's own CLAUDE.md files, and no auto-memory. Under
  * `--setting-sources user`, a run still loaded the owner's ~/.claude/CLAUDE.md,
  * their instructions to their own Claude, which no Odd should read. Auto-memory
@@ -92,9 +95,7 @@ export function modelArgs(): string[] {
  * memory beside the office's lessons that the owner never sees. None of the
  * office process's own git variables either (every `GIT_` name, such as
  * `GIT_DIR` or `GIT_CONFIG_PARAMETERS`), since the owner's git settings never
- * shape an Odd's git: a run with a shell gets the office's own (`gitEnv`)
- * after this. Every coding tool's run, install and sign-in starts here. A run's own
- * instructions come in its arguments and its message, which this leaves alone.
+ * shape an Odd's git: a run with a shell gets the office's own (`gitEnv`).
  */
 export function cleanEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
