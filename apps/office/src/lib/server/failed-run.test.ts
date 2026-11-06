@@ -8,13 +8,14 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { UsageKind } from '@oddboro/ledger';
 import type { ChatEntry, ChatEvent } from '../staff/chat.ts';
-import { L, bin, chatOf, odd, refusal, request } from './office-under-test.ts';
+import { L, bin, chatOf, followThrough, odd, refusal, request } from './office-under-test.ts';
 import { RUN_FAILURE, type Landing } from './run-failures.ts';
-import { start } from './jobs.ts';
-import { currentDesign, followDesign, startDesign } from './design-job.ts';
-import { followThrough } from './staff.ts';
-import { replayed, replayedAt } from './replay.ts';
 import { chatPreface } from './chat-preface.ts';
+
+// After the office under test set its home and secret store, so the office reads those.
+const { start } = await import('./jobs.ts');
+const { currentDesign, followDesign, startDesign } = await import('./design-job.ts');
+const { replayed, replayedAt } = await import('./replay.ts');
 
 /** What every run says when Claude Code is not on the computer. */
 const GONE = 'Could not start Claude Code: spawn claude ENOENT';
@@ -34,9 +35,16 @@ async function withoutClaude<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** The owner's page sending one chat message, and every event the reply streamed. */
-async function send(id: string, message: string): Promise<ChatEvent[]> {
-  const res = await request('/api/staff/[id]/chat', 'POST', { params: { id }, body: { message } });
+/** The owner's page sending one chat message, about a desk item `re` or not, and every event the reply streamed. */
+async function send(
+  id: string,
+  message: string,
+  re?: { kind: 'report'; id: number }
+): Promise<ChatEvent[]> {
+  const res = await request('/api/staff/[id]/chat', 'POST', {
+    params: { id },
+    body: { message, re }
+  });
   return (await res.text())
     .split('\n\n')
     .filter((chunk) => chunk.startsWith('data: '))
@@ -72,6 +80,17 @@ test('the next chat after a failed one tells the Odd once what the owner said, a
   assert.equal(message.split('Are you there?').length - 1, 1, 'the owner line was said twice');
   assert.match(message, /Your run on .*'s last message you saw before this one failed/);
   assert.ok(!message.includes(`You: ${GONE}`), 'the error was replayed as the Odd speaking');
+});
+
+test('a failed chat about a report records no feedback on it, and leaves it unread', async () => {
+  const [{ id }] = await L.pg<{ id: number }[]>`
+    insert into reports (staff_id, title, body) values ('gil', 'Chair count', 'Twelve chairs.')
+    returning id`;
+  await withoutClaude(() => send('gil', 'Count them again.', { kind: 'report', id }));
+  const [{ n }] = await L.pg<{ n: number }[]>`
+    select count(*)::int as n from ledger where title = 'Feedback on: Chair count'`;
+  assert.equal(n, 0, 'feedback was recorded for a reply the Odd never got');
+  assert.equal((await L.report(id))?.readAt, null);
 });
 
 test("a chat whose run throws keeps the owner's message and the error after a reload", async () => {
