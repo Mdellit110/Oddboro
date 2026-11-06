@@ -118,3 +118,4 @@ diverge. How to record one is in `docs/decisions/CLAUDE.md`.
 - [packages/CLAUDE.md](packages/CLAUDE.md). One line per package.
 - [scripts/CLAUDE.md](scripts/CLAUDE.md). Every lint guard, one line each.
 - [docs/CLAUDE.md](docs/CLAUDE.md). Every doc with its status, and the ledger.
+- `docs/architecture.md`. The picture: where a new kind of thing starts, the shared function for each job, and the check that catches a missed place.

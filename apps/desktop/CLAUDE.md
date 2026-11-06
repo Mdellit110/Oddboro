@@ -9,6 +9,9 @@ service. On Windows: a per-user installer (NSIS) for x64 or arm64, Windows 10
 or 11, not code-signed yet. No UI framework: the only page of its own is
 `loading/index.html`.
 
+Where a new kind of thing starts, the shared function for each job, and the
+check that catches a missed place: `docs/architecture.md`.
+
 What differs between the systems is in `#[cfg(...)]` branches, one per
 function: the home and log folders and the PATH (`env.rs`), asking Node to
 quit, keeping the computer awake and notifications (`server.rs`), opening

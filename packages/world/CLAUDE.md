@@ -8,6 +8,9 @@ it. A floor plan (`plans/*.json`) places stamps to make one office, and its
 lights and a walkable grid. Each placed prop has an id, `room/sprite#i`, on its
 draws, lights and spots (`obj`), so a switch can name it and find all three.
 
+Where a new kind of thing starts, the shared function for each job, and the
+check that catches a missed place: `docs/architecture.md`.
+
 A plan's `grounds` puts land around the building. `margin` pads the plan on
 each side, then a grounds template in world coordinates (`rooms/grounds-main-street.json`)
 fills every cell nothing else claimed: grass, the river, the footpath and the

@@ -8,6 +8,9 @@ them, the lessons the owner teaches the Odds, the app's updates, and the ledger 
 Drizzle ORM over the `postgres` driver. Server only, except `./time`,
 `./tools`, `./agents`, `./access`, `./goals`, `./update-window` and `./work-paths`, which the page may import.
 
+Where a new kind of thing starts, the shared function for each job, and the
+check that catches a missed place: `docs/architecture.md`.
+
 ## Running it
 
 `src/home.ts` says where everything is. `home()` is the owner's office
