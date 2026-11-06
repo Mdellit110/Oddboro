@@ -25,6 +25,13 @@ then names every other place.
   then starts every tool on every system it runs on, from an office whose
   environment holds things no run should get, and fails its type check until
   the new tool has an Odd there and a reader of its walls (`WALLS`).
+- To call out of the computer from new code (a door to an outside service,
+  such as a persona's, an error report, or a new connector kind), add or
+  update the file's entry in `OUTBOUND` in the repo's `scripts/outbound.ts`:
+  how many calls, where they go, what they send and whose yes covers them.
+  `npm run lint` fails until the entry matches the code. A kind of call the
+  guard does not name yet (a new client library's constructor or init) goes
+  in `scripts/check-outbound.ts` too.
 
 ## Later
 
