@@ -42,6 +42,7 @@ const { bringUpToDate } = await import('@oddboro/ledger/upgrade');
 await bringUpToDate();
 const L = await import('@oddboro/ledger');
 const { fromOwnerPage, guardOffice } = await import('./owner-page.ts');
+const { closeGateway, openGateway } = await import('./gateway.ts');
 const askRoute = await import('../../routes/api/asks/[id]/+server.ts');
 const updateRoute = await import('../../routes/api/update/+server.ts');
 const openRoute = await import('../../routes/api/files/open/+server.ts');
@@ -240,6 +241,31 @@ test('the shell reports an update with its token, and nothing else reports one',
     headers: { ...PAGE, 'x-oddboro-update-token': 'wrong-token-for-tests' }
   });
   assert.deepEqual([page.status, page.ran], [403, true]);
+});
+
+test("a run's token reaches its gateway while the run goes, and nothing else", async () => {
+  const notes = {
+    id: 'notes',
+    name: 'Notes',
+    readTools: [],
+    tools: [],
+    config: {}
+  } as unknown as import('@oddboro/ledger').ConnectorRow;
+  const { token } = openGateway([{ connector: notes, level: 'read' }], 60_000);
+  const call = { path: '/api/gateway/notes', body: '{}' };
+  const run = await send(ok, { ...call, headers: { authorization: `Bearer ${token}` } });
+  assert.deepEqual([run.status, run.ran], [200, true]);
+  for (const auth of ['', 'Bearer wrong-token-for-tests', token]) {
+    const r = await send(ok, { ...call, headers: { authorization: auth } });
+    assert.deepEqual([auth, r.status, r.ran], [auth, 403, false]);
+  }
+  // The token opens only the gateway, never another route.
+  const elsewhere = await send(ok, { headers: { authorization: `Bearer ${token}` } });
+  assert.deepEqual([elsewhere.status, elsewhere.ran], [403, false]);
+  // Once the run ends, its token opens nothing.
+  await closeGateway(token);
+  const ended = await send(ok, { ...call, headers: { authorization: `Bearer ${token}` } });
+  assert.deepEqual([ended.status, ended.ran], [403, false]);
 });
 
 test("only the owner's page reaches the route that opens a page", async () => {

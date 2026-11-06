@@ -13,8 +13,6 @@ type Body = {
   value?: string;
   done?: boolean;
   note?: string;
-  readTools?: string[];
-  tools?: string[];
 };
 
 export const POST: RequestHandler = async ({ params, request }) => {
@@ -49,8 +47,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
       await tickStep(id, b.index!);
     } else if (b.op === 'tools' && action?.kind === 'tools')
       return json({ tools: await listTools(action.connector) });
-    else if (b.op === 'confirm-tools' && action?.kind === 'tools' && Array.isArray(b.tools)) {
-      await confirmTools(action.connector, b.tools, b.readTools ?? []);
+    else if (b.op === 'confirm-tools' && action?.kind === 'tools') {
+      await confirmTools(action.connector);
       await tickStep(id, b.index!);
     } else error(400, 'That step does not take that');
   } catch (e) {

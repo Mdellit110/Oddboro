@@ -65,9 +65,9 @@
           detail: 'The office reaches your Open Brain and lists its tools.'
         },
         {
-          text: 'Leave the ticks as they are, and click Confirm.',
+          text: 'Click Confirm.',
           detail:
-            'The ticked tools only read. capture_thought, the one that saves, stays unticked, so only a Read and write Odd can use it.'
+            'The list marks the tools Read only reaches: the ones Open Brain marks as only reading. capture_thought, the one that saves, needs Read and write.'
         }
       ]
     }
