@@ -476,6 +476,18 @@ test("an Odd's registered tools are exactly the always tools, the ones it holds 
     }
 });
 
+test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {
+  const c = await toolServer('tot', { RUN_KEY: 'k-tot-hint' });
+  const hire = (await c.listTools()).tools.find((t) => t.name === 'propose_hire');
+  const hint = (hire?.inputSchema.properties?.office_tools as { description?: string })
+    ?.description;
+  const named = hint?.match(/has: (.*)\. Leave/)?.[1].split(', ');
+  assert.deepEqual(
+    named,
+    OFFICE_TOOLS.filter((t) => !t.always).map((t) => t.id)
+  );
+});
+
 test("the hand_off tool names what each colleague lacks of the lead's tools once, in plain words", async () => {
   // The tool server's home, holding the folder Lena gave her Odds, so it is
   // shown as ~/x and is on the disk for a colleague that has it.

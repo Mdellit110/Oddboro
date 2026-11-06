@@ -88,7 +88,13 @@ import {
   zone,
   zoneName
 } from './time.ts';
-import { hasTool, isGrantable, type OfficeToolId, type RIDES_WITH } from './tools.ts';
+import {
+  GRANTABLE_TOOLS,
+  hasTool,
+  isGrantable,
+  type OfficeToolId,
+  type RIDES_WITH
+} from './tools.ts';
 import { home } from './home.ts';
 
 const ME = process.env.STAFF_ID ?? '';
@@ -263,7 +269,7 @@ const hireFields = {
     .array(z.string())
     .optional()
     .describe(
-      'Office tools beyond the ones every Odd has: search_ledger, give_owner_a_task, find_connectors, ask_for_access, edit_my_job, edit_my_description, hand_off, poke_owner, propose_hire, office_report. Leave out for the usual starters.'
+      `Office tools beyond the ones every Odd has: ${GRANTABLE_TOOLS.join(', ')}. Leave out for the usual starters.`
     ),
   appearance: z
     .string()

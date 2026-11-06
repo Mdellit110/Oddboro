@@ -152,7 +152,9 @@ export const STARTER_TOOLS: OfficeToolId[] = [
   'poke_owner'
 ];
 
-const GRANTABLE = new Set<string>(OFFICE_TOOLS.filter((t) => !t.always).map((t) => t.id));
+/** The office tools the owner gives an Odd, beyond the ones every Odd has. */
+export const GRANTABLE_TOOLS = OFFICE_TOOLS.filter((t) => !t.always).map((t) => t.id);
+const GRANTABLE = new Set<string>(GRANTABLE_TOOLS);
 export const isGrantable = (id: string): id is OfficeToolId => GRANTABLE.has(id);
 
 /** Whether a staffer holding `granted` may use the office tool `id`. */
