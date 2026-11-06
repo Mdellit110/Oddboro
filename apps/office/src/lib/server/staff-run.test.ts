@@ -23,6 +23,7 @@ import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import type { McpServer } from './launch.ts';
 import {
   L,
   PATCH,
@@ -54,7 +55,8 @@ import {
 } from './office-under-test.ts';
 // After the office under test is set up, as its own imports are: the office reads where everything is as it loads.
 const { agentCommand } = await import('./agent-sign-in.ts');
-const { asClaudeServer } = await import('./launch.ts');
+const { configServers } = await import('./launch.ts');
+const { LAUNCHES } = await import('./cli.ts');
 
 test("a colleague's run on a hand-off works at Draft, and its key is held while it goes and only then", async () => {
   const h = await L.handOff({
@@ -122,21 +124,49 @@ test("the colleague's run a yes to keep going starts is handed the held work as 
   assert.match(told, /Plan it\./);
 });
 
+/** One command server and one hosted one, as access() builds them, and as a run's config has always written them. */
+const SERVERS = {
+  office: { type: 'stdio', command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } },
+  notes: { type: 'http', url: 'https://notes.example/mcp', headers: { Authorization: 'a' } }
+} satisfies Record<string, McpServer>;
+const WRITTEN = {
+  office: { command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } },
+  notes: { type: 'http', url: 'https://notes.example/mcp', headers: { Authorization: 'a' } }
+};
+
 test("a Claude Code run's MCP config gives a command server and a hosted one in the shape it always had", async () => {
   const { args } = await chatOf('cleo');
   const config = JSON.parse(args[args.indexOf('--mcp-config') + 1]);
   assert.deepEqual(Object.keys(config.mcpServers.office), ['command', 'args', 'env']);
+  assert.deepEqual(configServers(SERVERS), WRITTEN);
+});
+
+test("a Grok run's agent file gives a command server and a hosted one in the shape it always had", async () => {
+  const dir = join(folder, 'staff', 'gus');
+  const launch = await LAUNCHES.grok({
+    key: 'agent-file-shape',
+    account: 'office',
+    staffId: 'gus',
+    dir,
+    reads: [],
+    writes: [dir],
+    granted: [],
+    commands: false,
+    network: false,
+    system: 'You are Gus.',
+    input: 'Hello.',
+    servers: SERVERS,
+    allowed: [],
+    timeoutMs: 60_000,
+    web: false
+  });
+  assert.ok('args' in launch, JSON.stringify(launch));
+  const agent = readFileSync(launch.args[launch.args.indexOf('--agent') + 1], 'utf8');
+  launch.done();
+  // Grok takes a list of one-server objects, in the order the run's servers come.
   assert.deepEqual(
-    asClaudeServer({ type: 'stdio', command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } }),
-    { command: 'node', args: ['mcp.ts'], env: { RUN_KEY: 'k' } }
-  );
-  assert.deepEqual(
-    asClaudeServer({
-      type: 'http',
-      url: 'https://notes.example/mcp',
-      headers: { Authorization: 'a' }
-    }),
-    { type: 'http', url: 'https://notes.example/mcp', headers: { Authorization: 'a' } }
+    JSON.parse(/^mcpServers: (.*)$/m.exec(agent)![1]),
+    Object.entries(WRITTEN).map(([name, server]) => ({ [name]: server }))
   );
 });
 

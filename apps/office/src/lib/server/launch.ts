@@ -51,11 +51,18 @@ type McpServerOf = {
 export type McpServer = { [K in ConnectorKind]: { type: K } & McpServerOf[K] }[ConnectorKind];
 
 /**
- * A server as Claude Code's `--mcp-config` takes it. Its config has never
- * named a command's kind (it reads a server with no `type` as one), so the
- * kind stays the office's own word and the file a run gets does not change.
+ * A run's servers as Claude Code's `--mcp-config` and Grok's agent file take
+ * them. Neither config has ever named a command's kind (each reads a server
+ * with no `type` as one), so the kind stays the office's own word and the
+ * file a run gets does not change.
  */
-export function asClaudeServer(s: McpServer): Record<string, unknown> {
+export function configServers(
+  servers: Record<string, McpServer>
+): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(Object.entries(servers).map(([name, s]) => [name, configServer(s)]));
+}
+
+function configServer(s: McpServer): Record<string, unknown> {
   switch (s.type) {
     case 'http':
       return s;
@@ -66,7 +73,7 @@ export function asClaudeServer(s: McpServer): Record<string, unknown> {
     default: {
       // A kind with no case here fails the type check; the cast only names it.
       const missed: never = s;
-      throw new Error(`No way to give Claude Code a ${(missed as McpServer).type} server`);
+      throw new Error(`No way to write a ${(missed as McpServer).type} server into a run's config`);
     }
   }
 }

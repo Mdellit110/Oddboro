@@ -148,7 +148,7 @@ import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
 import {
-  asClaudeServer,
+  configServers,
   NOT_SIGNED_IN,
   shellEnv,
   SIGN_IN_WHERE,
@@ -960,9 +960,7 @@ async function run(
       '--strict-mcp-config',
       '--mcp-config',
       JSON.stringify({
-        mcpServers: Object.fromEntries(
-          Object.entries(servers).map(([name, s]) => [name, asClaudeServer(s)])
-        )
+        mcpServers: configServers(servers)
       }),
       '--disable-slash-commands',
       '--settings',

@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { COMMANDS_WHY, type Agent, type Effort } from '@oddboro/ledger';
 import { deniedEdits } from './files.ts';
-import type { McpServer, RunEvent, RunImage } from './launch.ts';
+import { configServers, type McpServer, type RunEvent, type RunImage } from './launch.ts';
 import { GROK_PLAN_LIMIT, GROK_SIGN_IN, grokLaunch, grokSignedOut } from './grok.ts';
 import { codexLaunch, codexReader, codexSignedOut } from './codex.ts';
 import { geminiKeyMissing, geminiLaunch, geminiReader } from './gemini.ts';
@@ -106,7 +106,7 @@ export const LAUNCHES: Record<
         message: r.input,
         resume: r.resume,
         newSession: randomUUID(),
-        servers: r.servers,
+        servers: configServers(r.servers),
         allowed: r.allowed,
         web: r.web,
         images: r.images,
