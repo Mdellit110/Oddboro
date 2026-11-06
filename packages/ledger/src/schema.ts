@@ -89,7 +89,16 @@ export type AccountRow = typeof accounts.$inferSelect;
  * (usage-window.ts): a yes lets hand-offs run until it resets, and a no holds
  * them until then.
  */
-export type AskKind = 'approval' | 'access' | 'hire' | 'goal' | 'plan' | 'hand_offs' | 'window';
+export const ASK_KINDS = [
+  'approval',
+  'access',
+  'hire',
+  'goal',
+  'plan',
+  'hand_offs',
+  'window'
+] as const;
+export type AskKind = (typeof ASK_KINDS)[number];
 /** `revise` means the owner sent it back to be reworked. */
 export type AskStatus = 'open' | 'approved' | 'denied' | 'revise';
 /** What an access ask wants: a connector and a level. */
@@ -142,7 +151,8 @@ export type GoalPlan = {
 
 /** When a goal is for. `date` reads `due`. */
 export type GoalHorizon = 'week' | 'quarter' | 'year' | 'date' | 'ongoing';
-export type GoalStatus = 'active' | 'paused' | 'met' | 'dropped';
+export const GOAL_STATUSES = ['active', 'paused', 'met', 'dropped'] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
 
 /** A goal as written, before it is one: what the owner or the manager proposes. */
 export type GoalDraft = {
@@ -427,7 +437,8 @@ export const ledger = pgTable(
  * hosted one (`http`), found in the MCP Registry or named by its address. A
  * secret named in `secrets` lives in the macOS keychain, never here.
  */
-export type ConnectorKind = 'stdio' | 'http';
+export const CONNECTOR_KINDS = ['stdio', 'http'] as const;
+export type ConnectorKind = (typeof CONNECTOR_KINDS)[number];
 export type ConnectorConfig = {
   command?: string;
   args?: string[];
@@ -552,18 +563,20 @@ export const threads = pgTable('threads', {
  * the owner's answer when no other run follows it. An `edited` run reads the
  * owner's edit to one of the staffer's files, for a lesson.
  */
-export type FollowUpKind =
-  | 'carry_out'
-  | 'rework'
-  | 'denied'
-  | 'feedback'
-  | 'task_done'
-  | 'goal'
-  | 'first_day'
-  | 'hand_off'
-  | 'handed_back'
-  | 'resume'
-  | 'edited';
+export const FOLLOW_UP_KINDS = [
+  'carry_out',
+  'rework',
+  'denied',
+  'feedback',
+  'task_done',
+  'goal',
+  'first_day',
+  'hand_off',
+  'handed_back',
+  'resume',
+  'edited'
+] as const;
+export type FollowUpKind = (typeof FOLLOW_UP_KINDS)[number];
 /** `waiting` means the staffer put what it needs on the owner's desk. */
 export type Outcome = 'done' | 'failed' | 'waiting';
 

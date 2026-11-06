@@ -9,10 +9,10 @@ import { db } from './db.ts';
 import { firstAsk } from './first-questions.ts';
 import { hire, ownerName, type StaffRow } from './office.ts';
 import { jobs } from './schema.ts';
-import { STARTER_TOOLS } from './tools.ts';
+import { STARTER_TOOLS, type OfficeToolId } from './tools.ts';
 
 export const MANAGER_ROLE = 'Office Manager';
-export const MANAGER_TOOLS = [
+export const MANAGER_TOOLS: OfficeToolId[] = [
   ...STARTER_TOOLS,
   'office_report',
   'propose_hire',

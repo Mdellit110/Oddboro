@@ -3,6 +3,7 @@
 // The owner grants the rest one staffer at a time, from the Settings tab. Safe to
 // import in the browser.
 import type { AskKind, Step } from './schema.ts';
+import { OWNER_ANSWERS } from './desk-answers.ts';
 
 export type OfficeTool = {
   id: string;
@@ -12,7 +13,7 @@ export type OfficeTool = {
   always?: boolean;
 };
 
-export const OFFICE_TOOLS: readonly OfficeTool[] = [
+const TOOLS = [
   { id: 'raise_ask', name: 'Ask you', does: 'Puts an ask on your desk.', always: true },
   { id: 'my_asks', name: 'Its asks', does: 'Sees how you decided its asks.', always: true },
   { id: 'my_access', name: 'Its access', does: 'Sees the tools you gave it.', always: true },
@@ -123,10 +124,24 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     name: 'Update goals',
     does: 'Marks a goal met or paused, or rewords it, when you ask in chat or approve an ask.'
   }
-];
+] as const satisfies readonly OfficeTool[];
+export type OfficeToolId = (typeof TOOLS)[number]['id'];
+/** Every office tool, each with its id from the list above, so a typo in an id fails the type check. */
+export const OFFICE_TOOLS: readonly (OfficeTool & { id: OfficeToolId })[] = TOOLS;
+
+/**
+ * Tools the tool server registers beside a listed one, held with it: an Odd
+ * that may poke the owner sees and cancels its pokes, and one that hands off
+ * may park its thread until a time.
+ */
+export const RIDES_WITH = {
+  my_pokes: 'poke_owner',
+  cancel_poke: 'poke_owner',
+  resume_at: 'hand_off'
+} as const satisfies Record<string, OfficeToolId>;
 
 /** What a new hire starts with. The owner adds or removes from there. */
-export const STARTER_TOOLS = [
+export const STARTER_TOOLS: OfficeToolId[] = [
   'search_ledger',
   'give_owner_a_task',
   'find_connectors',
@@ -137,8 +152,8 @@ export const STARTER_TOOLS = [
   'poke_owner'
 ];
 
-const GRANTABLE = new Set(OFFICE_TOOLS.filter((t) => !t.always).map((t) => t.id));
-export const isGrantable = (id: string) => GRANTABLE.has(id);
+const GRANTABLE = new Set<string>(OFFICE_TOOLS.filter((t) => !t.always).map((t) => t.id));
+export const isGrantable = (id: string): id is OfficeToolId => GRANTABLE.has(id);
 
 /** Whether a staffer holding `granted` may use the office tool `id`. */
 export const hasTool = (granted: readonly string[], id: string) =>
@@ -152,4 +167,4 @@ export const tickable = (s: Step) => !s.action || s.action.kind === 'oauth';
  * nobody could rework one sent back, so they take no Iterate.
  */
 export const yesOrNo = (kind: AskKind | undefined): boolean =>
-  kind === 'hand_offs' || kind === 'window';
+  kind !== undefined && OWNER_ANSWERS.ask[kind].iterate === 'refused';

@@ -70,6 +70,7 @@ import {
   followUps,
   goals,
   type AccessRequest,
+  type AskKind,
   type FollowUpKind,
   type GoalDraft,
   type GoalPlan,
@@ -99,6 +100,13 @@ import { MANAGER_ROLE } from './managers.ts';
 import { levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
+import {
+  OWNER_ANSWERS,
+  type AskAnswer,
+  type AskEffect,
+  type DeskItem,
+  type TaskEffect
+} from './desk-answers.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
 
 export type StaffRow = typeof staff.$inferSelect;
@@ -729,7 +737,8 @@ export async function asksFor(staffId: string): Promise<AskRow[]> {
     .limit(30);
 }
 
-export type Decision = 'approve' | 'deny' | 'iterate';
+export const DECISIONS = ['approve', 'deny', 'iterate'] as const;
+export type Decision = (typeof DECISIONS)[number];
 
 /**
  * The owner's decision. Approving an access ask grants it and gives the owner the steps
@@ -792,7 +801,8 @@ async function decide(
       .where(and(eq(asks.id, id), eq(asks.status, 'open')))
       .returning();
     if (claimed) await o.link?.(claimed, tx);
-    if (claimed?.kind === 'hand_offs' && decision === 'approve') await startHeld(tx, claimed);
+    if (claimed && effectsOf(claimed.kind, decision).includes('start_held'))
+      await startHeld(tx, claimed);
     return claimed;
   });
   if (!ask) return false;
@@ -806,46 +816,72 @@ async function decide(
     askId: ask.id
   });
   await o.carryOut?.(ask);
-  if (decision === 'approve' && ask.access) await grantAccess(ask.staffId, ask.access, ask.id);
-  else if (decision === 'approve' && ask.kind === 'approval')
-    await followUp(ask.staffId, 'carry_out', {
-      askId: ask.id,
-      note: ask.reason,
-      reportWhenDone: o.reportWhenDone
-    });
-  else if (decision === 'iterate')
-    await followUp(ask.staffId, 'rework', { askId: ask.id, note: ask.reason });
-  // No run carries out a denial, or a hire, goal, plan or more hand-offs the owner
-  // approved: the answer itself goes back to a hand-off the ask came from, or
-  // to the thread's hub. A yes to more hand-offs started the hand-off it held
-  // with the claim, and a no stops the thread. A yes to the usage window wakes the threads it held.
-  else {
-    const owner = await ownerName();
-    const said = `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
-    const answer = ask.reason ? `${said}: ${ask.reason}` : `${said}.`;
-    if (ask.kind === 'window') {
-      // The title asks whether to pause the work or let it carry on, so "approved" would not say which.
-      const ran = `${owner} let hand-offs run until the usage window resets. Hand on the work the office held.`;
-      await answerWindow(
-        ask.id,
-        decision === 'approve',
-        ask.reason ? `${ran} They said: ${ask.reason}` : ran
-      );
-    } else if (ask.kind === 'hand_offs' && ask.threadId)
-      await answerHandOffs({ ...ask, threadId: ask.threadId }, decision === 'approve', answer);
-    else
-      await answerLater(
-        { handOffId: ask.handOffId, threadId: ask.threadId, askId: ask.id },
-        decision === 'deny' ? 'failed' : 'done',
-        answer
-      );
-    // A no with a reason may be a lesson: the Odd that asked reads it once. The
-    // office raised a window ask, not the Odd named on it, so it has none to learn.
-    if (decision === 'deny' && ask.reason && ask.kind !== 'window')
-      await followUp(ask.staffId, 'denied', { askId: ask.id, note: ask.reason });
+  const owner = await ownerName();
+  const said = `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
+  const answer = ask.reason ? `${said}: ${ask.reason}` : `${said}.`;
+  for (const effect of effectsOf(ask.kind, decision)) {
+    if (typeof effect === 'object') continue;
+    switch (effect) {
+      // Done before this loop: the caller's approval, and the held hand-off with the claim.
+      case 'approval_work':
+      case 'start_held':
+        break;
+      case 'grant_access':
+        if (ask.access) await grantAccess(ask.staffId, ask.access, ask.id);
+        break;
+      case 'carry_out':
+        await followUp(ask.staffId, 'carry_out', {
+          askId: ask.id,
+          note: ask.reason,
+          reportWhenDone: o.reportWhenDone
+        });
+        break;
+      case 'rework':
+        await followUp(ask.staffId, 'rework', { askId: ask.id, note: ask.reason });
+        break;
+      case 'answer_window': {
+        // The title asks whether to pause the work or let it carry on, so "approved" would not say which.
+        const ran = `${owner} let hand-offs run until the usage window resets. Hand on the work the office held.`;
+        await answerWindow(
+          ask.id,
+          decision === 'approve',
+          ask.reason ? `${ran} They said: ${ask.reason}` : ran
+        );
+        break;
+      }
+      // A yes started the hand-off it held with the claim, and a no stops the thread.
+      case 'answer_hand_offs':
+        if (ask.threadId)
+          await answerHandOffs({ ...ask, threadId: ask.threadId }, decision === 'approve', answer);
+        else await answerBack(ask, decision, answer);
+        break;
+      case 'answer_back':
+        await answerBack(ask, decision, answer);
+        break;
+      // A no with a reason may be a lesson: the Odd that asked reads it once.
+      case 'denied_lesson':
+        if (ask.reason) await followUp(ask.staffId, 'denied', { askId: ask.id, note: ask.reason });
+        break;
+      default:
+        effect satisfies never;
+    }
   }
   return true;
 }
+
+/** What the owner's decision on an ask of this kind does, from its row in `OWNER_ANSWERS`. */
+function effectsOf(kind: AskKind, decision: Decision): readonly AskEffect[] {
+  const cell = (OWNER_ANSWERS.ask[kind] as AskAnswer)[decision];
+  return cell === 'refused' ? [] : 'by' in cell ? cell.then : cell;
+}
+
+/** No run carries out this answer: it goes back to the hand-off or thread the ask came from. */
+const answerBack = (ask: AskRow, decision: Decision, answer: string) =>
+  answerLater(
+    { handOffId: ask.handOffId, threadId: ask.threadId, askId: ask.id },
+    decision === 'deny' ? 'failed' : 'done',
+    answer
+  );
 
 /**
  * The owner answered something raised on a hand-off or a thread, and no run
@@ -1601,42 +1637,56 @@ export async function finishTask(id: number, done: boolean, note: string | null)
     .where(and(eq(tasks.id, id), eq(tasks.status, 'open')))
     .returning();
   if (!t) return;
+  const owner = await ownerName();
   const answers = t.steps
     .filter((s) => s.answer && s.action?.kind === 'choice')
     .map((s) => `${s.text} ${s.answer}`);
   await record({
     kind: 'work',
     actor: 'owner',
-    title: `${done ? 'Done' : 'Dropped'} by ${await ownerName()}: ${t.title}`,
+    title: `${done ? 'Done' : 'Dropped'} by ${owner}: ${t.title}`,
     body: [t.why, ...answers].join('\n'),
     reason: t.note,
     taskId: t.id
   });
-  if (!done) {
-    // No run follows a dropped task: the answer itself goes back. A tool's connect
-    // task belongs to the access ask it came from.
-    const from = t.askId ? await ask(t.askId) : undefined;
-    await answerLater(
-      {
-        handOffId: t.handOffId ?? from?.handOffId ?? null,
-        threadId: t.threadId ?? from?.threadId ?? null
-      },
-      'failed',
-      `${await ownerName()} dropped "${t.title}"${t.note ? `: ${t.note}` : '.'}`
-    );
-    return;
+  // A tool's connect task belongs to the access ask it came from.
+  const from = t.askId ? await ask(t.askId) : undefined;
+  const effects: readonly TaskEffect[] = !done
+    ? OWNER_ANSWERS.task.dropped
+    : !t.staffId
+      ? OWNER_ANSWERS.task.done.noOdd
+      : from?.kind === 'access'
+        ? OWNER_ANSWERS.task.done.fromAccess
+        : OWNER_ANSWERS.task.done.other;
+  for (const effect of effects) {
+    if (typeof effect === 'object') continue;
+    switch (effect) {
+      // No run follows a dropped task: the answer itself goes back.
+      case 'answer_back':
+        await answerLater(
+          {
+            handOffId: t.handOffId ?? from?.handOffId ?? null,
+            threadId: t.threadId ?? from?.threadId ?? null
+          },
+          done ? 'done' : 'failed',
+          `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`
+        );
+        break;
+      // The owner finished connecting a tool an Odd asked for: it can start the
+      // work that was waiting on it.
+      case 'carry_out':
+        if (t.staffId && from)
+          await followUp(t.staffId, 'carry_out', { askId: from.id, note: null });
+        break;
+      // Any other task an Odd gave them: the Odd picks up whatever waited on
+      // it, such as hiring from an intake the owner just filled in.
+      case 'task_done':
+        if (t.staffId) await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note });
+        break;
+      default:
+        effect satisfies never;
+    }
   }
-  if (!t.staffId) return;
-  // The owner finished connecting a tool a staffer asked for: it can start the
-  // work that was waiting on it.
-  const a = t.askId ? await ask(t.askId) : undefined;
-  if (a?.kind === 'access') {
-    await followUp(t.staffId, 'carry_out', { askId: a.id, note: null });
-    return;
-  }
-  // Any other task a staffer gave them: the staffer picks up whatever waited on
-  // it, such as hiring from an intake the owner just filled in.
-  await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note });
 }
 
 export async function tasksFrom(staffId: string): Promise<TaskRow[]> {
@@ -1687,7 +1737,7 @@ export async function desk(): Promise<Desk> {
 
 /** Something a staffer put on the owner's desk, as its chat shows it. */
 export type Delivery = {
-  kind: 'ask' | 'task' | 'report';
+  kind: DeskItem;
   id: number;
   title: string;
   at: Date;

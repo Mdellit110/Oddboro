@@ -40,7 +40,7 @@ import {
   updateGoal,
   type GoalView
 } from './goals.ts';
-import { goalWhen, HEALTH_WORDS, HORIZONS, STATUS_WORDS } from './goal-words.ts';
+import { GOAL_IS_LIVE, goalWhen, HEALTH_WORDS, HORIZONS, STATUS_WORDS } from './goal-words.ts';
 import {
   accessInRun,
   askAboveLevel,
@@ -77,17 +77,18 @@ import { THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
 import { ensureConnector, searchRegistry } from './registry.ts';
-import type { GoalPlanItem, HireProposal } from './schema.ts';
+import { GOAL_STATUSES, type GoalPlanItem, type HireProposal } from './schema.ts';
 import {
   clockTime,
   describe as describeSchedule,
   officeAt,
   officeDay,
+  SCHEDULE_RULE,
   WEEKDAYS,
   zone,
   zoneName
 } from './time.ts';
-import { hasTool, isGrantable } from './tools.ts';
+import { hasTool, isGrantable, type OfficeToolId, type RIDES_WITH } from './tools.ts';
 import { home } from './home.ts';
 
 const ME = process.env.STAFF_ID ?? '';
@@ -97,7 +98,7 @@ if (!me) throw new Error(`STAFF_ID "${ME}" names no Odd in this office`);
 const OWNER = await ownerName();
 /** The office's time zone in words, like "Pacific Time". */
 const ZONE = zoneName();
-const has = (tool: string) => hasTool(me.tools, tool);
+const has = (tool: OfficeToolId) => hasTool(me.tools, tool);
 /** This staffer's own folder. Files it names are relative to it. */
 const HOME = home('staff', ME);
 
@@ -216,9 +217,9 @@ async function attachable(
   return { paths: [...new Set(out)] };
 }
 
-const atArg = z.string().regex(/^\d\d:\d\d$/);
+const atArg = z.string().regex(SCHEDULE_RULE.oddAt);
 const scheduleArg = z.discriminatedUnion('every', [
-  z.object({ every: z.literal('minutes'), n: z.number().int().min(15) }),
+  z.object({ every: z.literal('minutes'), n: z.number().int().min(SCHEDULE_RULE.oddMinMinutes) }),
   z.object({ every: z.literal('day'), at: atArg }),
   z.object({ every: z.literal('weekday'), at: atArg }),
   z
@@ -365,7 +366,7 @@ const server = new McpServer({ name: 'office', version: '1.0.0' });
  * one, since an old name may say a word the Odd never reads.
  */
 function tool<Shape extends z.ZodRawShape>(
-  name: string,
+  name: OfficeToolId | keyof typeof RIDES_WITH,
   { description, inputSchema }: { description: string; inputSchema: Shape },
   run: ToolCallback<Shape>
 ) {
@@ -747,7 +748,7 @@ tool(
     inputSchema: {}
   },
   async () => {
-    const rows = (await goalsFor(ME)).filter((g) => g.status === 'active' || g.status === 'paused');
+    const rows = (await goalsFor(ME)).filter((g) => GOAL_IS_LIVE[g.status]);
     return text(
       rows.length ? rows.map((g) => goalText(g)).join('\n\n') : 'You serve no goals yet.'
     );
@@ -1014,7 +1015,7 @@ if (has('update_goal'))
       description: `Change a goal: mark it met, paused, dropped or active again, or reword it. When ${OWNER} asks in chat, do it at once. Outside a chat, only to carry out an ask they approved, passing its id. To propose it, raise_ask first.`,
       inputSchema: {
         goal_id: z.number().int(),
-        status: z.enum(['active', 'paused', 'met', 'dropped']).optional(),
+        status: z.enum(GOAL_STATUSES).optional(),
         title: goalFields.title.optional(),
         why: goalFields.why,
         done_when: goalFields.done_when,
