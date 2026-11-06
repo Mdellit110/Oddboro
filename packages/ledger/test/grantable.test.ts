@@ -158,9 +158,12 @@ test('a grant the owner gives through an ask says what approving it does, from t
   }
 });
 
-test('a hire with nothing picked starts from HIRE_DEFAULTS, and a manager from its own', async () => {
+test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a manager from its own', async () => {
+  // Every default, so one that the schema or hire() does not read fails here.
+  // The cast holds: HIRE_DEFAULTS.staff is an object literal with only its typed keys.
+  const defaults = Object.keys(G.HIRE_DEFAULTS.staff) as (keyof typeof G.HIRE_DEFAULTS.staff)[];
   const columns = getTableColumns(staff);
-  for (const key of ['permission', 'tools', 'commands', 'web', 'folders'] as const)
+  for (const key of defaults)
     assert.deepEqual(columns[key].default, G.HIRE_DEFAULTS.staff[key], `${key}'s column default`);
 
   const row = await hire({
@@ -172,17 +175,8 @@ test('a hire with nothing picked starts from HIRE_DEFAULTS, and a manager from i
     remit: 'Tests.',
     desk: 'You are Quinn.'
   });
-  const { permission, tools, commands, web, folders } = G.HIRE_DEFAULTS.staff;
-  assert.deepEqual(
-    {
-      permission: row.permission,
-      tools: row.tools,
-      commands: row.commands,
-      web: row.web,
-      folders: row.folders
-    },
-    { permission, tools, commands, web, folders }
-  );
+  for (const key of defaults)
+    assert.deepEqual(row[key], G.HIRE_DEFAULTS.staff[key], `${key} on the hired row`);
   assert.deepEqual(
     { agent: row.agent, account: row.account, model: row.model, effort: row.effort },
     { agent: officeAgent(), account: null, model: null, effort: null }
