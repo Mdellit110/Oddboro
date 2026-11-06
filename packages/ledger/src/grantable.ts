@@ -98,15 +98,19 @@ export const OWNER_GRANTS = {
   },
   folders: {
     control: { patch: ['folder', 'access'] },
-    missing: { none: 'NEW-1697' },
-    heard: [],
+    // Said only to an Odd with no folder at all.
+    missing: ({ owner, where }: Readers['folders']) =>
+      `${owner} can give you a folder outside the office in ${where}.`,
+    heard: ['accessInRun'],
     route: { owner: 'settings' },
     atHire: false
   },
   office_tools: {
     control: { patch: ['tool', 'on'] },
-    missing: { none: 'NEW-1697' },
-    heard: [],
+    // Said while any office tool the owner can give is still not given.
+    missing: ({ owner, where }: Readers['office_tools']) =>
+      `${owner} grants other office tools in ${where}; when a job needs one, say which and why in your reply.`,
+    heard: ['accessInRun'],
     route: { owner: 'settings' },
     atHire: true
   },

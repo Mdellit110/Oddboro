@@ -7,10 +7,12 @@ import { test } from 'node:test';
 import './pglite.ts';
 
 const { getTableColumns } = await import('drizzle-orm');
-const { officeSection } = await import('../src/access-words.ts');
-const { askAboveLevel, outsideLines, ownToolsLine } = await import('../src/capabilities.ts');
+const { officeSection, settingsTab } = await import('../src/access-words.ts');
+const { accessInRun, askAboveLevel, outsideLines, ownToolsLine } =
+  await import('../src/capabilities.ts');
 const G = await import('../src/grantable.ts');
 const { hire, officeAgent } = await import('../src/office.ts');
+const { GRANTABLE_TOOLS } = await import('../src/tools.ts');
 const { hireManager, MANAGERS } = await import('../src/managers.ts');
 const { staff } = await import('../src/schema.ts');
 type Capabilities = import('../src/capabilities.ts').Capabilities;
@@ -71,8 +73,34 @@ const HEARD: Record<GrantKind, () => void> = {
     assert.ok(ownToolsLine('claude', bare).includes(lacks));
     assert.doesNotMatch(ownToolsLine('claude', { ...bare, web: true }), /No web/);
   },
-  folders: () => assert.match(G.OWNER_GRANTS.folders.missing.none, /^NEW-\d+$/),
-  office_tools: () => assert.match(G.OWNER_GRANTS.office_tools.missing.none, /^NEW-\d+$/),
+  folders: () => {
+    const lacks = 'Sam can give you a folder outside the office in your Settings tab.';
+    assert.equal(
+      G.OWNER_GRANTS.folders.missing({ owner: 'Sam', where: settingsTab('your') }),
+      lacks
+    );
+    assert.ok(
+      accessInRun(heldBack, 'Sam', {})
+        .split('\n')
+        .includes(`Sam has given you no folders. ${lacks}`)
+    );
+    const given = {
+      ...heldBack,
+      own: { ...heldBack.own, granted: [{ path: '/tmp', write: false }] }
+    };
+    assert.ok(!accessInRun(given, 'Sam', {}).includes(lacks));
+  },
+  office_tools: () => {
+    const lacks =
+      'Sam grants other office tools in your Settings tab, under Office; when a job needs one, say which and why in your reply.';
+    assert.equal(G.OWNER_GRANTS.office_tools.missing({ owner: 'Sam', where }), lacks);
+    assert.ok(accessInRun(heldBack, 'Sam', {}).split('\n').includes(lacks));
+    // One office tool still not given is enough to hear it.
+    const lacksOne = { ...heldBack, office: GRANTABLE_TOOLS.slice(1) };
+    assert.ok(accessInRun(lacksOne, 'Sam', {}).split('\n').includes(lacks));
+    const holdsAll = { ...heldBack, office: [...GRANTABLE_TOOLS] };
+    assert.ok(!accessInRun(holdsAll, 'Sam', {}).includes('grants other office tools'));
+  },
   // house() is in the office, which a ledger test cannot import: its own
   // test holds this line (house.test.ts).
   outside_tools: () => {

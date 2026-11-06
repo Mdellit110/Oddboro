@@ -15,6 +15,7 @@ import {
   levelAtMost,
   officeSection,
   parseLevel,
+  settingsTab,
   type Level
 } from './access-words.ts';
 import {
@@ -36,7 +37,7 @@ import {
   type GrantRow,
   type StaffRow
 } from './office.ts';
-import { hasTool, OFFICE_TOOLS } from './tools.ts';
+import { GRANTABLE_TOOLS, hasTool, OFFICE_TOOLS } from './tools.ts';
 import { currentPlatform } from './platform.ts';
 
 /**
@@ -178,7 +179,8 @@ export function officeHeldIn(env: Record<string, string | undefined>): boolean {
  * the run knows three things, so the office passes them in its environment:
  * its ceiling (`CEILING`), set when it is below the Odd's own level, the
  * sign-ins that ran out (`SIGNED_OUT`), and whether the office holds the
- * network (`officeHeldIn`).
+ * network (`officeHeldIn`). An Odd lacking an office tool the owner can give,
+ * or with no folder, is told where the owner gives one (`OWNER_GRANTS`).
  */
 export function accessInRun(
   own: Capabilities,
@@ -206,9 +208,14 @@ export function accessInRun(
     ...ownToolsSaid(caps.agent, caps.own, officeHeldIn(env)).map((l) =>
       l.replaceAll('{owner}', owner)
     ),
+    ...(GRANTABLE_TOOLS.every((t) => caps.office.includes(t))
+      ? []
+      : [OWNER_GRANTS.office_tools.missing({ owner, where: officeSection('your') })]),
     ...(folders.length
       ? [`Folders ${owner} gave you:`, ...folders.map((l) => `- ${l}`)]
-      : [`${owner} has given you no folders.`]),
+      : [
+          `${owner} has given you no folders. ${OWNER_GRANTS.folders.missing({ owner, where: settingsTab('your') })}`
+        ]),
     lines.length
       ? lines.map((l, i) => `- (id: ${outside[i].connector.id}) ${l}`).join('\n')
       : `${owner} has connected no outside tools for you yet.`
