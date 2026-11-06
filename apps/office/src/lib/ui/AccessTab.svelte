@@ -5,6 +5,7 @@
     LEVEL_LABEL,
     LEVELS,
     levelAtMost,
+    MODEL_SECTION,
     type GrantLevel,
     type Level
   } from '@oddboro/ledger/access';
@@ -300,7 +301,7 @@
   const TABS = [
     {
       id: 'model',
-      label: 'Model',
+      label: MODEL_SECTION,
       icon: 'M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M6 6h12v12H6zM10 10h4v4h-4z'
     },
     {

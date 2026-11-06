@@ -5,10 +5,11 @@
 // Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LEVELS, type Level } from '../src/access-words.ts';
+import { levelRoute, LEVELS, MODEL_SECTION, type Level } from '../src/access-words.ts';
 import {
   accessInRun,
   accessOf,
+  askAboveLevel,
   capped,
   levelLine,
   NETWORK_HELD_LINE,
@@ -75,7 +76,12 @@ test('each held-back reason tells the Odd what brings the tool back', () => {
   const line = (a: ReturnType<typeof accessOf>) => outsideLines(caps(a), 'Sam')[0];
   assert.equal(
     line(accessOf(grant('act'), 'draft')),
-    'Notion (read and write): held back. It needs the Act level, and the current level is Draft. It works again once Sam raises the level.'
+    'Notion (read and write): held back. It needs the Act level, and the current level is Draft. It works again once Sam raises it. Sam sets your level on your Settings tab, under Model.'
+  );
+  // office_report reads it about a colleague, so the card is that Odd's.
+  assert.equal(
+    outsideLines(caps(accessOf(grant('act'), 'draft')), 'Sam', 'Rowan')[0],
+    "Notion (read and write): held back. It needs the Act level, and the current level is Draft. It works again once Sam raises it. Sam sets Rowan's level on Rowan's Settings tab, under Model."
   );
   assert.equal(
     line(accessOf(grant('read', { readyAt: null }), 'draft')),
@@ -86,6 +92,25 @@ test('each held-back reason tells the Odd what brings the tool back', () => {
     'Notion (read only): held back. Its sign-in ran out, and Sam needs to sign in again.'
   );
   assert.equal(line(accessOf(grant('read'), 'draft')), 'Notion (read only): 1 tool.');
+});
+
+test('the level route names whose level it is and the section of that card it is under', () => {
+  const forms: [string, string][] = [
+    ['your', 'Sam sets your level on your Settings tab, under Model.'],
+    ["Rowan's", "Sam sets Rowan's level on Rowan's Settings tab, under Model."],
+    ["that Odd's", "Sam sets that Odd's level on that Odd's Settings tab, under Model."]
+  ];
+  for (const [whose, said] of forms) assert.equal(levelRoute('Sam', whose), said, whose);
+  // The section is the one the card's sub-tab shows (AccessTab reads MODEL_SECTION).
+  assert.ok(levelRoute('Sam', 'your').endsWith(`, under ${MODEL_SECTION}.`));
+});
+
+test("ask_for_access's refusal above the level says where the owner sets it and asks for no raise", () => {
+  const said = askAboveLevel('read', 'write', 'Sam');
+  assert.equal(
+    said,
+    'You hold read, so you cannot ask for write. Sam sets your level on your Settings tab, under Model. If this job needs a higher one, say so in your reply.'
+  );
 });
 
 test('only the Act level is told it may use a write tool without asking', () => {

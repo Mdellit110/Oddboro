@@ -17,7 +17,7 @@ import { db, toolServer } from './tool-server.ts';
 const W = await import('../src/access-words.ts');
 const A = await import('../src/agents.ts');
 const C = await import('../src/capabilities.ts');
-const { staff, threads } = await import('../src/schema.ts');
+const { connectors, grants, staff, threads } = await import('../src/schema.ts');
 
 const dir = realpathSync(mkdtempSync(join(tmpdir(), 'access-profile-')));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -63,8 +63,19 @@ await db.insert(staff).values([
   // Lena hands work on, and leads one thread.
   person('lena', 'Lena', ['hand_off']),
   // Bea's commands reach the internet, unless the office holds the network.
-  { ...person('bea', 'Bea', []), commands: true, web: true }
+  { ...person('bea', 'Bea', []), commands: true, web: true },
+  // Rae reads only, so her write grant is held back and she cannot ask for write.
+  person('rae', 'Rae', ['ask_for_access'])
 ]);
+await db.insert(connectors).values({
+  id: 'notion',
+  name: 'Notion',
+  description: 'Notes.',
+  kind: 'http',
+  readyAt: new Date()
+});
+await db.insert(grants).values({ staffId: 'rae', connectorId: 'notion', level: 'act' });
+const rae = await toolServer('rae', { RUN_KEY: 'k-access-profile-rae' });
 const manager = await toolServer('mona', { RUN_KEY: 'k-access-profile' });
 // Mona has no shell of her own, so only the office's flag tells her run the network is held.
 const heldManager = await toolServer('mona', {
@@ -425,6 +436,22 @@ test('a run off its threads hands off and names which thread it raises for, a ru
     onThread: { handOff: true, work: false },
     handedOver: { handOff: false, work: false }
   });
+});
+
+test("office_report says where a colleague's level is set on that Odd's card, and ask_for_access above the level says where the Odd's own is", async () => {
+  const r = await manager.callTool({ name: 'office_report', arguments: {} });
+  const text = (r.content as { type: string; text: string }[])[0]?.text ?? '';
+  const report = JSON.parse(text) as { staff: { id: string; outsideTools?: string[] }[] };
+  assert.deepEqual(report.staff.find((s) => s.id === 'rae')?.outsideTools, [
+    "Notion (read and write): held back. It needs the Act level, and the current level is Read. It works again once the owner raises it. the owner sets Rae's level on Rae's Settings tab, under Model."
+  ]);
+  const asked = await rae.callTool({
+    name: 'ask_for_access',
+    arguments: { connector: 'notion', level: 'write', why: 'To file the notes.' }
+  });
+  assert.deepEqual(asked.content, [
+    { type: 'text', text: C.askAboveLevel('read', 'write', 'the owner') }
+  ]);
 });
 
 /** Each Odd's own tools line in the office_report `client` gets, by id. */

@@ -1215,7 +1215,7 @@ test("an Odd signs in through the account it is on: its own folder for each, the
   }
 });
 
-test("a new hire's first day and the manager's planning say how an Odd gets Run commands or Browse the web, and a lesson never does", async () => {
+test("a new hire's first day and the manager's planning say how an Odd gets Run commands or Browse the web, the planning says where a level is raised, and a lesson never does", async () => {
   await L.startFirstDay('sam');
   const [day] = await L.pg<{ id: number }[]>`
     select id from follow_ups where staff_id = 'sam' and kind = 'first_day' order by id desc limit 1`;
@@ -1245,6 +1245,12 @@ test("a new hire's first day and the manager's planning say how an Odd gets Run 
   const plan = JSON.parse(r.text) as Gave;
   const planText = `${plan.system}\n${plan.message}`;
   const owner = await L.ownerName();
+  assert.ok(
+    planText.includes(
+      "put any level raise in owner_steps, as a step on that Odd's Settings tab, under Model. Have the Odd ask"
+    ),
+    planText
+  );
   // Only office_report knows whether that Odd's tool follows the switch, so the step waits on it.
   assert.ok(
     planText.includes(

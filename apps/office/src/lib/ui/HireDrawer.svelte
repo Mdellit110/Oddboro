@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { HireProposal, Schedule } from '@oddboro/ledger';
-  import { LEVEL_LABEL, LEVELS, type Level } from '@oddboro/ledger/access';
+  import { LEVEL_LABEL, LEVELS, settingsTab, type Level } from '@oddboro/ledger/access';
   import { AGENT_NAMES, type Agent } from '@oddboro/ledger/agents';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import Pixel from './Pixel.svelte';
@@ -25,6 +25,8 @@
   let { rooms, from, id, onhired }: Props = $props();
 
   const STEPS = ['Who', 'Where', 'Job description', 'First job', 'Review'];
+  /** Where the owner gives the hire tools later, by the card's own tab name. */
+  const theirTab = settingsTab('their');
   let step = $state(0);
   let name = $state('');
   let role = $state('');
@@ -272,7 +274,8 @@
       </div>
     {:else if step === 3}
       <p class="text-xs text-muted">
-        Optional. Access to tools comes later, when they ask for it on their Settings tab.
+        Optional. You can give tools and switch on Run commands or Browse the web on {theirTab} later.
+        They'll tell you when a job needs one.
       </p>
       <div class="flex flex-col gap-2 rounded-xl bg-raise p-3">
         <span class="text-xs text-muted">A first job</span>

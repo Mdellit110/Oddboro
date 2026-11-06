@@ -43,6 +43,7 @@ import {
 import { goalWhen, HEALTH_WORDS, HORIZONS, STATUS_WORDS } from './goal-words.ts';
 import {
   accessInRun,
+  askAboveLevel,
   capabilities,
   folderLines,
   handsOff,
@@ -670,9 +671,7 @@ if (has('ask_for_access'))
       if ('problem' in on) return refused(on.problem);
       const level = asked === 'write' ? 'act' : 'read';
       if (!levelAtMost(level, me.permission))
-        return text(
-          `You hold ${me.permission}, so you cannot ask for ${asked}. Ask ${OWNER} to raise your level first.`
-        );
+        return text(askAboveLevel(me.permission, asked, OWNER));
       const found = await ensureConnector(
         wanted,
         key_header ? { keyHeader: key_header.trim() } : undefined
@@ -1386,7 +1385,7 @@ if (has('office_report'))
               .replaceAll('{owner}', OWNER),
             folders: folderLines(caps.own),
             officeTools: caps.office,
-            outsideTools: outsideLines(caps, OWNER)
+            outsideTools: outsideLines(caps, OWNER, who.name)
           };
         })
       );

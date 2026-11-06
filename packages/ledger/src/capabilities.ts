@@ -13,6 +13,7 @@ import {
   GRANT_LABEL,
   LEVEL_NAME,
   levelAtMost,
+  levelRoute,
   parseLevel,
   settingsTab,
   type Level
@@ -216,13 +217,17 @@ export function reachOf(a: Access): string {
   return a.level === 'act' ? 'every tool' : `${n} ${n === 1 ? 'tool' : 'tools'}`;
 }
 
-/** One line per outside tool, in words that suit both the Odd and the Office Manager. */
-export function outsideLines(c: Capabilities, owner: string): string[] {
+/**
+ * One line per outside tool, in words that suit both the Odd and the Office
+ * Manager. `about` is the Odd's name when another Odd reads it
+ * (office_report), so the level's route names whose card it is on.
+ */
+export function outsideLines(c: Capabilities, owner: string, about?: string): string[] {
   return c.outside.map((a) => {
     const what = `${a.connector.name} (${GRANT_LABEL[a.level === 'act' ? 'act' : 'read'].toLowerCase()})`;
     switch (a.heldBack) {
       case 'above its level':
-        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises the level.`;
+        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${levelRoute(owner, whoseOf(about))}`;
       case 'still connecting':
         return `${what}: held back until ${owner} finishes connecting it.`;
       case 'sign-in ran out':
@@ -240,6 +245,15 @@ export function levelLine(level: Level, owner: string): string {
     draft: `Your level is Draft: you prepare things for ${owner}'s yes, drafts included. Nothing you make goes out until they say yes.`,
     act: `Your level is Act: you do housekeeping inside the office on your own, and use a tool ${owner} connected for you at read and write without asking each time.`
   }[level];
+}
+
+/**
+ * ask_for_access's refusal of a grant above the Odd's level (`held`): where
+ * the owner sets the level, and to say so in the reply, since approving an
+ * ask never changes a level: the owner changes it on the card.
+ */
+export function askAboveLevel(held: Level, asked: 'read' | 'write', owner: string): string {
+  return `You hold ${held}, so you cannot ask for ${asked}. ${levelRoute(owner, 'your')} If this job needs a higher one, say so in your reply.`;
 }
 
 /**

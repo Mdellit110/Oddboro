@@ -1,7 +1,7 @@
 // The words for access, in one place: the owner's permission levels, and how
-// the owner and an Odd read a level, a grant and a folder, and the name of the
-// tab where the owner sets an Odd's access. The page imports
-// this, so it imports nothing.
+// the owner and an Odd read a level, a grant and a folder, and the names of
+// the tab where the owner sets an Odd's access and of its section that holds
+// the level. The page imports this, so it imports nothing.
 
 /** The owner's permission levels, lowest first. */
 export const LEVELS = ['read', 'draft', 'act'] as const;
@@ -41,3 +41,11 @@ export const FOLDER_SAID: Record<FolderAccess, string> = {
 export const SETTINGS_TAB = 'Settings';
 /** That tab in a sentence, by whose card it is on: "your", "Rowan's", "this Odd's". */
 export const settingsTab = (whose: string): string => `${whose} ${SETTINGS_TAB} tab`;
+/** The Settings tab's section that holds the Odd's tool, its sign-in, its model and its level. */
+export const MODEL_SECTION = 'Model';
+/** That section in a sentence, by whose card it is on: "your Settings tab, under Model". */
+export const modelSection = (whose: string): string =>
+  `${settingsTab(whose)}, under ${MODEL_SECTION}`;
+/** Where the owner sets an Odd's level, as one sentence an Odd reads. */
+export const levelRoute = (owner: string, whose: string): string =>
+  `${owner} sets ${whose} level on ${modelSection(whose)}.`;
