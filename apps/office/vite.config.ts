@@ -39,8 +39,11 @@ export default defineConfig(({ command }) => ({
     host: '127.0.0.1',
     allowedHosts: ['local.oddboro.com', 'oddboro.localhost']
   },
-  // Rolldown, not ssr.external: the adapter bundles every dependency, and only
-  // this keeps a workspace package and its subpaths out.
+  // Rolldown, not ssr.external: this keeps a workspace package and its subpaths
+  // out of the server build. The adapter also leaves out whatever package.json
+  // lists under dependencies, so the office lists only the workspace packages
+  // there, and every third-party package under devDependencies, which bundles
+  // it: the app then ships none of them (issue #13).
   environments:
     command === 'build'
       ? { ssr: { build: { rolldownOptions: { external: [/^@oddboro\//] } } } }
