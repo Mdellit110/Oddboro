@@ -58,6 +58,38 @@ const PROXIED = {
 };
 /** A setting of the office's own, which only the tool server gets. */
 const SERVER_ONLY = { OFFICE_TIME_ZONE: 'Europe/Paris' };
+/**
+ * PATH and each name a run on Windows needs, written out here so a name the
+ * list loses fails, and each in a case the list does not use, since Windows
+ * ignores case and an office there may hold `Path`. Each keeps the office's
+ * own value where it has one: on a Windows host the new spelling is the same
+ * variable, and a run may not start without it. Node gives a launch on
+ * Windows one spelling of each name, so on a Mac or Linux host `Path` merges
+ * with the office's own `PATH`, and the other names are the ones that test
+ * the case.
+ */
+const WINDOWS_SPELT: Record<string, string> = Object.fromEntries(
+  [
+    'Path',
+    'SYSTEMROOT',
+    'SystemDrive',
+    'WINDIR',
+    'UserProfile',
+    'HomeDrive',
+    'HomePath',
+    'AppData',
+    'LocalAppData',
+    'PathExt',
+    'COMSPEC',
+    'Temp',
+    'Tmp',
+    'PROGRAMFILES',
+    'PROGRAMFILES(X86)',
+    'PROGRAMDATA',
+    'UserName',
+    'Processor_Architecture'
+  ].map((n) => [n, process.env[n] ?? `C:\\${n}`])
+);
 
 /**
  * Two names every run gets from `runEnv` itself, whatever its tool, and one a
@@ -158,7 +190,7 @@ async function eachLaunch(
   for (const agent of L.AGENTS) {
     await setOwn(ODDS[agent], { web: false, folders });
     for (const platform of L.AGENT_PLATFORMS[agent].runs) {
-      const gave = await withEnv({ ...HOSTILE, ...PROXIED, ...SERVER_ONLY }, () =>
+      const gave = await withEnv({ ...HOSTILE, ...PROXIED, ...SERVER_ONLY, ...WINDOWS_SPELT }, () =>
         onPlatform(platform, () => chatOf(ODDS[agent]))
       );
       check(gave, agent, platform);
@@ -207,6 +239,17 @@ test("an owner's proxy and certificate settings reach every run", async () => {
     for (const n of Object.keys(PROXIED))
       assert.ok(listed(n, gave.envNames, platform), `${agent} on ${platform} lost ${n}`);
   });
+});
+
+test('on Windows, PATH and every name its list holds reach each run, whatever their case', async () => {
+  let launches = 0;
+  await eachLaunch((gave, agent, platform) => {
+    if (platform !== 'win32') return;
+    for (const n of Object.keys(WINDOWS_SPELT))
+      assert.ok(listed(n, gave.envNames, platform), `${agent} on win32 lost ${n}`);
+    launches++;
+  });
+  assert.ok(launches > 0, 'no tool runs on Windows: nothing was checked');
 });
 
 test('a secret store stored as a folder never reaches any run, in any case the disk ignores', () =>
