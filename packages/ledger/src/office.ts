@@ -498,17 +498,6 @@ export function shownFolder(path: string): string {
 }
 
 /**
- * Whether `path`, as the owner typed it, may be given to an Odd, and its real
- * path when it may. A folder inside the home that holds or sits in none of
- * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
- * code: a deny inside a folder a run reads is not held by every tool, so a
- * folder that holds one is refused at the door. A real path with a character
- * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
- * what a run is given. Only `setFolder` calls this, as a folder is given, so a
- * folder given before a rule was added is not checked again, but for the
- * secret stores, which every run checks again (`touchesSecretStore`).
- */
-/**
  * Whether the folder at `path`, by its real path, is a secret store
  * (`SECRET_STORES`), sits in one or holds one. `checkFolder` refuses such a
  * folder as it is given, and `ownTools` leaves out one stored before its
@@ -524,6 +513,17 @@ export function touchesSecretStore(path: string): boolean {
   });
 }
 
+/**
+ * Whether `path`, as the owner typed it, may be given to an Odd, and its real
+ * path when it may. A folder inside the home that holds or sits in none of
+ * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
+ * code: a deny inside a folder a run reads is not held by every tool, so a
+ * folder that holds one is refused at the door. A real path with a character
+ * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
+ * what a run is given. Only `setFolder` calls this, as a folder is given, so a
+ * folder given before a rule was added is not checked again, but for the
+ * secret stores, which every run checks again (`touchesSecretStore`).
+ */
 export function checkFolder(path: string): { real: string } | { refused: string } {
   const typed = path.trim();
   const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
