@@ -1445,6 +1445,26 @@ export async function connectorReady(
     .where(eq(connectors.id, id));
 }
 
+/**
+ * Take tools out of what a Read only grant to a connector reaches, when they
+ * no longer pass `readsOnly`: a connector the owner connected before the rule
+ * held, or a server that changed its marks. Records which ones went and why,
+ * so the owner can see it in the Ledger.
+ */
+export async function narrowReadTools(id: string, gone: string[]): Promise<void> {
+  const c = await connector(id);
+  if (!c || !gone.length) return;
+  const keep = c.readTools.filter((t) => !gone.includes(t));
+  if (keep.length === c.readTools.length) return;
+  await db.update(connectors).set({ readTools: keep }).where(eq(connectors.id, id));
+  await record({
+    kind: 'access',
+    actor: 'office',
+    title: `Read only for ${c.name} no longer reaches ${gone.join(', ')}`,
+    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. Read and write reaches ${gone.length === 1 ? 'it' : 'them'}, at Acts on its own.`
+  });
+}
+
 export async function grantsFor(
   staffId: string
 ): Promise<(GrantRow & { connector: ConnectorRow })[]> {

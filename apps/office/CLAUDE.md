@@ -589,8 +589,17 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    every tool's launch drops (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with
    only the office tools the owner ticked under "In the office" on the Settings tab,
    and whatever outside access the owner granted: servers at read (the tools
-   the owner ticked as read-only) or write (every tool, only while the Odd
-   holds Act). Which outside tools a run gets comes from `capabilities()` in
+   the server marks as only reading, less any whose name says it changes
+   something: `readsOnly` in `packages/ledger/src/read-only.ts`) or write
+   (every tool, only while the Odd holds Act). Every outside tool reaches the
+   run through the office's gateway (`src/lib/server/gateway.ts`, at
+   `/api/gateway/<connector>`): the run gets the office's address and a
+   token that lives as long as the run, never the server's address, key or
+   sign-in. The gateway connects to the real server (`upstream` in
+   `access.ts`), lists only the tools the grant reaches, refuses any other
+   call, and takes a tool that no longer passes `readsOnly` off the
+   connector's stored list with a Ledger line (`narrowReadTools`). The run's
+   tool still gets its own per-tool allow list, so either one alone holds. Which outside tools a run gets comes from `capabilities()` in
    `packages/ledger/src/capabilities.ts`, which also says why a granted one is
    held back (above the Odd's level, still connecting). The prompt's "What you
    can do" section, `my_access`, `office_report` and the owner's Settings tab all
@@ -606,8 +615,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    says Draft and why, with a write grant read only, as the prompt does
    (`capped`, `accessInRun`). Hosted servers sign in with
    OAuth (`src/lib/server/oauth.ts`): the task's Sign in opens the service, it
-   returns to `/connect/callback`, the tokens go in the keychain, and each run
-   gets a fresh access token as a header. When a tool an Odd holds stops working, it calls
+   returns to `/connect/callback`, the tokens go in the keychain, and each run's
+   gateway connects with a fresh access token as a header. When a tool an Odd holds stops working, it calls
    `reconnect_access` (every Odd has it): the office puts its own connect
    steps on the desk again (`reconnectTask`), after the Odd's steps for
    getting a new key, with no ask, one open per tool. Odds never write

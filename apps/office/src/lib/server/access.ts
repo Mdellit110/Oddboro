@@ -1,19 +1,30 @@
 // The steps of connecting a tool that the office does itself: a hosted
-// server's sign-in, and starting a server to list its tools.
+// server's sign-in, and starting a server to list its tools. `upstream` is
+// the one way the office reaches an outside server, here and in the gateway
+// every run goes through (gateway.ts).
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { connector, connectorReady, setConnectorConfig, tickKey } from '@oddboro/ledger';
+import {
+  connector,
+  connectorReady,
+  readsOnly,
+  setConnectorConfig,
+  tickKey,
+  toolCommand,
+  type ConnectorRow
+} from '@oddboro/ledger';
+import { cleanEnv } from './claude.ts';
 import { getSecret, headerSecret } from './keychain.ts';
 import { bearer, startSignIn } from './oauth.ts';
 
 export type ToolInfo = { name: string; description: string; readOnly: boolean };
 
-/** Start a connector with its secrets and list its tools, marking the ones that say they only read. */
-export async function listTools(id: string, open = false): Promise<ToolInfo[]> {
-  const c = await connector(id);
-  if (!c) throw new Error(`No connector named ${id}`);
-  const secret = (n: string) => getSecret(c.id, n) ?? '';
+/**
+ * Connect to an outside server with its keys and sign-in, which stay in the
+ * office. `open` leaves the sign-in out, to see whether it needs one.
+ */
+export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
   const transport =
     c.kind === 'http'
       ? new StreamableHTTPClientTransport(new URL(c.config.url!), {
@@ -27,34 +38,48 @@ export async function listTools(id: string, open = false): Promise<ToolInfo[]> {
           }
         })
       : new StdioClientTransport({
-          command: c.config.command!,
-          args: c.config.args ?? [],
+          ...toolCommand(c.config.command!, c.config.args ?? []),
           env: {
-            ...(process.env as Record<string, string>),
-            ...Object.fromEntries((c.config.secrets ?? []).map((n) => [n, secret(n)]))
+            ...(cleanEnv() as Record<string, string>),
+            ...Object.fromEntries(
+              (c.config.secrets ?? []).map((n) => [n, getSecret(c.id, n) ?? ''])
+            )
           },
           stderr: 'ignore'
         });
   const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
   await client.connect(transport);
+  return client;
+}
+
+/** Start a connector with its secrets and list its tools, marking the ones a Read only grant reaches (`readsOnly`). */
+export async function listTools(id: string, open = false): Promise<ToolInfo[]> {
+  const c = await connector(id);
+  if (!c) throw new Error(`No connector named ${id}`);
+  const client = await upstream(c, open);
   try {
     const { tools } = await client.listTools();
     return tools.map((t) => ({
       name: t.name,
       description: t.description ?? '',
-      readOnly: t.annotations?.readOnlyHint === true
+      readOnly: readsOnly(t)
     }));
   } finally {
     await client.close();
   }
 }
 
-/** The owner confirmed which tools only read. The connector is ready. */
-export async function confirmTools(id: string, all: string[], readTools: string[]): Promise<void> {
+/**
+ * The owner confirmed the tools: the connector is ready. The office lists
+ * them again itself and works out which ones Read only reaches, so nothing
+ * the page sends can add a tool that changes something.
+ */
+export async function confirmTools(id: string): Promise<void> {
+  const tools = await listTools(id);
   await connectorReady(
     id,
-    all,
-    readTools.filter((t) => all.includes(t))
+    tools.map((t) => t.name),
+    tools.filter((t) => t.readOnly).map((t) => t.name)
   );
 }
 
@@ -72,7 +97,7 @@ export async function hostedSignIn(id: string): Promise<{ url?: string }> {
       // Neither a sign-in nor an open door: most likely it takes a key.
       const why = signInError instanceof Error ? signInError.message : String(signInError);
       throw new Error(
-        `This server did not offer a sign-in${why ? ` (${why})` : ''}. If its setup guide gives you a key instead, open the Odd's Access tab, click Add access, paste the server's address, and pick Takes a key.`
+        `This server did not offer a sign-in${why ? ` (${why})` : ''}. If its setup guide gives you a key instead, open the Odd's Settings, then Services, click + Add service, paste the server's address, and pick Takes a key.`
       );
     }
     const c = await connector(id);

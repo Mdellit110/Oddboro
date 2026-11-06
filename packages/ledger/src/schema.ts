@@ -448,7 +448,7 @@ export const connectors = pgTable('connectors', {
   config: jsonb().$type<ConnectorConfig>().notNull().default({}),
   /** The MCP Registry name it came from, if any. */
   registry: text(),
-  /** Tools a Read grant may call. */
+  /** Tools a Read grant may call: the ones that passed `readsOnly` when the owner connected it. */
   readTools: text().array().notNull().default([]),
   /** Every tool, for a Draft or Act grant. Filled in when the owner connects it. */
   tools: text().array().notNull().default([]),
