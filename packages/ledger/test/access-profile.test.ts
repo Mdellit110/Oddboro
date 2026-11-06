@@ -65,7 +65,7 @@ await db.insert(staff).values([
   // Bea's commands reach the internet, unless the office holds the network.
   { ...person('bea', 'Bea', []), commands: true, web: true },
   // Rae reads only, so her write grant is held back and she cannot ask for write.
-  person('rae', 'Rae', ['ask_for_access'])
+  person('rae', 'Rae', ['find_connectors', 'ask_for_access'])
 ]);
 await db.insert(connectors).values({
   id: 'notion',
@@ -170,8 +170,8 @@ test('a handed-over run keeps its own commands, web and folders; only outside to
 
 /** The line an Odd hears for each own tool it lacks, when {owner} can switch it on, by whose card it is. */
 const switchLines = (whose: string) => ({
-  commands: `No shell: {owner} can switch on Run commands in ${whose} Settings tab.`,
-  web: `No web: {owner} can switch on Browse the web in ${whose} Settings tab.`
+  commands: `No shell: {owner} can switch on Run commands in ${whose} Settings tab, under Office.`,
+  web: `No web: {owner} can switch on Browse the web in ${whose} Settings tab, under Office.`
 });
 const SWITCH = switchLines('your');
 
@@ -311,7 +311,7 @@ test('an Odd is told the owner can switch on a tool it lacks exactly when the ow
       web: false,
       about: 'Rowan',
       hears:
-        "Rowan's own tools work on files only. No shell: {owner} can switch on Run commands in Rowan's Settings tab. No web: {owner} can switch on Browse the web in Rowan's Settings tab."
+        "Rowan's own tools work on files only. No shell: {owner} can switch on Run commands in Rowan's Settings tab, under Office. No web: {owner} can switch on Browse the web in Rowan's Settings tab, under Office."
     },
     {
       agent: 'claude',
@@ -331,7 +331,7 @@ test('an Odd is told the owner can switch on a tool it lacks exactly when the ow
       web: false,
       about: 'Rowan',
       hears:
-        "Rowan's own tools work on files only. No shell: Gemini can't run commands here. No web: {owner} can switch on Browse the web in Rowan's Settings tab."
+        "Rowan's own tools work on files only. No shell: Gemini can't run commands here. No web: {owner} can switch on Browse the web in Rowan's Settings tab, under Office."
     }
   ];
   for (const r of rows) {
@@ -353,14 +353,27 @@ test('an Odd is told the owner can switch on a tool it lacks exactly when the ow
   }
 });
 
-test("the Odd is told the card's own tab name, and office_report names whose card it is", () => {
+test("the Odd is told the card's own tab, section and switch names, and office_report names whose card it is", () => {
   const off = C.ownTools(odd('claude', false, false), 'darwin');
   const [line] = C.ownToolsSaid('claude', off, false);
-  assert.ok(line.includes(`in your ${W.SETTINGS_TAB} tab.`), line);
-  assert.equal(W.settingsTab("Rowan's"), "Rowan's Settings tab");
+  // The words come from the constants the Settings tab shows (AccessTab reads OFFICE_SECTION and SWITCH_NAMES).
+  for (const name of Object.values(W.SWITCH_NAMES))
+    assert.ok(line.includes(`switch on ${name} in ${W.officeSection('your')}.`), line);
+  assert.ok(line.includes(`in your ${W.SETTINGS_TAB} tab, under ${W.OFFICE_SECTION}.`), line);
   const [rowans] = C.ownToolsSaid('claude', off, false, 'Rowan');
-  assert.ok(rowans.includes("can switch on Browse the web in Rowan's Settings tab."), rowans);
+  assert.ok(
+    rowans.includes("can switch on Browse the web in Rowan's Settings tab, under Office."),
+    rowans
+  );
   assert.doesNotMatch(rowans, /your Settings tab/);
+});
+
+test("find_connectors and ask_for_access each say they are not for the Odd's own tools", async () => {
+  const { tools } = await rae.listTools();
+  for (const name of ['find_connectors', 'ask_for_access']) {
+    const description = tools.find((t) => t.name === name)?.description ?? '';
+    assert.ok(description.includes(W.NOT_OWN_TOOLS), `${name}: ${description}`);
+  }
 });
 
 test('the line under Browse the web says what its commands do with it', () => {
@@ -495,7 +508,7 @@ test("office_report lists each Odd's tool, own tools and folders", async () => {
       'Claude Code',
       // Another Odd reads the report, so it names whose tools and card they are.
       process.platform === 'darwin'
-        ? "Mona's own tools work on files, plus web search and fetch. No shell: the owner can switch on Run commands in Mona's Settings tab."
+        ? "Mona's own tools work on files, plus web search and fetch. No shell: the owner can switch on Run commands in Mona's Settings tab, under Office."
         : "Mona's own tools work on files, plus web search and fetch. No shell: Claude Code can't run commands here.",
       [`${kept} (read only)`]
     ]

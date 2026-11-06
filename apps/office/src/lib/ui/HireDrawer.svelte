@@ -1,7 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { HireProposal, Schedule } from '@oddboro/ledger';
-  import { LEVEL_LABEL, LEVELS, settingsTab, type Level } from '@oddboro/ledger/access';
+  import {
+    LEVEL_LABEL,
+    LEVELS,
+    settingsTab,
+    SWITCH_NAMES,
+    type Level
+  } from '@oddboro/ledger/access';
   import { AGENT_NAMES, type Agent } from '@oddboro/ledger/agents';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import Pixel from './Pixel.svelte';
@@ -274,8 +280,8 @@
       </div>
     {:else if step === 3}
       <p class="text-xs text-muted">
-        Optional. You can give tools and switch on Run commands or Browse the web on {theirTab} later.
-        They'll tell you when a job needs one.
+        Optional. You can give tools and switch on {SWITCH_NAMES.commands} or {SWITCH_NAMES.web} on {theirTab}
+        later. They'll tell you when a job needs one.
       </p>
       <div class="flex flex-col gap-2 rounded-xl bg-raise p-3">
         <span class="text-xs text-muted">A first job</span>

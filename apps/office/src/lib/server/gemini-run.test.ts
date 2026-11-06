@@ -207,7 +207,7 @@ test('a Gemini Odd is told it has file tools only, each given the full path, tha
   const run = await chatOf('gemma');
   assert.ok(
     run.system.includes(
-      `Your own tools work on files only. No shell: Gemini can't run commands here. No web: ${owner} can switch on Browse the web in your Settings tab. Give each file tool the file's full path.`
+      `Your own tools work on files only. No shell: Gemini can't run commands here. No web: ${owner} can switch on Browse the web in your Settings tab, under Office. Give each file tool the file's full path.`
     ),
     run.system
   );

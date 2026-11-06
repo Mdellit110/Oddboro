@@ -2,7 +2,7 @@
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SETTINGS_TAB } from '@oddboro/ledger/access';
+import { OFFICE_SECTION, SETTINGS_TAB } from '@oddboro/ledger/access';
 import { house } from './house.ts';
 
 const section = house({ has: () => false, now: '9:00', zone: 'London time' });
@@ -49,12 +49,12 @@ test('every run speaks of the owner by name or as "they" unless the owner said o
 test('every run is told Run commands and Browse the web are its own tools, which my_access says how to get, never outside tools to find', () => {
   assert.ok(
     section.includes(
-      '- my_access lists your outside tools and your own. Run commands and Browse the web are your own tools, not outside tools: my_access says whether you have each, and if not, whether {owner} can switch it on in your Settings tab. When a job needs one they can switch on, say which and why in your reply. When an outside tool stops working'
+      '- my_access lists your outside tools and your own. Run commands and Browse the web are your own tools, not outside tools: my_access says whether you have each, and if not, whether {owner} can switch it on in your Settings tab, under Office. When a job needs one they can switch on, say which and why in your reply. When an outside tool stops working'
     ),
     section
   );
-  // The tab is named as the card names it.
-  assert.ok(section.includes(`in your ${SETTINGS_TAB} tab.`), section);
+  // The tab and its section are named as the card names them.
+  assert.ok(section.includes(`in your ${SETTINGS_TAB} tab, under ${OFFICE_SECTION}.`), section);
 });
 
 test('a run that can ask for access is told where more outside tools come from', () => {

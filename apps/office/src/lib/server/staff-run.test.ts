@@ -1254,7 +1254,7 @@ test("a new hire's first day and the manager's planning say how an Odd gets Run 
   // Only office_report knows whether that Odd's tool follows the switch, so the step waits on it.
   assert.ok(
     planText.includes(
-      `For Run commands or Browse the web, put switching it on in that Odd's Settings tab in owner_steps only when office_report says ${owner} can switch it on for that Odd.`
+      `For Run commands or Browse the web, put switching it on in that Odd's Settings tab, under Office, in owner_steps only when office_report says ${owner} can switch it on for that Odd.`
     ),
     planText
   );

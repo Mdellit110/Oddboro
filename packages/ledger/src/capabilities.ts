@@ -14,8 +14,9 @@ import {
   LEVEL_NAME,
   levelAtMost,
   levelRoute,
+  officeSection,
   parseLevel,
-  settingsTab,
+  SWITCH_NAMES,
   type Level
 } from './access-words.ts';
 import {
@@ -263,7 +264,7 @@ export function askAboveLevel(held: Level, asked: 'read' | 'write', owner: strin
  * when `network` says so, and the tool's own web search (and page fetch, where
  * it has one) when the owner switched Browse the web on. Each one it lacks
  * gets a line saying whether {owner} can switch it on, and where (its card's
- * Settings tab). Gemini's policy allows a write only by its full path.
+ * Settings tab, under Office). Gemini's policy allows a write only by its full path.
  * `about` names the Odd when another Odd reads the line (`ownToolsSaid`).
  * `{owner}` is left for the caller to fill.
  */
@@ -279,12 +280,12 @@ export function ownToolsLine(
     ...(own.web ? [FETCHES_PAGES[agent] ? 'web search and fetch' : 'web search'] : [])
   ];
   const opens = `${about === undefined ? 'Your' : whose} own tools work on files`;
-  const tab = settingsTab(whose);
+  const where = officeSection(whose);
   const line = [
     plus.length ? `${opens}, plus ${plus.join(', and ')}.` : `${opens} only.`,
-    ...(own.commands ? [] : [noShell(agent, own.commandsHow, tab)]),
+    ...(own.commands ? [] : [noShell(agent, own.commandsHow, where)]),
     // Browse the web follows the owner on every tool.
-    ...(own.web ? [] : [`No web: {owner} can switch on Browse the web in ${tab}.`])
+    ...(own.web ? [] : [`No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`])
   ].join(' ');
   // The full-path sentence tells the Gemini Odd itself how to work; a reader of
   // another Odd's line has its own tool and its own rules.
@@ -298,9 +299,9 @@ export function ownToolsLine(
  * reaches its tool on this system (`commandsHow`), so it is never offered a
  * switch the owner cannot move.
  */
-function noShell(agent: Agent, how: CommandsHow, tab: string): string {
+function noShell(agent: Agent, how: CommandsHow, where: string): string {
   return how.state === 'switch'
-    ? `No shell: {owner} can switch on Run commands in ${tab}.`
+    ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
     : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`;
 }
 

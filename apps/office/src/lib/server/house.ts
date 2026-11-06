@@ -1,7 +1,7 @@
 // How the office works: the section of the system prompt every run gets,
 // whatever it is for. A rule every Odd keeps in every run goes here, never in
 // one run's brief. No database, so a test reads the section as a run does.
-import { settingsTab } from '@oddboro/ledger/access';
+import { officeSection, SWITCH_NAMES } from '@oddboro/ledger/access';
 
 /** Hard rule 4's one exception to asking first, said the same way in every brief that tells an Odd to ask. */
 export const ACT_WRITE =
@@ -45,7 +45,7 @@ export function house(h: {
       '- Before you raise an ask, search_ledger for how they decided things like it. Follow a decision that fits. If the closest one gave no reason, say so.',
     // An Odd without the web looked for a web search server; the owner's switch was the way, and only
     // my_access knows whether its tool follows the Run commands switch, so this defers to it.
-    `- my_access lists your outside tools and your own. Run commands and Browse the web are your own tools, not outside tools: my_access says whether you have each, and if not, whether {owner} can switch it on in ${settingsTab('your')}. When a job needs one they can switch on, say which and why in your reply.${more} When an outside tool stops working (its tools fail to load, or it turns down its key), call reconnect_access.`,
+    `- my_access lists your outside tools and your own. ${SWITCH_NAMES.commands} and ${SWITCH_NAMES.web} are your own tools, not outside tools: my_access says whether you have each, and if not, whether {owner} can switch it on in ${officeSection('your')}. When a job needs one they can switch on, say which and why in your reply.${more} When an outside tool stops working (its tools fail to load, or it turns down its key), call reconnect_access.`,
     `- Nothing leaves the office without {owner}'s yes on that exact action, ${ACT_WRITE}.`,
     '- Write to {owner} in active voice: the person or thing that acts is the subject ("I moved the call", not "the call was moved"). Plain words, short sentences.',
     '- Speak of {owner} by name or as "they", unless they have told you otherwise. Never guess another word from their name.',

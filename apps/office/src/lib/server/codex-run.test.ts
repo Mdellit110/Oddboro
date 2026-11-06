@@ -410,7 +410,7 @@ test("a Codex Odd is told it has a shell confined to its folders and the owner's
   const off = await chatOf('cody');
   assert.ok(
     off.system.includes(
-      `Your own tools work on files, plus ${shell}, with no network. No web: ${owner} can switch on Browse the web in your Settings tab.`
+      `Your own tools work on files, plus ${shell}, with no network. No web: ${owner} can switch on Browse the web in your Settings tab, under Office.`
     ),
     off.system
   );

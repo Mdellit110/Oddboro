@@ -1,6 +1,8 @@
 // The coding tools an Odd can run on, the systems each is offered on, and
 // whether each may run commands. The hire drawer and the Settings tab read it,
-// so this file imports nothing: safe to import in the browser.
+// so this file imports only access-words.ts, which imports nothing: safe to
+// import in the browser.
+import { SWITCH_NAMES } from './access-words.ts';
 
 /** The coding tools an Odd can run on. Each is also the command the office starts. */
 export const AGENTS = ['claude', 'grok', 'codex', 'gemini'] as const;
@@ -289,7 +291,7 @@ export function webLine(agent: Agent, platform: NodeJS.Platform, held: boolean):
     return `${web} ${AGENT_NAMES[agent]}'s commands stay off the internet.`;
   return how === 'always'
     ? `${web} Its commands can reach the internet too.`
-    : `${web} With Run commands on, its commands can reach the internet too.`;
+    : `${web} With ${SWITCH_NAMES.commands} on, its commands can reach the internet too.`;
 }
 
 /** A folder outside the office the owner lets an Odd read, or read and change (`write`), by its real path. */

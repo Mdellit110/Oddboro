@@ -1,7 +1,8 @@
 // The words for access, in one place: the owner's permission levels, and how
 // the owner and an Odd read a level, a grant and a folder, and the names of
-// the tab where the owner sets an Odd's access and of its section that holds
-// the level. The page imports this, so it imports nothing.
+// the tab where the owner sets an Odd's access, of its sections that hold the
+// level and the switches, and of the switches. The page imports this, so it
+// imports nothing.
 
 /** The owner's permission levels, lowest first. */
 export const LEVELS = ['read', 'draft', 'act'] as const;
@@ -43,9 +44,29 @@ export const SETTINGS_TAB = 'Settings';
 export const settingsTab = (whose: string): string => `${whose} ${SETTINGS_TAB} tab`;
 /** The Settings tab's section that holds the Odd's tool, its sign-in, its model and its level. */
 export const MODEL_SECTION = 'Model';
-/** That section in a sentence, by whose card it is on: "your Settings tab, under Model". */
-export const modelSection = (whose: string): string =>
-  `${settingsTab(whose)}, under ${MODEL_SECTION}`;
+/** The Settings tab's section that holds the Run commands and Browse the web switches and the office tools. */
+export const OFFICE_SECTION = 'Office';
+/** A section of that tab in a sentence, by whose card it is on. */
+const under = (section: string, whose: string): string => `${settingsTab(whose)}, under ${section}`;
+/** Where the level is: "your Settings tab, under Model". */
+export const modelSection = (whose: string): string => under(MODEL_SECTION, whose);
+/** Where the switches are: "your Settings tab, under Office". */
+export const officeSection = (whose: string): string => under(OFFICE_SECTION, whose);
 /** Where the owner sets an Odd's level, as one sentence an Odd reads. */
 export const levelRoute = (owner: string, whose: string): string =>
   `${owner} sets ${whose} level on ${modelSection(whose)}.`;
+/**
+ * The owner's two switches for an Odd's own tools, by the staff column each
+ * sets. The Settings tab shows these names and the Odds are told them.
+ */
+export const SWITCH_NAMES: Record<'commands' | 'web', string> = {
+  commands: 'Run commands',
+  web: 'Browse the web'
+};
+/**
+ * Said by both tools that get an outside tool (find_connectors and
+ * ask_for_access): an Odd without the web went looking for a web search
+ * server when the owner's Browse the web switch was the way.
+ */
+export const NOT_OWN_TOOLS =
+  'Not for web search, reading pages or a shell: those are your own tools, and my_access says how to get them.';

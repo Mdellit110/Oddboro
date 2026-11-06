@@ -52,7 +52,7 @@ import {
   ownToolsSaid
 } from './capabilities.ts';
 import { AGENT_NAMES } from './agents.ts';
-import { levelAtMost, LEVELS } from './access-words.ts';
+import { levelAtMost, LEVELS, NOT_OWN_TOOLS } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
   APPLIES_TO_MAX,
@@ -595,14 +595,6 @@ tool(
   },
   async () => text(accessInRun(await capabilities(me), OWNER, process.env))
 );
-
-/**
- * Said by both tools that get an outside tool: an Odd without the web went
- * looking for a web search server when the owner's Browse the web switch was
- * the way.
- */
-const NOT_OWN_TOOLS =
-  'Not for web search, reading pages or a shell: those are your own tools, and my_access says how to get them.';
 
 if (has('find_connectors'))
   tool(

@@ -5,7 +5,14 @@
 // Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { levelRoute, LEVELS, MODEL_SECTION, type Level } from '../src/access-words.ts';
+import {
+  levelRoute,
+  LEVELS,
+  MODEL_SECTION,
+  OFFICE_SECTION,
+  officeSection,
+  type Level
+} from '../src/access-words.ts';
 import {
   accessInRun,
   accessOf,
@@ -105,6 +112,17 @@ test('the level route names whose level it is and the section of that card it is
   assert.ok(levelRoute('Sam', 'your').endsWith(`, under ${MODEL_SECTION}.`));
 });
 
+test('the switches are placed on whose Settings tab, under the section the card shows them in', () => {
+  const forms: [string, string][] = [
+    ['your', 'your Settings tab, under Office'],
+    ["Rowan's", "Rowan's Settings tab, under Office"],
+    ["that Odd's", "that Odd's Settings tab, under Office"]
+  ];
+  for (const [whose, said] of forms) assert.equal(officeSection(whose), said, whose);
+  // The section is the one the card's sub-tab shows (AccessTab reads OFFICE_SECTION).
+  assert.ok(officeSection('your').endsWith(`, under ${OFFICE_SECTION}`));
+});
+
 test("ask_for_access's refusal above the level says where the owner sets it and asks for no raise", () => {
   const said = askAboveLevel('read', 'write', 'Sam');
   assert.equal(
@@ -169,7 +187,7 @@ test("my_access says a capped run's level and why, and an uncapped run's own lev
       levelLine('draft', 'Sam'),
       "This run was started by a colleague or by the office, not by Sam's yes, so it works at Draft at most.",
       'Your runs go through Claude Code.',
-      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab. No web: Sam can switch on Browse the web in your Settings tab.',
+      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab, under Office. No web: Sam can switch on Browse the web in your Settings tab, under Office.',
       'Sam has given you no folders.',
       '- (id: notion) Notion (read only): 1 tool.'
     ].join('\n')
@@ -179,7 +197,7 @@ test("my_access says a capped run's level and why, and an uncapped run's own lev
     [
       levelLine('act', 'Sam'),
       'Your runs go through Claude Code.',
-      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab. No web: Sam can switch on Browse the web in your Settings tab.',
+      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab, under Office. No web: Sam can switch on Browse the web in your Settings tab, under Office.',
       'Sam has given you no folders.',
       '- (id: notion) Notion (read and write): every tool.'
     ].join('\n')
