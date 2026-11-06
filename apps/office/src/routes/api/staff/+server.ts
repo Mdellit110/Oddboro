@@ -10,6 +10,7 @@
 // go through it.
 import { error, json } from '@sveltejs/kit';
 import {
+  currentPlatform,
   addJob,
   agentsOn,
   approveHire,
@@ -56,9 +57,9 @@ export const POST: RequestHandler = async ({ request }) => {
   if (!rooms.has(room)) error(400, 'Pick a room on the floor');
   if (!permission) error(400, 'Pick read, draft or act');
   // Left out, the hire runs on the column's default, Claude Code.
-  const agent = b.agent === undefined ? undefined : offeredAgent(b.agent, process.platform);
+  const agent = b.agent === undefined ? undefined : offeredAgent(b.agent, currentPlatform());
   if (b.agent !== undefined && !agent)
-    error(400, `Pick ${agentsOn(process.platform).join(' or ')}`);
+    error(400, `Pick ${agentsOn(currentPlatform()).join(' or ')}`);
   const jobName = text(b.job?.name, 80);
   const jobSteps = text(b.job?.instructions, 8000);
   const jobSchedule = b.job ? parseSchedule(b.job.schedule) : null;

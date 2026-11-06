@@ -5,6 +5,7 @@
 // tab offers under a switch the Odd's own tool cannot follow.
 import { error, json } from '@sveltejs/kit';
 import {
+  currentPlatform,
   agentsOn,
   checkFolder,
   commandsHow,
@@ -32,7 +33,7 @@ import type { RequestHandler } from './$types';
  * turn commands on unasked after a later move to a tool that follows it.
  */
 function followsCommands(agent: Agent): void {
-  const how = commandsHow(agent, process.platform);
+  const how = commandsHow(agent, currentPlatform());
   if (how.state !== 'switch') error(400, how.why);
 }
 
@@ -65,8 +66,8 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   // against the tool it moves to, not the one it leaves.
   if (b.agent !== undefined) {
     // Only a tool whose sandbox held on this system (`AGENT_PLATFORMS`).
-    const agent = offeredAgent(b.agent, process.platform);
-    if (!agent) error(400, `Pick ${agentsOn(process.platform).join(' or ')}`);
+    const agent = offeredAgent(b.agent, currentPlatform());
+    if (!agent) error(400, `Pick ${agentsOn(currentPlatform()).join(' or ')}`);
     // A chat still replying would save its session after the move, for a tool that cannot resume it.
     if (isBusy(params.id)) error(409, 'Wait for the reply to finish, then switch.');
     // Refused before anything changes, so the Odd never moves without the commands it was moved for.

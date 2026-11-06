@@ -31,6 +31,7 @@ import {
 } from './agents.ts';
 import { grantsFor, heldReach, type ConnectorRow, type GrantRow, type StaffRow } from './office.ts';
 import { hasTool, OFFICE_TOOLS } from './tools.ts';
+import { currentPlatform } from './platform.ts';
 
 /**
  * Why a run leaves out a tool the Odd was granted. A run adds
@@ -91,7 +92,7 @@ export async function capabilities(who: StaffRow): Promise<Capabilities> {
     office: OFFICE_TOOLS.filter((t) => !t.always && who.tools.includes(t.id)).map((t) => t.id),
     outside: (await grantsFor(who.id)).map((g) => accessOf(g, who.permission)),
     agent: who.agent,
-    own: ownTools(who, process.platform)
+    own: ownTools(who, currentPlatform())
   };
 }
 

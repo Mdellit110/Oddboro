@@ -2,6 +2,7 @@
 // reads the disk (folders still there) and this office's held network, and
 // each folder's `~` form reads the home folder, none of which the page can do.
 import {
+  currentPlatform,
   effortFor,
   heldReach,
   MANAGER_ROLE,
@@ -35,7 +36,7 @@ function officeModel(agent: Agent): string | undefined {
  * A new hire has no guesses of its own; the next office load counts any for every Odd.
  */
 export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
-  const reach = heldReach(r.agent, ownTools(r, process.platform), networkHeld());
+  const reach = heldReach(r.agent, ownTools(r, currentPlatform()), networkHeld());
   return {
     id: r.id,
     name: r.name,
@@ -54,7 +55,7 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     tools: r.tools,
     commands: r.commands,
     web: r.web,
-    webLine: webLine(r.agent, process.platform, reach.held),
+    webLine: webLine(r.agent, currentPlatform(), reach.held),
     folders: r.folders.map((f) => ({ ...f, shown: shownFolder(f.path) })),
     reach,
     remit: r.remit,

@@ -23,6 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { homedir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
 import {
+  currentPlatform,
   DATABASE_URL,
   goal as findGoal,
   goalsFor,
@@ -1224,7 +1225,7 @@ export async function chat(
     const inReplay = new Set(replayedAt(past, kept));
     const since = replaySince(past, kept);
     // The Odd writes only its own folder and the given folders it may change, so only those are walked.
-    const writable = ownTools(who, process.platform)
+    const writable = ownTools(who, currentPlatform())
       .granted.filter((f) => f.write)
       .map((f) => f.path);
     const prompt = [

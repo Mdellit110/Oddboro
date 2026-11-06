@@ -15,6 +15,7 @@
 // /api/agents/[tool].
 import { error, json } from '@sveltejs/kit';
 import {
+  currentPlatform,
   AGENT_NAMES,
   AGENTS,
   agentsOn,
@@ -63,7 +64,7 @@ const stateOf = (tool: Agent, account?: string): Promise<SignInState> | SignInSt
     : signInState(tool, account);
 
 export const GET: RequestHandler = async () => {
-  const platform = process.platform;
+  const platform = currentPlatform();
   return json({
     // The picker's word for this computer.
     computer: computerWord(),
@@ -102,8 +103,8 @@ export const GET: RequestHandler = async () => {
 /** Pick the tool the office runs on. It applies to the next office run and the next hire. */
 export const PUT: RequestHandler = async ({ request }) => {
   const b = (await request.json().catch(() => ({}))) as { office?: unknown };
-  const agent = offeredAgent(b.office, process.platform);
-  if (!agent) error(400, `Pick ${agentsOn(process.platform).join(' or ')}`);
+  const agent = offeredAgent(b.office, currentPlatform());
+  if (!agent) error(400, `Pick ${agentsOn(currentPlatform()).join(' or ')}`);
   writeEnv({ OFFICE_AGENT: agent });
   process.env.OFFICE_AGENT = agent;
   return json({ office: agent });

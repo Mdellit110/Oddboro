@@ -97,6 +97,7 @@ import {
 } from './agents.ts';
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
+import { currentPlatform } from './platform.ts';
 import { levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
@@ -213,7 +214,7 @@ export function heldReach<T extends { network: boolean }>(
  * office holds it says the hold's words instead.
  */
 function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
-  const [was, is] = [before, after].map((s) => commandsOnline(s.agent, process.platform, s));
+  const [was, is] = [before, after].map((s) => commandsOnline(s.agent, currentPlatform(), s));
   if (was === is) return {};
   if (!is) return { body: NETWORK_NOTE.off };
   const opened = heldReach(after.agent, { network: is }, networkHeld()).network;
@@ -221,7 +222,7 @@ function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
 }
 
 /** The tool the office runs on, from `.env` as it stands now (`officeAgentOf`). */
-export const officeAgent = (): Agent => officeAgentOf(process.env.OFFICE_AGENT, process.platform);
+export const officeAgent = (): Agent => officeAgentOf(process.env.OFFICE_AGENT, currentPlatform());
 
 /**
  * Only the owner moves a staffer to another coding tool. Its chat session
@@ -440,7 +441,7 @@ const real = (p: string): string => (existsSync(p) ? realpathSync.native(p) : p)
 /** Whether `p` is `parent` or sits inside it. A Windows disk ignores case. */
 export function within(p: string, parent: string): boolean {
   const [a, b] =
-    process.platform === 'win32' ? [p.toLowerCase(), parent.toLowerCase()] : [p, parent];
+    currentPlatform() === 'win32' ? [p.toLowerCase(), parent.toLowerCase()] : [p, parent];
   return a === b || a.startsWith(b.endsWith(sep) ? b : b + sep);
 }
 

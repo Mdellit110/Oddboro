@@ -19,7 +19,7 @@ import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { OFFICE_ACCOUNT, type Agent } from '@oddboro/ledger';
-import { claudeCommand } from '@oddboro/ledger/platform';
+import { claudeCommand, currentPlatform } from '@oddboro/ledger/platform';
 import { claudeAccountOf, claudeHome, cleanEnv, forgetClaudeAccount } from './claude.ts';
 import { codexAccount, codexHome, codexSignIn } from './codex.ts';
 import { commandSlot, type Slot } from './command-stream.ts';
@@ -221,7 +221,7 @@ export function agentCommand(tool: Agent): Command | undefined {
  * MAC is fixed at import and a test stubs the system.
  */
 export const computerWord = (): 'Mac' | 'computer' =>
-  process.platform === 'darwin' ? 'Mac' : 'computer';
+  currentPlatform() === 'darwin' ? 'Mac' : 'computer';
 
 /**
  * The environment an installer gets: the office's, with no key of its own and
