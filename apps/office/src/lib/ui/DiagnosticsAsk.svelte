@@ -25,9 +25,13 @@
 
 <p class="text-sm leading-relaxed text-muted">
   When something in Oddboro breaks, it can send New Altitude a report: what went wrong, where in the
-  code, and how long the office took to do things. {NEVER_CARRIED} Sentry, the service that stores them,
-  keeps the approximate location (city and country) your internet address points to, never the address
-  itself. You can turn this off in Setup at any time.
+  code, and how long the office took to do things.
+  {#if diagnostics.account}
+    Reports go with your New Altitude sign-in: New Altitude checks it, then passes the report on
+    without it, so Sentry never learns your account.
+  {/if}
+  {NEVER_CARRIED} Sentry, the service that stores them, keeps the approximate location (city and country)
+  your internet address points to, never the address itself. You can turn this off in Setup at any time.
 </p>
 <div class="mt-3 flex flex-wrap gap-2">
   <button

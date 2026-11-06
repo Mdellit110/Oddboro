@@ -2,8 +2,8 @@
 // its own public client (registered on first use, PKCE, a loopback address),
 // asks for the profile permission alone, and keeps the sign-in with who
 // signed in as one secret, `new-altitude-account:oauth`, in the system's
-// secret store. Nothing in the office needs it: `accountToken()` is the one
-// way to get its token, for whatever comes to need it.
+// secret store. Error reports to New Altitude need it: `accountToken()` is the
+// one way to get its token.
 import { auth } from '@modelcontextprotocol/sdk/client/auth.js';
 import { OFFICE_URL } from '@oddboro/ledger';
 import { checkKeyring } from '@oddboro/ledger/checks';
@@ -91,7 +91,8 @@ const provider = () => new AccountProvider(ACCOUNT_ID, ACCOUNT_PLACE);
  * The status as last known, so a page load starts no secret-store process.
  * Signing in, signing out and each token check set it. A change it misses
  * (the secret deleted by hand, another office on this computer) shows at the
- * next GET /api/account, which reads the store.
+ * next GET /api/account, which reads the store. It stays the same object
+ * until the status changes: reports reuse a token only while it does.
  */
 let known: AccountStatus | undefined;
 

@@ -20,7 +20,7 @@
   import type { Work } from '#lib/staff/work.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
   import { account } from '#lib/ui/account.svelte.ts';
-  import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
+  import { diagnostics, shown } from '#lib/ui/diagnostics.svelte.ts';
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
   import GoalsPanel from '#lib/ui/GoalsPanel.svelte';
   import OfficeDesigner from '#lib/ui/OfficeDesigner.svelte';
@@ -41,8 +41,8 @@
   // Every time on the page is in the office's zone, which only the server knows.
   // It is fixed for the life of the page: a new zone takes a restart.
   setZone(untrack(() => data.zone));
-  // Whether the office can send reports, and the owner's answer. Answering
-  // updates it from then on.
+  // Whether the office can send reports, whether they need a New Altitude
+  // sign-in, and the owner's answer. Answering updates it from then on.
   Object.assign(
     diagnostics,
     untrack(() => data.diagnostics)
@@ -230,9 +230,7 @@
   const status = $derived(Object.fromEntries(tags.map((t) => [t.id, statusOf(t)])));
 
   /** The Desk asks about reports once the office is open, until the owner answers. */
-  const askDiagnostics = $derived(
-    diagnostics.possible && diagnostics.answer === 'unasked' && welcomed
-  );
+  const askDiagnostics = $derived(shown() && diagnostics.answer === 'unasked' && welcomed);
   const deskCount = $derived(
     desk.asks.length + desk.tasks.length + desk.reports.length + Number(askDiagnostics)
   );

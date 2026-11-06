@@ -18,8 +18,8 @@ import type { Account } from '#lib/account.ts';
 import { getSecret, setSecret } from './keychain.ts';
 
 export const REDIRECT = `${OFFICE_URL}/connect/callback`;
-/** Refresh a token this long before it runs out. */
-const MARGIN_MS = 5 * 60_000;
+/** Refresh a token this long before it runs out. Reports reuse a token for less (`TOKEN_REUSE_MS`). */
+export const MARGIN_MS = 5 * 60_000;
 
 /**
  * Failures raised before any connection exists, so the request was never

@@ -31,7 +31,7 @@
   import { setZone } from '@oddboro/ledger/time';
   import type { StaffProfile } from '../../staff/roster.ts';
   import { call, follow } from '../api.ts';
-  import { diagnostics } from '../diagnostics.svelte.ts';
+  import { shown } from '../diagnostics.svelte.ts';
   import AccountCard from './AccountCard.svelte';
   import ClaudeCard from './ClaudeCard.svelte';
   import DiagnosticsCard from './DiagnosticsCard.svelte';
@@ -71,7 +71,7 @@
     go: 'Open the office'
   };
   const steps = $derived<readonly Step[]>(
-    diagnostics.possible ? STEPS : STEPS.filter((s) => s !== 'diagnostics')
+    shown() ? STEPS : STEPS.filter((s) => s !== 'diagnostics')
   );
   let step = $state<Step>('mac');
   let backward = $state(false);

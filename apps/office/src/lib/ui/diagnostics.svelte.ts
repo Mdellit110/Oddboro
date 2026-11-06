@@ -1,13 +1,22 @@
-// The page's view of reports: whether the office can send them, and the
-// owner's answer. Set from the page data and after each answer; the page's
-// trace sampler reads it.
-import type { Answer } from '#lib/diagnostics.ts';
+// The page's view of reports: whether the office can send them, whether they
+// need a New Altitude sign-in, and the owner's answer. Set from the page data
+// and after each answer; the page's trace sampler reads it.
+import { reportsOffered, type Answer, type ReportsState } from '#lib/diagnostics.ts';
+import { account } from './account.svelte.ts';
 import { call } from './api.ts';
 
-export const diagnostics = $state<{ possible: boolean; answer: Answer }>({
+export const diagnostics = $state<ReportsState>({
   possible: false,
+  account: false,
   answer: 'unasked'
 });
+
+/** Whether the page offers reports: the first-visit card, the Setup switch and the Desk's ask. */
+export const shown = (): boolean => reportsOffered(diagnostics, account.status.state === 'in');
+
+/** The answer the page's own traces follow: no while reports wait on a sign-in. */
+export const pageAnswer = (): Answer =>
+  diagnostics.account && account.status.state !== 'in' ? 'no' : diagnostics.answer;
 
 /**
  * What a report never carries, in the words the owner approved. The ask and
