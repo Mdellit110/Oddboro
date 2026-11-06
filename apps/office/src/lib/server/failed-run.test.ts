@@ -180,6 +180,12 @@ const SHOWN: Record<Landing, (reply?: string) => Promise<number>> = {
   ledger: async () =>
     (await L.pg<{ n: number }[]>`select count(*)::int as n from ledger where body like ${like}`)[0]
       .n,
+  jobs: async () => {
+    const res = await request('/api/staff/[id]/jobs', 'GET', { params: { id: 'fay' } });
+    const jobs = (await res.json()) as { lastRun?: { status: string; summary: string | null } }[];
+    return jobs.filter((j) => j.lastRun?.status === 'failed' && j.lastRun.summary?.includes(GONE))
+      .length;
+  },
   reply: async (reply) => (reply?.includes(GONE) ? 1 : 0),
   drawing: async () =>
     currentDesign()?.lines.filter((l) => l.step === 'error' && l.message.includes(GONE)).length ?? 0
