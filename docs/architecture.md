@@ -66,6 +66,13 @@ Before writing a helper, use the one that already does the job.
 Each entry says where to start, then what fails when a place is missed. Where
 nothing fails, it says so: name that place in the pull request.
 
+Planned work starts where a "Later" line says, not here: the "Later" sections
+of `packages/ledger/CLAUDE.md`, `apps/office/src/lib/server/CLAUDE.md` and
+`apps/desktop/CLAUDE.md` say what comes first for a run timeline (one row per
+run), Stop for a run, Claude Code's launch, a new office tool or AI tool, and
+a release smoke test. The page pass is the last line of "Rules for this app"
+in `apps/office/CLAUDE.md`.
+
 - **An ask kind.** Start at `ASK_KINDS` in `packages/ledger/src/schema.ts`.
   Check-types fails at `OWNER_ANSWERS.ask` in
   `packages/ledger/src/desk-answers.ts`, which says what each answer does.
@@ -103,7 +110,9 @@ nothing fails, it says so: name that place in the pull request.
   it runs.
 - **An office tool.** Start at its row in `OFFICE_TOOLS` in
   `packages/ledger/src/tools.ts`, and register it in `mcp.ts` behind
-  `has()`. A tool registered beside a listed one goes in `RIDES_WITH`.
+  `has()`. A tool registered only alongside another, never granted alone
+  (such as `my_pokes` with `poke_owner`), goes in `RIDES_WITH` instead,
+  under the tool it rides with.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in
@@ -126,8 +135,10 @@ nothing fails, it says so: name that place in the pull request.
   `stream()` or `follow()`, which take an `ApiUrl`: check-types fails a call
   to a route that does not exist. A route the owner acts through has its row
   in `OWNER_ACTIONS` in `apps/office/src/lib/server/owner-actions.ts`;
-  `owner-actions.test.ts` fails a route with none, and a row that says it
-  records but writes no ledger row.
+  `owner-actions.test.ts` fails a POST, PUT, PATCH or DELETE handler with
+  none, and a row that says it records but writes no ledger row. No check
+  finds a GET or a page's `load` that changes something: give it a row by
+  hand, and the test then fails if its handler goes.
 - **A call out of the office.** Start at its file's entry in `OUTBOUND` in
   `scripts/outbound.ts`, with whose yes covers it (hard rule 4).
   `scripts/check-outbound.ts` fails lint when a file's calls differ from its

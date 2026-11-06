@@ -1114,3 +1114,10 @@ sends every action as JSON, body or not.
   renderer in `packages/world` still multiplies, so its night renders differ
   a little from the office.
 - In dev, `window.floor` holds the `Floor` for poking at from the console.
+- When the next new panel comes, or NEW-1665 is built: first give the whole
+  page one pass at phone and desktop width with an accessibility check, one
+  helper for the page's actions, tables for its words, one source for its
+  colours and one shared snapshot of the office. Text that tells the owner
+  how an action went is built from the server's result (NEW-1709). Add a
+  lint that fails on a promise nobody awaits or catches; that brings ESLint,
+  a new dependency, so the change says why.

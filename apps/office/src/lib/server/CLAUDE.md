@@ -32,6 +32,18 @@ then names every other place.
   `npm run lint` fails until the entry matches the code. A kind of call the
   guard does not name yet (a new client library's constructor or init) goes
   in `scripts/check-outbound.ts` too.
+- To add a route that changes something (a POST, PUT, PATCH or DELETE
+  handler, or a staff PATCH body key), add its row to `OWNER_ACTIONS` in
+  `owner-actions.ts`: the ledger kind it records, the Linear row that owes
+  one, or why it is not an action. `owner-actions.test.ts` fails until the
+  row is there, and drives each recording row to check it writes exactly one
+  ledger row of that kind. A GET that changes something, or a page's `load`
+  that does, gets a row by hand: the test cannot tell it from a read.
+- To add a kind of run (`UsageKind` in the ledger), add its row to
+  `RUN_FAILURE` in `run-failures.ts`: each place the owner finds its error.
+  The type check fails until the row is there and `failed-run.test.ts` has a
+  way to make that kind fail; the test then checks the error shows in
+  exactly those places.
 
 ## Later
 
