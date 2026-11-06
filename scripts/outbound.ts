@@ -1,7 +1,10 @@
-// Every place the office's own code calls out of this computer, or could.
-// Hard rule 4 says nothing leaves the office without the owner's yes, so each
-// entry says where it goes, what it sends and whose yes covers it.
-// `check-outbound.ts` fails when a file's calls differ from its entry here.
+// Each call the office's own code makes out of its process by a name
+// `check-outbound.ts` counts (that file lists the names, and what it does not
+// count: child processes such as each AI tool's run, `require`, `import()`, and
+// the desktop updater past `updater_builder`). Hard rule 4 says nothing leaves
+// the office without the owner's yes, so each entry says where its calls go,
+// what they send and whose yes covers them. `check-outbound.ts` fails when a
+// file's calls differ from its entry here.
 
 export type Outbound = {
   /** The file, from the repo root. */
@@ -23,10 +26,59 @@ export const OUTBOUND: readonly Outbound[] = [
   },
   {
     file: 'apps/office/src/lib/server/address.ts',
-    calls: 4,
+    calls: 5,
     to: "Caddy's admin and the office's own address on this computer, and GitHub for Caddy's release and checksums.",
     sends: "The office's Caddy settings, kept on this computer, and a download request for Caddy.",
     yes: "The owner setting up the office's address in Setup."
+  },
+  {
+    file: 'apps/office/src/lib/floor/engine.ts',
+    calls: 1,
+    to: "The office, on this computer: the floor's sprite atlas.",
+    sends: "A request for the atlas. Nothing of the owner's.",
+    yes: 'The owner opening the office; nothing leaves this computer.'
+  },
+  {
+    file: 'apps/office/src/lib/floor/looks.ts',
+    calls: 1,
+    to: "The office, on this computer: an Odd's drawn look.",
+    sends: "A request for the look. Nothing of the owner's.",
+    yes: 'The owner opening the office; nothing leaves this computer.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/ChatPanel.svelte',
+    calls: 2,
+    to: 'The office, on this computer: the chat route.',
+    sends: "The owner's chat messages, to the office that runs the Odd.",
+    yes: 'The owner sending the message; nothing leaves this computer here.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/UpdatesSection.svelte',
+    calls: 1,
+    to: 'The office, on this computer: its live line of changes.',
+    sends: "A request to hear changes. Nothing of the owner's.",
+    yes: 'The owner opening the Setup window; nothing leaves this computer.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/api.ts',
+    calls: 3,
+    to: "The office, on this computer: the page's routes.",
+    sends: "The owner's actions on the page, to the office.",
+    yes: 'The owner acting on the page; nothing leaves this computer here.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/atlas.ts',
+    calls: 1,
+    to: 'The office, on this computer: the sprite atlas.',
+    sends: "A request for the atlas. Nothing of the owner's.",
+    yes: 'The owner opening the office; nothing leaves this computer.'
+  },
+  {
+    file: 'apps/office/src/routes/+page.svelte',
+    calls: 1,
+    to: 'The office, on this computer: its live line of changes.',
+    sends: "A request to hear changes. Nothing of the owner's.",
+    yes: 'The owner opening the office; nothing leaves this computer.'
   },
   {
     file: 'apps/office/src/lib/server/gemini.ts',

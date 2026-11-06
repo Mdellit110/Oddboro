@@ -141,8 +141,9 @@ in `apps/office/CLAUDE.md`.
   hand, and the test then fails if its handler goes.
 - **A call out of the office.** Start at its file's entry in `OUTBOUND` in
   `scripts/outbound.ts`, with whose yes covers it (hard rule 4).
-  `scripts/check-outbound.ts` fails lint when a file's calls differ from its
-  entry.
+  `scripts/check-outbound.ts` fails lint when a file's calls, by the names it
+  counts, differ from its entry. It counts no child process, such as an AI
+  tool's run.
 - **A kind of run.** Start at `UsageKind` in `schema.ts`. Check-types fails
   at `RUN_FAILURE` in `apps/office/src/lib/server/run-failures.ts`, and
   `failed-run.test.ts` holds where each failure lands. No check: the run

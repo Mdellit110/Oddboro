@@ -31,7 +31,9 @@ then names every other place.
   how many calls, where they go, what they send and whose yes covers them.
   `npm run lint` fails until the entry matches the code. A kind of call the
   guard does not name yet (a new client library's constructor or init) goes
-  in `scripts/check-outbound.ts` too.
+  in `scripts/check-outbound.ts` too. A call through a child process (an
+  installer, a tool's update check, an AI tool's run) is not counted, so the
+  guard does not catch one; that file says what else it does not count.
 - To add a route that changes something (a POST, PUT, PATCH or DELETE
   handler, or a staff PATCH body key), add its row to `OWNER_ACTIONS` in
   `owner-actions.ts`: the ledger kind it records, the Linear row that owes
