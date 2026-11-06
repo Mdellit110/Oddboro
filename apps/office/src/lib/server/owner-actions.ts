@@ -62,7 +62,8 @@ export const OWNER_ACTIONS = {
   'DELETE /api/pokes/[id]': { none: NO_ROW },
   'POST /api/reports/[id]': { none: NO_ROW },
   'PUT /api/rooms': { records: 'work' },
-  'POST /api/setup': { notAnAction: SETUP },
+  // The owner's name, and that the welcome is done (the `owner` table).
+  'POST /api/setup': { none: NO_ROW },
   'POST /api/setup/address': { notAnAction: SETUP },
   'PUT /api/setup/claude': { notAnAction: SETUP },
   'POST /api/setup/claude': { notAnAction: SETUP },
@@ -87,18 +88,18 @@ export const OWNER_ACTIONS = {
   'PUT /api/staff/[id]/description': { records: 'work' },
   'POST /api/staff/[id]/jobs': { none: NO_ROW },
   'PUT /api/staff/[id]/look': { records: 'work' },
-  'POST /api/staff/[id]/pokes': {
-    notAnAction: "Marks the Odd's delivered pokes seen as its chat shows them."
-  },
+  // Marks the Odd's delivered pokes read as its chat shows them.
+  'POST /api/staff/[id]/pokes': { none: NO_ROW },
   'POST /api/staff/draft': {
     notAnAction: 'Drafts a job description for the hire window; nothing is kept until a hire.'
   },
   'PUT /api/switches': { none: NO_ROW },
   'POST /api/tasks/[id]': { records: 'work' },
-  'POST /api/update': {
-    notAnAction: "The app's shell reporting an update, and the owner picking when it installs."
-  },
-  'PUT /api/update': { notAnAction: "The owner's update window, a setting of the app." },
+  // The app's shell reporting an update, and the owner picking when it
+  // installs: both write the `app_update` row.
+  'POST /api/update': { none: NO_ROW },
+  // The owner's update window, in the `app_update` row.
+  'PUT /api/update': { none: NO_ROW },
   // A hosted server's sign-in comes back here: its tokens go in the keychain
   // and the task's sign-in step ticks.
   'GET /connect/callback': { none: NO_ROW }

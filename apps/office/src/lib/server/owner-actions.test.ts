@@ -239,3 +239,49 @@ test('every owner route is declared, and each that records writes exactly one le
     });
   }
 });
+
+/** Each table's rows, as one digest per table, so a change to any row shows. */
+async function tableDigests(): Promise<Map<string, string>> {
+  const tables = await L.pg<{ name: string }[]>`
+    select table_name as name from information_schema.tables
+    where table_schema = 'public' and table_type = 'BASE TABLE'`;
+  const digests = await Promise.all(
+    tables.map(async ({ name }) => {
+      const [{ d }] = await L.pg<{ d: string | null }[]>`
+        select md5(string_agg(t::text, ',' order by t::text)) as d from ${L.pg(name)} t`;
+      return [name, d ?? ''] as const;
+    })
+  );
+  return new Map(digests);
+}
+
+/** Actions that write no ledger row but change a row of the office's: any rows each needs, then its call. */
+const CHANGES: Partial<Record<keyof typeof OWNER_ACTIONS, (send: Send) => Promise<void>>> = {
+  'POST /api/staff/[id]/pokes': async (send) => {
+    await L.pg`insert into pokes (staff_id, at, message, status)
+      values ('sam', now(), 'How did the call go?', 'sent')`;
+    await send({ params: { id: 'sam' } });
+  },
+  'PUT /api/update': (send) => send({ body: { start: '01:00', end: '03:00' } }),
+  'POST /api/setup': async (send) => send({ body: { name: await L.ownerName() } })
+};
+
+test('an owner action that changes a row of the office is never classed as changing none', async (t) => {
+  for (const [key, act] of Object.entries(CHANGES)) {
+    await t.test(key, async () => {
+      const [method, at] = key.split(' ');
+      let changed: string[] = [];
+      await act(async (call) => {
+        const before = await tableDigests();
+        await request(at, method, call);
+        const after = await tableDigests();
+        changed = [...after.keys()].filter((k) => after.get(k) !== before.get(k));
+      });
+      assert.notDeepEqual(changed, [], `${key} changed no table`);
+      assert.ok(
+        !('notAnAction' in OWNER_ACTIONS[key as keyof typeof OWNER_ACTIONS]),
+        `${key} changed ${changed.join(', ')}, yet is classed as changing none of the office's records`
+      );
+    });
+  }
+});
