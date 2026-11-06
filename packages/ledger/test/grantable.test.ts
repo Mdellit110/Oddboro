@@ -192,7 +192,7 @@ test('a grant the owner gives through an ask says what approving it does, from t
   }
 });
 
-test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a manager from its own', async () => {
+test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a manager from its own: Draft, with exactly its tools', async () => {
   // Every default, so one that the schema or hire() does not read fails here.
   // The cast holds: HIRE_DEFAULTS.staff is an object literal with only its typed keys.
   const defaults = Object.keys(G.HIRE_DEFAULTS.staff) as (keyof typeof G.HIRE_DEFAULTS.staff)[];
@@ -228,8 +228,28 @@ test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a m
     assert.equal(G.OWNER_GRANTS[kind].atHire, holds[kind], `${kind} at hire`);
 
   const manager = await hireManager({ preset: MANAGERS[0].id });
-  assert.deepEqual(
-    { permission: manager.permission, tools: manager.tools },
-    G.HIRE_DEFAULTS.manager
-  );
+  const hired = { permission: manager.permission, tools: manager.tools };
+  assert.deepEqual(hired, G.HIRE_DEFAULTS.manager);
+  // Word for word, not from HIRE_DEFAULTS: a manager at Act would act
+  // without the owner's yes (hard rule 4), so its level and tools change
+  // here on purpose or not at all.
+  assert.deepEqual(hired, {
+    permission: 'draft',
+    tools: [
+      'search_ledger',
+      'give_owner_a_task',
+      'find_connectors',
+      'ask_for_access',
+      'edit_my_job',
+      'edit_my_description',
+      'hand_off',
+      'poke_owner',
+      'office_report',
+      'propose_hire',
+      'list_goals',
+      'propose_goal',
+      'propose_goal_plan',
+      'update_goal'
+    ]
+  });
 });
