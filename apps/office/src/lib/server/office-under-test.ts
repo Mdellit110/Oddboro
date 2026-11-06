@@ -346,8 +346,9 @@ chmodSync(join(bin, 'codex'), 0o755);
 // run folder's policy, settings and instructions, and the message, in the
 // event shapes `gemini -o stream-json` prints: the session, an echo of the
 // message, a reply in pieces, a file tool and an MCP call, the reply's last
-// message in two pieces and the result's tokens. A message that says "End in
-// error" gets a failed result instead. Each launch adds a dot to launches.log
+// message in two pieces and the result's tokens. A message that ends "End in
+// error" gets a failed result instead (only at the end, since a later prompt
+// can quote an earlier message that failed). Each launch adds a dot to launches.log
 // in the Gemini home.
 writeFileSync(
   join(bin, 'gemini'),
@@ -369,7 +370,7 @@ process.stdin.on('end', () => {
   line({ type: 'init', session_id: '0a0a0a0a-0000-4000-8000-00000000ce01', model: 'gemini-test' });
   if (message.startsWith('/'))
     return line({ type: 'result', status: 'error', error: { type: 'Error', message: 'Ran a slash command.' } });
-  if (message.includes('End in error'))
+  if (/End in error\\s*$/.test(message))
     return line({ type: 'result', status: 'error', error: { type: 'Error', message: 'Quota used up.' } });
   const settingsPath = process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
   const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
