@@ -14,7 +14,9 @@ export type DeskItem = (typeof DESK_ITEMS)[number];
  * - `approval_work`: what approving means, done by the function that approves
  *   that kind (`approveGoal`, `approvePlan`) before the answer goes back.
  * - `carry_out`: a `carry_out` follow-up, to do what the ask or task waited on.
- * - `grant_access`: the access the ask names is granted (`grantAccess`).
+ * - `grant_access`: the access the ask names is granted (`grantAccess`). A tool
+ *   already connected starts the work that waited on it (`carry_out`) at once;
+ *   otherwise the owner gets a task to connect it, and finishing that starts it.
  * - `start_held`: the hand-off the ask held starts, as the ask is claimed.
  * - `answer_window`: the usage window's answer (`answerWindow`).
  * - `answer_hand_offs`: the yes or no to more hand-offs goes to the thread's hub
@@ -50,11 +52,15 @@ export type AskAnswer = {
   /** `refused`: the office raised it, so the owner says yes or no and nobody reworks it. */
   iterate: readonly AskEffect[] | 'refused';
 };
-/** A no: the answer goes back, and its reason is a lesson for the Odd that asked. */
-const NO: readonly AskEffect[] = ['answer_back', 'denied_lesson'];
-const REWORK: readonly AskEffect[] = ['rework'];
-/** A yes to a hire or a goal the Odd raised on no hand-off and no thread tells that Odd nothing. */
+/**
+ * An answer with no run to follow it, to an ask raised on no hand-off and no
+ * thread, tells the Odd that asked nothing: a yes to a hire or a goal, and a
+ * no with no reason.
+ */
 const OFF_A_THREAD = { none: 'NEW-1715' };
+/** A no: the answer goes back, and its reason is a lesson for the Odd that asked. */
+const NO: readonly AskEffect[] = ['answer_back', 'denied_lesson', OFF_A_THREAD];
+const REWORK: readonly AskEffect[] = ['rework'];
 
 export const OWNER_ANSWERS = {
   ask: {
@@ -68,7 +74,11 @@ export const OWNER_ANSWERS = {
     // Setting the goal wakes the Office Manager to plan it, on the goal's thread.
     goal: { approve: ['approval_work', 'answer_back', OFF_A_THREAD], deny: NO, iterate: REWORK },
     // A plan is always raised on its goal's thread, so its answer always reaches the lead.
-    plan: { approve: ['approval_work', 'answer_back'], deny: NO, iterate: REWORK },
+    plan: {
+      approve: ['approval_work', 'answer_back'],
+      deny: ['answer_back', 'denied_lesson'],
+      iterate: REWORK
+    },
     hand_offs: {
       approve: ['start_held', 'answer_hand_offs'],
       deny: ['answer_hand_offs', 'denied_lesson'],
