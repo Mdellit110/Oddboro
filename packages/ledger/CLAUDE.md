@@ -214,7 +214,8 @@ hand-off or number, which ledger tests and the office's format test share.
   Gemini on none until a live run holds its walls; `agentsOn()`, and
   `offeredAgent()` for a hire or a move), and where its Run commands switch
   follows the owner (`commands`: Claude Code on a Mac only, since its sandbox
-  held commands to the Odd's folders only there).
+  held commands to the Odd's folders only there; Codex's is `'always'`, a
+  shell whatever the switch).
 - `staff.commands` and `staff.web` are the owner's Run commands and Browse the
   web switches, and `staff.folders` the folders outside the office the owner
   gave the Odd, each to read or to read and change, by real path. Only the
@@ -233,9 +234,9 @@ hand-off or number, which ledger tests and the office's format test share.
   this system that follows it (`offer`), which the Settings tab offers to move
   the Odd to in one click, with the switch on. With Run commands and Browse
   the web both on, commands reach the internet where the tool's walls held
-  with the network open (`NETWORK_WITH_WEB`, `commandsOnline()`: Claude Code
-  only, since Codex's commands reached the office's own ports on this Mac with
-  its network on), and a change to the switches or the tool that opens or
+  with the network open (`networkWithWeb` in `AGENT_PLATFORMS`, per system,
+  read by `commandsOnline()`: Claude Code on a Mac only, since Codex's commands
+  reached the office's own ports on this Mac with its network on), and a change to the switches or the tool that opens or
   closes that says so in its ledger line (`NETWORK_NOTE`). `ownTools()` in
   `capabilities.ts` is that one reading of the switches and folders for a
   run, `my_access`, `office_report` and the page. Once a Claude Code refuses
@@ -551,6 +552,21 @@ hand-off or number, which ledger tests and the office's format test share.
     migration by hand.
   - To change how often a job may run, start at `SCHEDULE_RULE` in
     `src/time.ts`.
+  - To add an AI tool, start at `AGENTS` in `src/agents.ts`, then its rows in
+    `AGENT_PLATFORMS` (the systems it runs on, follows Run commands on and
+    reaches the internet with commands on), `AGENT_FILES` (its own
+    instruction files and home folders, which the office's
+    `agent-files.test.ts` holds to `INSTRUCTIONS` and `SECRET_STORES`) and
+    `OFFICE_MODEL_VAR` (the office's model variable for it). To offer a tool
+    on another system, start at its `AGENT_PLATFORMS` row; the office's
+    `sandbox-paths.test.ts` and `launch-contract.test.ts` name what that
+    system still needs.
+    - Later: at the next raise of `MIN_VERSIONS`, or a new AI tool, add a
+      probe that runs each tool's real CLI against its walls. Ask the repo's
+      owner first: it needs CI secrets and spends tokens.
+  - To read which system the office runs on, call `currentPlatform()` in
+    `src/platform.ts`, never `process.platform`, so a test's `onPlatform`
+    reaches it. `scripts/check-platform.ts` fails any other read.
 - The owner's name lives in the `owner` table, one row, set per install with
   `setOwnerName()` and read with `ownerName()` ("the owner" until one is set).
   Odd prompts use it, so each install's Odds call the owner by name. Never
@@ -571,3 +587,19 @@ hand-off or number, which ledger tests and the office's format test share.
 - On Windows, reach the system through `powershell()` or `powershellSync()`
   with values passed as `env`, never pasted into the script, so nothing needs
   quoting.
+
+## Later
+
+Each line says what to do when its trigger comes.
+
+- Building NEW-1651 or NEW-1654, whichever comes first: give each run one
+  row of its own, with `runs.jobId` optional, usage pointing at the run, and
+  one reader per tool of that tool's stream.
+- Before any change to what Odds are told (the lines in `capabilities.ts`,
+  the office's `house.ts` or a run's brief): add snapshot tests of each kind
+  of run's prompt, so the change shows as a diff in review.
+- Building NEW-1644, or adding an office tool or an AI tool: first write a
+  threat model for prompt injection: what a page, file or message an Odd
+  reads could make it do, and which wall stops each.
+- When a test fixture is copied a third time: move it into one shared test
+  helper that every copy's tests import.
