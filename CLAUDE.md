@@ -31,8 +31,10 @@ Each rule's reason is in `docs/hard-rules.md`, under the same heading.
 7. **Every colour on the floor comes from the palette.** Sprites draw from
    `packages/sprites/src/palette.json`, and the page chrome reads the tokens
    in `apps/office/src/app.css`.
-8. **Spaces are data.** A room is a JSON stamp and an office is a JSON floor
-   plan. Adding a space never needs engine code.
+8. **Rooms and offices are data.** A room is a JSON stamp and an office is a
+   JSON floor plan, so adding a room or an office never needs engine code. A
+   new kind of room does, starting at `ROOM_KINDS` in
+   `packages/world/src/generate.ts`.
 9. **Family data never reaches a tracked file.** People and family data
    live in the gitignored `data/` folder. Which AI tool an Odd runs on is
    the owner's choice per Odd. Enforced by `scripts/check-private.ts`.
