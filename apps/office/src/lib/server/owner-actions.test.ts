@@ -271,7 +271,7 @@ const CHANGES: Partial<Record<keyof typeof OWNER_ACTIONS, (send: Send) => Promis
   'POST /api/setup': async (send) => send({ body: { name: await L.ownerName() } })
 };
 
-test('sending a poke, setting the update window and setup each change a row of the office, and none is classed as changing none', async (t) => {
+test('marking delivered pokes read, setting the update window and setup each change a row of the office, and none is classed as changing none', async (t) => {
   for (const [key, act] of Object.entries(CHANGES)) {
     await t.test(key, async () => {
       const [method, at] = key.split(' ');

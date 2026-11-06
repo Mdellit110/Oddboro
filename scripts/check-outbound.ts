@@ -6,10 +6,12 @@
 //
 // It counts, with comments taken out: `fetch(`, `navigator.sendBeacon(`, the
 // connector transports, `WebSocket`, `EventSource` and `XMLHttpRequest` as
-// each is made, `Sentry.init(`, and each function in `NET_MODULES` (Node's
-// network and DNS modules, and undici) and each class there as it is made (a
-// `net.Socket` counts where it is made, not where it connects), however the
-// file imports the module (named, default or `* as`). In the desktop app: the
+// each is made, `Sentry.init(`, and each function and class in `NET_MODULES`
+// (those that open a connection from Node's http, https, http2, tls and net
+// modules, every lookup in `dns` and `dns/promises`, and undici's `request`,
+// `fetch`, `stream`, `pipeline`, `connect`, `upgrade`, `Client` and `Pool`)
+// as it is made (a `net.Socket` counts where it is made, not where it
+// connects), however the file imports the module (named, default or `* as`). In the desktop app: the
 // updater, `reqwest` and Sentry. It matches names in text because the guards
 // take no dependencies, so it does not count:
 // - child processes, such as `npm install -g`, `grok update --check` and each
@@ -17,6 +19,8 @@
 // - what the desktop updater does after `updater_builder`;
 // - a module loaded with `require` or `import()`;
 // - a call through `dns.promises`, or through a name a counted one was copied to;
+// - `dgram` `createSocket().send`, undici `Agent().request`, `new http.ClientRequest`
+//   and `new tls.TLSSocket`, which are not in `NET_MODULES`;
 // - what markup loads, such as `<img src="https://...">` in a `.svelte` file;
 // - a library's own calls that start from a name not listed here.
 import { read, repoFiles, report, withoutComments } from './lib/files.ts';
