@@ -1214,3 +1214,42 @@ test("an Odd signs in through the account it is on: its own folder for each, the
     forgetClaudeAccount();
   }
 });
+
+test("a new hire's first day and the manager's planning say how an Odd gets Run commands or Browse the web, and a lesson never does", async () => {
+  await L.startFirstDay('sam');
+  const [day] = await L.pg<{ id: number }[]>`
+    select id from follow_ups where staff_id = 'sam' and kind = 'first_day' order by id desc limit 1`;
+  const first = await runOf(day.id);
+  const firstText = `${first.system}\n${first.message}`;
+  assert.ok(
+    firstText.includes(
+      '3. If a tool you need is not in my_access, ask for it with ask_for_access. For Run commands or Browse the web, follow what my_access says instead.'
+    ),
+    firstText
+  );
+  assert.ok(
+    first.system.includes(
+      "tell them plainly that more access is the Settings tab's job, not a lesson's."
+    ),
+    first.system
+  );
+  const [g] = await L.pg<
+    { id: number }[]
+  >`insert into goals (title) values ('Plant the orchard') returning id`;
+  const [row] = await L.pg<{ id: number }[]>`
+    insert into follow_ups (staff_id, kind, goal_id) values ('sam', 'goal', ${g.id}) returning id`;
+  const f = await L.startFollowUp(row.id);
+  assert.ok(f, 'the planning run could not start');
+  const r = await followThrough(f, undefined, undefined, undefined, await L.goal(g.id));
+  assert.equal(r.outcome, 'done', r.text);
+  const plan = JSON.parse(r.text) as Gave;
+  const planText = `${plan.system}\n${plan.message}`;
+  const owner = await L.ownerName();
+  // Only office_report knows whether that Odd's tool follows the switch, so the step waits on it.
+  assert.ok(
+    planText.includes(
+      `For Run commands or Browse the web, put switching it on in that Odd's Settings tab in owner_steps only when office_report says ${owner} can switch it on for that Odd.`
+    ),
+    planText
+  );
+});

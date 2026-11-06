@@ -148,7 +148,7 @@
   }
 
   /** The page shows how Run commands reaches the Odd's tool and what its runs get; only the server works either out. */
-  const how = $derived(profile.commandsHow);
+  const how = $derived(profile.reach.commandsHow);
   async function setOwnTool(which: 'commands' | 'web', box: HTMLInputElement) {
     problem = refused = '';
     try {

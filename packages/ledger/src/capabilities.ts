@@ -14,14 +14,17 @@ import {
   LEVEL_NAME,
   levelAtMost,
   parseLevel,
+  settingsTab,
   type Level
 } from './access-words.ts';
 import {
   AGENT_NAMES,
+  commandsHow,
   commandsOnline,
   FETCHES_PAGES,
   runsCommands,
   type Agent,
+  type CommandsHow,
   type GrantedFolder
 } from './agents.ts';
 import { grantsFor, heldReach, type ConnectorRow, type GrantRow, type StaffRow } from './office.ts';
@@ -43,6 +46,8 @@ export type Access = {
 export type OwnTools = {
   /** A shell: the Run commands switch as its tool takes it (`runsCommands`). */
   commands: boolean;
+  /** How Run commands reaches its tool on this system, and the tool here that follows it when its own cannot. */
+  commandsHow: CommandsHow;
   /** The Browse the web switch. */
   web: boolean;
   /** Whether its commands reach the internet (`commandsOnline`). */
@@ -58,6 +63,7 @@ export function ownTools(
 ): OwnTools {
   return {
     commands: runsCommands(who.agent, platform, who.commands),
+    commandsHow: commandsHow(who.agent, platform),
     web: who.web,
     network: commandsOnline(who.agent, platform, who),
     // A folder deleted since the owner gave it reaches no tool.
@@ -126,10 +132,20 @@ export const NETWORK_HELD_LINE =
  * `heldReach`), then `NETWORK_HELD_LINE` only when the hold took away a
  * network it would have had, so an Odd is never told of commands it lacks.
  * The prompt, my_access and office_report all say this, so they agree.
+ * `whose` names the card its switches are on: "your" to the Odd itself, and
+ * the Odd's name in office_report, which another Odd reads.
  */
-export function ownToolsSaid(agent: Agent, own: OwnTools, officeHeld: boolean): string[] {
+export function ownToolsSaid(
+  agent: Agent,
+  own: OwnTools,
+  officeHeld: boolean,
+  whose = 'your'
+): string[] {
   const reach = heldReach(agent, own, officeHeld);
-  return [ownToolsLine(agent, reach), ...(reach.held && own.network ? [NETWORK_HELD_LINE] : [])];
+  return [
+    ownToolsLine(agent, reach, whose),
+    ...(reach.held && own.network ? [NETWORK_HELD_LINE] : [])
+  ];
 }
 
 /**
@@ -225,26 +241,42 @@ export function levelLine(level: Level, owner: string): string {
  * shell when the run gets commands, which its tool's sandbox holds to its
  * folders and {owner}'s developer tools, read only, and to the internet only
  * when `network` says so, and the tool's own web search (and page fetch, where
- * it has one) when the owner switched Browse the web on. Gemini's policy
- * allows a write only by its full path. `{owner}` is left for the caller to fill.
+ * it has one) when the owner switched Browse the web on. Each one it lacks
+ * gets a line saying whether {owner} can switch it on, and where (`whose`
+ * card's Settings tab). Gemini's policy allows a write only by its full path.
+ * `{owner}` is left for the caller to fill.
  */
 export function ownToolsLine(
   agent: Agent,
-  own: Pick<OwnTools, 'commands' | 'web' | 'network'>
+  own: Pick<OwnTools, 'commands' | 'commandsHow' | 'web' | 'network'>,
+  whose: string
 ): string {
   const shell = `a shell confined to your folders and {owner}'s developer tools (read only), ${own.network ? 'which can reach the internet' : 'with no network'}`;
   const plus = [
     ...(own.commands ? [shell] : []),
     ...(own.web ? [FETCHES_PAGES[agent] ? 'web search and fetch' : 'web search'] : [])
   ];
-  const line = plus.length
-    ? [
-        `Your own tools work on files, plus ${plus.join(', and ')}.`,
-        ...(own.commands ? [] : ['No shell.']),
-        ...(own.web ? [] : ['No web.'])
-      ].join(' ')
-    : 'Your own tools work on files only: no shell and no web.';
+  const tab = settingsTab(whose);
+  const line = [
+    plus.length
+      ? `Your own tools work on files, plus ${plus.join(', and ')}.`
+      : 'Your own tools work on files only.',
+    ...(own.commands ? [] : [noShell(agent, own.commandsHow, tab)]),
+    // Browse the web follows the owner on every tool.
+    ...(own.web ? [] : [`No web: {owner} can switch on Browse the web in ${tab}.`])
+  ].join(' ');
   return agent === 'gemini' ? `${line} Give each file tool the file's full path.` : line;
+}
+
+/**
+ * What an Odd without a shell hears: the Run commands switch only when it
+ * reaches its tool on this system (`commandsHow`), so it is never offered a
+ * switch the owner cannot move.
+ */
+function noShell(agent: Agent, how: CommandsHow, tab: string): string {
+  return how.state === 'switch'
+    ? `No shell: {owner} can switch on Run commands in ${tab}.`
+    : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`;
 }
 
 /** One line per folder the owner gave the Odd: its path and what the Odd may do there. */

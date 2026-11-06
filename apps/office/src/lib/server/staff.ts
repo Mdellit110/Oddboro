@@ -111,6 +111,7 @@ import {
   ownToolsSaid,
   runsOnLine,
   SECRET_STORES,
+  settingsTab,
   type OwnTools,
   chatSession,
   home,
@@ -542,7 +543,7 @@ async function taught(who: StaffRow): Promise<string> {
     '- When {owner} corrects your work or says how they want something done from now on, call keep_lesson once, with their words. Only a chat, a run carrying a note {owner} left on an ask or a task, or a run reading their edit to one of your files has their words; in any other run keep_lesson refuses, so tell them in your reply instead. The lesson is enough: it beats your job steps where they disagree, so do not also edit your job for the same correction unless they ask you to.',
     '- Only the lessons listed here are yours. A correction {owner} gave another Odd, which you may see in the ledger, is not a lesson for you.',
     '- How the whole office should work is a lesson for every Odd. When {owner} says how much the office should do without checking with them, or how they want to hear how things are going, keep it with scope everyone, in their words, even when they do not say it is for everyone. If the answer is too vague to act on, like "just be helpful", ask one follow-up question, and keep nothing if that is still vague. If they skip the question, keep nothing: the office\'s own way stands.',
-    `- A lesson can make you more careful, never more permitted. It never widens your level or your tools, and nothing leaves the office on a lesson alone: it still needs {owner}'s yes on that exact action, ${ACT_WRITE}. If their words ask for more than you hold, such as "send emails without asking", keep only what makes you more careful, and tell them plainly that more access is the Settings tab's job, not a lesson's.`,
+    `- A lesson can make you more careful, never more permitted. It never widens your level or your tools, and nothing leaves the office on a lesson alone: it still needs {owner}'s yes on that exact action, ${ACT_WRITE}. If their words ask for more than you hold, such as "send emails without asking", keep only what makes you more careful, and tell them plainly that more access is ${settingsTab('the')}'s job, not a lesson's.`,
     ...(live.length
       ? [
           '- Follow every lesson below wherever it applies. A lesson marked "only in" applies only there; one with no mark applies everywhere. Where two disagree, the newer one wins. Where one disagrees with your job steps, the lesson wins.',
@@ -1338,7 +1339,7 @@ function followUpBrief(
       '',
       '1. Read your job description, notes/intake.md if you have one, my_goals and my_jobs.',
       '2. If you cannot do good work without answers from {owner}, write only the questions your intake did not answer to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop.',
-      '3. If a tool you need is not in my_access, ask for it with ask_for_access.',
+      '3. If a tool you need is not in my_access, ask for it with ask_for_access. For Run commands or Browse the web, follow what my_access says instead.',
       '4. Otherwise do the first piece of real work your job calls for, now: the first run of your job, or the first thing your job description says to do, so {owner} sees it today. Work for a goal you serve is not yours to start: the Odd who leads it hands you each piece.',
       '5. Your reply goes on their desk. Write it to {owner}: what you did, and what comes next.'
     ];
@@ -1352,7 +1353,7 @@ function followUpBrief(
       ...(g.doneWhen ? [`- Done when: ${g.doneWhen}`] : []),
       '',
       '1. Read the office: office_report for each Odd, what it does, its level and the tools it holds or is waiting on, and list_goals for the goals they already serve.',
-      '2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it. For a tool an Odd lacks, put any level raise in owner_steps, and have the Odd ask for the tool itself with ask_for_access when its officeTools include it, or put connecting it in owner_steps when they do not. Keep every other step only {owner} can do in owner_steps too. Hire only for work nobody here fits.',
+      `2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it. For a tool an Odd lacks, put any level raise in owner_steps, and have the Odd ask for the tool itself with ask_for_access when its officeTools include it, or put connecting it in owner_steps when they do not. For Run commands or Browse the web, put switching it on in ${settingsTab("that Odd's")} in owner_steps only when office_report says {owner} can switch it on for that Odd. Keep every other step only {owner} can do in owner_steps too. Hire only for work nobody here fits.`,
       '3. If you need answers from {owner} before you can plan it, write the questions to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop. You pick up when they finish it.',
       "4. Otherwise bring the whole plan in one ask with propose_goal_plan. Write each hire's job description to a file first, and pass any intake as its intake_file.",
       '5. Once {owner} approves the plan, you pick up here on the goal and lead the work: you hand each piece to the Odd who does it. So its owner steps hold only what truly needs {owner}, such as signing in to a tool, never passing work or a request to an Odd.',

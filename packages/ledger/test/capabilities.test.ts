@@ -18,10 +18,16 @@ import {
 } from '../src/capabilities.ts';
 import type { ConnectorRow, GrantRow } from '../src/office.ts';
 
-/** A Claude Code Odd's own tools with both switches off and no folder. */
+/** A Claude Code Odd on a Mac with both switches off and no folder. */
 const noOwnTools = {
   agent: 'claude',
-  own: { commands: false, web: false, network: false, granted: [] }
+  own: {
+    commands: false,
+    commandsHow: { state: 'switch' },
+    web: false,
+    network: false,
+    granted: []
+  }
 } as const satisfies Pick<Capabilities, 'agent' | 'own'>;
 
 function grant(
@@ -138,7 +144,7 @@ test("my_access says a capped run's level and why, and an uncapped run's own lev
       levelLine('draft', 'Sam'),
       "This run was started by a colleague or by the office, not by Sam's yes, so it works at Draft at most.",
       'Your runs go through Claude Code.',
-      'Your own tools work on files only: no shell and no web.',
+      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab. No web: Sam can switch on Browse the web in your Settings tab.',
       'Sam has given you no folders.',
       '- (id: notion) Notion (read only): 1 tool.'
     ].join('\n')
@@ -148,7 +154,7 @@ test("my_access says a capped run's level and why, and an uncapped run's own lev
     [
       levelLine('act', 'Sam'),
       'Your runs go through Claude Code.',
-      'Your own tools work on files only: no shell and no web.',
+      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab. No web: Sam can switch on Browse the web in your Settings tab.',
       'Sam has given you no folders.',
       '- (id: notion) Notion (read and write): every tool.'
     ].join('\n')
@@ -168,6 +174,7 @@ test('my_access says the tool, what its own tools reach and each folder, and a h
     agent: 'claude',
     own: {
       commands: true,
+      commandsHow: { state: 'switch' },
       web: true,
       network: true,
       granted: [

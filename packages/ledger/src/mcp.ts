@@ -595,12 +595,19 @@ tool(
   async () => text(accessInRun(await capabilities(me), OWNER, process.env))
 );
 
+/**
+ * Said by both tools that get an outside tool: an Odd without the web went
+ * looking for a web search server when the owner's Browse the web switch was
+ * the way.
+ */
+const NOT_OWN_TOOLS =
+  'Not for web search, reading pages or a shell: those are your own tools, and my_access says how to get them.';
+
 if (has('find_connectors'))
   tool(
     'find_connectors',
     {
-      description:
-        "Find MCP servers that would give you a tool you need: the office's own catalog first, then the public MCP Registry. Then call ask_for_access with the id or registry name.",
+      description: `Find MCP servers that would give you a tool you need: the office's own catalog first, then the public MCP Registry. Then call ask_for_access with the id or registry name. ${NOT_OWN_TOOLS}`,
       inputSchema: {
         need: z.string().describe('The service or job, e.g. "Trello cards" or "Notion pages".')
       }
@@ -641,7 +648,7 @@ if (has('ask_for_access'))
   tool(
     'ask_for_access',
     {
-      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done.${raisedNote}`,
+      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
       inputSchema: {
         connector: z.string(),
         level: z
@@ -1373,7 +1380,8 @@ if (has('office_report'))
             level: caps.level,
             runsOn: AGENT_NAMES[caps.agent],
             // As the Odd's own my_access says it, the office's held network included.
-            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env))
+            // Its switches are on its own card, so the reader is told whose Settings tab.
+            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env), `${who.name}'s`)
               .join(' ')
               .replaceAll('{owner}', OWNER),
             folders: folderLines(caps.own),

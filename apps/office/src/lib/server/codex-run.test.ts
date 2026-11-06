@@ -404,15 +404,17 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
-test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not, never that it has no shell", async () => {
+test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not, never that it has no shell or that the owner can switch one on", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;
   const off = await chatOf('cody');
   assert.ok(
-    off.system.includes(`Your own tools work on files, plus ${shell}, with no network. No web.`),
+    off.system.includes(
+      `Your own tools work on files, plus ${shell}, with no network. No web: ${owner} can switch on Browse the web in your Settings tab.`
+    ),
     off.system
   );
-  assert.doesNotMatch(off.system, /no shell/);
+  assert.doesNotMatch(off.system, /no shell|Run commands in/i);
   await L.pg`update staff set web = true where id = 'cody'`;
   try {
     const on = await chatOf('cody');

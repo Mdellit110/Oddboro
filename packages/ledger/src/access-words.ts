@@ -1,5 +1,6 @@
 // The words for access, in one place: the owner's permission levels, and how
-// the owner and an Odd read a level, a grant and a folder. The page imports
+// the owner and an Odd read a level, a grant and a folder, and the name of the
+// tab where the owner sets an Odd's access. The page imports
 // this, so it imports nothing.
 
 /** The owner's permission levels, lowest first. */
@@ -32,3 +33,11 @@ export const FOLDER_SAID: Record<FolderAccess, string> = {
   read: 'read only',
   write: 'read and change'
 };
+
+/**
+ * The name of the Odd card's tab that holds its switches, folders and tools.
+ * The card shows it and the Odds are told it, so a rename reaches both.
+ */
+export const SETTINGS_TAB = 'Settings';
+/** That tab in a sentence, by whose card it is on: "your", "Rowan's", "this Odd's". */
+export const settingsTab = (whose: string): string => `${whose} ${SETTINGS_TAB} tab`;
