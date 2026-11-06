@@ -14,27 +14,35 @@ export async function listTools(id: string, open = false): Promise<ToolInfo[]> {
   const c = await connector(id);
   if (!c) throw new Error(`No connector named ${id}`);
   const secret = (n: string) => getSecret(c.id, n) ?? '';
-  const transport =
-    c.kind === 'http'
-      ? new StreamableHTTPClientTransport(new URL(c.config.url!), {
-          requestInit: {
-            headers: {
-              ...Object.fromEntries(
-                (c.config.headers ?? []).map((n) => [n, headerSecret(c.id, n)])
-              ),
-              ...(c.config.oauth && !open ? { Authorization: `Bearer ${await bearer(c.id)}` } : {})
-            }
+  let transport: StdioClientTransport | StreamableHTTPClientTransport;
+  switch (c.kind) {
+    case 'http':
+      // A hosted connector is saved with its address (registry.ts).
+      transport = new StreamableHTTPClientTransport(new URL(c.config.url!), {
+        requestInit: {
+          headers: {
+            ...Object.fromEntries((c.config.headers ?? []).map((n) => [n, headerSecret(c.id, n)])),
+            ...(c.config.oauth && !open ? { Authorization: `Bearer ${await bearer(c.id)}` } : {})
           }
-        })
-      : new StdioClientTransport({
-          command: c.config.command!,
-          args: c.config.args ?? [],
-          env: {
-            ...(process.env as Record<string, string>),
-            ...Object.fromEntries((c.config.secrets ?? []).map((n) => [n, secret(n)]))
-          },
-          stderr: 'ignore'
-        });
+        }
+      });
+      break;
+    case 'stdio':
+      transport = new StdioClientTransport({
+        command: c.config.command!,
+        args: c.config.args ?? [],
+        env: {
+          ...(process.env as Record<string, string>),
+          ...Object.fromEntries((c.config.secrets ?? []).map((n) => [n, secret(n)]))
+        },
+        stderr: 'ignore'
+      });
+      break;
+    default: {
+      const missed: never = c.kind;
+      throw new Error(`No way to start a ${String(missed)} connector`);
+    }
+  }
   const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
   await client.connect(transport);
   try {

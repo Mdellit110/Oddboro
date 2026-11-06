@@ -147,7 +147,7 @@ import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
-import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups } from './launch.ts';
+import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups, type McpServer } from './launch.ts';
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
@@ -404,8 +404,6 @@ export async function runHomeOf(who: StaffRow): Promise<string> {
   return toolHome(who.agent, account);
 }
 
-type Server = Record<string, unknown>;
-
 /**
  * The office's own settings from .env that the staff tool server reads, set
  * on the server itself. Grok's sandbox holds that server too and will not
@@ -424,13 +422,13 @@ const officeSettings = (): Record<string, string> =>
  * caps come down to the ceiling too (`capped`), so its prompt lists what it loads.
  */
 async function access(who: StaffRow, ceiling: Level) {
-  const servers: Record<string, Server> = {
-    office: {
-      command: process.execPath,
-      args: [STAFF_SERVER],
-      env: { STAFF_ID: who.id, DATABASE_URL, ...officeSettings() }
-    }
+  const office: McpServer = {
+    type: 'stdio',
+    command: process.execPath,
+    args: [STAFF_SERVER],
+    env: { STAFF_ID: who.id, DATABASE_URL, ...officeSettings() }
   };
+  const servers: Record<string, McpServer> = { office };
   const allowed = ['mcp__office'];
   const caps = capped(await capabilities(who), ceiling);
   for (const a of caps.outside) {
@@ -450,14 +448,27 @@ async function access(who: StaffRow, ceiling: Level) {
       }
       headers.Authorization = `Bearer ${token}`;
     }
-    servers[c.id] =
-      c.kind === 'http'
-        ? { type: 'http', url: c.config.url, headers }
-        : { ...toolCommand(c.config.command!, c.config.args ?? []), env };
+    switch (c.kind) {
+      case 'http':
+        // A hosted connector is saved with its address (registry.ts).
+        servers[c.id] = { type: 'http', url: c.config.url!, headers };
+        break;
+      case 'stdio':
+        servers[c.id] = {
+          type: 'stdio',
+          ...toolCommand(c.config.command!, c.config.args ?? []),
+          env
+        };
+        break;
+      default: {
+        const missed: never = c.kind;
+        throw new Error(`No way to start a ${String(missed)} connector`);
+      }
+    }
     if (a.level === 'act') allowed.push(`mcp__${c.id}`);
     else allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
   }
-  return { servers, allowed, caps };
+  return { servers, office, allowed, caps };
 }
 
 /**
@@ -808,7 +819,7 @@ async function run(
   /** Claude Code's folder for this run: the account's, or ~/.claude for the owner's own login. */
   const claudeDir = toolDir || join(homedir(), '.claude');
   const ceiling = opts.draftOnly && levelAtMost('draft', who.permission) ? 'draft' : who.permission;
-  const { servers, allowed, caps } = await access(who, ceiling);
+  const { servers, office, allowed, caps } = await access(who, ceiling);
   // Prompts name the owner as {owner}: each install's staff use its own name.
   const owner = await ownerName();
   const say = (s: string) => s.replaceAll('{owner}', owner);
@@ -862,7 +873,7 @@ async function run(
   // ends (`runsGoing`), even when it is a follow-up on no thread.
   const key = randomUUID();
   Object.assign(
-    servers.office.env as Record<string, string>,
+    office.env,
     officeEnv({
       key,
       ownerSaid: opts.ownerSaid,

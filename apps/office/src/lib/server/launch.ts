@@ -9,7 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { modelSection, runsGoing, type ModelUsage } from '@oddboro/ledger';
+import { modelSection, runsGoing, type ConnectorKind, type ModelUsage } from '@oddboro/ledger';
 import { cleanEnv } from './claude.ts';
 
 /** Where the owner signs a tool in for the office: beside the Odd's "Runs on" picker. */
@@ -36,6 +36,19 @@ export function toml(v: Toml): string {
     .map(([k, x]) => `${tomlString(k)} = ${toml(x)}`)
     .join(', ')} }`;
 }
+
+/** What a run is given for each kind of connector. */
+type McpServerOf = {
+  /** A command the run starts. */
+  stdio: { command: string; args: string[]; env: Record<string, string> };
+  /** A hosted server, with the headers that sign the run in. */
+  http: { url: string; headers: Record<string, string> };
+};
+/**
+ * One MCP server a run gets, as `access()` in staff.ts builds it. A new kind
+ * of connector fails the type check here until it says what a run is given.
+ */
+export type McpServer = { [K in ConnectorKind]: { type: K } & McpServerOf[K] }[ConnectorKind];
 
 /**
  * One MCP grant as access() names it for Claude Code: `mcp__office` is the
