@@ -4,16 +4,20 @@
 // calls differ from its entry, when an entry's file has none, and when no call
 // is found at all (nothing to check).
 //
-// It counts, with comments taken out: `fetch(`, the connector transports,
-// `WebSocket` and `EventSource`, `Sentry.init(`, and the calls that open a
-// connection from Node's http, https, http2, tls and net modules, however the
-// file imports them (named, default or `* as`). In the desktop app: the
+// It counts, with comments taken out: `fetch(`, `navigator.sendBeacon(`, the
+// connector transports, `WebSocket`, `EventSource` and `XMLHttpRequest` as
+// each is made, `Sentry.init(`, and each function in `NET_MODULES` (Node's
+// network and DNS modules, and undici) and each class there as it is made (a
+// `net.Socket` counts where it is made, not where it connects), however the
+// file imports the module (named, default or `* as`). In the desktop app: the
 // updater, `reqwest` and Sentry. It matches names in text because the guards
 // take no dependencies, so it does not count:
 // - child processes, such as `npm install -g`, `grok update --check` and each
 //   AI tool's run, which sends the owner's words to that tool's maker;
 // - what the desktop updater does after `updater_builder`;
 // - a module loaded with `require` or `import()`;
+// - a call through `dns.promises`, or through a name a counted one was copied to;
+// - what markup loads, such as `<img src="https://...">` in a `.svelte` file;
 // - a library's own calls that start from a name not listed here.
 import { read, repoFiles, report, withoutComments } from './lib/files.ts';
 import { OUTBOUND } from './outbound.ts';
@@ -23,41 +27,81 @@ const DESKTOP = /^apps\/desktop\/src-tauri\/src\/.+\.rs$/;
 
 // `fetch(` not after a dot or a name, so `globalThis.fetch(` counts once.
 const TS_CALLS =
-  /(?<![.\w$])fetch\s*\(|\b(?:globalThis|window|self)\.fetch\s*\(|\bnew\s+(?:StreamableHTTPClientTransport|SSEClientTransport|WebSocket|EventSource)\s*\(|\bSentry\.init\s*\(/
+  /(?<![.\w$])fetch\s*\(|\b(?:globalThis|window|self)\.fetch\s*\(|\bnavigator\.sendBeacon\s*\(|\bnew\s+(?:StreamableHTTPClientTransport|SSEClientTransport|WebSocket|EventSource|XMLHttpRequest)\s*\(|\bSentry\.init\s*\(/
     .source;
 const RS_CALLS = /\bsentry::init\(|\breqwest::|\.updater_builder\(|\.updater\s*\(/g;
 
-/** Node's network modules, and the functions on each that open a connection. */
-const NODE_NET: Record<string, string[]> = {
-  http: ['request', 'get'],
-  https: ['request', 'get'],
-  http2: ['connect'],
-  tls: ['connect'],
-  net: ['connect', 'createConnection']
+const DNS = [
+  'lookup',
+  'lookupService',
+  'resolve',
+  'resolve4',
+  'resolve6',
+  'resolveAny',
+  'resolveCaa',
+  'resolveCname',
+  'resolveMx',
+  'resolveNaptr',
+  'resolveNs',
+  'resolvePtr',
+  'resolveSoa',
+  'resolveSrv',
+  'resolveTlsa',
+  'resolveTxt',
+  'reverse'
+];
+/**
+ * The modules that reach the network: on each, the functions that open a
+ * connection or ask a name server (`calls`), and the classes that do once
+ * made (`makes`), whose later calls on a variable the text cannot follow.
+ */
+const NET_MODULES: Record<string, { calls: string[]; makes: string[] }> = {
+  http: { calls: ['request', 'get'], makes: [] },
+  https: { calls: ['request', 'get'], makes: [] },
+  http2: { calls: ['connect'], makes: [] },
+  tls: { calls: ['connect'], makes: [] },
+  net: { calls: ['connect', 'createConnection'], makes: ['Socket'] },
+  dns: { calls: DNS, makes: ['Resolver'] },
+  'dns/promises': { calls: DNS, makes: ['Resolver'] },
+  undici: {
+    calls: ['request', 'fetch', 'stream', 'pipeline', 'connect', 'upgrade'],
+    makes: ['Client', 'Pool']
+  }
 };
-const NODE_IMPORT = new RegExp(
-  `\\bimport\\s+(?!type\\s)([^'";]*?)\\s*from\\s*['"](?:node:)?(${Object.keys(NODE_NET).join('|')})['"]`,
+const NET_IMPORT = new RegExp(
+  `\\bimport\\s+(?!type\\s)([^'";]*?)\\s*from\\s*['"](?:node:)?(${Object.keys(NET_MODULES).join('|')})['"]`,
   'g'
 );
 
 /**
- * The calls a file makes through Node's network modules, as patterns: a
- * default or `* as` import's name before `.request(` and the like, and a named
- * import's own local name, such as `request(` or `tlsConnect(`.
+ * The calls a file makes through the modules in `NET_MODULES`, as patterns: a
+ * default or `* as` import's name before `.request(` or after `new` before
+ * `.Socket(` and the like, and a named import's own local name, such as
+ * `request(`, `tlsConnect(` or `new Socket(`.
  */
-function nodeCalls(text: string): string[] {
-  return [...text.matchAll(NODE_IMPORT)].flatMap(([, clause, module]) => {
-    const opens = NODE_NET[module];
+function netCalls(text: string): string[] {
+  const escape = (n: string) => n.replaceAll('$', '\\$');
+  return [...text.matchAll(NET_IMPORT)].flatMap(([, clause, module]) => {
+    const { calls, makes } = NET_MODULES[module];
     const whole = [...clause.matchAll(/^\s*([\w$]+)\s*(?:,|$)|\*\s*as\s+([\w$]+)/g)].flatMap(
       (m) => m[1] ?? m[2] ?? []
     );
     const named = (clause.match(/\{([^}]*)\}/)?.[1] ?? '')
       .split(',')
       .map((item) => item.trim().split(/\s+as\s+/))
-      .flatMap(([name, local]) => (opens.includes(name) ? [local ?? name] : []));
+      .map(([name, local]) => ({ name, local: escape(local ?? name) }));
     return [
-      ...whole.map((n) => `\\b${n.replaceAll('$', '\\$')}\\.(?:${opens.join('|')})\\s*\\(`),
-      ...named.map((n) => `(?<![.\\w$])${n.replaceAll('$', '\\$')}\\s*\\(`)
+      ...whole.map((n) => `\\b${escape(n)}\\.(?:${calls.join('|')})\\s*\\(`),
+      ...(makes.length
+        ? whole.map((n) => `\\bnew\\s+${escape(n)}\\.(?:${makes.join('|')})\\s*\\(`)
+        : []),
+      ...named.flatMap(({ name, local }) =>
+        calls.includes(name)
+          ? [`(?<![.\\w$])${local}\\s*\\(`]
+          : makes.includes(name)
+            ? [`\\bnew\\s+${local}\\s*\\(`]
+            : []
+      )
     ];
   });
 }
@@ -70,7 +114,7 @@ function callsIn(file: string): string[] {
     text = text.replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ''));
   const calls = file.endsWith('.rs')
     ? RS_CALLS
-    : new RegExp([TS_CALLS, ...nodeCalls(text)].join('|'), 'g');
+    : new RegExp([TS_CALLS, ...netCalls(text)].join('|'), 'g');
   return text
     .split('\n')
     .flatMap((line, i) => (line.match(calls) ?? []).map(() => `${file}:${i + 1}`));

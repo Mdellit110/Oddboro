@@ -1,9 +1,8 @@
 // Each call the office's own code makes out of its process by a name
-// `check-outbound.ts` counts (that file lists the names, and what it does not
-// count: child processes such as each AI tool's run, `require`, `import()`, and
-// the desktop updater past `updater_builder`). Hard rule 4 says nothing leaves
-// the office without the owner's yes, so each entry says where its calls go,
-// what they send and whose yes covers them. `check-outbound.ts` fails when a
+// `check-outbound.ts` counts (that file lists what it counts and what it does
+// not, such as each AI tool's run in a child process). Hard rule 4 says
+// nothing leaves the office without the owner's yes, so each entry says where
+// its calls go, what they send and whose yes covers them. `check-outbound.ts` fails when a
 // file's calls differ from its entry here.
 
 export type Outbound = {
@@ -26,9 +25,10 @@ export const OUTBOUND: readonly Outbound[] = [
   },
   {
     file: 'apps/office/src/lib/server/address.ts',
-    calls: 5,
-    to: "Caddy's admin and the office's own address on this computer, and GitHub for Caddy's release and checksums.",
-    sends: "The office's Caddy settings, kept on this computer, and a download request for Caddy.",
+    calls: 6,
+    to: "Caddy's admin and the office's own address on this computer, GitHub for Caddy's release and checksums, and the name server this computer uses, for the office's address.",
+    sends:
+      "The office's Caddy settings, kept on this computer, a download request for Caddy, and the name local.oddboro.com to look up.",
     yes: "The owner setting up the office's address in Setup."
   },
   {
