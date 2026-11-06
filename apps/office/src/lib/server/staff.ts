@@ -1232,11 +1232,17 @@ export async function chat(
       timeoutMs: CHAT_TIMEOUT_MS,
       onEvent
     });
-    if (r.ok) {
-      addToChat(id, { at: sent, from: 'owner', text: message, re: re?.ref });
-      addToChat(id, { at: new Date().toISOString(), from: 'staff', text: r.text });
-      if (re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
-    }
+    // Saved however the run ended, so a reload still shows what the owner said
+    // and why no reply came. A failed run's error is never the Odd's words:
+    // the replay leaves it out, and the next chat's preface says the run failed.
+    addToChat(id, { at: sent, from: 'owner', text: message, re: re?.ref });
+    addToChat(id, {
+      at: new Date().toISOString(),
+      from: 'staff',
+      text: r.text,
+      ...(r.ok ? {} : { failed: true })
+    });
+    if (r.ok && re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
   } finally {
     chatting.delete(id);
   }

@@ -35,7 +35,7 @@
   });
 
   /** A chat line as the page keeps it: one sent or streaming has no time yet. */
-  type Line = Omit<ChatEntry, 'at'> & { at?: string; pending?: boolean; failed?: boolean };
+  type Line = Omit<ChatEntry, 'at'> & { at?: string; pending?: boolean };
 
   /** Where a hand-off stands, in words, and whether the owner has to act. */
   function progress(h: HandOffLine): { text: string; yours: boolean } {

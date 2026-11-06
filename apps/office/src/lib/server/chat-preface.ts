@@ -1,13 +1,13 @@
 // What a chat message tells the staffer's chat session before the owner's
-// words: the lines in its chat that no run of the session wrote, the work it
-// put on the desk, and the asks the owner decided, since the session last
-// heard. Without it, an answer to a
+// words: the lines in its chat that no run of the session wrote, what the
+// owner said in a chat whose run failed, the work it put on the desk, and the
+// asks the owner decided, since the session last heard. Without it, an answer to a
 // new manager's hello, or "How did the call go?" after a poke, means nothing
 // to the session.
 import type { ChatEntry } from '../staff/chat.ts';
 
-/** A line the session never saw: a poke the office delivered, or a line it said in the staffer's name. */
-const unseen = (e: ChatEntry) => e.poke || e.told;
+/** A line the session never saw: a poke the office delivered, a line it said in the staffer's name, or a failed run's error. */
+const unseen = (e: ChatEntry) => e.poke || e.told || e.failed;
 
 /** Something the staffer put on the desk, as the chat lists it, and when the owner decided an ask. */
 type Landed = { kind: string; title: string; at: Date; status?: string; decidedAt?: Date | null };
@@ -20,11 +20,16 @@ const DECIDED: Record<string, string> = {
 };
 
 export function chatPreface(past: ChatEntry[], landed: Landed[]): string[] {
-  const since = past.slice(past.findLastIndex((e) => e.from === 'owner') + 1);
+  // The owner's line of a chat whose run failed never reached the session.
+  // The office saves the failed line right after it (`chat` in staff.ts).
+  const unheard = (i: number) => past[i].from === 'owner' && past[i + 1]?.failed === true;
+  const heard = past.findLastIndex((e, i) => e.from === 'owner' && !unheard(i)) + 1;
+  const since = past.slice(heard);
   const told = since.filter((e) => e.told);
   const poked = since.filter((e) => e.poke);
+  const missed = since.filter((_, i) => unheard(heard + i));
   // The session saw what it delivered up to the end of its last reply.
-  const last = past.findLast((e) => !unseen(e))?.at ?? '';
+  const last = past.findLast((e, i) => !unseen(e) && !unheard(i))?.at ?? '';
   const put = landed.filter((d) => d.at.toISOString() > last);
   // Without this, a resumed session says an ask still waits after the owner decided it.
   const decided = landed.filter((d) => d.decidedAt && d.decidedAt.toISOString() > last);
@@ -37,6 +42,11 @@ export function chatPreface(past: ChatEntry[], landed: Landed[]): string[] {
     ...(poked.length
       ? [
           `(Since {owner} last wrote, the office delivered your pokes to them: ${poked.map((e) => `"${e.text}"`).join(', ')}.)`
+        ]
+      : []),
+    ...(missed.length
+      ? [
+          `({owner} wrote to you before this, but your run failed each time, so you never saw it: ${missed.map((e) => `"${e.text}"`).join(', ')}.)`
         ]
       : []),
     ...(put.length

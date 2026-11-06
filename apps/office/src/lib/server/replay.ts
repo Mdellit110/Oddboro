@@ -22,29 +22,36 @@ const WALK_ENTRIES = 2_000;
 export type Changed = { files: string[]; granted: boolean };
 
 /**
- * The lines a replay holds, oldest first: the newest lines with text whose
- * text fits the budget together. A newest line over the budget alone keeps
- * its end, after a `…`.
+ * A line a replay may hold: one with text that someone said. A failed run's
+ * error is the office's, so it is never replayed as the Odd's words; the
+ * owner's line before it stays.
+ */
+const said = (e: ChatEntry) => !!e.text && !e.failed;
+
+/**
+ * The lines a replay holds, oldest first: the newest lines said (`said`)
+ * whose text fits the budget together. A newest line over the budget alone
+ * keeps its end, after a `…`.
  */
 export function replayed(entries: ChatEntry[], budget = REPLAY_CHARS): ChatEntry[] {
-  const said = entries.filter((e) => e.text);
+  const lines = entries.filter(said);
   let total = 0;
-  let from = said.length;
-  while (from > 0 && total + said[from - 1].text.length <= budget)
-    total += said[--from].text.length;
-  const newest = said.at(-1);
-  if (from === said.length && newest)
+  let from = lines.length;
+  while (from > 0 && total + lines[from - 1].text.length <= budget)
+    total += lines[--from].text.length;
+  const newest = lines.at(-1);
+  if (from === lines.length && newest)
     return [{ ...newest, text: `…${newest.text.slice(-budget)}` }];
-  return said.slice(from);
+  return lines.slice(from);
 }
 
 /**
  * Where in `entries` the lines `replayed` kept sit: the last `kept.length`
- * lines with text. By position, since a cut newest line is a copy.
+ * lines said. By position, since a cut newest line is a copy.
  */
 export function replayedAt(entries: ChatEntry[], kept: ChatEntry[]): number[] {
   if (!kept.length) return [];
-  return entries.flatMap((e, i) => (e.text ? [i] : [])).slice(-kept.length);
+  return entries.flatMap((e, i) => (said(e) ? [i] : [])).slice(-kept.length);
 }
 
 /**
@@ -72,7 +79,7 @@ export function replay(entries: ChatEntry[], changed: Changed, budget = REPLAY_C
     ? `(Files that changed during it, in your folder and the folders {owner} gave you, newest first: ${files}.)`
     : `(Files in your folder that changed during it: ${files}.)`;
   // The rest is in the office's own record, which the Odd may read: nothing of the chat is out of reach.
-  const older = kept.length < entries.filter((e) => e.text).length || kept[0]?.text.startsWith('…');
+  const older = kept.length < entries.filter(said).length || kept[0]?.text.startsWith('…');
   return [
     '(This is a new session, so you do not remember your chat with {owner} so far. Here is the latest of it, word for word, oldest first:)',
     lines.join('\n'),

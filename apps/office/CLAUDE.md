@@ -224,7 +224,11 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    tapped or typed, gets the next question from the office (`chat` in
    `staff.ts`, a `told` line, no run); the third runs the manager, whose new
    session hears all three in its replay. The owner's line is stamped when sent,
-   so what lands during a reply sits between the two. Its input grows with the text
+   so what lands during a reply sits between the two. A chat whose run fails
+   keeps the owner's line, and the error in place of the reply, marked
+   `failed` (`ChatEntry`), so a reload shows both as the chat showed them live;
+   the next message tells the session what the owner wrote that it never saw
+   (`chatPreface`). Its input grows with the text
    up to 60% of the chat, and the bar above it drags it taller; that height is
    remembered per viewer. Every run's system prompt opens with "Who you work
    for" (`whoFor` in `staff.ts`): the owner, `data/people.json` when it
@@ -432,7 +436,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    A chat that starts a new session (after a move to another tool, or with
    `session.json` gone or unreadable: `sessionIdIn`) opens with the latest of
    the chat instead, word for word, oldest first: the newest lines whose text
-   fits in 24,000 characters (`REPLAY_CHARS`), and the files changed since
+   fits in 24,000 characters (`REPLAY_CHARS`), never a failed run's error, and the files changed since
    the oldest of them (since the owner line before it, when that is the Odd's
    reply: `replaySince`) in the Odd's own folder and the folders the owner
    gave it to change, among the first 2,000 entries of each, 30 named and the

@@ -1,0 +1,180 @@
+// A run that fails, in an office under test (office-under-test.ts) whose
+// Claude Code is not installed: the owner keeps their words and sees the
+// error, in the place RUN_FAILURE declares for that kind of run. Run with
+// `npm test -w @oddboro/office`.
+import assert from 'node:assert/strict';
+import { renameSync } from 'node:fs';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import type { UsageKind } from '@oddboro/ledger';
+import type { ChatEntry, ChatEvent } from '../staff/chat.ts';
+import { L, bin, chatOf, odd, refusal, request } from './office-under-test.ts';
+import { RUN_FAILURE, type Landing } from './run-failures.ts';
+import { start } from './jobs.ts';
+import { currentDesign, followDesign, startDesign } from './design-job.ts';
+import { followThrough } from './staff.ts';
+import { replayed, replayedAt } from './replay.ts';
+import { chatPreface } from './chat-preface.ts';
+
+/** What every run says when Claude Code is not on the computer. */
+const GONE = 'Could not start Claude Code: spawn claude ENOENT';
+
+await L.pg`insert into staff ${L.pg([odd('fay', 'Fay'), odd('gil', 'Gil')])}`;
+
+/** `fn`, run on a computer without Claude Code: only the stand-ins on PATH, and claude not among them. */
+async function withoutClaude<T>(fn: () => Promise<T>): Promise<T> {
+  const path = process.env.PATH;
+  process.env.PATH = bin;
+  renameSync(join(bin, 'claude'), join(bin, 'claude-away'));
+  try {
+    return await fn();
+  } finally {
+    renameSync(join(bin, 'claude-away'), join(bin, 'claude'));
+    process.env.PATH = path;
+  }
+}
+
+/** The owner's page sending one chat message, and every event the reply streamed. */
+async function send(id: string, message: string): Promise<ChatEvent[]> {
+  const res = await request('/api/staff/[id]/chat', 'POST', { params: { id }, body: { message } });
+  return (await res.text())
+    .split('\n\n')
+    .filter((chunk) => chunk.startsWith('data: '))
+    .map((chunk) => JSON.parse(chunk.slice(6)) as ChatEvent);
+}
+
+/** The chat as the page loads it, after a reload. */
+async function reload(id: string): Promise<ChatEntry[]> {
+  const res = await request('/api/staff/[id]/chat', 'GET', { params: { id } });
+  return ((await res.json()) as { history: ChatEntry[] }).history;
+}
+
+test("a chat whose run fails keeps the owner's message and the error after a reload", async () => {
+  const events = await withoutClaude(() => send('fay', 'Are you there?'));
+  assert.deepEqual(events.at(-1), { type: 'error', message: GONE });
+  const [said, failed] = (await reload('fay')).slice(-2);
+  assert.deepEqual(
+    { from: said.from, text: said.text, failed: said.failed },
+    { from: 'owner', text: 'Are you there?', failed: undefined }
+  );
+  assert.deepEqual(
+    { from: failed.from, text: failed.text, failed: failed.failed },
+    { from: 'staff', text: GONE, failed: true }
+  );
+});
+
+test('the next chat after a failed one tells the Odd what the owner said and that the run failed', async () => {
+  await withoutClaude(() => send('gil', 'Are you there?'));
+  const { message } = await chatOf('gil', 'Still there?');
+  assert.match(
+    message,
+    /wrote to you before this, but your run failed each time, so you never saw it: "Are you there\?"/
+  );
+  // Gil's session never started, so the new one hears the chat word for word:
+  // the owner's line, never the error as Gil's own.
+  assert.match(message, /: Are you there\?\n/);
+  assert.ok(!message.includes(`You: ${GONE}`), 'the error was replayed as the Odd speaking');
+});
+
+test("a new session's replay finds its lines in place when the chat ends in a failed run", () => {
+  const chat: ChatEntry[] = [
+    { at: '2026-11-06T09:00:00Z', from: 'staff', text: 'Hello.', told: true },
+    { at: '2026-11-06T09:01:00Z', from: 'owner', text: 'Are you there?' },
+    { at: '2026-11-06T09:02:00Z', from: 'staff', text: GONE, failed: true }
+  ];
+  const kept = replayed(chat);
+  assert.deepEqual(
+    kept.map((e) => e.text),
+    ['Hello.', 'Are you there?']
+  );
+  // The told line is found in the replay, so the preface does not say it twice.
+  assert.deepEqual(replayedAt(chat, kept), [0, 1]);
+});
+
+test('the next chat after a failed one still hears what the Odd put on the desk before it', () => {
+  const chat: ChatEntry[] = [
+    { at: '2026-11-06T09:00:00.000Z', from: 'owner', text: 'Plan the week.' },
+    { at: '2026-11-06T09:01:00.000Z', from: 'staff', text: 'On it.' },
+    { at: '2026-11-06T09:03:00.000Z', from: 'owner', text: 'Are you there?' },
+    { at: '2026-11-06T09:04:00.000Z', from: 'staff', text: GONE, failed: true }
+  ];
+  const landed = [{ kind: 'ask', title: 'Book the room', at: new Date('2026-11-06T09:02:00Z') }];
+  assert.ok(
+    chatPreface(chat, landed).some((line) => line.includes('ask "Book the room"')),
+    'the ask put on the desk before the failed run went untold'
+  );
+});
+
+/** One run of each kind, made to fail; a request's refusal is its reply. */
+const FAIL: Record<UsageKind, () => Promise<string | undefined>> = {
+  chat: async () => {
+    await send('fay', 'Count the chairs.');
+    return undefined;
+  },
+  job: async () => {
+    const job = await L.addJob({
+      staffId: 'fay',
+      name: 'Count the chairs',
+      instructions: 'Count the chairs.',
+      schedule: { every: 'day', at: '07:00' }
+    });
+    await start(job, 'manual');
+    return undefined;
+  },
+  'follow-up': async () => {
+    const [{ id }] = await L.pg<{ id: number }[]>`
+      insert into follow_ups (staff_id, kind) values ('fay', 'first_day') returning id`;
+    const f = await L.startFollowUp(id);
+    assert.ok(f, 'the follow-up did not start');
+    // As follow-ups.ts finishes each one it starts.
+    const r = await followThrough(f);
+    await L.finishFollowUp(f, await L.workTitle(f), r.outcome, r.text);
+    return undefined;
+  },
+  draft: async () =>
+    (await refusal(request('/api/staff/draft', 'POST', { body: { brief: 'Counts chairs.' } })))
+      .message,
+  look: async () =>
+    (
+      await refusal(
+        request('/api/looks', 'POST', {
+          // A model that draws, so the office runs rather than refusing to draw.
+          body: { description: 'Tall.', name: 'Ann', role: 'Tester', model: 'claude-opus-5-5' }
+        })
+      )
+    ).message,
+  office: async () => {
+    const job = startDesign({ description: 'A small office.' });
+    await new Promise<void>((done) => followDesign(job, () => {}, done));
+    return undefined;
+  }
+};
+
+const like = `%${GONE}%`;
+/** How many times each place shows the error. A reply counts once when it says it. */
+const SHOWN: Record<Landing, (reply?: string) => Promise<number>> = {
+  chat: async () => (await reload('fay')).filter((e) => e.failed && e.text === GONE).length,
+  desk: async () =>
+    (await L.pg<{ n: number }[]>`select count(*)::int as n from reports where body like ${like}`)[0]
+      .n,
+  ledger: async () =>
+    (await L.pg<{ n: number }[]>`select count(*)::int as n from ledger where body like ${like}`)[0]
+      .n,
+  reply: async (reply) => (reply?.includes(GONE) ? 1 : 0),
+  drawing: async () =>
+    currentDesign()?.lines.filter((l) => l.step === 'error' && l.message.includes(GONE)).length ?? 0
+};
+const LANDINGS = Object.keys(SHOWN) as Landing[];
+
+test('a failed run of each kind lands where its RUN_FAILURE row says', async (t) => {
+  for (const kind of Object.keys(RUN_FAILURE) as UsageKind[])
+    await t.test(kind, async () => {
+      const before = await Promise.all(LANDINGS.map((l) => SHOWN[l]()));
+      const reply = await withoutClaude(FAIL[kind]);
+      const after = await Promise.all(LANDINGS.map((l) => SHOWN[l](reply)));
+      assert.deepEqual(
+        LANDINGS.filter((_, i) => after[i] > before[i]),
+        LANDINGS.filter((l) => RUN_FAILURE[kind].includes(l))
+      );
+    });
+});

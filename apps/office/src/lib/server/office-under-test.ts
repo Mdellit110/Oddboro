@@ -139,8 +139,9 @@ chmodSync(join(bin, 'claude'), 0o755);
 // The stand-in for Grok, which reads no input: it sends back its arguments, the
 // Grok, git and key variables it got, the tool server's environment from its agent
 // file, and its sandbox profile. Then one MCP call the way Grok streams it
-// (through use_tool), and a result. A message that says "Replay <file>"
-// gets that recorded stream instead, and its arguments go in replay-args.json.
+// (through use_tool), and a result. A message that ends "Replay <file>"
+// gets that recorded stream instead (only at the end, since a later prompt
+// can quote an earlier message that failed), and its arguments go in replay-args.json.
 // "grok models", which renews the sign-in, adds a dot to models.log in the
 // Grok home, and puts renewed.json there as the sign-in when there is one.
 // With hang.pid in the Grok home, it writes its pid there and never ends,
@@ -200,7 +201,7 @@ if (args.some((a) => a.startsWith('- '))) {
 }
 const after = (flag) => args[args.indexOf(flag) + 1];
 const joined = (flag) => args.find((a) => a.startsWith(flag + '='))?.slice(flag.length + 1);
-const replay = /Replay (\\/\\S+\\.jsonl)/.exec(joined('--single'))?.[1];
+const replay = /Replay (\\/\\S+\\.jsonl)\\s*$/.exec(joined('--single'))?.[1];
 if (replay) {
   fs.writeFileSync(process.env.GROK_HOME + '/replay-args.json', JSON.stringify(args));
   process.stdout.write(fs.readFileSync(replay, 'utf8'));
@@ -238,7 +239,7 @@ chmodSync(join(bin, 'grok'), 0o755);
 // empty as it ran (`done()` removes it after), in the item
 // shapes `codex exec --json` prints (exec_events.rs): a shell command, an MCP
 // call, a file change, two messages and the turn's tokens. A message that
-// says "Replay <file>" gets that recorded stream instead, and one that says
+// ends "Replay <file>" gets that recorded stream instead, and one that says
 // "Leave a sleeper at <file>" first starts a `sleep` that outlives it, in its
 // process group, and writes its pid there. Every launch's arguments go in
 // launches.jsonl, a line each. "codex login" is no launch: it logs its
@@ -288,7 +289,7 @@ function emptyFolder(p) {
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
-  const replay = /Replay (\\/\\S+\\.jsonl)/.exec(message)?.[1];
+  const replay = /Replay (\\/\\S+\\.jsonl)\\s*$/.exec(message)?.[1];
   if (replay) return process.stdout.write(fs.readFileSync(replay, 'utf8'));
   const sleeper = /Leave a sleeper at (\\/\\S+)/.exec(message)?.[1];
   if (sleeper) {
@@ -812,7 +813,11 @@ export async function request(route: string, method: string, call: Call = {}): P
   return handler({
     params: call.params ?? {},
     url,
-    request: new Request(url, { method, body: JSON.stringify(call.body ?? {}) }),
+    // A GET or HEAD carries no body: `Request` refuses one.
+    request: new Request(url, {
+      method,
+      body: method === 'GET' || method === 'HEAD' ? undefined : JSON.stringify(call.body ?? {})
+    }),
     getClientAddress: () => '127.0.0.1'
   });
 }

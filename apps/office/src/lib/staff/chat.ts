@@ -13,7 +13,8 @@ export type ChatRef = { kind: DeskItem; id: number; title: string };
  * owner's line with `re` replied about one of those. A `handOff` line is work
  * the staffer handed a colleague, or a colleague handed it. A `thread` line is
  * a thread the staffer leads, holding each hand-off it gave on it. A `lesson`
- * line is one the staffer kept, where it kept it.
+ * line is one the staffer kept, where it kept it. A `failed` line is the error a
+ * chat run ended with, saved in place of its reply: the staffer never said it.
  */
 export type ChatEntry = {
   at: string;
@@ -21,6 +22,7 @@ export type ChatEntry = {
   text: string;
   poke?: true;
   told?: true;
+  failed?: true;
   re?: ChatRef;
   item?: ChatRef & { status: string };
   lesson?: LessonLine;
