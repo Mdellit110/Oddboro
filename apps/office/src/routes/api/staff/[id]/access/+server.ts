@@ -1,5 +1,5 @@
 // A staffer's access: what the owner granted, grant more directly, or revoke.
-// Granting creates the task with the steps to connect it.
+// Granting creates the task with the steps to connect it, unless it is already connected.
 import { error, json } from '@sveltejs/kit';
 import {
   capabilities,
@@ -41,11 +41,12 @@ export const POST: RequestHandler = async ({ params, request }) => {
   );
   if (!found.connector) error(400, found.problem ?? 'No such tool');
   try {
-    await grantAccess(params.id, { connector: found.connector.id, level });
+    const { task } = await grantAccess(params.id, { connector: found.connector.id, level });
+    // A tool already connected needs no steps, so nothing waits on the desk.
+    return json({ ok: true, task });
   } catch (e) {
     error(400, e instanceof Error ? e.message : String(e));
   }
-  return json({ ok: true });
 };
 
 export const DELETE: RequestHandler = async ({ params, url }) => {
