@@ -43,6 +43,7 @@ import {
 import { goalWhen, HEALTH_WORDS, HORIZONS, STATUS_WORDS } from './goal-words.ts';
 import {
   accessInRun,
+  askAboveLevel,
   capabilities,
   folderLines,
   handsOff,
@@ -51,7 +52,7 @@ import {
   ownToolsSaid
 } from './capabilities.ts';
 import { AGENT_NAMES } from './agents.ts';
-import { levelAtMost, LEVELS } from './access-words.ts';
+import { levelAtMost, LEVELS, NOT_OWN_TOOLS, SWITCH_NAMES } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
   APPLIES_TO_MAX,
@@ -487,7 +488,7 @@ async function placed(a: {
 tool(
   'raise_ask',
   {
-    description: `Ask ${OWNER} to approve something. It lands on their desk and they approve, deny, or send it back with what to change, maybe with a reason. Use it for anything that needs their yes. One decision per ask, worded as the exact action: if they approve, you carry it out at once in a new run, with only the ask to go on. The reply lists their closest past decisions: if one matches and gave no reason, tell ${OWNER} that a reason would let Odds handle these without asking next time. For tool access use ask_for_access, and for a new Odd use propose_hire.${raisedNote}`,
+    description: `Ask ${OWNER} to approve something. It lands on their desk and they approve, deny, or send it back with what to change, maybe with a reason. Use it for anything that needs their yes. One decision per ask, worded as the exact action: if they approve, you carry it out at once in a new run, with only the ask to go on. The reply lists their closest past decisions: if one matches and gave no reason, tell ${OWNER} that a reason would let Odds handle these without asking next time. For an outside tool, use ask_for_access; for ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, see my_access; and for a new Odd, use propose_hire.${raisedNote}`,
     inputSchema: {
       title: z
         .string()
@@ -599,8 +600,7 @@ if (has('find_connectors'))
   tool(
     'find_connectors',
     {
-      description:
-        "Find MCP servers that would give you a tool you need: the office's own catalog first, then the public MCP Registry. Then call ask_for_access with the id or registry name.",
+      description: `Find MCP servers that would give you a tool you need: the office's own catalog first, then the public MCP Registry. Then call ask_for_access with the id or registry name. ${NOT_OWN_TOOLS}`,
       inputSchema: {
         need: z.string().describe('The service or job, e.g. "Trello cards" or "Notion pages".')
       }
@@ -641,7 +641,7 @@ if (has('ask_for_access'))
   tool(
     'ask_for_access',
     {
-      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done.${raisedNote}`,
+      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
       inputSchema: {
         connector: z.string(),
         level: z
@@ -663,9 +663,7 @@ if (has('ask_for_access'))
       if ('problem' in on) return refused(on.problem);
       const level = asked === 'write' ? 'act' : 'read';
       if (!levelAtMost(level, me.permission))
-        return text(
-          `You hold ${me.permission}, so you cannot ask for ${asked}. Ask ${OWNER} to raise your level first.`
-        );
+        return text(askAboveLevel(me.permission, asked, OWNER));
       const found = await ensureConnector(
         wanted,
         key_header ? { keyHeader: key_header.trim() } : undefined
@@ -1373,12 +1371,13 @@ if (has('office_report'))
             level: caps.level,
             runsOn: AGENT_NAMES[caps.agent],
             // As the Odd's own my_access says it, the office's held network included.
-            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env))
+            // Another Odd reads it, so it names whose tools, folders and Settings tab.
+            ownTools: ownToolsSaid(caps.agent, caps.own, officeHeldIn(process.env), who.name)
               .join(' ')
               .replaceAll('{owner}', OWNER),
             folders: folderLines(caps.own),
             officeTools: caps.office,
-            outsideTools: outsideLines(caps, OWNER)
+            outsideTools: outsideLines(caps, OWNER, who.name)
           };
         })
       );

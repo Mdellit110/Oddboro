@@ -250,7 +250,6 @@ export async function setTool(id: string, tool: string, on: boolean): Promise<vo
   });
 }
 
-/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
 /**
  * Set how hard an Odd's runs think, from the levels its tool takes
  * (`EFFORTS`). The Office Manager never goes below Medium. Takes effect on its
@@ -314,6 +313,7 @@ export async function setModel(
   });
 }
 
+/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
 export async function setOwnTool(
   id: string,
   which: 'commands' | 'web',

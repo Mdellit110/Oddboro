@@ -9,11 +9,11 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runsGoing, type ModelUsage } from '@oddboro/ledger';
+import { modelSection, runsGoing, type ModelUsage } from '@oddboro/ledger';
 import { cleanEnv } from './claude.ts';
 
 /** Where the owner signs a tool in for the office: beside the Odd's "Runs on" picker. */
-export const SIGN_IN_WHERE = "on this Odd's Settings tab, under Model";
+export const SIGN_IN_WHERE = `on ${modelSection("this Odd's")}`;
 /** What a run refused for its tool's sign-in says after the tool's name. */
 export const NOT_SIGNED_IN = `is not signed in for this office. Sign in ${SIGN_IN_WHERE}.`;
 

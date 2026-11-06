@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import type { HireProposal, Schedule } from '@oddboro/ledger';
   import { LEVEL_LABEL, LEVELS, type Level } from '@oddboro/ledger/access';
-  import { AGENT_NAMES, type Agent } from '@oddboro/ledger/agents';
+  import { AGENT_NAMES, hireToolsLine, type Agent } from '@oddboro/ledger/agents';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import Pixel from './Pixel.svelte';
   import LookStudio, { type Drawn } from './LookStudio.svelte';
@@ -40,6 +40,10 @@
   const agentTools = new AgentTools();
   let pickedAgent = $state<Agent | undefined>();
   const agent = $derived(pickedAgent ?? agentTools.office);
+  /** Where the owner gives the hire tools later, by how its tool takes Run commands. */
+  const toolsLine = $derived(
+    hireToolsLine(agentTools.tools.find((t) => t.id === agent)?.commandsHow.state)
+  );
   let jobName = $state('');
   let jobInstructions = $state('');
   /** Shown only once the owner names a job, so an empty job never reads as an hourly one. */
@@ -271,9 +275,7 @@
         />
       </div>
     {:else if step === 3}
-      <p class="text-xs text-muted">
-        Optional. Access to tools comes later, when they ask for it on their Settings tab.
-      </p>
+      <p class="text-xs text-muted">{toolsLine}</p>
       <div class="flex flex-col gap-2 rounded-xl bg-raise p-3">
         <span class="text-xs text-muted">A first job</span>
         {#if !jobName.trim() && !jobInstructions.trim()}

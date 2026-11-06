@@ -5,10 +5,18 @@
 // Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LEVELS, type Level } from '../src/access-words.ts';
+import {
+  levelRoute,
+  LEVELS,
+  MODEL_SECTION,
+  OFFICE_SECTION,
+  officeSection,
+  type Level
+} from '../src/access-words.ts';
 import {
   accessInRun,
   accessOf,
+  askAboveLevel,
   capped,
   levelLine,
   NETWORK_HELD_LINE,
@@ -18,10 +26,16 @@ import {
 } from '../src/capabilities.ts';
 import type { ConnectorRow, GrantRow } from '../src/office.ts';
 
-/** A Claude Code Odd's own tools with both switches off and no folder. */
+/** A Claude Code Odd on a Mac with both switches off and no folder. */
 const noOwnTools = {
   agent: 'claude',
-  own: { commands: false, web: false, network: false, granted: [] }
+  own: {
+    commands: false,
+    commandsHow: { state: 'switch' },
+    web: false,
+    network: false,
+    granted: []
+  }
 } as const satisfies Pick<Capabilities, 'agent' | 'own'>;
 
 function grant(
@@ -69,7 +83,12 @@ test('each held-back reason tells the Odd what brings the tool back', () => {
   const line = (a: ReturnType<typeof accessOf>) => outsideLines(caps(a), 'Sam')[0];
   assert.equal(
     line(accessOf(grant('act'), 'draft')),
-    'Notion (read and write): held back. It needs the Act level, and the current level is Draft. It works again once Sam raises the level.'
+    'Notion (read and write): held back. It needs the Act level, and the current level is Draft. It works again once Sam raises it. Sam sets your level on your Settings tab, under Model.'
+  );
+  // office_report reads it about a colleague, so the card is that Odd's.
+  assert.equal(
+    outsideLines(caps(accessOf(grant('act'), 'draft')), 'Sam', 'Rowan')[0],
+    "Notion (read and write): held back. It needs the Act level, and the current level is Draft. It works again once Sam raises it. Sam sets Rowan's level on Rowan's Settings tab, under Model."
   );
   assert.equal(
     line(accessOf(grant('read', { readyAt: null }), 'draft')),
@@ -80,6 +99,36 @@ test('each held-back reason tells the Odd what brings the tool back', () => {
     'Notion (read only): held back. Its sign-in ran out, and Sam needs to sign in again.'
   );
   assert.equal(line(accessOf(grant('read'), 'draft')), 'Notion (read only): 1 tool.');
+});
+
+test('the level route names whose level it is and the section of that card it is under', () => {
+  const forms: [string, string][] = [
+    ['your', 'Sam sets your level on your Settings tab, under Model.'],
+    ["Rowan's", "Sam sets Rowan's level on Rowan's Settings tab, under Model."],
+    ["that Odd's", "Sam sets that Odd's level on that Odd's Settings tab, under Model."]
+  ];
+  for (const [whose, said] of forms) assert.equal(levelRoute('Sam', whose), said, whose);
+  // The section is the one the card's sub-tab shows (AccessTab reads MODEL_SECTION).
+  assert.ok(levelRoute('Sam', 'your').endsWith(`, under ${MODEL_SECTION}.`));
+});
+
+test('the switches are placed on whose Settings tab, under the section the card shows them in', () => {
+  const forms: [string, string][] = [
+    ['your', 'your Settings tab, under Office'],
+    ["Rowan's", "Rowan's Settings tab, under Office"],
+    ["that Odd's", "that Odd's Settings tab, under Office"]
+  ];
+  for (const [whose, said] of forms) assert.equal(officeSection(whose), said, whose);
+  // The section is the one the card's sub-tab shows (AccessTab reads OFFICE_SECTION).
+  assert.ok(officeSection('your').endsWith(`, under ${OFFICE_SECTION}`));
+});
+
+test("ask_for_access's refusal above the level says where the owner sets it and asks for no raise", () => {
+  const said = askAboveLevel('read', 'write', 'Sam');
+  assert.equal(
+    said,
+    'You hold read, so you cannot ask for write. Sam sets your level on your Settings tab, under Model. If this job needs a higher one, say so in your reply.'
+  );
 });
 
 test('only the Act level is told it may use a write tool without asking', () => {
@@ -138,7 +187,7 @@ test("my_access says a capped run's level and why, and an uncapped run's own lev
       levelLine('draft', 'Sam'),
       "This run was started by a colleague or by the office, not by Sam's yes, so it works at Draft at most.",
       'Your runs go through Claude Code.',
-      'Your own tools work on files only: no shell and no web.',
+      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab, under Office. No web: Sam can switch on Browse the web in your Settings tab, under Office.',
       'Sam has given you no folders.',
       '- (id: notion) Notion (read only): 1 tool.'
     ].join('\n')
@@ -148,7 +197,7 @@ test("my_access says a capped run's level and why, and an uncapped run's own lev
     [
       levelLine('act', 'Sam'),
       'Your runs go through Claude Code.',
-      'Your own tools work on files only: no shell and no web.',
+      'Your own tools work on files only. No shell: Sam can switch on Run commands in your Settings tab, under Office. No web: Sam can switch on Browse the web in your Settings tab, under Office.',
       'Sam has given you no folders.',
       '- (id: notion) Notion (read and write): every tool.'
     ].join('\n')
@@ -168,6 +217,7 @@ test('my_access says the tool, what its own tools reach and each folder, and a h
     agent: 'claude',
     own: {
       commands: true,
+      commandsHow: { state: 'switch' },
       web: true,
       network: true,
       granted: [

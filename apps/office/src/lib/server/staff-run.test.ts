@@ -641,20 +641,23 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           id: 'claude',
           name: 'Claude Code',
           installed: true,
-          signIn: { how: 'browser', installing: false, signedIn: false }
+          signIn: { how: 'browser', installing: false, signedIn: false },
+          commandsHow: L.commandsHow('claude', 'darwin')
         },
         {
           id: 'grok',
           name: 'Grok',
           installed: false,
-          signIn: { how: 'browser', installing: false, signedIn: false }
+          signIn: { how: 'browser', installing: false, signedIn: false },
+          commandsHow: L.commandsHow('grok', 'darwin')
         },
         // The office under test's Codex home holds a sign-in file with no account in it.
         {
           id: 'codex',
           name: 'Codex',
           installed: false,
-          signIn: { how: 'browser', installing: false, signedIn: true }
+          signIn: { how: 'browser', installing: false, signedIn: true },
+          commandsHow: L.commandsHow('codex', 'darwin')
         }
       ]
     });
@@ -700,8 +703,16 @@ require(${JSON.stringify(join(bin, 'claude'))});
     }>;
   // Its version read through the same command a run starts, npm's script under this Node too.
   const out = { how: 'browser', installing: false, signedIn: false };
+  const commandsHow = L.commandsHow('claude', 'win32');
   const installed = [
-    { id: 'claude', name: 'Claude Code', installed: true, signIn: out, version: '2.1.318' }
+    {
+      id: 'claude',
+      name: 'Claude Code',
+      installed: true,
+      signIn: out,
+      commandsHow,
+      version: '2.1.318'
+    }
   ];
   try {
     // Away from home, so the Mac's own ~/.local/bin, where Windows' installer puts claude.exe, is never read.
@@ -718,7 +729,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
               id: 'claude',
               name: 'Claude Code',
               installed: false,
-              signIn: { how: 'browser', installing: false, signedIn: false }
+              signIn: { how: 'browser', installing: false, signedIn: false },
+              commandsHow
             }
           ],
           later: [
@@ -741,7 +753,7 @@ require(${JSON.stringify(join(bin, 'claude'))});
         assert.deepEqual(agentCommand('claude'), [join(native, 'claude.exe'), []]);
         // Installed. This Mac cannot run a stand-in claude.exe, so it has no version to say.
         assert.deepEqual((await picker()).tools, [
-          { id: 'claude', name: 'Claude Code', installed: true, signIn: out }
+          { id: 'claude', name: 'Claude Code', installed: true, signIn: out, commandsHow }
         ]);
       })
     );
@@ -1213,4 +1225,49 @@ test("an Odd signs in through the account it is on: its own folder for each, the
     rmSync(join(accounts, 'claude', 'office', 'signed-in'), { force: true });
     forgetClaudeAccount();
   }
+});
+
+test("a new hire's first day and the manager's planning say how an Odd gets Run commands or Browse the web, the planning says where a level is raised, and a lesson never does", async () => {
+  await L.startFirstDay('sam');
+  const [day] = await L.pg<{ id: number }[]>`
+    select id from follow_ups where staff_id = 'sam' and kind = 'first_day' order by id desc limit 1`;
+  const first = await runOf(day.id);
+  const firstText = `${first.system}\n${first.message}`;
+  assert.ok(
+    firstText.includes(
+      '3. If a tool you need is not in my_access, ask for it with ask_for_access. For Run commands or Browse the web, follow what my_access says instead.'
+    ),
+    firstText
+  );
+  assert.ok(
+    first.system.includes(
+      "tell them plainly that more access is the Settings tab's job, not a lesson's."
+    ),
+    first.system
+  );
+  const [g] = await L.pg<
+    { id: number }[]
+  >`insert into goals (title) values ('Plant the orchard') returning id`;
+  const [row] = await L.pg<{ id: number }[]>`
+    insert into follow_ups (staff_id, kind, goal_id) values ('sam', 'goal', ${g.id}) returning id`;
+  const f = await L.startFollowUp(row.id);
+  assert.ok(f, 'the planning run could not start');
+  const r = await followThrough(f, undefined, undefined, undefined, await L.goal(g.id));
+  assert.equal(r.outcome, 'done', r.text);
+  const plan = JSON.parse(r.text) as Gave;
+  const planText = `${plan.system}\n${plan.message}`;
+  const owner = await L.ownerName();
+  assert.ok(
+    planText.includes(
+      "put any level raise in owner_steps, as a step on that Odd's Settings tab, under Model. Have the Odd ask"
+    ),
+    planText
+  );
+  // Only office_report knows whether that Odd's tool follows the switch, so the step waits on it.
+  assert.ok(
+    planText.includes(
+      `For Run commands or Browse the web, put switching it on in that Odd's Settings tab, under Office, in owner_steps only when office_report says ${owner} can switch it on for that Odd.`
+    ),
+    planText
+  );
 });

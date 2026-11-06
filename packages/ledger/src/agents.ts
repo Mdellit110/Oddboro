@@ -1,6 +1,8 @@
 // The coding tools an Odd can run on, the systems each is offered on, and
 // whether each may run commands. The hire drawer and the Settings tab read it,
-// so this file imports nothing: safe to import in the browser.
+// so this file imports only access-words.ts, which imports nothing: safe to
+// import in the browser.
+import { officeSection, SWITCH_NAMES } from './access-words.ts';
 
 /** The coding tools an Odd can run on. Each is also the command the office starts. */
 export const AGENTS = ['claude', 'grok', 'codex', 'gemini'] as const;
@@ -234,6 +236,18 @@ export function commandsHow(agent: Agent, platform: NodeJS.Platform): CommandsHo
   return { state: 'never', why: COMMANDS_WHY[agent], ...(offer ? { offer } : {}) };
 }
 
+/**
+ * The hire drawer's line on a new Odd's own tools, by how its tool takes Run
+ * commands (`commandsHow(...).state`): it names that switch only where the
+ * owner can move it. Unknown until the page has the tools, so it names Browse
+ * the web alone.
+ */
+export function hireToolsLine(state?: CommandsHow['state']): string {
+  const switches =
+    state === 'switch' ? `${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}` : SWITCH_NAMES.web;
+  return `Optional. You can give tools and switch on ${switches} on ${officeSection('their')}, later. They'll tell you when a job needs one.`;
+}
+
 /** Whether a run gets a shell: the owner's stored switch, as its tool takes it. */
 export function runsCommands(agent: Agent, platform: NodeJS.Platform, stored: boolean): boolean {
   const how = commandsHow(agent, platform);
@@ -289,7 +303,7 @@ export function webLine(agent: Agent, platform: NodeJS.Platform, held: boolean):
     return `${web} ${AGENT_NAMES[agent]}'s commands stay off the internet.`;
   return how === 'always'
     ? `${web} Its commands can reach the internet too.`
-    : `${web} With Run commands on, its commands can reach the internet too.`;
+    : `${web} With ${SWITCH_NAMES.commands} on, its commands can reach the internet too.`;
 }
 
 /** A folder outside the office the owner lets an Odd read, or read and change (`write`), by its real path. */

@@ -2,7 +2,6 @@
 // reads the disk (folders still there) and this office's held network, and
 // each folder's `~` form reads the home folder, none of which the page can do.
 import {
-  commandsHow,
   effortFor,
   heldReach,
   MANAGER_ROLE,
@@ -54,7 +53,6 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     effort: effortFor(r.agent, r.effort, r.role === MANAGER_ROLE, modelFor(r.agent, r.model)),
     tools: r.tools,
     commands: r.commands,
-    commandsHow: commandsHow(r.agent, process.platform),
     web: r.web,
     webLine: webLine(r.agent, process.platform, reach.held),
     folders: r.folders.map((f) => ({ ...f, shown: shownFolder(f.path) })),

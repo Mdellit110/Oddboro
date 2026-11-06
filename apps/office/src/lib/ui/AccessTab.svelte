@@ -5,6 +5,9 @@
     LEVEL_LABEL,
     LEVELS,
     levelAtMost,
+    MODEL_SECTION,
+    OFFICE_SECTION,
+    SWITCH_NAMES,
     type GrantLevel,
     type Level
   } from '@oddboro/ledger/access';
@@ -150,7 +153,7 @@
   }
 
   /** The page shows how Run commands reaches the Odd's tool and what its runs get; only the server works either out. */
-  const how = $derived(profile.commandsHow);
+  const how = $derived(profile.reach.commandsHow);
   async function setOwnTool(which: 'commands' | 'web', box: HTMLInputElement) {
     problem = refused = '';
     try {
@@ -302,12 +305,12 @@
   const TABS = [
     {
       id: 'model',
-      label: 'Model',
+      label: MODEL_SECTION,
       icon: 'M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3M6 6h12v12H6zM10 10h4v4h-4z'
     },
     {
       id: 'office',
-      label: 'Office',
+      label: OFFICE_SECTION,
       icon: 'M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3'
     },
     {
@@ -336,8 +339,10 @@
   } as const;
   const officeTools = $derived(GRANTABLE.filter((t) => matches(t.name, t.does)));
   const shownGrants = $derived(grants.filter((g) => matches(g.name, GRANT_LABEL[g.level])));
-  const commandsShown = $derived(matches('Run commands', how.state === 'switch' ? '' : how.why));
-  const webShown = $derived(matches('Browse the web', profile.webLine));
+  const commandsShown = $derived(
+    matches(SWITCH_NAMES.commands, how.state === 'switch' ? '' : how.why)
+  );
+  const webShown = $derived(matches(SWITCH_NAMES.web, profile.webLine));
 
   async function setPermission(permission: Level) {
     problem = refused = '';
@@ -417,7 +422,7 @@
       />
     {/if}
     {#if tab === 'model'}
-      <section aria-label="Model" class="flex flex-col gap-3">
+      <section aria-label={MODEL_SECTION} class="flex flex-col gap-3">
         <ToolTiles
           tools={agentTools}
           picked={profile.agent}
@@ -667,7 +672,7 @@
                 <label
                   for="commands-{profile.id}"
                   class="block text-sm {how.state === 'switch' ? 'cursor-pointer' : ''}"
-                  >Run commands</label
+                  >{SWITCH_NAMES.commands}</label
                 >
                 {#if how.state !== 'switch'}
                   <span class="block text-xs text-muted">{how.why}</span>
@@ -698,7 +703,7 @@
                   onchange={(e) => setOwnTool('web', e.currentTarget)}
                 />
                 <span class="min-w-0 flex-1">
-                  <span class="block text-sm">Browse the web</span>
+                  <span class="block text-sm">{SWITCH_NAMES.web}</span>
                   <span class="block text-xs text-muted">{profile.webLine}</span>
                 </span>
               </label>

@@ -343,9 +343,12 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    switches and folders as its tool takes them from `capabilities()`
    (`caps.own`), less a held network, and passes the given folders still on
    the disk; the prompt lists them under "Where things are", and "What you
-   can do" says what the Odd's own tools reach (`ownToolsSaid` in the
-   ledger's `capabilities.ts`, held network included), the same line
-   `my_access` and `office_report` give.
+   can do" says what the Odd's own tools reach and, for Run commands or
+   Browse the web when it lacks one, whether the owner can switch it on in
+   its Settings tab (`ownToolsSaid` in the ledger's `capabilities.ts`, held
+   network included), the same line `my_access` gives. `office_report` gives
+   it too, naming the Odd, since another Odd reads it ("Rowan's own tools",
+   "Rowan's Settings tab").
    `src/lib/server/grok.ts` starts a Grok run from the office's own Grok home,
    `~/.oddboro/grok` (`GROK_HOME`), never the owner's `~/.grok`. The owner signs
    in to it from the office's page (`agent-sign-in.ts`, item 18); a run from a
@@ -647,8 +650,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     `src/lib/ui/PixelDrawing.svelte` paints a bust pixel by pixel beside the
     stage and the time. Step three picks the level and the tool its runs go
     through ("Runs on", Claude Code unless the owner picks another, item 9).
-    Hiring grants no tools: access goes through the
-    Odd's Settings tab when they ask. A first job reports to the owner's desk unless they
+    Hiring grants no tools. The Odd tells the owner,
+    in its reply, to switch on Run commands or Browse the web in its Settings tab,
+    under Office; outside tools come through `ask_for_access`. A first job reports to the owner's desk unless they
     untick it; a proposal can say either way. "Draft it" drafts the job
     description. Both run as the office (`src/lib/server/office-run.ts`),
     never as an Odd, so a new office can hire its first. An office run goes
@@ -806,9 +810,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     (`src/lib/server/agent-sign-in.ts`). `/api/agents` carries each tool's
     sign-in: signed in when Grok's `auth.json` in its office home holds an
     account (its email shown), when Codex's exists (the email from its
-    `id_token`), or when Gemini has a key. `/api/agents/[tool]` changes one,
-    only for a tool this system offers and never Claude Code. Sign in runs the
-    tool's browser sign-in in its office home (`grok login --oauth`, and
+    `id_token`), or when Gemini has a key. It also carries how each tool
+    takes Run commands on this system (`commandsHow`), so the hire drawer's
+    line (`hireToolsLine`) names that switch only where the owner can move it,
+    and Browse the web alone until the tools load. `/api/agents/[tool]`
+    changes one, only for a tool this system offers and never Claude Code.
+    Sign in runs the tool's browser sign-in in its office home
+    (`grok login --oauth`, and
     `codex login -c cli_auth_credentials_store="file"`), streamed through the
     runner Claude Code's sign-in uses (`src/lib/server/command-stream.ts`), with
     the sign-in page's address as a link; a second one starts over, Cancel

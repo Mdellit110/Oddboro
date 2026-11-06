@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modelSection } from '@oddboro/ledger/access';
   import type { Check } from '@oddboro/ledger/checks';
   import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
@@ -158,7 +159,7 @@
       <h3 class="text-xs tracking-[0.16em] text-sea uppercase">4 · Your AI</h3>
       <p class="text-xs text-muted">
         What your office runs on: its Office Manager and every new Odd. Each Odd can move to another
-        tool on its Settings tab.
+        tool on {modelSection('its')}.
       </p>
       <OfficeTools tools={agentTools} />
     </section>

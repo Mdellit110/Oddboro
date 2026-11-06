@@ -52,7 +52,8 @@ test("the page's profile carries what runs reach, each folder's ~ form, the offe
     const grok = toProfile(row({ agent: 'grok', commands: true, web: true }));
     assert.equal(grok.commands, true, 'the stored switch stays as the owner set it');
     assert.equal(grok.reach.commands, false);
-    assert.equal(grok.commandsHow.state === 'never' && grok.commandsHow.offer, 'claude');
+    const how = grok.reach.commandsHow;
+    assert.equal(how.state === 'never' && how.offer, 'claude');
     assert.equal(grok.webLine, 'Search and read web pages.');
 
     const both = row({ commands: true, web: true });
