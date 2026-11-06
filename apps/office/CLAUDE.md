@@ -511,8 +511,9 @@ account.
    once, and a new sign-in never sends the old token. It imports
    `account.ts` when a report goes, never at the top, because that brings
    in Postgres (step 7). `flush` waits for every send from its start,
-   including one still waiting on a token refresh, so the SDK's flush before
-   a crash ends the office loses none.
+   including one still waiting on a token refresh, up to the flush's
+   timeout: a refresh slower than that loses its report when a crash ends
+   the office.
 5. The relay: the page's SDK (`hooks.client.ts`) posts to
    `/api/diagnostics/envelope`, never to Sentry. The route scrubs each event
    and span again and sends them through the office's own transport, so the

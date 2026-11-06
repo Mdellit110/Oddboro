@@ -104,16 +104,27 @@ impl Diagnostics {
         // the app, where the office's settings live in its home.
         let settings = std::env::var_os("ODDBORO_ENV")
             .map_or_else(|| env::office_home().join(".env"), PathBuf::from);
-        let dsn = find_setting(
-            DSN_KEY,
-            std::env::var(DSN_KEY).ok(),
+        Self::from_settings(
+            |key| std::env::var(key).ok(),
             option_env!("ODDBORO_DIAGNOSTICS_DSN"),
-            &settings,
-        )?;
+            settings,
+        )
+    }
+
+    /// `find` with the shell's environment, the address built into the
+    /// release and the settings file given, so a test can give its own. The
+    /// account site comes from the environment or the settings file only: a
+    /// release builds in no site.
+    fn from_settings(
+        environment: impl Fn(&str) -> Option<String>,
+        built_dsn: Option<&str>,
+        settings: PathBuf,
+    ) -> Option<Self> {
+        let dsn = find_setting(DSN_KEY, environment(DSN_KEY), built_dsn, &settings)?;
         dsn.parse::<Dsn>().ok()?;
         let account_site = find_setting(
             ACCOUNT_SITE_KEY,
-            std::env::var(ACCOUNT_SITE_KEY).ok(),
+            environment(ACCOUNT_SITE_KEY),
             None,
             &settings,
         );
@@ -602,11 +613,27 @@ mod tests {
         None
     }
 
-    /// A sign-in as the office saves it, with most of an hour left.
-    fn saved_sign_in() -> Option<String> {
+    /// A sign-in as the office saves it, with an hour-long token, saved
+    /// `ago`. The time is read here, not through `now_ms`, so a wrong unit
+    /// there shows at the door.
+    fn sign_in_saved(ago: Duration) -> Option<String> {
         let tokens = serde_json::json!({ "access_token": "access-1", "expires_in": 3600 });
-        let saved_at = u64::try_from(now_ms()).unwrap();
+        let saved_at = (SystemTime::now() - ago)
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let saved_at = u64::try_from(saved_at).unwrap();
         Some(serde_json::json!({ "tokens": tokens, "savedAt": saved_at }).to_string())
+    }
+
+    /// Saved just now, with most of an hour left.
+    fn saved_sign_in() -> Option<String> {
+        sign_in_saved(Duration::ZERO)
+    }
+
+    /// Saved an hour ago, so its token has run out.
+    fn run_out_sign_in() -> Option<String> {
+        sign_in_saved(Duration::from_secs(3600))
     }
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -647,10 +674,10 @@ mod tests {
         fs::write(&settings, "OFFICE_DIAGNOSTICS=no\n").unwrap();
         let home = env::home();
         Arc::new(Diagnostics {
+            needs_sign_in: needs_sign_in(&dsn, None),
             dsn,
             settings: settings.clone(),
             home: home.clone(),
-            needs_sign_in: false,
             sign_in: no_sign_in,
         })
         .watch_panics();
@@ -730,10 +757,10 @@ mod tests {
         assert!(why.message(&server.log_tail()).contains("LOGMARK"));
 
         Diagnostics {
+            needs_sign_in: needs_sign_in(&dsn, None),
             dsn,
             settings,
             home: env::home(),
-            needs_sign_in: false,
             sign_in: no_sign_in,
         }
         .gave_up(&why);
@@ -765,10 +792,10 @@ mod tests {
                 fs::write(&settings, text).unwrap();
             }
             let diagnostics = Diagnostics {
+                needs_sign_in: needs_sign_in(&dsn, None),
                 dsn,
                 settings,
                 home: env::home(),
-                needs_sign_in: false,
                 sign_in: no_sign_in,
             };
             diagnostics.gave_up(&GaveUp::KeptStopping { code: Some(3) });
@@ -1119,11 +1146,68 @@ mod tests {
 
         let signed_in = the_one_request(&report(saved_sign_in));
         let signed_out = report(no_sign_in).recv_timeout(Duration::from_millis(500));
+        let run_out = report(run_out_sign_in).recv_timeout(Duration::from_millis(500));
         fs::remove_dir_all(&dir).unwrap();
 
         assert_eq!(signed_in.authorization.as_deref(), Some("Bearer access-1"));
         assert!(!signed_in.body.contains("access-1"), "{}", signed_in.body);
         assert!(signed_out.is_err(), "a report left while signed out");
+        assert!(run_out.is_err(), "a report left with a run-out token");
+    }
+
+    #[test]
+    fn only_an_address_that_needs_a_sign_in_is_given_the_token() {
+        let dir = temp_dir("needs-sign-in");
+        let door = "ODDBORO_DIAGNOSTICS_DSN=http://k@127.0.0.1:4599/oddboro/0\n";
+        let site = "ODDBORO_ACCOUNT_SITE=http://127.0.0.1:4598\n";
+        let own = dir.join("own.env");
+        fs::write(
+            &own,
+            "ODDBORO_DIAGNOSTICS_DSN=https://own@o1.ingest.sentry.io/2\n",
+        )
+        .unwrap();
+        let local = dir.join("local.env");
+        fs::write(&local, door).unwrap();
+        let site_in_file = dir.join("site.env");
+        fs::write(&site_in_file, format!("{door}{site}")).unwrap();
+        let missing = dir.join("missing.env");
+        let nothing = |_: &str| None;
+        let site_in_environment =
+            |key: &str| (key == ACCOUNT_SITE_KEY).then(|| "http://127.0.0.1:4598".to_string());
+        let needs = |environment: &dyn Fn(&str) -> Option<String>, built, settings: &Path| {
+            Diagnostics::from_settings(environment, built, settings.to_path_buf())
+                .expect("no address found")
+                .needs_sign_in
+        };
+
+        let own_sentry = needs(&nothing, None, &own);
+        let no_site = needs(&nothing, None, &local);
+        let from_file = needs(&nothing, None, &site_in_file);
+        let from_environment = needs(&site_in_environment, None, &local);
+        let release = needs(
+            &nothing,
+            Some("https://oddboro@relay.newaltitude.ai/oddboro/0"),
+            &missing,
+        );
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert!(
+            !own_sentry,
+            "a source build's own Sentry would get the token"
+        );
+        assert!(
+            !no_site,
+            "a local address with no account site needs a sign-in"
+        );
+        assert!(
+            from_file,
+            "the account site in the settings file was missed"
+        );
+        assert!(
+            from_environment,
+            "the account site in the environment was missed"
+        );
+        assert!(release, "a release's New Altitude address needs no sign-in");
     }
 
     #[test]

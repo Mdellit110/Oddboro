@@ -56,7 +56,7 @@ const accountSite = () => process.env.ODDBORO_ACCOUNT_SITE || readEnv().ODDBORO_
  */
 export const diagnosticsState = (): ReportsState => ({
   possible: !!getClient(),
-  account: needsSignIn(getClient()?.getOptions().dsn, accountSite()),
+  account: needsSignIn({ address: getClient()?.getOptions().dsn, accountSite: accountSite() }),
   answer: answer()
 });
 
@@ -188,7 +188,7 @@ type MakeTransport = typeof makeNodeTransport;
 export function gated(make: MakeTransport): MakeTransport {
   return (options) => {
     // `options.url` is the envelope address, with the DSN's scheme and host.
-    const signIn = needsSignIn(options.url, accountSite());
+    const signIn = needsSignIn({ address: options.url, accountSite: accountSite() });
     const plain = signIn ? undefined : make(options);
     // The stock transport takes its headers when it is made, so one is made per token.
     let signed: { token: string; transport: Transport } | undefined;

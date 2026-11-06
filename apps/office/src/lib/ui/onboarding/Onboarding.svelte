@@ -70,10 +70,12 @@
     diagnostics: 'Help fix Oddboro',
     go: 'Open the office'
   };
-  const steps = $derived<readonly Step[]>(
-    shown() ? STEPS : STEPS.filter((s) => s !== 'diagnostics')
-  );
   let step = $state<Step>('mac');
+  // The card stays while the owner is on it, so Next and Back still find it
+  // when the account signs out under them.
+  const steps = $derived<readonly Step[]>(
+    shown() || step === 'diagnostics' ? STEPS : STEPS.filter((s) => s !== 'diagnostics')
+  );
   let backward = $state(false);
   let wantKey = $state(false);
 

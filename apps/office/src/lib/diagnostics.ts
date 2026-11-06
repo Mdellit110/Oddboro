@@ -39,12 +39,20 @@ const parsed = (text: string | undefined): URL | undefined => {
  * Altitude's own address over https, or the account site itself when one is
  * set (a stand-in in development and tests, whose port may differ). Any other
  * address, such as a source build's own Sentry, needs none and never gets the
- * token. Takes a DSN or the envelope URL made from one: both have its scheme
- * and host. The shell's `needs_sign_in` is the same rule, and both are tested
- * against `needs-sign-in.cases.json`.
+ * token. `address` is a DSN or the envelope URL made from one: both have its
+ * scheme and host. The two are named, not in order, because swapped they still
+ * type-check and turn the sign-in off for New Altitude's own address. The
+ * shell's `needs_sign_in` is the same rule, and both are tested against
+ * `needs-sign-in.cases.json`.
  */
-export function needsSignIn(dsn: string | undefined, accountSite: string | undefined): boolean {
-  const to = parsed(dsn);
+export function needsSignIn({
+  address,
+  accountSite
+}: {
+  address: string | undefined;
+  accountSite: string | undefined;
+}): boolean {
+  const to = parsed(address);
   if (!to) return false;
   const own = to.hostname === 'newaltitude.ai' || to.hostname.endsWith('.newaltitude.ai');
   return (to.protocol === 'https:' && own) || parsed(accountSite)?.hostname === to.hostname;

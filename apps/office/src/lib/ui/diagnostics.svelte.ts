@@ -14,9 +14,8 @@ export const diagnostics = $state<ReportsState>({
 /** Whether the page offers reports: the first-visit card, the Setup switch and the Desk's ask. */
 export const shown = (): boolean => reportsOffered(diagnostics, account.status.state === 'in');
 
-/** The answer the page's own traces follow: no while reports wait on a sign-in. */
-export const pageAnswer = (): Answer =>
-  diagnostics.account && account.status.state !== 'in' ? 'no' : diagnostics.answer;
+/** The answer the page's own traces follow: no while the page offers no reports. */
+export const pageAnswer = (): Answer => (shown() ? diagnostics.answer : 'no');
 
 /**
  * What a report never carries, in the words the owner approved. The ask and

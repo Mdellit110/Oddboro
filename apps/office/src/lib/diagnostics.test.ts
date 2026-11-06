@@ -10,7 +10,11 @@ import cases from './needs-sign-in.cases.json' with { type: 'json' };
 test("only New Altitude's https address, or the account site, needs a sign-in", () => {
   assert.ok(cases.length > 0);
   for (const { dsn, site, needs } of cases)
-    assert.equal(needsSignIn(dsn, site ?? undefined), needs, `${dsn} with site ${site}`);
+    assert.equal(
+      needsSignIn({ address: dsn, accountSite: site ?? undefined }),
+      needs,
+      `${dsn} with site ${site}`
+    );
 });
 
 test('reports are offered only when they can go and need no sign-in or have one', () => {
