@@ -107,8 +107,11 @@ nothing fails, it says so: name that place in the pull request.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in
-  `STARTER_TOOLS` or `has()`, and `named-tools.test.ts` fails a description
-  naming a tool the Odd does not hold.
+  `STARTER_TOOLS` or `has()`. The ledger's `named-tools.test.ts` fails a
+  tool's description naming an office tool the Odd does not hold, and the
+  office's `named-tools.test.ts` fails the same in `house()` and every
+  follow-up's brief, unless that test's `NAMES_UNHELD` declares it with the
+  Linear row that owes the fix.
 - **A table.** Start at its `pgTable` in `schema.ts`, then run
   `npm run db:generate`. Its row in `LIVE_TABLES` in
   `packages/ledger/src/live-tables.ts` says whether the page hears it, and its
