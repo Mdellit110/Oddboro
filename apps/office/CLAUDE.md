@@ -63,27 +63,33 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
 6. Two full-height panels flank the floor (`src/lib/ui/SidePanel.svelte`).
    Each resizes by dragging its inner edge (or the arrow keys on it), and
    remembers its width per viewer. The start side is the office plate (name,
-   the clock, Setup, and the Odds, Desk, Goals, Lessons, Ledger, Hire and
-   Office buttons), which opens into a bar of windows
-   (`src/lib/ui/windows.svelte.ts`): the Odds list, the Desk, the Goals, the
-   Lessons, the Ledger, each hire and each open file is a tab.
-   The Odds list (`src/lib/ui/AgentsPanel.svelte`) is every Odd, one per
-   row, with a search over name, role and remit; the office opens on it when
-   the screen has room beside the floor. Cmd+K (Ctrl+K) opens it from anywhere
-   with the cursor in the search; the arrow keys pick a row and Enter opens a
-   chat with that Odd (`chatAbout(id, '')`, which takes the cursor and
-   leaves any unsent draft alone). D opens the Desk. An Odd with work in progress has
-   an "In progress" badge that opens its card on the **In progress** tab
-   (`src/lib/ui/WorkTab.svelte`): each piece of work, what the owner approved for
-   it, and the tool in use. Every open window stays
-   mounted, so a drawing keeps going while the owner works another. ✕ folds the
-   bar away with its windows still open; closing a window with unsaved edits
-   or a drawing in progress asks first. The end side is the selected
-   Odd, and collapses to a rail. The camera centres on the floor left
-   between them, and the Desk pill moves to stay clear. The floor opens on
-   the whole building and stays where the owner drags it. While an Odd's
-   panel is open, the camera follows that Odd; a drag lets go until the
-   owner selects someone or reopens the panel.
+   the clock, Setup, and the Desk, Goals, Lessons, Ledger, Hire and Office
+   buttons), which opens into a bar of windows
+   (`src/lib/ui/windows.svelte.ts`): the Desk, the Goals, the Lessons, the
+   Ledger, each hire and each open file is a tab. D opens the Desk. Every
+   open window stays mounted, so a drawing keeps going while the owner works
+   another. ✕ folds the bar away with its windows still open; closing a
+   window with unsaved edits or a drawing in progress asks first.
+   The end edge holds the Odds rail (`src/lib/ui/OddsRail.svelte`) once the
+   office has an Odd: a ⌘K button on top, then every Odd's portrait, with its
+   count of work in progress and an ember ring when it waits on the owner.
+   Hovering the rail, moving into it with the keyboard, the ⌘K button or
+   Cmd+K (Ctrl+K) from anywhere widens the rail itself toward the floor
+   (200 ms, none under reduced motion): each portrait gains its name and
+   role, and the top slot a search over name, role and remit (Cmd+K puts the
+   cursor there), with the arrow keys to pick one and Enter to open a chat
+   (`chatAbout(id, '')`). The portraits stay at the edge. Picking an Odd
+   opens its panel, sliding in from the screen's edge, and the rail slides
+   off the screen while the panel is open; Cmd+K brings it back over the
+   panel until an Odd is picked or the pointer leaves. Closing or folding
+   the panel (») brings the rail back. An effect that reads what it writes
+   loops until Svelte stops the page (`effect_update_depth_exceeded`): the
+   rail's ⌘K effect writes untracked. The
+   camera centres on the floor left between the panels and the rail, and
+   the Desk pill moves to stay clear. The floor opens on the whole building
+   and stays where the owner drags it. While an Odd's panel is open, the
+   camera follows that Odd; a drag lets go until the owner selects someone
+   or reopens the panel.
 7. **The Desk** (`src/lib/ui/DeskDrawer.svelte`) is everything waiting on the owner:
    open asks, open tasks, unread reports. The pill at the top shows the count,
    the tab title carries it, a waiting Odd's tag turns ember, and a Mac
@@ -163,8 +169,29 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    filter (About you when none is given; `{ staff }` for one Odd, `'all'` for
    the floor's library shelf), and switches an open one to it. It reloads
    when lessons change (`version`).
-9. The Odd's panel has **Chat, Card, In progress, Jobs, Lessons and Access** tabs,
-   and opens on Chat. Send is a button on the card. The chat stays mounted
+9. The Odd's panel has three groups, each an icon and a word (the icon
+   alone when the bar is under 18rem): **Chat** (the chat alone, with no
+   row of tabs), **Data** (a files icon: Lessons and Storage) and
+   **Settings** (its own four tabs, below). A group opens on the tab it was
+   last on; Data's count is Lessons' guesses. It opens on Chat. Storage
+   (`StorageTab.svelte`) is a tree of everything the Odd kept in its own
+   folder, searchable by path, from `/api/staff/[id]/storage`
+   (`listStorage` in `src/lib/server/storage.ts`): never the office's own
+   `chat.jsonl` and `session.json`, an instruction file, a hidden entry or a
+   link, and at most 5,000 entries, which it says. A file opens in the
+   viewer. It is read when the tab opens and when the office says something
+   changed. The Odd's name in the header, with an info icon beside
+   it, opens its info page (`OddInfo.svelte`), which has no tab, so the
+   tabs have room: one scrolling page of sections, most useful first. Who it
+   is, what it is doing now, and what its runs go through (tool, model,
+   thinking level); In progress (`WorkSection.svelte`); Jobs
+   (`JobsSection.svelte`: click one to edit it in place, "+ Add a job", and
+   "Next run today at 3:00 PM" or Paused, from `nextRunAt` and `nextWhen`
+   in format.ts); the job description; stats; and the look, with Redraw look
+   and Send to a place. While it has work in progress, a count in a turning
+   ring sits beside the name (CSS only, still under reduced motion, and gone
+   with nothing in progress); it opens the info page at In progress, as
+   `show: {tab: 'work'}` does. The chat stays mounted
    while the panel is open, so a
    reply survives switching tabs or collapsing. The chat shows every ask, task
    and report the Odd put on the desk, where it landed (`chatLog` merges
@@ -187,7 +214,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `src/lib/server/chat-preface.ts`): what the Odd delivered, and the asks
    the owner decided, since it last replied, and the pokes delivered and the lines the office said in the Odd's
    name (`told`, from `sayInChat`, like a new manager's hello) since the owner
-   last wrote. The owner's line is stamped when sent,
+   last wrote. A new manager's hello ends with the first of three short
+   questions (`FIRST_QUESTIONS` in the ledger's `first-questions.ts`). While
+   one is the chat's last line, the chat shows its answers as buttons; a tap
+   sends that answer as the owner's message. An answer to the first or second,
+   tapped or typed, gets the next question from the office (`chat` in
+   `staff.ts`, a `told` line, no run); the third runs the manager, whose new
+   session hears all three in its replay. The owner's line is stamped when sent,
    so what lands during a reply sits between the two. Its input grows with the text
    up to 60% of the chat, and the bar above it drags it taller; that height is
    remembered per viewer. Every run's system prompt opens with "Who you work
@@ -207,7 +240,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    how the whole office should work (how much to do without checking, how
    the owner wants to hear how things go) is a lesson for every Odd, a vague
    answer gets one follow-up question or nothing kept, a lesson never widens
-   the Odd's level or tools (more access is the Access tab's job), and a
+   the Odd's level or tools (more access is the Settings tab's job), and a
    lesson about writing to the owner covers what they read, not ask and task
    titles. An Odd keeps one from the owner's words in a chat or on an ask or a
    task, or from their edit to one of its files (item 13), which is always a
@@ -225,18 +258,54 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    job runs, follow-ups and drafts, or `grok -p` for an Odd that runs on Grok,
    `codex exec` for one on Codex, or `gemini` for one on Gemini (`staff.agent`;
    each but Claude Code gets ready through `LAUNCHES` in `src/lib/server/cli.ts`). The owner picks under "Runs on" (`RunsOn.svelte`) in the hire
-   drawer, stored with the hire before its hello runs, and on the Access tab
+   drawer, stored with the hire before its hello runs, and on the Settings tab
    (`AccessTab.svelte`); both list the tools `/api/agents` finds on PATH
    (Grok in xAI's install folder `~/.grok/bin` too, and Claude Code where
    `claudeCommand` finds it on Windows, `agentCommand`),
    with each one's sign-in, which the owner starts beside the picker,
    only those offered on this system (`AGENT_PLATFORMS` in the ledger: Grok
    and Codex on a Mac only, Gemini nowhere until a live run proves its walls); a
-   switch on the Access tab goes through `setAgent` from the staff PATCH, clears the Odd's chat
+   switch on the Settings tab goes through `setAgent` from the staff PATCH, clears the Odd's chat
    session, and gets a 409 while the Odd is replying. A computer without the
    picked tool fails the run naming it; it never falls back to the other.
-   Under "Runs on", the Access tab has two switches, Run commands and Browse
-   the web, and then a Folders list (`FoldersList.svelte`). Each goes through
+   On the Settings tab (named Access before it held the model too), the
+   Model tab picks the tool with the same square tiles as setup
+   (`ToolTiles.svelte`), with the picked tool's install or update below
+   them (`RunsOn` with `installOnly`), then the account it signs in with:
+   a card for the tool's Office account and each one the owner added
+   (accounts.ts in the ledger), "+ Add a sign-in", and one row of the same
+   buttons for the picked account (Sign in, Sign in again, Sign out,
+   and for an added one Rename and Remove). Every account is a folder of its own, `~/.oddboro/accounts/
+<tool>/<id>`, and a run points its tool at it (`GROK_HOME`, `CODEX_HOME`,
+   `CLAUDE_CONFIG_DIR`); no run reads another account's folder. Claude Code's
+   Office account runs on the owner's own login until it is signed in
+   (`claudeRunHome`), and Setup's Claude card and the account card say so.
+   A session counts only in the folder it was made in (`home` in
+   session.json), so a move starts a new one, which hears the chat and is
+   told where the rest is (`chat.jsonl`, replay.ts). Then its model from that tool's list
+   (`MODELS` in the ledger's agents.ts, `setModel`; "The office's default"
+   keeps the office's: Opus or Sonnet from setup, Codex's and Grok's own),
+   passed as `--model` or `-m`, then the permission level, then
+   Thinking, which picks how hard its runs think, from the levels
+   its tool takes (`EFFORTS` in the ledger's agents.ts): Medium until the
+   owner picks, never below Medium for the Office Manager (`effortFor`,
+   `setEffort`). Every run passes it: Claude Code's `--effort`, Codex's
+   `model_reasoning_effort`, Grok's `--reasoning-effort`, so no Odd takes the
+   owner's own Claude Code setting or a tool's default.
+   The Settings tab has four tabs, Model first, then Office, Folders and
+   Services, each an icon and a word, the icon alone when the bar is under
+   22rem (a container query). Office, Folders and Services each have a search
+   box over their list, which filters it as the owner types and clears on a
+   tab change. Office lists two switches, Run
+   commands and Browse the web, above the office's own tools; Folders
+   (`FoldersList.svelte`) lists each folder with Can read and Can write side
+   by side; Services holds the outside tools. Choose a folder asks
+   `/api/folders/pick`, which opens the system's own picker on this computer
+   (`src/lib/server/folder-picker.ts`: AppleScript on a Mac, PowerShell's
+   Forms dialog on Windows, zenity or kdialog on Linux), one at a time; a
+   cancel picks nothing, and where none can open the page says why and keeps
+   the typed path. A picked folder starts at Can read and goes through the
+   same PATCH and `checkFolder` as a typed one. Each switch and folder goes through
    the staff PATCH, `setOwnTool` or `setFolder` in the ledger's `office.ts`,
    which records a Ledger line, gets no 409 and takes effect on the next run;
    a change that opens or closes the internet to the Odd's commands says so
@@ -280,12 +349,12 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `src/lib/server/grok.ts` starts a Grok run from the office's own Grok home,
    `~/.oddboro/grok` (`GROK_HOME`), never the owner's `~/.grok`. The owner signs
    in to it from the office's page (`agent-sign-in.ts`, item 18); a run from a
-   home with no sign-in fails pointing to the Access tab (`endedEarly` in `cli.ts`),
+   home with no sign-in fails pointing to the Settings tab (`endedEarly` in `cli.ts`),
    a run past Grok's plan limit says so in the office's own words, with no
    link (`GROK_PLAN_LIMIT`), and any other early end gives the tool's own words. The sandbox keeps Grok
    from saving a renewed sign-in, so a sign-in that could run out before a
    run ends is renewed first with `grok models` outside the sandbox, and a
-   run whose sign-in has still run out is refused pointing to the Access tab
+   run whose sign-in has still run out is refused pointing to the Settings tab
    (`grokSignedOut` in `grok.ts`). Its files are
    held by a kernel sandbox profile per Odd (per run on a thread), built on
    Grok's `strict`, which reads the Odd's folders (a lead's chat also its live
@@ -333,7 +402,7 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    `~/.gemini`, signed in only with an API key the owner gives on the office's
    page (item 18), kept in the keychain like the Claude key. The keychain is
    read once per office start, the miss too, so a key put there outside the
-   page is seen after a restart; with none the run points to the Access tab and
+   page is seen after a restart; with none the run points to the Settings tab and
    starts nothing. A Gemini Odd has file
    tools and, with Browse the web, Gemini's `google_web_search` and
    `web_fetch`; never a shell, so Run commands shows off. Gemini holds its
@@ -515,20 +584,20 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    plugins, none of the owner's own CLAUDE.md files, no Claude Code
    auto-memory and none of the office process's own `GIT_` variables, which
    every tool's launch drops (`cleanEnv` in `claude.ts`), the office's own MCP server (`packages/ledger/src/mcp.ts`) with
-   only the office tools the owner ticked under "In the office" on the Access tab,
+   only the office tools the owner ticked under "In the office" on the Settings tab,
    and whatever outside access the owner granted: servers at read (the tools
    the owner ticked as read-only) or write (every tool, only while the Odd
    holds Act). Which outside tools a run gets comes from `capabilities()` in
    `packages/ledger/src/capabilities.ts`, which also says why a granted one is
    held back (above the Odd's level, still connecting). The prompt's "What you
-   can do" section, `my_access`, `office_report` and the owner's Access tab all
+   can do" section, `my_access`, `office_report` and the owner's Settings tab all
    read it for the level, what the Odd's own tools reach (`ownTools`: Run
    commands, Browse the web, whether commands reach the internet, and the
    folders) and each outside tool. The prompt, `my_access` and
    `office_report` also name the tool its runs go through, the prompt and
    `my_access` in one line (`runsOnLine`). A hosted sign-in that ran out
    shows only to the run, which passes it to its own `my_access` as
-   `SIGNED_OUT`; `office_report` and the Access tab still show that tool as
+   `SIGNED_OUT`; `office_report` and the Settings tab still show that tool as
    working. A run below the Odd's own level (a hand-off's, either side, or a
    hub's pick-up) passes its ceiling as `CEILING` the same way, so `my_access`
    says Draft and why, with a write grant read only, as the prompt does
@@ -565,18 +634,29 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     refuses if the description changed since the owner opened it. While an
     update is about to install it starts no scheduled job (item 17).
 12. **Hire** on the office plate opens a five-step drawer
-    (`src/lib/ui/HireDrawer.svelte`). Step one draws the person: the owner
-    describes them, `src/lib/ui/LookStudio.svelte` asks `/api/looks`, and
+    (`src/lib/ui/HireDrawer.svelte`). Step one makes the person's look
+    (`src/lib/ui/LookStudio.svelte`), drawn or built. Drawn: the owner
+    describes them, LookStudio asks `/api/looks`, and
     the owner sees the portrait and the walk, then redraws with a note or keeps it.
+    Built: `src/lib/ui/OddParts.svelte` cycles hair, top and bottom and
+    picks colours and glasses, each change rendered at once by
+    `/api/looks/parts` from the list at `/api/me/parts`. Only offices whose
+    tool draws looks (`drawsLooks`, `/api/agents`) offer drawing; the rest
+    build. The onboarding manager card offers the same, as "Build your own".
     Nobody is hired without a kept look. While it draws,
     `src/lib/ui/PixelDrawing.svelte` paints a bust pixel by pixel beside the
     stage and the time. Step three picks the level and the tool its runs go
     through ("Runs on", Claude Code unless the owner picks another, item 9).
     Hiring grants no tools: access goes through the
-    Odd's Access tab when they ask. A first job reports to the owner's desk unless they
+    Odd's Settings tab when they ask. A first job reports to the owner's desk unless they
     untick it; a proposal can say either way. "Draft it" drafts the job
     description. Both run as the office (`src/lib/server/office-run.ts`),
-    never as an Odd, so a new office can hire its first. Opened from a
+    never as an Odd, so a new office can hire its first. An office run goes
+    to the office's tool (`officeAgent()`): on Grok or Codex through that
+    tool's own launch (`LAUNCHES` in `cli.ts`) and sandbox, in a folder of
+    its own under `<home>/office/runs` that reads nothing else, has no MCP,
+    web or network, and goes when the run ends, pictures and all. A hire with
+    no tool picked starts on the office's tool. Opened from a
     proposed hire, it starts filled in, reading the job description from the
     proposer's file at that moment. Hiring writes a `staff` row; the Odd
     walks in live. When the office opens, Odds do not walk in: each starts
@@ -637,7 +717,12 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     start or exits with an error within a second tells the owner it could not
     open the page. Like every action, only the
     owner's page reaches it (see "Who the office answers").
-14. **Looks.** `src/lib/server/looks.ts` draws a person (`drawLook`): one
+14. **Looks.** A look built from parts (`buildLook`) takes a portrait made
+    from the same parts (`partsPortrait` in the sprites package) and draws
+    nothing, so it runs on any tool. Drawing a look runs only where
+    `officeDrawsLooks()` holds: Claude Code on Opus or Fable, Codex on Sol or
+    Astra; elsewhere `drawLook` refuses with `cannotDrawLook()`.
+    `src/lib/server/looks.ts` draws a person (`drawLook`): one
     office run with the parts library, the swatches, the body, two example
     parts and two example portraits in the prompt. It checks every piece
     (`problemsWith`) and retries once with what was wrong; a failed reply from
@@ -745,11 +830,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     deletes that home's `auth.json` and never runs a tool's own logout, which
     once removed the owner's own `~/.grok` sign-in. A Gemini key is tried once
     with a listing of Google's models before the keychain keeps it. The page's
-    side is `src/lib/ui/agent-tools.svelte.ts`, used by the Other AI tools
-    rows (`src/lib/ui/ToolRows.svelte`) and by "Runs on". The rows show on
-    onboarding's card (`ToolsCard.svelte`) and as the Setup window's Other AI
-    tools section, each only where this system offers a tool to sign in to
-    (`offersOtherTools`). Each row offers one action
+    side is `src/lib/ui/agent-tools.svelte.ts`, used by the Your AI tiles
+    (`src/lib/ui/OfficeTools.svelte`) and by "Runs on". The tiles show on
+    setup's Your AI card (`AiCard.svelte`) and as the Setup window's Your AI
+    section: one per tool on every system, a tool this system does not offer
+    greyed with why (`notOfferedWhy`), and the picked tool's panel below
+    them. Picking a tile sets the office's tool (`OFFICE_AGENT`, PUT
+    `/api/agents`). Each panel offers one action
     (`toolAction` in `src/lib/ui/tool-action.ts`: Install, nothing while
     installing, Sign in, Cancel, Sign in again over a sign-in that may have
     stopped working, or a key), and Sign out beside it when signed in and not
@@ -828,16 +915,13 @@ sample stay in the window to move back to.
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
 welcomed, the page loads the sample's empty lot (`currentOffice({ lot: true })`,
-`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs seven cards in
+`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs six cards, the same on a Mac, Linux and Windows (hard rule 14), in
 the start panel, titled "{name}'s Lot" until the office stands on it. The
 command center's buttons and tabs appear there once the first run is over, so
 the owner meets the panel first. The cards: Your computer (`MacCard`, the checks
-from `/api/setup`, and Notifications: a test of the Mac's (`notifyMac` in `src/lib/server/notify.ts`, which macOS shows as Oddboro's in the app and as Script Editor's from the repo) with the way to System Settings if it does not show, and, outside the app, the browser's for the Desk, with buttons that install Claude Code or start its sign-in
-through `/api/setup/claude`; the owner moves on with Next), their name, Your Claude (`ClaudeCard`: a Claude plan tab with the account Claude Code is signed in to, from `claude auth status`, and Switch account, or an API key tab; a model picker in both. Sonnet cannot draw looks or design offices: `canDraw()` in `claude.ts` refuses them, and the later cards offer only the ready-made managers and Main Street; the model,
+from `/api/setup`, and Notifications: a test of the Mac's (`notifyMac` in `src/lib/server/notify.ts`, which macOS shows as Oddboro's in the app and as Script Editor's from the repo) with the way to System Settings if it does not show, and, outside the app, the browser's for the Desk; the owner moves on with Next), their name, Your AI (`AiCard`, item 18: a tile per tool, the picked one the office's tool, and its panel below: Claude Code's installs it through `/api/setup/claude` and is `ClaudeCard`, a Claude plan tab with the account Claude Code is signed in to, from `claude auth status`, and Sign in with Claude or Switch account, or an API key tab, with a model picker in both. On Claude Code, Sonnet cannot draw looks or design offices: `canDraw()` in `claude.ts` refuses them, and the later cards offer only the ready-made managers and Main Street; the model,
 or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
-every run), Other AI tools (`ToolsCard`, item 18: Grok, Codex and Gemini as
-this system offers them, each with its install and sign-in; the card is skipped where
-no other tool is offered), the Office Manager (`ManagerCard`: four ready-made ones from
+every run. Next waits until the picked tool is signed in), the Office Manager (`ManagerCard`: four ready-made ones from
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
 owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
 a description or a chip, and starts the design job), and
@@ -847,8 +931,9 @@ welcome, hires the manager (`hireManager`), writes their hello into their chat
 described one gets `customHello`),
 and tells the design job to move in when it is done. The hello asks three questions, each skippable
 with its default said: what the office should help them get done (the manager
-offers an answer as a goal), how much to do without checking with them (until
-they say, the office checks before anything leaves it), and everything or
+offers an answer as a goal), how much to do on their own inside the office (the
+question says first that nothing leaves it without the owner's yes; until
+they say, the Odds draft and bring it to them), and everything or
 only what needs them (until they say, only what needs them, plus the daily
 report). The manager keeps each answer about how the office works as a lesson
 for every Odd. No run wrote the hello, so `sayInChat` marks it `told` and the

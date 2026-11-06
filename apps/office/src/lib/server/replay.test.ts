@@ -41,26 +41,36 @@ const poke = (text: string): ChatEntry => ({ ...reply(text), poke: true });
 const item: ChatEntry = { ...reply(''), item: { kind: 'ask', id: 1, title: 'A', status: 'open' } };
 /** No files changed. */
 const none = { files: [], granted: false };
+const OLDER =
+  '(The chat goes back further. All of it is in chat.jsonl in your folder, one line per message, oldest first. Read it when something earlier matters.)';
 const HEAD =
   '(This is a new session, so you do not remember your chat with {owner} so far. Here is the latest of it, word for word, oldest first:)';
 
-test('replay keeps the newest whole lines within the budget', () => {
+test('replay keeps the newest whole lines within the budget, and says where the rest is', () => {
   const chat = [owner('aaaa'), reply('bbbbbb'), item, told('cc'), poke('dd')];
   // Every line's text fits in 14 characters: each is kept, oldest first, by who said it.
   assert.equal(replay(chat, none, 14), `${HEAD}\n\n{owner}: aaaa\nYou: bbbbbb\nYou: cc\nYou: dd`);
-  // At exactly the budget the oldest line that fits is kept whole; one short of it, it goes.
-  assert.equal(replay(chat, none, 10), `${HEAD}\n\nYou: bbbbbb\nYou: cc\nYou: dd`);
-  assert.equal(replay(chat, none, 9), `${HEAD}\n\nYou: cc\nYou: dd`);
+  // At exactly the budget the oldest line that fits is kept whole; one short of it, it goes,
+  // and the session is told the whole chat is in chat.jsonl.
+  assert.equal(replay(chat, none, 10), `${HEAD}\n\nYou: bbbbbb\nYou: cc\nYou: dd\n\n${OLDER}`);
+  assert.equal(replay(chat, none, 9), `${HEAD}\n\nYou: cc\nYou: dd\n\n${OLDER}`);
   // An older short line never fills in behind a longer one that did not fit.
   assert.equal(
     replay([owner('x'), reply('yyyyyy'), owner('zz')], none, 4),
-    `${HEAD}\n\n{owner}: zz`
+    `${HEAD}\n\n{owner}: zz\n\n${OLDER}`
   );
   // A newest line over the budget alone keeps its end.
-  assert.equal(replay([owner('x'), reply('abcdefghij')], none, 4), `${HEAD}\n\nYou: …ghij`);
+  assert.equal(
+    replay([owner('x'), reply('abcdefghij')], none, 4),
+    `${HEAD}\n\nYou: …ghij\n\n${OLDER}`
+  );
+  assert.equal(replay([reply('abcdefghij')], none, 4), `${HEAD}\n\nYou: …ghij\n\n${OLDER}`);
   assert.equal(REPLAY_CHARS, 24_000);
   const long = 'w'.repeat(REPLAY_CHARS + 5);
-  assert.equal(replay([reply(long)], none), `${HEAD}\n\nYou: …${'w'.repeat(REPLAY_CHARS)}`);
+  assert.equal(
+    replay([reply(long)], none),
+    `${HEAD}\n\nYou: …${'w'.repeat(REPLAY_CHARS)}\n\n${OLDER}`
+  );
 });
 
 /** A file under `dir`, last changed at `at`. */

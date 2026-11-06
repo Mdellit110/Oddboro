@@ -3,7 +3,12 @@
 // each folder's `~` form reads the home folder, none of which the page can do.
 import {
   commandsHow,
+  effortFor,
   heldReach,
+  MANAGER_ROLE,
+  modelFor,
+  MODELS,
+  type Agent,
   networkHeld,
   ownTools,
   shownFolder,
@@ -12,6 +17,19 @@ import {
 } from '@oddboro/ledger';
 import { officeDay } from '@oddboro/ledger/time';
 import { lookVersion, type StaffProfile } from '../staff/roster.ts';
+import { claudeSettings } from './claude.ts';
+
+/**
+ * The model an Odd with none of its own runs on `agent`: Opus or Sonnet from
+ * setup, else `OFFICE_CODEX_MODEL` or `OFFICE_GROK_MODEL`, else the tool's own
+ * default, first in its list.
+ */
+function officeModel(agent: Agent): string | undefined {
+  if (agent === 'claude')
+    return claudeSettings().model === 'sonnet' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
+  const set = agent === 'codex' ? process.env.OFFICE_CODEX_MODEL : process.env.OFFICE_GROK_MODEL;
+  return set ?? MODELS[agent][0]?.id;
+}
 
 /**
  * A staff row as the page needs it. The job description stays on the server.
@@ -30,6 +48,10 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     hired: officeDay(new Date(r.hiredAt)),
     permission: r.permission,
     agent: r.agent,
+    ...(r.account ? { account: r.account } : {}),
+    model: modelFor(r.agent, r.model),
+    officeModel: officeModel(r.agent),
+    effort: effortFor(r.agent, r.effort, r.role === MANAGER_ROLE, modelFor(r.agent, r.model)),
     tools: r.tools,
     commands: r.commands,
     commandsHow: commandsHow(r.agent, process.platform),

@@ -19,7 +19,7 @@ import type { ArtKind, Place } from '@oddboro/sprites/art';
 import type { LookSpec, PartKind } from '@oddboro/sprites/look';
 import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/world';
 import { STARTER_TOOLS } from './tools.ts';
-import type { Agent, GrantedFolder } from './agents.ts';
+import type { Agent, Effort, GrantedFolder } from './agents.ts';
 import type { Level } from './access-words.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
@@ -37,10 +37,16 @@ export const staff = pgTable('staff', {
   /** The room template it works in. */
   room: text().notNull().default('workspace'),
   permission: text().$type<Level>().notNull().default('read'),
-  /** The coding tool its runs go through. The owner picks it at hire and on the Access tab. */
+  /** The coding tool its runs go through. The owner picks it at hire and on the Settings tab. */
   agent: text().$type<Agent>().notNull().default('claude'),
   /** The office tools the owner granted, beyond the ones every staffer has. See tools.ts. */
   tools: text().array().notNull().default(STARTER_TOOLS),
+  /** The account its runs sign in with on its tool (accounts.ts); null is the tool's Office account. */
+  account: text(),
+  /** The model its runs use on its tool (`MODELS` in agents.ts); null is the office's. */
+  model: text(),
+  /** How hard its runs think, as the owner picked it; null is Medium (`effortFor` in agents.ts). */
+  effort: text().$type<Effort>(),
   /** The owner's Run commands switch. Whether a run gets a shell also depends on its tool (`commandsHow`). */
   commands: boolean().notNull().default(false),
   /** The owner's Browse the web switch. */
@@ -59,6 +65,20 @@ export const staff = pgTable('staff', {
   /** Set when the owner lets a staffer go. Its history stays. */
   leftAt: at('left_at')
 });
+
+/**
+ * The accounts the owner added beyond each tool's Office account, which has
+ * no row: a named sign-in for one coding tool, kept in its own folder
+ * (`accountHome`). Odds share them.
+ */
+export const accounts = pgTable('accounts', {
+  id: text().primaryKey(),
+  agent: text().$type<Agent>().notNull(),
+  /** What the owner calls it, like "Work" or "Personal". */
+  label: text().notNull(),
+  createdAt: created('created_at')
+});
+export type AccountRow = typeof accounts.$inferSelect;
 
 /**
  * `goal` proposes a goal the manager heard in chat; approving sets it. `plan`

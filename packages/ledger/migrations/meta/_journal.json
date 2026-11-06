@@ -43,6 +43,27 @@
       "when": 1793838260935,
       "tag": "0005_own-tools",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793925219793,
+      "tag": "0006_effort",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793927000295,
+      "tag": "0007_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793929776239,
+      "tag": "0008_accounts",
+      "breakpoints": true
     }
   ]
 }

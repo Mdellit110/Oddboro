@@ -62,9 +62,8 @@ export function replaySince(entries: ChatEntry[], kept: ChatEntry[]): string | u
 
 /** The earlier chat, word for word, for a session that never saw it. Pure. */
 export function replay(entries: ChatEntry[], changed: Changed, budget = REPLAY_CHARS): string {
-  const lines = replayed(entries, budget).map(
-    (e) => `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}`
-  );
+  const kept = replayed(entries, budget);
+  const lines = kept.map((e) => `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}`);
   const more = changed.files.length - REPLAY_FILES;
   const files =
     changed.files.slice(0, REPLAY_FILES).join(', ') + (more > 0 ? `, and ${more} more` : '');
@@ -72,9 +71,16 @@ export function replay(entries: ChatEntry[], changed: Changed, budget = REPLAY_C
   const list = changed.granted
     ? `(Files that changed during it, in your folder and the folders {owner} gave you, newest first: ${files}.)`
     : `(Files in your folder that changed during it: ${files}.)`;
+  // The rest is in the office's own record, which the Odd may read: nothing of the chat is out of reach.
+  const older = kept.length < entries.filter((e) => e.text).length || kept[0]?.text.startsWith('…');
   return [
     '(This is a new session, so you do not remember your chat with {owner} so far. Here is the latest of it, word for word, oldest first:)',
     lines.join('\n'),
+    ...(older
+      ? [
+          '(The chat goes back further. All of it is in chat.jsonl in your folder, one line per message, oldest first. Read it when something earlier matters.)'
+        ]
+      : []),
     ...(changed.files.length ? [list] : [])
   ].join('\n\n');
 }

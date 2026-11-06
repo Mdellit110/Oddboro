@@ -91,3 +91,13 @@ to build and again every time someone has to read it. On 2026-10-29 the floor
 redrew all 10,464 sprites 60 times a second and an Odd's card looped a shine
 forever. Together they used about 31% of a core while nothing moved. Drawing
 only on change and sweeping the shine once cut that to about 6%.
+
+## 14. Setup works on a Mac, Linux and Windows.
+
+Setup is the first thing a new owner sees, and Oddboro ships on all three
+systems. Grok, Codex and Gemini were built and measured on a Mac while the
+Linux and Windows releases were going out, so a setup screen that assumed a
+Mac would have offered tools those systems cannot run, or hidden the one they
+can. A tool not offered on a system still shows there, greyed, with why. The
+office's tests run each system's answer with `onPlatform`, and a person walks
+through setup on each before a release reaches owners. (Decided 2026-11-05.)

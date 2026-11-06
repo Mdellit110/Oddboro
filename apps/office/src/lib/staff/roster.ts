@@ -4,7 +4,7 @@
 // the ledger; the server builds the profile (`toProfile` in `lib/server/profile.ts`).
 import type { OwnTools } from '@oddboro/ledger';
 import type { Level } from '@oddboro/ledger/access';
-import type { Agent, CommandsHow, GrantedFolder } from '@oddboro/ledger/agents';
+import type { Agent, CommandsHow, Effort, GrantedFolder } from '@oddboro/ledger/agents';
 import type { LookSpec } from '@oddboro/sprites/look';
 
 export type Activity =
@@ -22,6 +22,14 @@ export type StaffProfile = {
   permission: Level;
   /** The coding tool its runs go through. */
   agent: Agent;
+  /** The account it signs in with on that tool (accounts.ts), or nothing for the Office account. */
+  account?: string;
+  /** Its own model on that tool, or nothing for the office's. */
+  model?: string;
+  /** The office's model on that tool, which it runs without one of its own. */
+  officeModel?: string;
+  /** How hard its runs think on that tool (`effortFor`), or nothing on a tool with no levels. */
+  effort?: Effort;
   /** The office tools the owner granted, beyond the ones every staffer has. */
   tools: string[];
   /** The owner's Run commands switch, as stored; `commandsHow` says whether its tool follows it. */

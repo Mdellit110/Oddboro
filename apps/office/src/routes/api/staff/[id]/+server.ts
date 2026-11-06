@@ -1,4 +1,4 @@
-// Change a staffer's permission level or coding tool, grant or remove one
+// Change a staffer's permission level, coding tool, account, model or thinking level, grant or remove one
 // office tool, switch Run commands or Browse the web, or give or take back a
 // folder outside the office. Only the owner does this, from the card. A move
 // to another tool can turn Run commands on with it: the one click the Access
@@ -11,12 +11,17 @@ import {
   offeredAgent,
   parseLevel,
   setAgent,
+  setEffort,
+  setModel,
+  setAccount,
   setFolder,
   setOwnTool,
   setPermission,
   setTool,
   staffer,
-  type Agent
+  EFFORT_ORDER,
+  type Agent,
+  type Effort
 } from '@oddboro/ledger';
 import { isBusy } from '#lib/server/staff.ts';
 import type { RequestHandler } from './$types';
@@ -43,6 +48,9 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     web?: unknown;
     folder?: unknown;
     access?: unknown;
+    effort?: unknown;
+    model?: unknown;
+    account?: unknown;
   };
   if (typeof b.tool === 'string') {
     if (typeof b.on !== 'boolean') error(400, 'Say whether to grant or remove it');
@@ -68,6 +76,27 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
     return json({ ok: true });
   }
   // Like a tool, each of these takes effect on the Odd's next run, so none waits for a reply.
+  if (b.account !== undefined) {
+    if (b.account !== null && typeof b.account !== 'string') error(400, 'Pick an account');
+    // A chat still replying would save its session after the move, in the folder it left.
+    if (isBusy(params.id)) error(409, 'Wait for the reply to finish, then switch.');
+    const set = await setAccount(params.id, b.account);
+    if (set) error(400, set.refused);
+    return json({ ok: true });
+  }
+  if (b.model !== undefined) {
+    if (b.model !== null && typeof b.model !== 'string') error(400, 'Pick a model');
+    const set = await setModel(params.id, b.model);
+    if (set) error(400, set.refused);
+    return json({ ok: true });
+  }
+  if (b.effort !== undefined) {
+    const effort = EFFORT_ORDER.find((e) => e === b.effort);
+    if (!effort) error(400, `Pick ${EFFORT_ORDER.join(', ')}`);
+    const set = await setEffort(params.id, effort as Effort);
+    if (set) error(400, set.refused);
+    return json({ ok: true });
+  }
   if (typeof b.commands === 'boolean') {
     followsCommands(who.agent);
     await setOwnTool(params.id, 'commands', b.commands);

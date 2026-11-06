@@ -1,5 +1,5 @@
 // The coding tools an Odd can run on, the systems each is offered on, and
-// whether each may run commands. The hire drawer and the Access tab read it,
+// whether each may run commands. The hire drawer and the Settings tab read it,
 // so this file imports nothing: safe to import in the browser.
 
 /** The coding tools an Odd can run on. Each is also the command the office starts. */
@@ -39,6 +39,162 @@ export const agentsOn = (platform: NodeJS.Platform): Agent[] =>
 /** `v` when it names a tool offered on `platform`, for a hire or a move the owner asked for. */
 export const offeredAgent = (v: unknown, platform: NodeJS.Platform): Agent | undefined =>
   agentsOn(platform).find((a) => a === v);
+
+/**
+ * The oldest version of each tool the office runs: the one its switches,
+ * sandbox and prompts were measured on. An older one fails a run on a switch
+ * it does not know (Codex 0.149 had no `features.sleep_tool`, seen
+ * 2026-11-05), so the office refuses it and offers Update instead. Raise one
+ * when the office starts to rely on something newer.
+ */
+export const MIN_VERSIONS: Record<Agent, string> = {
+  claude: '2.1.318',
+  codex: '0.166.0',
+  // Grok's office runs send pictures as --prompt-json blocks, measured on 1.0.62.
+  grok: '1.0.62',
+  gemini: '0.66.0'
+};
+
+/** Whether version `a` (like 0.149.1) is older than `b`, by its numbers; a missing number counts as 0. */
+export function olderThan(a: string, b: string): boolean {
+  const [x, y] = [a, b].map((v) =>
+    v
+      .split(/[.+-]/)
+      .slice(0, 3)
+      .map((n) => parseInt(n, 10) || 0)
+  );
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+  return false;
+}
+
+/**
+ * The tool the office runs on (`OFFICE_AGENT` in `.env`), picked at setup:
+ * its own runs (drafting a job description, drawing a look, designing an
+ * office) and every new hire. A tool this system does not offer, or none,
+ * is Claude Code, the one offered everywhere.
+ */
+export const officeAgentOf = (v: unknown, platform: NodeJS.Platform): Agent =>
+  offeredAgent(v, platform) ?? 'claude';
+
+/** Every tool's first account, the one each Odd starts on and setup signs in. */
+export const OFFICE_ACCOUNT = 'office';
+
+/** How hard a run thinks, least to most, as the tools name it. */
+export const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] as const;
+export type Effort = (typeof EFFORT_ORDER)[number];
+/** What the owner reads for each. */
+export const EFFORT_NAMES: Record<Effort, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+  ultra: 'Ultra'
+};
+/**
+ * The levels each tool takes for an Odd's run, on the model it runs. Claude
+ * Code's `--effort` lists low to max. Codex's Sol lists low to ultra in its
+ * model list. Grok's menu for its default model is not published anywhere the
+ * office can read, so it offers the levels seen to work. Gemini is offered
+ * nowhere yet.
+ */
+export const EFFORTS: Record<Agent, readonly Effort[]> = {
+  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  grok: ['low', 'medium', 'high'],
+  gemini: []
+};
+/** A model an Odd may run on, and the levels it takes when they differ from its tool's. */
+export type ModelChoice = { id: string; name: string; efforts?: readonly Effort[] };
+const UP_TO_MAX: readonly Effort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+/**
+ * The models each tool offers an Odd, the tool's default first where it has
+ * one. An Odd with none picked runs the office's: Claude Code's Opus or
+ * Sonnet from setup, Codex's and Grok's own default (or `OFFICE_CODEX_MODEL`,
+ * `OFFICE_GROK_MODEL`). Codex's list and its levels are the ones its model
+ * list shows (Luna stops at Max); Grok's are the models it lists.
+ */
+export const MODELS: Record<Agent, readonly ModelChoice[]> = {
+  claude: [
+    { id: 'claude-opus-5-5', name: 'Opus 5.5' },
+    { id: 'claude-fable-5-1', name: 'Fable 5.1' },
+    { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5' },
+    { id: 'claude-haiku-5-5', name: 'Haiku 5.5' }
+  ],
+  codex: [
+    { id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' },
+    { id: 'gpt-6-astra', name: 'GPT-6 Astra' },
+    { id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra' },
+    { id: 'gpt-6-sol', name: 'GPT-6 Sol' },
+    { id: 'gpt-6-luna', name: 'GPT-6 Luna', efforts: UP_TO_MAX },
+    { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol' },
+    { id: 'gpt-5.6-terra', name: 'GPT-5.6 Terra' },
+    { id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', efforts: UP_TO_MAX }
+  ],
+  grok: [
+    { id: 'grok-4.7', name: 'Grok 4.7' },
+    { id: 'grok-4.7-build-fast', name: 'Grok 4.7 Build Fast' },
+    { id: 'grok-4.6', name: 'Grok 4.6' },
+    { id: 'grok-4.5', name: 'Grok 4.5' }
+  ],
+  gemini: []
+};
+/** The Odd's own model on `agent`, or nothing for the office's: a model kept from another tool does not carry over. */
+export const modelFor = (agent: Agent, picked: string | null | undefined): string | undefined =>
+  MODELS[agent].find((m) => m.id === picked)?.id;
+/** The levels a run on `agent` takes, on the Odd's model when it has one. */
+export const effortsOf = (agent: Agent, model?: string | null): readonly Effort[] =>
+  MODELS[agent].find((m) => m.id === model)?.efforts ?? EFFORTS[agent];
+
+/** Every Odd thinks at this until the owner picks another. */
+export const DEFAULT_EFFORT: Effort = 'medium';
+/** The Office Manager runs the floor, so it never thinks below this. */
+export const MANAGER_EFFORT_FLOOR: Effort = 'medium';
+const rank = (e: Effort) => EFFORT_ORDER.indexOf(e);
+/**
+ * The level an Odd's runs use on `agent` and its model: the one the owner picked, or
+ * Medium when none; a level this tool or model does not take becomes the nearest one
+ * below it it does. The Office Manager's is never below Medium. Undefined on a
+ * tool that takes none.
+ */
+export function effortFor(
+  agent: Agent,
+  picked: string | null | undefined,
+  manager: boolean,
+  model?: string | null
+): Effort | undefined {
+  const menu = effortsOf(agent, model);
+  if (!menu.length) return undefined;
+  const want = EFFORT_ORDER.find((e) => e === picked) ?? DEFAULT_EFFORT;
+  const fits = menu.filter((e) => rank(e) <= rank(want));
+  let e = fits.at(-1) ?? menu[0];
+  if (manager && rank(e) < rank(MANAGER_EFFORT_FLOOR))
+    e = menu.find((m) => rank(m) >= rank(MANAGER_EFFORT_FLOOR)) ?? e;
+  return e;
+}
+
+/**
+ * Whether the office's tool, on `model`, draws an Odd's look from words or a
+ * headshot: Claude Code on Opus or Fable, Codex on Sol or Astra. With no
+ * model named, each runs its default, Opus and Sol. Every other tool and
+ * model builds a look from parts, which needs no drawing at all.
+ */
+export function drawsLooks(agent: Agent, model: string | undefined): boolean {
+  if (agent === 'claude') return /opus|fable/i.test(model ?? 'opus');
+  if (agent === 'codex') return /sol|astra/i.test(model ?? 'sol');
+  return false;
+}
+
+/**
+ * Why setup shows a tool it does not offer on `platform`, greyed out, or
+ * nothing when it is offered. Every tool has a row on every system, so the
+ * owner sees what the office can run on and what is coming.
+ */
+export function notOfferedWhy(agent: Agent, platform: NodeJS.Platform): string | undefined {
+  if (AGENT_PLATFORMS[agent].runs.includes(platform)) return undefined;
+  if (!AGENT_PLATFORMS[agent].runs.length) return 'Coming soon. We are still testing it.';
+  return 'Mac only for now.';
+}
 
 /**
  * How the Run commands switch reaches each coding tool, on this system:

@@ -2,15 +2,14 @@
   import type { Check } from '@oddboro/ledger/checks';
   import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
+  import OfficeTools from './OfficeTools.svelte';
   import { selectOnFocus } from './select-on-focus.ts';
-  import { offersOtherTools } from './tool-action.ts';
-  import ToolRows from './ToolRows.svelte';
   import UpdatesSection from './UpdatesSection.svelte';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
-  // the other AI tools Odds can run on (where this system offers one, as on
-  // onboarding's card), and the same checks `npm run setup` runs.
+  // what the office runs on (the same list as setup's Your AI card), and the
+  // same checks `npm run setup` runs.
   type Props = {
     office: string;
     welcomed: boolean;
@@ -155,15 +154,14 @@
       {/if}
     </section>
 
-    {#if offersOtherTools(agentTools.tools)}
-      <section class="flex flex-col gap-2">
-        <h3 class="text-xs tracking-[0.16em] text-sea uppercase">4 · Other AI tools</h3>
-        <p class="text-xs text-muted">
-          Odds can also run on these. Optional: Claude Code stays the default.
-        </p>
-        <ToolRows tools={agentTools} />
-      </section>
-    {/if}
+    <section class="flex flex-col gap-2">
+      <h3 class="text-xs tracking-[0.16em] text-sea uppercase">4 · Your AI</h3>
+      <p class="text-xs text-muted">
+        What your office runs on: its Office Manager and every new Odd. Each Odd can move to another
+        tool on its Settings tab.
+      </p>
+      <OfficeTools tools={agentTools} />
+    </section>
 
     {#if welcomed}
       <UpdatesSection />

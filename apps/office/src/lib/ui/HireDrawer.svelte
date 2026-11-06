@@ -8,6 +8,7 @@
   import LookStudio, { type Drawn } from './LookStudio.svelte';
   import SchedulePicker from './SchedulePicker.svelte';
   import RunsOn from './RunsOn.svelte';
+  import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
   import { wins } from './windows.svelte.ts';
   import type { StaffProfile } from '../staff/roster.ts';
@@ -35,8 +36,10 @@
   let remit = $state('');
   let desk = $state('');
   let permission = $state<Level>('read');
-  /** The tool its runs go through, its hello first. Stored with the hire. */
-  let agent = $state<Agent>('claude');
+  /** The tool its runs go through, its hello first: the office's own until the owner picks another. Stored with the hire. */
+  const agentTools = new AgentTools();
+  let pickedAgent = $state<Agent | undefined>();
+  const agent = $derived(pickedAgent ?? agentTools.office);
   let jobName = $state('');
   let jobInstructions = $state('');
   /** Shown only once the owner names a job, so an empty job never reads as an hourly one. */
@@ -263,13 +266,13 @@
         <!-- Every option's value is a tool id `/api/agents` sent, so the cast holds. -->
         <RunsOn
           value={agent}
-          onpick={(select) => (agent = select.value as Agent)}
+          onpick={(select) => (pickedAgent = select.value as Agent)}
           class="mt-2 text-xs"
         />
       </div>
     {:else if step === 3}
       <p class="text-xs text-muted">
-        Optional. Access to tools comes later, when they ask for it on their Access tab.
+        Optional. Access to tools comes later, when they ask for it on their Settings tab.
       </p>
       <div class="flex flex-col gap-2 rounded-xl bg-raise p-3">
         <span class="text-xs text-muted">A first job</span>

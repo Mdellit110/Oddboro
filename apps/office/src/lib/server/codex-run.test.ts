@@ -51,7 +51,7 @@ await L.pg`insert into staff ${L.pg([
   { ...odd('cora', 'Cora'), agent: 'codex' }
 ])}`;
 
-const CODEX_HOME = join(folder, 'codex');
+const CODEX_HOME = join(folder, 'accounts', 'codex', 'office');
 /** The names no run may write in a folder it writes, as files.ts has them. */
 const INSTRUCTIONS = [
   'CLAUDE.md',
@@ -143,7 +143,9 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
       'developer_instructions=<…>',
       'permissions=<…>',
       'default_permissions="odd"',
-      'mcp_servers=<…>'
+      'mcp_servers=<…>',
+      // No level picked: Medium (`effortFor`).
+      'model_reasoning_effort="medium"'
     ].flatMap((c) => ['-c', c]),
     '-'
   ]);
@@ -538,7 +540,7 @@ test("the office keeps a config.toml it did not write, so the owner's workspace 
   assert.equal(readFileSync(config, 'utf8'), pinned);
 });
 
-test('a Codex run from an office Codex home nobody signed in to points to its Access tab to sign in to that home, which keeps the sign-in as a file, and starts nothing', async () => {
+test('a Codex run from an office Codex home nobody signed in to points to its Settings tab to sign in to that home, which keeps the sign-in as a file, and starts nothing', async () => {
   const auth = join(CODEX_HOME, 'auth.json');
   const config = join(CODEX_HOME, 'config.toml');
   const before = codexLaunches().length;
@@ -547,7 +549,7 @@ test('a Codex run from an office Codex home nobody signed in to points to its Ac
   try {
     assert.equal(
       await chatError('cody'),
-      "Codex is not signed in for this office. Sign in on this Odd's Access tab, under Runs on."
+      "Codex is not signed in for this office. Sign in on this Odd's Settings tab, under Model."
     );
     assert.equal(codexLaunches().length, before, 'codex started without a sign-in');
     assert.match(readFileSync(config, 'utf8'), /^cli_auth_credentials_store = "file"$/m);

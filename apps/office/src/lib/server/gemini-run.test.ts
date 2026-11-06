@@ -142,6 +142,7 @@ test('a Gemini run starts as a process group of its own, so its MCP servers stop
   const dir = join(folder, 'staff', 'gemma');
   const launch = await LAUNCHES.gemini({
     key: 'own-group',
+    account: 'office',
     staffId: 'gemma',
     dir,
     reads: [],
@@ -213,7 +214,7 @@ test("a Gemini result that fails ends the run with Gemini's own words", async ()
   assert.equal(await chatError('gemma', 'End in error'), 'Quota used up.');
 });
 
-test('with no Gemini key in the office, the run points to its Access tab to add one, and starts nothing; a key added there reaches the next run', async () => {
+test('with no Gemini key in the office, the run points to its Settings tab to add one, and starts nothing; a key added there reaches the next run', async () => {
   const launches = () => readFileSync(join(GEMINI_HOME, 'launches.log'), 'utf8').length;
   const before = launches();
   // Google stood in for: it takes every key, since the key's trial is not under test here.
@@ -223,7 +224,7 @@ test('with no Gemini key in the office, the run points to its Access tab to add 
     clearGeminiKey();
     assert.equal(
       await chatError('gemma'),
-      "Gemini has no API key in this office. Add one on this Odd's Access tab, under Runs on."
+      "Gemini has no API key in this office. Add one on this Odd's Settings tab, under Model."
     );
     assert.equal(launches(), before, 'gemini started');
     assert.deepEqual(await setGeminiKey('added-later-key-for-tests-01'), { ok: true });

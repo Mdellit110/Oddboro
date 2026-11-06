@@ -3,10 +3,10 @@
 // gave it), the office tools the owner gave it, and each outside tool it was
 // granted, with whether a run gets that tool and why not. A run loads its
 // tools from this, my_access shows it, office_report shows it for every Odd,
-// and the owner's Access tab shows it, so all of them see the same thing. The
+// and the owner's Settings tab shows it, so all of them see the same thing. The
 // one gap is a hosted sign-in that ran out: only the run's fresh token shows
 // it. The run tells its own my_access (SIGNED_OUT), but office_report and the
-// Access tab, read outside any run, cannot know.
+// Settings tab, read outside any run, cannot know.
 import { existsSync } from 'node:fs';
 import {
   FOLDER_SAID,

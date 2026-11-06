@@ -13,7 +13,7 @@ import { runsGoing, type ModelUsage } from '@oddboro/ledger';
 import { cleanEnv } from './claude.ts';
 
 /** Where the owner signs a tool in for the office: beside the Odd's "Runs on" picker. */
-export const SIGN_IN_WHERE = "on this Odd's Access tab, under Runs on";
+export const SIGN_IN_WHERE = "on this Odd's Settings tab, under Model";
 /** What a run refused for its tool's sign-in says after the tool's name. */
 export const NOT_SIGNED_IN = `is not signed in for this office. Sign in ${SIGN_IN_WHERE}.`;
 
@@ -46,6 +46,9 @@ export function mcpGrant(allowed: string): { server: string; tool?: string } {
   const at = name.indexOf('__');
   return at < 0 ? { server: name } : { server: name.slice(0, at), tool: name.slice(at + 2) };
 }
+
+/** A picture an office run sends with its message (`runAsOffice`), as a file in the run's folder. */
+export type RunImage = { path: string; mediaType: string };
 
 /** What run() takes from one line of a tool's own stream (`read` on a `Launch` in cli.ts). */
 export type RunEvent =

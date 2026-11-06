@@ -1,4 +1,4 @@
-// The windows open on the start side: the agents, the desk, the goals, the
+// The windows open on the start side: the desk, the goals, the
 // lessons (what the office knows about the owner), the ledger, hires, the office
 // designer, the welcome and setup, files, and reports opened from a staffer's
 // chat once they have left the desk.
@@ -13,7 +13,6 @@ export type HireFrom = { askId: number; staff: string; proposal: HireProposal };
 /** Which lessons the Lessons window shows: those for every Odd, those one Odd follows, or all. */
 export type LessonsFilter = 'about' | 'all' | { staff: string };
 export type Win =
-  | { id: 'agents'; kind: 'agents' }
   | { id: 'desk'; kind: 'desk' }
   | { id: 'goals'; kind: 'goals' }
   | { id: 'lessons'; kind: 'lessons'; filter: LessonsFilter }

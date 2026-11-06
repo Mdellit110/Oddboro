@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ThreadStage } from '@oddboro/ledger';
 import { ownerWords } from '../../../../../packages/ledger/test/owner-words.ts';
-import { workLine, type Work } from './format.ts';
+import { nextWhen, workLine, type Work } from './format.ts';
+import { setZone } from '@oddboro/ledger/time';
 
 const work = (w: Partial<Work> & { stage: ThreadStage }): Work => ({
   lead: 'Marshall',
@@ -51,4 +52,12 @@ test('no line the owner reads says thread, hand-off or a number', () => {
   for (const stage of stages)
     for (const resumeAt of [undefined, at])
       for (const held of [false, true]) ownerWords(workLine(work({ stage, resumeAt, held })).text);
+});
+
+test('a next run says today, tomorrow, or the day, with its time, in the office time zone', () => {
+  setZone('America/Los_Angeles');
+  const now = new Date('2026-11-05T18:00:00Z'); // 10:00 AM Thursday in Los Angeles
+  assert.equal(nextWhen('2026-11-05T23:00:00Z', now), 'today at 3:00 PM');
+  assert.equal(nextWhen('2026-11-06T15:00:00Z', now), 'tomorrow at 7:00 AM');
+  assert.equal(nextWhen('2026-11-09T15:00:00Z', now), 'Mon, Nov 9 at 7:00 AM');
 });

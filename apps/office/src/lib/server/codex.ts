@@ -21,7 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { home } from '@oddboro/ledger';
+import { home, OFFICE_ACCOUNT, toolHome, type Effort } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
 import { devReads } from './sandbox.ts';
 import {
@@ -33,16 +33,20 @@ import {
   toml,
   vendorEnv,
   type RunEvent,
+  type RunImage,
   type Toml
 } from './launch.ts';
 
-export const CODEX_HOME = home('codex');
-const CONFIG = join(CODEX_HOME, 'config.toml');
 /**
- * Where a sign-in is kept, since config.toml says `cli_auth_credentials_store
- * = "file"`. Sign out from the page removes it (agent-sign-in.ts).
+ * One account's Codex home (`toolHome`), its config, and where its sign-in is
+ * kept, since config.toml says `cli_auth_credentials_store = "file"`. Sign out
+ * from the page removes it (agent-sign-in.ts).
  */
-export const CODEX_AUTH = join(CODEX_HOME, 'auth.json');
+export function codexHome(account: string = OFFICE_ACCOUNT) {
+  const dir = toolHome('codex', account);
+  return { dir, config: join(dir, 'config.toml'), auth: join(dir, 'auth.json') };
+}
+type CodexHome = ReturnType<typeof codexHome>;
 /**
  * Each run's own temp folder, named by its key. A shared one would let one
  * Odd's shell read what another's left there.
@@ -120,6 +124,8 @@ const PROFILE = 'odd';
 type CodexRun = {
   /** The run's key (`runsGoing`), which names its temp folder. */
   key: string;
+  /** The account whose Codex home the run uses (accounts.ts). */
+  account: string;
   /** The Odd's folder, the run's cwd. */
   dir: string;
   /** The folders the run reads besides its own: the owner's data folder, its thread's or those of the goals a lead's chat leads, and the folders the owner gave the Odd. */
@@ -140,6 +146,12 @@ type CodexRun = {
   web: boolean;
   /** Whether the run's commands reach the internet (`network` in its profile). */
   network: boolean;
+  /** Pictures sent with the message (an office run only), each as `--image=<file>`. */
+  images?: RunImage[];
+  /** How hard the model thinks, as `model_reasoning_effort`: an Odd's level or an office run's. */
+  effort?: Effort;
+  /** The Odd's own model; without one, the office's (`OFFICE_CODEX_MODEL`) or the tool's default. */
+  model?: string;
 };
 
 type CodexLaunch = { args: string[]; env: NodeJS.ProcessEnv; stdin: string; done: () => void };
@@ -274,10 +286,10 @@ export function mcpServers(
  * if it had none. Made before the sign-in check and the sign-in, so a sign-in
  * keeps itself as a file, not in the keychain.
  */
-function homeReady(): void {
-  mkdirSync(CODEX_HOME, { recursive: true, mode: 0o700 });
-  chmodSync(CODEX_HOME, 0o700);
-  if (!existsSync(CONFIG)) replace(CONFIG, FIRST_CONFIG);
+function homeReady(h: CodexHome): void {
+  mkdirSync(h.dir, { recursive: true, mode: 0o700 });
+  chmodSync(h.dir, 0o700);
+  if (!existsSync(h.config)) replace(h.config, FIRST_CONFIG);
 }
 
 /**
@@ -285,10 +297,11 @@ function homeReady(): void {
  * file, else the email its ID token names, when it names one. The token's
  * signature is not checked: the email is shown, never trusted.
  */
-export function codexAccount(): { email?: string } | undefined {
-  if (!existsSync(CODEX_AUTH)) return undefined;
+export function codexAccount(account: string = OFFICE_ACCOUNT): { email?: string } | undefined {
+  const h = codexHome(account);
+  if (!existsSync(h.auth)) return undefined;
   try {
-    const auth = JSON.parse(readFileSync(CODEX_AUTH, 'utf8')) as {
+    const auth = JSON.parse(readFileSync(h.auth, 'utf8')) as {
       tokens?: { id_token?: unknown };
     };
     const payload = auth.tokens?.id_token;
@@ -308,14 +321,14 @@ export function codexAccount(): { email?: string } | undefined {
  * nothing. Codex's own advice would sign in the owner's ~/.codex, so this
  * points to the office's own sign-in, on the page.
  */
-export function codexSignedOut(): string | undefined {
-  homeReady();
-  return codexAccount() ? undefined : `Codex ${NOT_SIGNED_IN}`;
+export function codexSignedOut(account: string = OFFICE_ACCOUNT): string | undefined {
+  homeReady(codexHome(account));
+  return codexAccount(account) ? undefined : `Codex ${NOT_SIGNED_IN}`;
 }
 
 /** The environment every `codex` the office starts gets: the office's Codex home, and no key or setup of the office's own. */
-function codexEnv(): NodeJS.ProcessEnv {
-  return Object.assign(vendorEnv(['OPENAI_', 'CODEX_']), { CODEX_HOME });
+function codexEnv(h: CodexHome): NodeJS.ProcessEnv {
+  return Object.assign(vendorEnv(['OPENAI_', 'CODEX_']), { CODEX_HOME: h.dir });
 }
 
 /**
@@ -323,11 +336,15 @@ function codexEnv(): NodeJS.ProcessEnv {
  * (agent-sign-in.ts). It says to keep the sign-in as a file even when the
  * home's config.toml does not, or the office would never see it.
  */
-export function codexSignIn(): { args: string[]; env: NodeJS.ProcessEnv } {
-  homeReady();
+export function codexSignIn(account: string = OFFICE_ACCOUNT): {
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  const h = codexHome(account);
+  homeReady(h);
   return {
     args: ['login', '-c', `cli_auth_credentials_store=${toml('file')}`],
-    env: codexEnv()
+    env: codexEnv(h)
   };
 }
 
@@ -337,7 +354,8 @@ export function codexSignIn(): { args: string[]; env: NodeJS.ProcessEnv } {
  * start `codex exec` with. `done` removes the temp folder.
  */
 export function codexLaunch(r: CodexRun): CodexLaunch {
-  homeReady();
+  const h = codexHome(r.account);
+  homeReady(h);
   mkdirSync(TEMPS, { recursive: true, mode: 0o700 });
   sweep(TEMPS, '', r.key);
   const temp = join(TEMPS, r.key);
@@ -345,9 +363,12 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   const shell = shellEnv(temp);
   mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
   const set = (key: string, value: Toml) => ['-c', `${key}=${toml(value)}`];
-  const model = process.env.OFFICE_CODEX_MODEL;
+  const model = r.model ?? process.env.OFFICE_CODEX_MODEL;
   const args = [
     'exec',
+    // Joined to its flag: `--image` takes many values, so a bare file after
+    // it would also take the "-" that reads the message.
+    ...(r.images ?? []).map((i) => `--image=${i.path}`),
     '--json',
     // The Odd's folder is not a git repository.
     '--skip-git-repo-check',
@@ -365,13 +386,14 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     }),
     ...set('default_permissions', PROFILE),
     ...set('mcp_servers', mcpServers(r.servers, r.allowed)),
+    ...(r.effort ? set('model_reasoning_effort', r.effort) : []),
     ...(model ? ['-m', model] : []),
     // "-" reads the message from stdin, so one that starts with a dash is never a flag.
     ...(r.resume ? ['resume', r.resume, '-'] : ['-'])
   ];
   return {
     args,
-    env: { ...codexEnv(), TMPDIR: temp },
+    env: { ...codexEnv(h), TMPDIR: temp },
     stdin: r.input,
     done: () => rmSync(temp, { recursive: true, force: true })
   };

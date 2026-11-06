@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOOKS_ROOT, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
 import { db } from './db.ts';
+import { firstAsk } from './first-questions.ts';
 import { hire, ownerName, type StaffRow } from './office.ts';
 import { jobs } from './schema.ts';
 import { STARTER_TOOLS } from './tools.ts';
@@ -31,11 +32,10 @@ export type ManagerPreset = {
   /** A generated look. Marshall has none and keeps the hand-drawn art. */
   look?: LookSpec;
   /**
-   * Their first chat message to the owner, in their own voice. It asks three
-   * questions, each with the default if the owner skips it: what the office
-   * should help them get done, how much to do without checking with them, and
-   * whether to hear everything or only what needs them. Each answer about how
-   * the office works becomes a lesson for every Odd.
+   * Their first chat message to the owner: a greeting in their own voice,
+   * then the first of three short questions (`firstAsk`). The owner taps or
+   * types each answer, and the office asks the next (`FIRST_QUESTIONS`). Each
+   * answer about how the office works becomes a lesson for every Odd.
    */
   hello: (owner: string) => string;
 };
@@ -46,16 +46,14 @@ export const MANAGERS: ManagerPreset[] = [
     name: 'Marshall',
     trait: 'Savvy',
     says: "Calm and organized. I spot talent, and I'll tell you who to hire next.",
-    hello: (owner) =>
-      `Hi ${owner}, I'm Marshall. Glad to be here.\n\nThree questions before I bring anyone else on. Skip any of them and I'll go with a sensible default.\n\nWhat should this office help you get done? A calmer inbox, a project that keeps sliding to next month. Tell me one or two, and I'll work out who we need. If you'd rather not think that big today, tell me what's taking too much of your week, and I'll start there.\n\nHow much should we do without checking with you? Until you say otherwise, we check with you before anything leaves the office.\n\nHow do you want to hear how things are going: everything, or only what needs you? Until you say, you'll hear only what needs you, plus my report at 7 each morning. The first one will be ready tomorrow.`
+    hello: (owner) => `Hi ${owner}, I'm Marshall. Glad to be here.\n\n${firstAsk}`
   },
   {
     id: 'ziva',
     name: 'Ziva',
     trait: 'Sharp',
     says: 'I read the room before you walk into it. Short answers, no surprises, nothing slips past me.',
-    hello: (owner) =>
-      `${owner}. Ziva. I run the floor from today.\n\nThree questions before I hire anyone. Skip any you like.\n\nWhat should this office get done for you? Fewer late nights, a launch, an hour back in your evening. Name one or two and I'll come back with a plan. Not today? Fine. Tell me what's eating your week instead.\n\nHow much do we do without checking with you? Until you say, we check with you before anything leaves the office.\n\nHow do you want to hear how things are going: everything, or only what needs you? No answer means only what needs you, plus my report on your desk at 7 each morning. The first one lands tomorrow.`,
+    hello: (owner) => `${owner}. Ziva. I run the floor from today.\n\n${firstAsk}`,
     look: {
       hair: 'long-straight',
       top: 'blazer',
@@ -76,7 +74,7 @@ export const MANAGERS: ManagerPreset[] = [
     trait: 'Executive presence',
     says: 'I run the floor like a boardroom. You set the direction, and I bring you decisions.',
     hello: (owner) =>
-      `Good to meet you, ${owner}. I'm Jamal.\n\nYou set the direction, so I have three questions for you. Skip any of them and I'll go with a sensible default.\n\nWhat should this office help you get done? Maybe it's more time outdoors, maybe it's the side project you keep meaning to finish. Give me one or two, and I'll come back with a plan and the people to carry it. If you'd rather start small, tell me what's eating your week.\n\nHow much should we do without checking with you? Until you decide, we check with you before anything leaves the office.\n\nHow do you want to hear how things are going: everything, or only what needs you? Until you say, you'll hear only what needs you, and you'll have my report at 7 each morning, starting tomorrow.`,
+      `Good to meet you, ${owner}. I'm Jamal. You set the direction.\n\n${firstAsk}`,
     look: {
       hair: 'short-crop',
       top: 'blazer',
@@ -98,7 +96,7 @@ export const MANAGERS: ManagerPreset[] = [
     trait: 'Intense',
     says: "I don't do half done. I chase every loose end until it closes, and I'll tell you the minute something is off.",
     hello: (owner) =>
-      `${owner}, hi. Cindy. Fair warning: I don't sit still, so point me somewhere.\n\nThree questions. Skip any you want and I'll pick a sensible default.\n\nWhat do you want this office to get done? More sleep, that project finally out the door, whatever keeps nagging at you. Give me one or two and I'll come back with a plan and the people for it. Not ready to go that big? Tell me what's driving you nuts this week, and I'll start there.\n\nHow much should we do without checking with you? Until you tell me, we check with you before anything leaves the office.\n\nHow do you want to hear how things are going: everything, or only what needs you? Skip it and you'll hear only what needs you, plus my report at 7 every morning. First one's on your desk tomorrow.`,
+      `${owner}, hi. Cindy. Fair warning: I don't sit still, so point me somewhere.\n\n${firstAsk}`,
     look: {
       hair: 'bob',
       top: 'sweater',
@@ -109,9 +107,9 @@ export const MANAGERS: ManagerPreset[] = [
   }
 ];
 
-/** The first chat message from a manager the owner described, who has no voice written for them yet. It asks what `hello` asks. */
+/** The first chat message from a manager the owner described, who has no voice written for them yet. It ends as `hello` does. */
 export const customHello = (name: string, owner: string) =>
-  `Hi ${owner}, I'm ${name}.\n\nThree questions before I bring anyone else on. Skip any of them and I'll go with a sensible default.\n\nWhat should this office help you get done? A tidier inbox, a project out the door, a quieter week. One or two is plenty, and I'll work out who we need. Or skip that for now and tell me what's taking too much of your time.\n\nHow much should we do without checking with you? Until you say otherwise, we check with you before anything leaves the office.\n\nHow do you want to hear how things are going: everything, or only what needs you? Until you say, you'll hear only what needs you, plus my report at 7 each morning, starting tomorrow.`;
+  `Hi ${owner}, I'm ${name}.\n\n${firstAsk}`;
 
 /** A ready-made manager's portrait, as .px in the looks palette. */
 export function managerPortrait(id: string): string | undefined {

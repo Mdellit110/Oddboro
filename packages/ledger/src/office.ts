@@ -80,7 +80,21 @@ import {
   type Step,
   type UsageKind
 } from './schema.ts';
-import { AGENT_NAMES, commandsOnline, type Agent, type GrantedFolder } from './agents.ts';
+import {
+  AGENT_NAMES,
+  commandsOnline,
+  EFFORT_NAMES,
+  EFFORT_ORDER,
+  effortsOf,
+  MANAGER_EFFORT_FLOOR,
+  MODELS,
+  officeAgentOf,
+  type Agent,
+  type Effort,
+  type GrantedFolder
+} from './agents.ts';
+// Read only inside functions, so the import cycle with managers.ts is safe.
+import { MANAGER_ROLE } from './managers.ts';
 import { levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
@@ -197,6 +211,9 @@ function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
   return { body: opened ? NETWORK_NOTE.on : NETWORK_NOTE.held };
 }
 
+/** The tool the office runs on, from `.env` as it stands now (`officeAgentOf`). */
+export const officeAgent = (): Agent => officeAgentOf(process.env.OFFICE_AGENT, process.platform);
+
 /**
  * Only the owner moves a staffer to another coding tool. Its chat session
  * belongs to the tool it left, which could not resume it, so the next chat
@@ -205,7 +222,8 @@ function networkNote(before: StaffRow, after: StaffRow): { body?: string } {
 export async function setAgent(id: string, agent: Agent): Promise<void> {
   const before = await staffer(id);
   if (!before || before.agent === agent) return;
-  await db.update(staff).set({ agent }).where(eq(staff.id, id));
+  // An account belongs to one tool, so the Odd starts the new one on its Office account.
+  await db.update(staff).set({ agent, account: null }).where(eq(staff.id, id));
   rmSync(chatSession(id), { force: true });
   await record({
     kind: 'access',
@@ -232,6 +250,69 @@ export async function setTool(id: string, tool: string, on: boolean): Promise<vo
 }
 
 /** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
+/**
+ * Set how hard an Odd's runs think, from the levels its tool takes
+ * (`EFFORTS`). The Office Manager never goes below Medium. Takes effect on its
+ * next run.
+ */
+export async function setEffort(
+  id: string,
+  effort: Effort
+): Promise<{ refused: string } | undefined> {
+  const before = await staffer(id);
+  if (!before) return { refused: 'No such Odd' };
+  const menu = effortsOf(before.agent, before.model);
+  if (!menu.includes(effort))
+    return {
+      refused: menu.length
+        ? `${AGENT_NAMES[before.agent]} takes ${menu.map((e) => EFFORT_NAMES[e]).join(', ')}`
+        : `${AGENT_NAMES[before.agent]} has no thinking levels to pick`
+    };
+  if (
+    before.role === MANAGER_ROLE &&
+    EFFORT_ORDER.indexOf(effort) < EFFORT_ORDER.indexOf(MANAGER_EFFORT_FLOOR)
+  )
+    return {
+      refused: `The ${MANAGER_ROLE} thinks at ${EFFORT_NAMES[MANAGER_EFFORT_FLOOR]} or more`
+    };
+  if (before.effort === effort) return;
+  await db.update(staff).set({ effort }).where(eq(staff.id, id));
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: `Set ${before.name} to think at ${EFFORT_NAMES[effort]}`
+  });
+}
+
+/**
+ * Set the model an Odd's runs use on its tool, from the ones it offers
+ * (`MODELS`), or null for the office's. Takes effect on its next run.
+ */
+export async function setModel(
+  id: string,
+  model: string | null
+): Promise<{ refused: string } | undefined> {
+  const before = await staffer(id);
+  if (!before) return { refused: 'No such Odd' };
+  const menu = MODELS[before.agent];
+  const picked = model === null ? undefined : menu.find((m) => m.id === model);
+  if (model !== null && !picked)
+    return {
+      refused: menu.length
+        ? `${AGENT_NAMES[before.agent]} runs ${menu.map((m) => m.name).join(', ')}`
+        : `${AGENT_NAMES[before.agent]} has no models to pick`
+    };
+  if (before.model === model) return;
+  await db.update(staff).set({ model }).where(eq(staff.id, id));
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: picked
+      ? `Set ${before.name} to run on ${picked.name}`
+      : `Set ${before.name} to run on the office's model`
+  });
+}
+
 export async function setOwnTool(
   id: string,
   which: 'commands' | 'web',
@@ -468,7 +549,8 @@ export async function hire(h: Hire): Promise<StaffRow> {
   const { newParts, ...values } = h;
   const [row] = await db
     .insert(staff)
-    .values({ ...values, id, tools: tools ?? STARTER_TOOLS })
+    // With no tool picked, the hire runs on the office's own.
+    .values({ ...values, agent: values.agent ?? officeAgent(), id, tools: tools ?? STARTER_TOOLS })
     .returning();
   await saveParts(newParts, id);
   await record({

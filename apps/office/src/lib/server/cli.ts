@@ -5,9 +5,9 @@
 // ended early. Server only.
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { COMMANDS_WHY, type Agent } from '@oddboro/ledger';
+import { COMMANDS_WHY, type Agent, type Effort } from '@oddboro/ledger';
 import { deniedEdits } from './files.ts';
-import type { RunEvent } from './launch.ts';
+import type { RunEvent, RunImage } from './launch.ts';
 import { GROK_PLAN_LIMIT, GROK_SIGN_IN, grokLaunch, grokSignedOut } from './grok.ts';
 import { codexLaunch, codexReader, codexSignedOut } from './codex.ts';
 import { geminiKeyMissing, geminiLaunch, geminiReader } from './gemini.ts';
@@ -64,6 +64,16 @@ export type CliRun = {
   allowed: string[];
   /** The longest the run may take before the office cuts it. */
   timeoutMs: number;
+  /** Pictures sent with the message: an office run's (`runAsOffice`), never an Odd's. */
+  images?: RunImage[];
+  /** An office run: Grok gets no tools (Codex keeps its shell, its only way to read). */
+  bare?: boolean;
+  /** How hard the model thinks: an Odd's level (`effortFor`) or an office run's. */
+  effort?: Effort;
+  /** The Odd's own model (`modelFor`); without one, the office's. */
+  model?: string;
+  /** The account whose home the tool runs with (`accountOf`): Office for an office run. */
+  account: string;
 };
 
 /**
@@ -80,11 +90,12 @@ export const LAUNCHES: Record<
 > = {
   grok: async (r) => {
     if (r.commands) return { refused: COMMANDS_WHY.grok };
-    const signedOut = await grokSignedOut(r.timeoutMs);
+    const signedOut = await grokSignedOut(r.timeoutMs, r.account);
     if (signedOut) return { refused: signedOut };
     return {
       ...grokLaunch({
         key: r.key,
+        account: r.account,
         staffId: r.staffId,
         dir: r.dir,
         reads: r.reads,
@@ -97,7 +108,11 @@ export const LAUNCHES: Record<
         newSession: randomUUID(),
         servers: r.servers,
         allowed: r.allowed,
-        web: r.web
+        web: r.web,
+        images: r.images,
+        bare: r.bare,
+        effort: r.effort,
+        model: r.model
       }),
       // Grok takes its message as an argument and reads no input.
       stdin: ''
@@ -106,11 +121,12 @@ export const LAUNCHES: Record<
   codex: async (r) => {
     if (!r.commands)
       return { refused: 'Codex reads files through its commands, so it cannot run without them.' };
-    const signedOut = codexSignedOut();
+    const signedOut = codexSignedOut(r.account);
     if (signedOut) return { refused: signedOut };
     return {
       ...codexLaunch({
         key: r.key,
+        account: r.account,
         dir: r.dir,
         reads: r.reads,
         writes: r.writes,
@@ -121,9 +137,12 @@ export const LAUNCHES: Record<
         servers: r.servers,
         allowed: r.allowed,
         web: r.web,
-        network: r.network
+        network: r.network,
+        images: r.images,
+        effort: r.effort,
+        model: r.model
       }),
-      read: codexReader(process.env.OFFICE_CODEX_MODEL ?? 'codex'),
+      read: codexReader(r.model ?? process.env.OFFICE_CODEX_MODEL ?? 'codex'),
       ownGroup: true
     };
   },

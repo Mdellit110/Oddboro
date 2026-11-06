@@ -1,7 +1,10 @@
-// How the owner installs the office's Grok, Codex and Gemini, signs Grok and
-// Codex in, and gives Gemini its API key, from the office's page
-// (routes/api/agents/[tool]), so no tool an Odd runs on needs Terminal.
-// Claude Code's install and sign-in are Setup's Claude card.
+// How the owner installs the office's Grok, Codex and Gemini, signs each
+// tool's accounts in (Claude Code's too), and gives Gemini its API key, from
+// the office's page (routes/api/agents/[tool]), so no tool an Odd runs on
+// needs Terminal. Each account is a folder of its own (accounts.ts), and a
+// sign-in signs that one folder in. Claude Code's install is Setup's Claude
+// card; its sign-in runs with the account's `CLAUDE_CONFIG_DIR`, so it never
+// touches the owner's own login.
 //
 // Install runs the tool's own installer and sign-in its own sign-in command
 // in the office's home for it, each streamed to the page through the runner
@@ -12,18 +15,20 @@
 // `GROK_HOME=<office> grok logout` removed the owner's own ~/.grok sign-in in
 // the same second. The session at xAI or OpenAI lasts until it ends or the
 // owner removes it in their account. Server only.
+import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import type { Agent } from '@oddboro/ledger';
+import { OFFICE_ACCOUNT, type Agent } from '@oddboro/ledger';
 import { claudeCommand } from '@oddboro/ledger/platform';
-import { codexAccount, codexSignIn, CODEX_AUTH } from './codex.ts';
+import { claudeAccountOf, claudeHome, cleanEnv, forgetClaudeAccount } from './claude.ts';
+import { codexAccount, codexHome, codexSignIn } from './codex.ts';
 import { commandSlot, type Slot } from './command-stream.ts';
 import { clearGeminiKey, geminiAccount, setGeminiKey } from './gemini.ts';
-import { grokAccount, grokCommand, grokSignIn, GROK_AUTH } from './grok.ts';
+import { grokAccount, grokCommand, grokHome, grokSignIn } from './grok.ts';
 import { vendorEnv } from './launch.ts';
 import { onPath } from './on-path.ts';
 
-/** Every tool the owner signs in to from here: each but Claude Code. */
+/** Every tool whose install and sign-in are here: each but Claude Code, whose install is Setup's. */
 export type SignInTool = Exclude<Agent, 'claude'>;
 
 type Account = { email?: string };
@@ -34,10 +39,10 @@ type BrowserSignIn = {
   how: 'browser';
   /** The tool's own installer, which the page's Install runs. */
   install: Command;
-  /** The office home's sign-in file, which Sign out removes. */
-  auth: string;
-  account: () => Account | undefined;
-  command: () => { args: string[]; env: NodeJS.ProcessEnv };
+  /** An account's sign-in file, which Sign out removes. */
+  auth: (account: string) => string;
+  account: (account: string) => Account | undefined;
+  command: (account: string) => { args: string[]; env: NodeJS.ProcessEnv };
 };
 /** A tool that signs in with an API key the owner pastes. */
 type KeySignIn = {
@@ -54,14 +59,14 @@ export const SIGN_INS: Record<SignInTool, BrowserSignIn | KeySignIn> = {
     how: 'browser',
     // Grok installs only through xAI's own script: its usage line, run as it says.
     install: ['bash', ['-c', 'curl -fsSL https://x.ai/cli/install.sh | bash']],
-    auth: GROK_AUTH,
+    auth: (a) => grokHome(a).auth,
     account: grokAccount,
     command: grokSignIn
   },
   codex: {
     how: 'browser',
     install: ['npm', ['install', '-g', '@openai/codex']],
-    auth: CODEX_AUTH,
+    auth: (a) => codexHome(a).auth,
     account: codexAccount,
     command: codexSignIn
   },
@@ -74,42 +79,117 @@ export const SIGN_INS: Record<SignInTool, BrowserSignIn | KeySignIn> = {
   }
 };
 
-/** One install or sign-in at a time per tool. */
-export const SLOTS: Record<SignInTool, Slot> = {
+/** One install or sign-in at a time per tool, Claude Code's (Setup's install and every sign-in) among them. */
+export const SLOTS: Record<Agent, Slot> = {
+  claude: commandSlot(),
   grok: commandSlot(),
   codex: commandSlot(),
   gemini: commandSlot()
 };
+/** The account each tool's running sign-in signs in, so only its card says it waits. */
+export const signingIn: Partial<Record<Agent, string>> = {};
 
 /** What the page reads about one tool's sign-in (in `/api/agents`). */
 export type SignInState = {
   how: 'browser' | 'key';
-  /** Its install runs, so the page offers nothing else for it until that ends, even after a refresh. */
+  /** Its install or update runs, so the page offers nothing else for it until that ends, even after a refresh. */
   installing: boolean;
   signedIn: boolean;
   /** The account's email, when the sign-in names one. */
   account?: string;
   /** A sign-in waits on its page, with that page's address once printed. */
   waiting?: { url?: string };
+  /**
+   * Claude Code's Office account only, before the owner signs it in: the
+   * owner's own login, which its Odds keep running on until then.
+   */
+  ownLogin?: string;
 };
 
-export function signInState(tool: SignInTool): SignInState {
-  const s = SIGN_INS[tool];
-  const account = s.account();
+/** Whether `account`'s sign-in is the one waiting on its page, and that page's address. */
+function waitingFor(tool: Agent, account: string): SignInState['waiting'] {
   const running = SLOTS[tool].running;
+  if (running?.action !== 'sign-in' || (signingIn[tool] ?? OFFICE_ACCOUNT) !== account)
+    return undefined;
+  return running.url ? { url: running.url } : {};
+}
+
+export function signInState(tool: SignInTool, account: string = OFFICE_ACCOUNT): SignInState {
+  const s = SIGN_INS[tool];
+  const signed = s.how === 'browser' ? s.account(account) : s.account();
+  const running = SLOTS[tool].running;
+  const waiting = waitingFor(tool, account);
   return {
     how: s.how,
-    installing: running?.action === 'install',
-    signedIn: !!account,
-    ...(account?.email ? { account: account.email } : {}),
-    ...(running?.action === 'sign-in' ? { waiting: running.url ? { url: running.url } : {} } : {})
+    installing: !!running && running.action !== 'sign-in',
+    signedIn: !!signed,
+    ...(signed?.email ? { account: signed.email } : {}),
+    ...(waiting ? { waiting } : {})
   };
 }
 
-/** Sign out: remove the office home's sign-in file, or Gemini's key. Never a tool's own logout. */
-export function signOut(tool: SignInTool): void {
+/**
+ * Claude Code's sign-in in one account's folder, read fresh. The Office
+ * account not signed in yet says the owner's own login, which its Odds use
+ * until it is (`claudeRunHome`).
+ */
+export async function claudeSignInState(
+  account: string = OFFICE_ACCOUNT,
+  own?: () => Promise<{ email?: string } | undefined>
+): Promise<SignInState> {
+  const signed = await claudeAccountOf(account, true);
+  const running = SLOTS.claude.running;
+  const waiting = waitingFor('claude', account);
+  const mine = !signed && own ? await own() : undefined;
+  return {
+    how: 'browser',
+    installing: !!running && running.action !== 'sign-in',
+    signedIn: !!signed,
+    ...(signed?.email ? { account: signed.email } : {}),
+    ...(waiting ? { waiting } : {}),
+    ...(mine ? { ownLogin: mine.email ?? 'your own login' } : {})
+  };
+}
+
+/** Claude Code's sign-in to one account's folder: `claude auth login` with that folder, never the owner's own. */
+export function claudeSignIn(account: string = OFFICE_ACCOUNT): {
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
+  return {
+    args: ['auth', 'login', '--claudeai'],
+    env: { ...cleanEnv(), CLAUDE_CONFIG_DIR: claudeHome(account) }
+  };
+}
+
+/**
+ * Sign one account out. Grok and Codex: remove its sign-in file, never the
+ * tool's own logout, which reached the owner's own Grok. Gemini: its key.
+ * Claude Code: its own logout, with the account's folder, which keeps that
+ * folder's login apart from the owner's (on a Mac, a keychain entry named
+ * after the folder).
+ */
+export async function signOut(tool: Agent, account: string = OFFICE_ACCOUNT): Promise<void> {
+  if (tool === 'claude') {
+    const command = agentCommand('claude');
+    if (command)
+      await new Promise<void>((done) =>
+        execFile(
+          command[0],
+          [...command[1], 'auth', 'logout'],
+          {
+            env: { ...cleanEnv(), CLAUDE_CONFIG_DIR: claudeHome(account) },
+            timeout: 15_000,
+            windowsHide: true
+          },
+          () => done()
+        )
+      );
+    forgetClaudeAccount(account);
+    return;
+  }
   const s = SIGN_INS[tool];
-  if (s.how === 'browser') rmSync(s.auth, { force: true });
+  if (s.how === 'browser') rmSync(s.auth(account), { force: true });
   else s.clear();
 }
 

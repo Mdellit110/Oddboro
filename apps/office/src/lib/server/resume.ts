@@ -34,8 +34,13 @@ export function sectionsOf(system: string, desk: string): Sections {
   return sections;
 }
 
-/** What session.json holds: the session, and the sections it last saw. */
-export type Saved = { sessionId: string; seen?: Sections };
+/**
+ * What session.json holds: the session, the sections it last saw, and the
+ * tool folder it lives in (an account's, or '' for the owner's own Claude
+ * login). A session lives in its tool's folder, so a run in another one (the
+ * Odd moved to another account) starts a new session, which hears the chat.
+ */
+export type Saved = { sessionId: string; seen?: Sections; home?: string };
 
 /** Writes session.json after a run, with what the session saw, so its next turn sends only what changed. */
 export function saveSession(file: string, saved: Required<Saved>): void {
@@ -55,19 +60,22 @@ export function parseSession(text: string): Saved | undefined {
     return undefined;
   }
   if (typeof raw !== 'object' || raw === null) return undefined;
-  const { sessionId, seen } = raw as { sessionId?: unknown; seen?: unknown };
+  const { sessionId, seen, home } = raw as { sessionId?: unknown; seen?: unknown; home?: unknown };
   if (typeof sessionId !== 'string') return undefined;
+  const where = typeof home === 'string' ? { home } : {};
   const isSections =
     typeof seen === 'object' &&
     seen !== null &&
     Object.values(seen).every((v) => typeof v === 'string');
-  return isSections ? { sessionId, seen: seen as Sections } : { sessionId };
+  return isSections ? { sessionId, seen: seen as Sections, ...where } : { sessionId, ...where };
 }
 
 /** The session a session file names, or undefined when the file is missing or unreadable, so the next run starts a new one. */
-export function sessionIdIn(file: string): string | undefined {
+export function sessionIdIn(file: string, home: string): string | undefined {
   try {
-    return parseSession(readFileSync(file, 'utf8'))?.sessionId;
+    const saved = parseSession(readFileSync(file, 'utf8'));
+    // One saved before the office kept its folder lived in the owner's own Claude login or a tool's old home: ''.
+    return saved && (saved.home ?? '') === home ? saved.sessionId : undefined;
   } catch {
     // A missing file means a new session, and one that cannot be read cannot be resumed.
     return undefined;

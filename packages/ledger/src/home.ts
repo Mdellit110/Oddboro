@@ -34,6 +34,12 @@ function officeHome(): string {
 }
 export const home = (...parts: string[]): string => join(officeHome(), ...parts);
 
+/** Every account's folder: each coding tool's sign-ins, one folder each (accounts.ts). */
+export const accountsHome = (): string => home('accounts');
+/** One account's folder: the home its tool runs with (`GROK_HOME`, `CODEX_HOME`, `CLAUDE_CONFIG_DIR`). */
+export const accountHome = (tool: string, account: string): string =>
+  home('accounts', tool, account);
+
 /** An Odd's one chat session, which every chat resumes (staff.ts). */
 export const chatSession = (id: string): string => home('staff', id, 'session.json');
 

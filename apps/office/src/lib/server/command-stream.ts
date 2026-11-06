@@ -8,8 +8,8 @@
 // installed. Server only.
 import { spawn, type ChildProcess } from 'node:child_process';
 
-/** What a slot's command does: install a tool, or sign it in on its page. */
-export type Action = 'install' | 'sign-in';
+/** What a slot's command does: install a tool, update it, or sign it in on its page. An update runs to its end, as an install does. */
+export type Action = 'install' | 'update' | 'sign-in';
 
 /** One job's command, whose output streams to the page a line of JSON at a time. */
 export type Slot = {

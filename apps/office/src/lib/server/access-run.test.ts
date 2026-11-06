@@ -87,6 +87,7 @@ const run = (commands: boolean) => {
   const dir = join(folder, 'staff', 'nobody');
   return {
     key: 'refused',
+    account: 'office',
     staffId: 'nobody',
     dir,
     reads: [],

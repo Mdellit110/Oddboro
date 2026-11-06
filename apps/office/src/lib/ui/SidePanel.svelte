@@ -19,6 +19,8 @@
     children: Snippet;
     /** What shows when collapsed. Without it, the panel cannot collapse. */
     rail?: Snippet;
+    /** Space kept free at its edge, in px, for something docked there (the Odds rail). */
+    inset?: number;
   };
   let {
     side,
@@ -29,7 +31,8 @@
     max = 960,
     storageKey,
     children,
-    rail
+    rail,
+    inset = 0
   }: Props = $props();
 
   onMount(() => {
@@ -92,8 +95,10 @@
 <aside
   class="panel glass pointer-events-auto absolute top-4 bottom-4 flex rounded-2xl max-sm:top-3 max-sm:bottom-3"
   class:start-4={side === 'start'}
-  class:end-4={side === 'end'}
-  style="inline-size: min({collapsed && rail ? RAIL : width}px, calc(100vw - 24px))"
+  class:end-4={side === 'end' && !inset}
+  style="inline-size: min({collapsed && rail ? RAIL : width}px, calc(100vw - {24 + inset}px)){inset
+    ? `; inset-inline-end: ${16 + inset}px`
+    : ''}"
   aria-label={label}
 >
   {#if collapsed && rail}

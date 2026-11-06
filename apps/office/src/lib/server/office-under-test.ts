@@ -46,13 +46,33 @@ const port = await new Promise<number>((done) => {
 // waits on the owner.
 export const bin = join(folder, 'bin');
 mkdirSync(bin);
+/**
+ * Node alone, for the stand-ins, never node's own bin folder: a tool the
+ * owner installed with npm (a real grok or codex) lives there, and a test
+ * that found it would start it for real, a sign-in page in their browser.
+ */
+export const nodeBin = join(folder, 'node-bin');
+mkdirSync(nodeBin);
+symlinkSync(process.execPath, join(nodeBin, 'node'));
 writeFileSync(
   join(bin, 'claude'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/claude in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'claude'))};
+  process.stdout.write('' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '2.1.318') + '\\n');
+  process.exit(0);
+}
 const [verb, sub] = process.argv.slice(2);
 if (verb === 'auth' && sub === 'status') {
-  process.stdout.write('{"loggedIn":false}\\n');
+  // Signed in only in an account's folder holding a "signed-in" file, which names the email.
+  const mark = (process.env.CLAUDE_CONFIG_DIR ?? '/nowhere') + '/signed-in';
+  process.stdout.write(
+    fs.existsSync(mark)
+      ? JSON.stringify({ loggedIn: true, email: fs.readFileSync(mark, 'utf8').trim() }) + '\\n'
+      : '{"loggedIn":false}\\n'
+  );
   process.exit(0);
 }
 if (verb === 'auth' && sub === 'login') {
@@ -105,7 +125,8 @@ function reply() {
       npm_config_userconfig: process.env.npm_config_userconfig ?? null
     },
     nodeOptions: process.env.NODE_OPTIONS ?? null,
-    apiKey: process.env.ANTHROPIC_API_KEY ?? null
+    apiKey: process.env.ANTHROPIC_API_KEY ?? null,
+    configDir: process.env.CLAUDE_CONFIG_DIR ?? null
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
@@ -131,6 +152,12 @@ writeFileSync(
   join(bin, 'grok'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/grok in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'grok'))};
+  process.stdout.write('grok ' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '1.0.62') + '\\n');
+  process.exit(0);
+}
 const args = process.argv.slice(2);
 const home = process.env.GROK_HOME;
 if (args[0] === 'login') {
@@ -188,11 +215,12 @@ const gave = {
   grokEnv: Object.fromEntries(
     Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
   ),
-  env: JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]).find((s) => s.office).office.env,
+  env: JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]).find((s) => s.office)?.office.env,
   agentMode: fs.statSync(after('--agent')).mode & 0o777,
   profile,
   system: joined('--rules'),
-  message: joined('--single')
+  message: joined('--single'),
+  prompt: joined('--prompt-json') && JSON.parse(joined('--prompt-json'))
 };
 const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
 line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'use_tool' } } });
@@ -220,6 +248,12 @@ writeFileSync(
   join(bin, 'codex'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/codex in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'codex'))};
+  process.stdout.write('codex-cli ' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '0.166.0') + '\\n');
+  process.exit(0);
+}
 const args = process.argv.slice(2);
 const home = process.env.CODEX_HOME;
 if (args[0] === 'login') {
@@ -274,8 +308,10 @@ process.stdin.on('end', () => {
     ),
     git: set['shell_environment_policy.set'],
     gitTemplate: emptyFolder(set['shell_environment_policy.set']?.GIT_TEMPLATE_DIR),
-    env: set.mcp_servers.office.env,
+    env: set.mcp_servers.office?.env,
     servers: set.mcp_servers,
+    // Whether each picture was there as the run read it (an office run's).
+    pictures: args.filter((a) => a.startsWith('--image=')).map((a) => fs.existsSync(a.slice(8))),
     permissions: set.permissions[set.default_permissions],
     system: set.developer_instructions,
     message,
@@ -313,6 +349,12 @@ writeFileSync(
   join(bin, 'gemini'),
   `#!/usr/bin/env node
 const fs = require('node:fs');
+// "--version" prints versions/gemini in the test office, else the oldest the office runs.
+if (process.argv[2] === '--version') {
+  const v = ${JSON.stringify(join(folder, 'versions', 'gemini'))};
+  process.stdout.write('' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '0.66.0') + '\\n');
+  process.exit(0);
+}
 const path = require('node:path');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.GEMINI_CLI_HOME + '/launches.log', '.');
@@ -427,12 +469,14 @@ Object.assign(process.env, {
   ODDBORO_DB_PORT: String(port),
   // A file that does not exist, so no .env reaches this office.
   ODDBORO_ENV: join(folder, 'none.env'),
+  // No tool's maker is asked for its newest version (versions.ts).
+  ODDBORO_NO_LATEST: '1',
   DATABASE_URL: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
   ODDBORO_LOCAL_DB: '1',
   OLLAMA_URL: 'http://127.0.0.1:9',
   // The stand-ins, node for them, and the system's own tools: never the Mac's
   // own claude, grok, codex, gemini, xcode-select or security.
-  PATH: `${bin}:${rgBin}:${installers}:${dirname(process.execPath)}:/usr/bin:/bin`,
+  PATH: `${bin}:${rgBin}:${installers}:${nodeBin}:/usr/bin:/bin`,
   // Never handed to a Grok run.
   XAI_API_KEY: 'from-the-parent',
   ANTHROPIC_API_KEY: 'from-the-parent',
@@ -528,6 +572,8 @@ export type Gave = {
   nodeOptions?: string | null;
   /** The git environment a run's shell gets: Claude Code's GIT_ variables, or Codex's `-c shell_environment_policy.set`. */
   git?: Record<string, string>;
+  /** The Claude Code folder the run got (`CLAUDE_CONFIG_DIR`): its account's, or none for the owner's own login. */
+  configDir?: string | null;
   /** Whether that environment's GIT_TEMPLATE_DIR was there and empty while the run went. */
   gitTemplate?: boolean;
   /** The Claude Code run's npm cache and user config, which Run commands sets (`shellEnv`). */

@@ -28,8 +28,14 @@ Object.assign(process.env, {
   ODDBORO_LOCAL_DB: '1',
   OLLAMA_URL: 'http://127.0.0.1:9',
   ODDBORO_UPDATE_TOKEN: TOKEN,
-  ORIGIN: 'http://office.test:4500'
+  ORIGIN: 'http://office.test:4500',
+  // An empty home of its own, so the office never finds the owner's own
+  // tools there (a real grok in ~/.grok/bin), and no tool's maker is asked
+  // for its newest version (versions.ts).
+  HOME: join(folder, 'home'),
+  ODDBORO_NO_LATEST: '1'
 });
+mkdirSync(join(folder, 'home'), { recursive: true });
 const { startLocalDatabase } = await import('@oddboro/ledger/local-db');
 const stopDatabase = await startLocalDatabase();
 const { bringUpToDate } = await import('@oddboro/ledger/upgrade');

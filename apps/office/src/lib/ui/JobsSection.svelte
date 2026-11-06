@@ -3,11 +3,13 @@
   import { describe, zoneName } from '@oddboro/ledger/time';
   import SchedulePicker from './SchedulePicker.svelte';
   import Markdown from './Markdown.svelte';
-  import JobDescription from './JobDescription.svelte';
   import { call } from './api.ts';
-  import { ago, when } from './format.ts';
+  import { ago, nextWhen } from './format.ts';
   import type { StaffProfile } from '../staff/roster.ts';
 
+  // An Odd's jobs, on its info page: each with its schedule, its last run and
+  // its next ("Next run today at 3:00 PM", or Paused). Clicking a job opens it
+  // to edit in place, and "+ Add a job" adds one.
   type Job = JobRow & { lastRun?: RunRow };
   type Props = {
     profile: StaffProfile;
@@ -62,23 +64,22 @@
   }
 </script>
 
-<div class="flex h-full min-h-0 flex-col">
-  <div class="flex items-center border-b border-hairline p-3">
-    <div class="flex-1">
-      <div class="text-sm font-medium">{profile.name}'s jobs</div>
-      <div class="mt-0.5 text-xs text-muted">
-        {working ? `Running ${working} now` : `What it does, and how often, in ${zoneName()}.`}
-      </div>
-    </div>
+<section aria-label="Jobs">
+  <div class="flex items-center gap-2">
+    <h3 class="flex-1 text-xs font-semibold text-ink">Jobs</h3>
     {#if editing === undefined}
       <button
-        class="rounded-lg bg-raise px-3 py-1.5 text-xs font-medium hover:bg-sea/20"
-        onclick={() => open()}>Add job</button
+        class="rounded-lg bg-raise px-2.5 py-1 text-xs font-medium hover:bg-sea/20"
+        onclick={() => open()}>+ Add a job</button
       >
     {/if}
   </div>
-  <div class="flex-1 overflow-y-auto p-3">
-    <JobDescription {profile} {version} />
+  <p class="mt-0.5 text-[11px] text-muted">
+    {working
+      ? `Running ${working} now.`
+      : `What it does on its own, and how often, in ${zoneName()}.`}
+  </p>
+  <div class="mt-2">
     {#snippet form()}
       <div class="flex flex-col gap-2 rounded-xl bg-raise p-3">
         <input
@@ -114,36 +115,48 @@
       <div class="mb-3">{@render form()}</div>
     {/if}
     {#if !jobs.length && editing !== 'new'}
-      <p class="py-8 text-center text-sm text-muted">No jobs yet.</p>
+      <p class="rounded-xl bg-raise px-3 py-3 text-sm text-muted">
+        No jobs yet. A job runs on its own on a schedule.
+      </p>
     {/if}
     <ul class="flex flex-col gap-2">
       {#each jobs as j (j.id)}
         {#if editing === j.id}
           <li>{@render form()}</li>
         {:else}
-          <li class="rounded-xl bg-raise p-3 text-sm" class:opacity-50={!j.enabled}>
-            <div class="flex items-start gap-2">
-              <div class="min-w-0 flex-1">
-                <div class="font-medium">{j.name}</div>
-                <div class="text-xs text-muted">
-                  {describe(j.schedule)}{j.report ? ' · report to your desk' : ''}{j.enabled
-                    ? ''
-                    : ' · paused'}
-                </div>
-              </div>
+          <li class="rounded-xl bg-raise p-3 text-sm" class:opacity-60={!j.enabled}>
+            <button
+              class="flex w-full items-start gap-2 text-start"
+              title="Edit {j.name}"
+              onclick={() => open(j)}
+            >
+              <span class="min-w-0 flex-1">
+                <span class="block font-medium hover:underline hover:underline-offset-2"
+                  >{j.name}</span
+                >
+                <span class="block text-xs text-muted">
+                  {describe(j.schedule)}{j.report ? ' · report to your desk' : ''}
+                </span>
+              </span>
               {#if working === j.name}
                 <span class="rounded-full bg-moss/20 px-2 py-0.5 text-[11px] text-moss"
                   >Running</span
                 >
               {/if}
-            </div>
-            <div class="mt-2 grid grid-cols-2 gap-1 text-[11px] text-faint">
-              <span
-                >Last run: {j.lastRun
+            </button>
+            <div class="mt-2 grid grid-cols-2 gap-1 text-[11px]">
+              <span class={j.enabled ? 'text-ink' : 'text-muted'}
+                >{j.enabled
+                  ? j.nextRunAt
+                    ? `Next run ${nextWhen(j.nextRunAt)}`
+                    : 'No next run'
+                  : 'Paused'}</span
+              >
+              <span class="text-faint"
+                >Last run {j.lastRun
                   ? `${j.lastRun.status === 'failed' ? 'failed ' : ''}${ago(j.lastRun.startedAt)}${j.lastRun.trigger === 'manual' ? ', by you' : ''}`
                   : 'never'}</span
               >
-              <span>Next: {j.enabled && j.nextRunAt ? when(j.nextRunAt) : 'none'}</span>
             </div>
             {#if j.lastRun?.summary}
               <details class="mt-1 text-xs text-muted">
@@ -156,10 +169,6 @@
                 class="rounded-lg bg-night/60 px-2.5 py-1 text-xs hover:bg-sea/25 disabled:opacity-40"
                 disabled={!!working}
                 onclick={() => act(() => call(`/api/jobs/${j.id}`, { op: 'run' }))}>Run now</button
-              >
-              <button
-                class="rounded-lg bg-night/60 px-2.5 py-1 text-xs hover:bg-sea/25"
-                onclick={() => open(j)}>Edit</button
               >
               <button
                 class="rounded-lg bg-night/60 px-2.5 py-1 text-xs hover:bg-sea/25"
@@ -183,4 +192,4 @@
       <p class="mt-3 rounded-lg bg-coral/15 px-3 py-2 text-xs text-coral">{problem}</p>
     {/if}
   </div>
-</div>
+</section>

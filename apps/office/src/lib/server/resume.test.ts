@@ -85,9 +85,9 @@ test('a saved session.json keeps what its session saw, so its next turn resends 
   const dir = mkdtempSync(join(tmpdir(), 'oddboro-session-'));
   try {
     const file = join(dir, 'session.json');
-    saveSession(file, { sessionId: 'abc', seen: now() });
+    saveSession(file, { sessionId: 'abc', seen: now(), home: '' });
     const saved = parseSession(readFileSync(file, 'utf8'));
-    assert.deepEqual(saved, { sessionId: 'abc', seen: now() });
+    assert.deepEqual(saved, { sessionId: 'abc', seen: now(), home: '' });
     assert.equal(catchUp(saved?.seen, now(), 'Tuesday'), '(It is Tuesday now.)\n\n');
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -104,13 +104,18 @@ test('a chat has a session only while its session file names one: a missing, bro
   const dir = mkdtempSync(join(tmpdir(), 'oddboro-session-'));
   try {
     const file = join(dir, 'session.json');
-    assert.equal(sessionIdIn(file), undefined);
-    saveSession(file, { sessionId: 'abc', seen: now() });
-    assert.equal(sessionIdIn(file), 'abc');
+    assert.equal(sessionIdIn(file, ''), undefined);
+    saveSession(file, { sessionId: 'abc', seen: now(), home: '/accounts/grok/office' });
+    assert.equal(sessionIdIn(file, '/accounts/grok/office'), 'abc');
+    // A session lives in its tool's folder: an Odd moved to another account starts a new one.
+    assert.equal(sessionIdIn(file, '/accounts/grok/a1b2c3d4'), undefined);
+    // One saved before the office kept its folder belongs to the owner's own login.
+    writeFileSync(file, JSON.stringify({ sessionId: 'old' }));
+    assert.equal(sessionIdIn(file, ''), 'old');
     writeFileSync(file, '{not json');
-    assert.equal(sessionIdIn(file), undefined);
+    assert.equal(sessionIdIn(file, ''), undefined);
     // A folder where the file should be cannot be read as one.
-    assert.equal(sessionIdIn(dir), undefined);
+    assert.equal(sessionIdIn(dir, ''), undefined);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
