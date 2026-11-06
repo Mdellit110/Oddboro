@@ -809,9 +809,13 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     (`src/lib/server/agent-sign-in.ts`). `/api/agents` carries each tool's
     sign-in: signed in when Grok's `auth.json` in its office home holds an
     account (its email shown), when Codex's exists (the email from its
-    `id_token`), or when Gemini has a key. `/api/agents/[tool]` changes one,
-    only for a tool this system offers and never Claude Code. Sign in runs the
-    tool's browser sign-in in its office home (`grok login --oauth`, and
+    `id_token`), or when Gemini has a key. It also carries how each tool
+    takes Run commands on this system (`commandsHow`), so the hire drawer's
+    line (`hireToolsLine`) names that switch only where the owner can move it,
+    and Browse the web alone until the tools load. `/api/agents/[tool]`
+    changes one, only for a tool this system offers and never Claude Code.
+    Sign in runs the tool's browser sign-in in its office home
+    (`grok login --oauth`, and
     `codex login -c cli_auth_credentials_store="file"`), streamed through the
     runner Claude Code's sign-in uses (`src/lib/server/command-stream.ts`), with
     the sign-in page's address as a link; a second one starts over, Cancel

@@ -641,20 +641,23 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           id: 'claude',
           name: 'Claude Code',
           installed: true,
-          signIn: { how: 'browser', installing: false, signedIn: false }
+          signIn: { how: 'browser', installing: false, signedIn: false },
+          commandsHow: L.commandsHow('claude', 'darwin')
         },
         {
           id: 'grok',
           name: 'Grok',
           installed: false,
-          signIn: { how: 'browser', installing: false, signedIn: false }
+          signIn: { how: 'browser', installing: false, signedIn: false },
+          commandsHow: L.commandsHow('grok', 'darwin')
         },
         // The office under test's Codex home holds a sign-in file with no account in it.
         {
           id: 'codex',
           name: 'Codex',
           installed: false,
-          signIn: { how: 'browser', installing: false, signedIn: true }
+          signIn: { how: 'browser', installing: false, signedIn: true },
+          commandsHow: L.commandsHow('codex', 'darwin')
         }
       ]
     });
@@ -700,8 +703,16 @@ require(${JSON.stringify(join(bin, 'claude'))});
     }>;
   // Its version read through the same command a run starts, npm's script under this Node too.
   const out = { how: 'browser', installing: false, signedIn: false };
+  const commandsHow = L.commandsHow('claude', 'win32');
   const installed = [
-    { id: 'claude', name: 'Claude Code', installed: true, signIn: out, version: '2.1.318' }
+    {
+      id: 'claude',
+      name: 'Claude Code',
+      installed: true,
+      signIn: out,
+      commandsHow,
+      version: '2.1.318'
+    }
   ];
   try {
     // Away from home, so the Mac's own ~/.local/bin, where Windows' installer puts claude.exe, is never read.
@@ -718,7 +729,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
               id: 'claude',
               name: 'Claude Code',
               installed: false,
-              signIn: { how: 'browser', installing: false, signedIn: false }
+              signIn: { how: 'browser', installing: false, signedIn: false },
+              commandsHow
             }
           ],
           later: [
@@ -741,7 +753,7 @@ require(${JSON.stringify(join(bin, 'claude'))});
         assert.deepEqual(agentCommand('claude'), [join(native, 'claude.exe'), []]);
         // Installed. This Mac cannot run a stand-in claude.exe, so it has no version to say.
         assert.deepEqual((await picker()).tools, [
-          { id: 'claude', name: 'Claude Code', installed: true, signIn: out }
+          { id: 'claude', name: 'Claude Code', installed: true, signIn: out, commandsHow }
         ]);
       })
     );

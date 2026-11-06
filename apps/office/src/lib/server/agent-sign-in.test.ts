@@ -523,6 +523,18 @@ test('Your AI lists every tool once on a Mac, Linux and Windows: the ones this s
   }
 });
 
+test('each listed tool says how it takes Run commands on that system, so the hire drawer names that switch only where the owner can move it', async () => {
+  for (const platform of ['darwin', 'linux'] as const) {
+    const { tools } = await listing(platform);
+    for (const t of tools)
+      assert.deepEqual(t.commandsHow, L.commandsHow(t.id, platform), `${t.id} on ${platform}`);
+  }
+  const claudeOn = async (platform: NodeJS.Platform) =>
+    (await listed(platform)).find((t) => t.id === 'claude')?.commandsHow.state;
+  assert.equal(await claudeOn('darwin'), 'switch');
+  assert.equal(await claudeOn('linux'), 'never');
+});
+
 test('the office runs on the tool picked at setup, only one this system offers, and a hire with no tool starts on it', async () => {
   const before = process.env.OFFICE_AGENT;
   const envFile = join(folder, 'none.env');
@@ -570,6 +582,7 @@ test('each tool state offers exactly one action, and a signed-in tool still offe
     id: 'grok',
     name: 'Grok',
     installed,
+    commandsHow: L.commandsHow('grok', 'darwin'),
     ...(signIn ? { signIn } : {})
   });
   const browser = { how: 'browser', installing: false } as const;
@@ -578,7 +591,12 @@ test('each tool state offers exactly one action, and a signed-in tool still offe
     ['a tool this computer does not offer', undefined, 'none'],
     [
       'Claude Code, signed in on its own card',
-      { id: 'claude', name: 'Claude Code', installed: true },
+      {
+        id: 'claude',
+        name: 'Claude Code',
+        installed: true,
+        commandsHow: L.commandsHow('claude', 'darwin')
+      },
       'none'
     ],
     ['not installed', tool(false, { ...browser, signedIn: false }), 'install'],
@@ -616,6 +634,7 @@ test('Sign out shows only beside an installed tool signed in, and never while it
     id: 'grok',
     name: 'Grok',
     installed,
+    commandsHow: L.commandsHow('grok', 'darwin'),
     signIn: { how: 'browser', installing, signedIn: true }
   });
   assert.equal(offersSignOut(grok(true, false)), true);

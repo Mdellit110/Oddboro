@@ -1,6 +1,7 @@
 // One access profile per Odd: what its own tools reach on each system, what a
 // handed-over run keeps, what the Odd and the Office Manager are told of it,
-// the words for levels, and when a run hands work on. office_report runs in
+// what the hire drawer says of it, the words for levels, and when a run hands
+// work on. office_report runs in
 // the office tool server (src/mcp.ts) in a process of its own, over the
 // office's own database in a throwaway folder (tool-server.ts). Run with
 // `npm test -w @oddboro/ledger`.
@@ -374,6 +375,40 @@ test("find_connectors and ask_for_access each say they are not for the Odd's own
     const description = tools.find((t) => t.name === name)?.description ?? '';
     assert.ok(description.includes(W.NOT_OWN_TOOLS), `${name}: ${description}`);
   }
+});
+
+test('raise_ask sends an outside tool to ask_for_access and the two switches to my_access', async () => {
+  const { tools } = await rae.listTools();
+  const description = tools.find((t) => t.name === 'raise_ask')?.description ?? '';
+  const { commands, web } = W.SWITCH_NAMES;
+  assert.ok(
+    description.includes(
+      `For an outside tool, use ask_for_access; for ${commands} or ${web}, see my_access;`
+    ),
+    description
+  );
+});
+
+test('the hire drawer names Run commands only where the owner can switch it, and always the Office section', () => {
+  const both =
+    "Optional. You can give tools and switch on Run commands or Browse the web on their Settings tab, under Office, later. They'll tell you when a job needs one.";
+  const web =
+    "Optional. You can give tools and switch on Browse the web on their Settings tab, under Office, later. They'll tell you when a job needs one.";
+  const rows: [(typeof A.AGENTS)[number], NodeJS.Platform, string][] = [
+    ['claude', 'darwin', both],
+    ['codex', 'darwin', web],
+    ['grok', 'darwin', web],
+    ['claude', 'linux', web],
+    ['claude', 'win32', web]
+  ];
+  for (const [agent, platform, line] of rows)
+    assert.equal(
+      A.hireToolsLine(A.commandsHow(agent, platform).state),
+      line,
+      `${agent} on ${platform}`
+    );
+  // Before the page has the tools, it does not know the switch is there.
+  assert.equal(A.hireToolsLine(undefined), web);
 });
 
 test('the line under Browse the web says what its commands do with it', () => {

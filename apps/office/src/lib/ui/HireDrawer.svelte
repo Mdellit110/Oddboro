@@ -1,14 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { HireProposal, Schedule } from '@oddboro/ledger';
-  import {
-    LEVEL_LABEL,
-    LEVELS,
-    settingsTab,
-    SWITCH_NAMES,
-    type Level
-  } from '@oddboro/ledger/access';
-  import { AGENT_NAMES, type Agent } from '@oddboro/ledger/agents';
+  import { LEVEL_LABEL, LEVELS, type Level } from '@oddboro/ledger/access';
+  import { AGENT_NAMES, hireToolsLine, type Agent } from '@oddboro/ledger/agents';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import Pixel from './Pixel.svelte';
   import LookStudio, { type Drawn } from './LookStudio.svelte';
@@ -31,8 +25,6 @@
   let { rooms, from, id, onhired }: Props = $props();
 
   const STEPS = ['Who', 'Where', 'Job description', 'First job', 'Review'];
-  /** Where the owner gives the hire tools later, by the card's own tab name. */
-  const theirTab = settingsTab('their');
   let step = $state(0);
   let name = $state('');
   let role = $state('');
@@ -48,6 +40,10 @@
   const agentTools = new AgentTools();
   let pickedAgent = $state<Agent | undefined>();
   const agent = $derived(pickedAgent ?? agentTools.office);
+  /** Where the owner gives the hire tools later, by how its tool takes Run commands. */
+  const toolsLine = $derived(
+    hireToolsLine(agentTools.tools.find((t) => t.id === agent)?.commandsHow.state)
+  );
   let jobName = $state('');
   let jobInstructions = $state('');
   /** Shown only once the owner names a job, so an empty job never reads as an hourly one. */
@@ -279,10 +275,7 @@
         />
       </div>
     {:else if step === 3}
-      <p class="text-xs text-muted">
-        Optional. You can give tools and switch on {SWITCH_NAMES.commands} or {SWITCH_NAMES.web} on {theirTab}
-        later. They'll tell you when a job needs one.
-      </p>
+      <p class="text-xs text-muted">{toolsLine}</p>
       <div class="flex flex-col gap-2 rounded-xl bg-raise p-3">
         <span class="text-xs text-muted">A first job</span>
         {#if !jobName.trim() && !jobInstructions.trim()}
