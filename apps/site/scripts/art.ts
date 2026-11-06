@@ -680,13 +680,14 @@ function renderSet(hour: number, dir: string): Image {
     w: 128,
     h: 96
   };
-  const ada = STAFF[1];
-  const adaFrame = (frame: string) => {
-    const src = frameImage(sprites.get(ada.sprite)!, frame, ada.variant);
+  /** One sprite frame of an Odd from STAFF, lit for the hour. */
+  const oddFrame = (who: (typeof STAFF)[number]) => (frame: string) => {
+    const src = frameImage(sprites.get(who.sprite)!, frame, who.variant);
     const img = createImage(src.width, src.height);
     drawImage(img, src, 0, 0);
     return shade(img, 1);
   };
+  const adaFrame = oddFrame(STAFF[1]);
   const hall: HallLayers = {
     room: light(
       paint(hallDraws, true, HALL.w, HALL.h),
@@ -695,7 +696,9 @@ function renderSet(hour: number, dir: string): Image {
     ),
     period: HALL.period,
     view: HALL.view,
-    odd: adaFrame
+    odd: adaFrame,
+    mate: oddFrame(STAFF[2]),
+    shade: (img) => shade(img, 1)
   };
   writeReleaseArt(
     {

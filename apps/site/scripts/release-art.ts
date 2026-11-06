@@ -19,6 +19,11 @@
 //                 tile: windows, on Windows, on Windows (0.0.5, the Windows
 //                 app). The loop has no start: its last frame leads into its
 //                 first.
+//   hand-off      a relay in the same hall, one pun a hand-off: HAND-OFF!,
+//                 HANDS ON!, FOLDER AND WISER, CODEX MARKS THE SPOT, GROK ON!,
+//                 LESSON? IT STUCK., NO BRAINER!, BACKSIES! (0.0.6: hand-offs,
+//                 folders, Codex and Grok, lessons, keys for hosted tools, and
+//                 the Revoke fix)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
@@ -61,6 +66,10 @@ export type HallLayers = {
   view: { w: number; h: number };
   /** Ada in one sprite frame, like `walk-side-2`, lit, 16 by 32. */
   odd: (frame: string) => Image;
+  /** Theo, the same way, for the art that needs a colleague. */
+  mate: (frame: string) => Image;
+  /** Lights an added sprite the way the hall is lit. */
+  shade: (img: Image) => Image;
 };
 
 export type Layers = { desk: DeskLayers; door: DoorLayers; hall: HallLayers };
@@ -117,6 +126,19 @@ const GLYPHS: Record<string, string[]> = {
   C: ['.xx', 'x..', 'x..', 'x..', '.xx'],
   I: ['xxx', '.x.', '.x.', '.x.', 'xxx'],
   K: ['x.x', 'x.x', 'xx.', 'x.x', 'x.x'],
+  A: ['.x.', 'x.x', 'xxx', 'x.x', 'x.x'],
+  B: ['xx.', 'x.x', 'xx.', 'x.x', 'xx.'],
+  F: ['xxx', 'x..', 'xx.', 'x..', 'x..'],
+  G: ['.xx', 'x..', 'x.x', 'x.x', '.xx'],
+  M: ['x...x', 'xx.xx', 'x.x.x', 'x...x', 'x...x'],
+  N: ['x..x', 'xx.x', 'x.xx', 'x..x', 'x..x'],
+  P: ['xx.', 'x.x', 'xx.', 'x..', 'x..'],
+  S: ['.xx', 'x..', '.x.', '..x', 'xx.'],
+  T: ['xxx', '.x.', '.x.', '.x.', '.x.'],
+  U: ['x.x', 'x.x', 'x.x', 'x.x', 'xxx'],
+  X: ['x.x', 'x.x', '.x.', 'x.x', 'x.x'],
+  '-': ['..', '..', 'xx', '..', '..'],
+  '.': ['.', '.', '.', '.', 'x'],
   ' ': ['..', '..', '..', '..', '..']
 };
 const HELLO = 'HELLO, WORLD!';
@@ -124,10 +146,14 @@ const HELLO = 'HELLO, WORLD!';
 const width = (text: string) =>
   [...text].reduce((w, ch, i) => w + GLYPHS[ch][0].length + (i ? 1 : 0), 0);
 
-/** A bubble with the first `shown` letters of `text`, its tail down at its start. */
-function bubble(shown: number, text = HELLO): Image {
+/**
+ * A bubble with the first `shown` letters of `text`, its tail down at column
+ * `tail` (its start, unless a bubble near the art's edge moves it).
+ */
+function bubble(shown: number, text = HELLO, tail = 3): Image {
   const w = width(text) + 6;
   const h = 11;
+  const t = tail;
   const rows: string[] = [];
   for (let y = 0; y < h + 3; y++) {
     let row = '';
@@ -136,14 +162,15 @@ function bubble(shown: number, text = HELLO): Image {
       const edge = x === 0 || x === w - 1 || y === 0 || y === h - 1;
       if (y < h) row += corner ? '.' : edge ? 'k' : '=';
       // The tail: three rows narrowing toward the bubble's start.
-      else if (y === h) row += x === 3 ? 'k' : x === 4 || x === 5 ? '=' : x === 6 ? 'k' : '.';
-      else if (y === h + 1) row += x === 3 ? 'k' : x === 4 ? '=' : x === 5 ? 'k' : '.';
-      else row += x === 3 || x === 4 ? 'k' : '.';
+      else if (y === h)
+        row += x === t ? 'k' : x === t + 1 || x === t + 2 ? '=' : x === t + 3 ? 'k' : '.';
+      else if (y === h + 1) row += x === t ? 'k' : x === t + 1 ? '=' : x === t + 2 ? 'k' : '.';
+      else row += x === t || x === t + 1 ? 'k' : '.';
     }
     rows.push(row);
   }
   // Opening the bubble's bottom edge over the tail.
-  rows[h - 1] = rows[h - 1].slice(0, 4) + '==' + rows[h - 1].slice(6);
+  rows[h - 1] = rows[h - 1].slice(0, t + 1) + '==' + rows[h - 1].slice(t + 3);
   const img = sprite(rows);
   let x = 3;
   [...text].slice(0, shown).forEach((ch) => {
@@ -445,6 +472,217 @@ function windows({ room, period, view, odd }: HallLayers): GifFrame[] {
   return frames;
 }
 
+// The props passed along the hall in 0.0.6's relay, each outlined in ink so
+// it shows on plaster and oak by night and by day.
+const FOLDER = sprite(['.kkk....', 'kyyykkkk', 'kyyyyyyk', 'kYYYYYYk', 'kYYYYYYk', 'kkkkkkkk']);
+// A book with an X on the cover.
+const CODEX = sprite([
+  'kkkkkkk',
+  'kRRRRRk',
+  'kRyRyRk',
+  'kRRyRRk',
+  'kRyRyRk',
+  'kRRRRRk',
+  'k=====k',
+  'kkkkkkk'
+]);
+// A brain: two halves, folded, on its stem.
+const BRAIN_ROWS = [
+  '...kkkkkkk...',
+  '..kfFfFkFfkk.',
+  '.kfFffFkfFffk',
+  'kffFfffkffFfk',
+  'kFfffFfkFfffk',
+  'kffFffFkffFfk',
+  'kfFffffkfFffk',
+  '.kffFfFkfffk.',
+  '..kkkkkkkkk..',
+  '.....kFk.....'
+];
+const BRAIN = sprite(BRAIN_ROWS);
+// The brain lit up, the moment the key goes in.
+const BRAIN_LIT = sprite(BRAIN_ROWS.map((r) => r.replace(/f/g, 'g').replace(/F/g, 'G')));
+const KEY = sprite(['.kkk....', 'kYyYkkkk', 'ky.yyyyk', 'kYyYkkYk', '.kkk..kk']);
+// A sticky note, written on.
+const NOTE = sprite([
+  'kkkkkkkkk',
+  'kyyyyyyyk',
+  'kyKKKKyyk',
+  'kyyyyyyyk',
+  'kyKKKyyyk',
+  'kyyyyyyyk',
+  'kyKKKKyYk',
+  'kyyyyyYYk',
+  'kkkkkkkkk'
+]);
+
+/**
+ * A relay down the 0.0.5 hallway, one pun a hand-off. Ada walks in with a
+ * folder and hands it off to Theo, who is hands on, and folder and wiser. A
+ * book with an X drops into her hands: Codex marks the spot. Theo hops: Grok
+ * on. She sticks a note to the wall: the lesson stuck. A brain turns up in
+ * Theo's hands, she tosses a key into it and it lights: no brainer. Then she
+ * takes the key back: backsies. They turn to face you. Everything they set
+ * down stays where it landed.
+ */
+function handOff({ room, period, view, odd, mate, shade }: HallLayers): GifFrame[] {
+  // Their sprite tops: feet on the middle row of oak, as in the hallway walk.
+  const Y = view.h - 2 * 16 - 8;
+  // Where Ada stops, and where Theo stands facing her.
+  const A = 34;
+  const T = 78;
+  // `shade` lights the image it is given, so each theme lights its own copy.
+  const lit = (src: Image) => {
+    const img = createImage(src.width, src.height);
+    drawImage(img, src, 0, 0);
+    return shade(img);
+  };
+  const folder = lit(FOLDER);
+  const codex = lit(CODEX);
+  const brain = lit(BRAIN);
+  const key = lit(KEY);
+  const note = lit(NOTE);
+
+  const ada = { x: -16, pose: 'idle-side' };
+  const theo = { y: Y, pose: 'idle-side' };
+  const holding: { ada?: Image; theo?: Image } = {};
+  // What they set down: it stays for the rest of the loop.
+  const down: { img: Image; x: number; y: number }[] = [];
+  const frames: GifFrame[] = [];
+
+  /** Where a held prop sits: in front of the hands, at chest height. */
+  const at = (who: 'ada' | 'theo', img: Image) => ({
+    x: who === 'ada' ? ada.x + 11 : T + 5 - img.width,
+    y: (who === 'ada' ? Y : theo.y) + 18 - (img.height >> 1)
+  });
+  /** A pose's frame: idles breathe on the clock, walks name their own step. */
+  const pose = (p: string) => (/-\d$/.test(p) ? p : `${p}-${Math.floor(frames.length / 3) % 4}`);
+  const shot = (extra?: (img: Image) => void) => {
+    const img = createImage(view.w, view.h);
+    drawImage(img, room, -period, 0);
+    for (const d of down) drawImage(img, d.img, d.x, d.y);
+    drawImage(img, odd(pose(ada.pose)), ada.x, Y);
+    // Theo faces Ada: his side poses, flipped.
+    drawImage(img, mate(pose(theo.pose)), T, theo.y, true);
+    for (const who of ['ada', 'theo'] as const) {
+      const held = holding[who];
+      if (held) drawImage(img, held, at(who, held).x, at(who, held).y);
+    }
+    extra?.(img);
+    return img;
+  };
+  const add = (extra?: (img: Image) => void, n = 1) => {
+    for (let i = 0; i < n; i++) frames.push({ image: shot(extra), delay: DELAY });
+  };
+  /** A bubble over one of them, kept inside the art with its tail over the head. */
+  const say = (text: string, who: 'ada' | 'theo') => {
+    const w = width(text) + 6;
+    const head = (who === 'ada' ? ada.x : T) + 6;
+    const x = Math.max(1, Math.min(view.w - w - 1, head - 3));
+    const b = bubble(text.length, text, Math.max(1, Math.min(w - 5, head - x)));
+    return (img: Image) => drawImage(img, b, x, Y - b.height + 2);
+  };
+  /** A prop flying from one place to another over an arc `lift` pixels high. */
+  const toss = (
+    img: Image,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    steps: number,
+    lift: number
+  ) => {
+    for (let i = 1; i <= steps; i++) {
+      const s = i / steps;
+      const x = Math.round(from.x + (to.x - from.x) * s);
+      const y = Math.round(from.y + (to.y - from.y) * s - lift * Math.sin(Math.PI * s));
+      add((g) => drawImage(g, img, x, y));
+    }
+  };
+  const pass = (img: Image, from: 'ada' | 'theo', to: 'ada' | 'theo', lift = 8) => {
+    const start = at(from, img);
+    holding[from] = undefined;
+    toss(img, start, at(to, img), 6, lift);
+    holding[to] = img;
+  };
+  const setDown = (who: 'ada' | 'theo', img: Image, x: number) => {
+    const start = at(who, img);
+    holding[who] = undefined;
+    const to = { x, y: Y + 31 - img.height };
+    toss(img, start, to, 3, 0);
+    down.push({ img, ...to });
+  };
+
+  // Ada walks in with the folder.
+  holding.ada = folder;
+  for (let i = 1; ada.x < A; i++) {
+    ada.x += 2;
+    ada.pose = `walk-side-${Math.floor(i / 2) % 4}`;
+    add();
+  }
+  ada.pose = 'idle-side';
+  add(undefined, 2);
+  // Hand-off, hands on.
+  add(say('HAND-OFF!', 'ada'), 10);
+  pass(folder, 'ada', 'theo');
+  add(say('HANDS ON!', 'theo'), 10);
+  add(say('FOLDER AND WISER', 'theo'), 16);
+  setDown('theo', folder, T - 10);
+  add(undefined, 2);
+  // Codex drops in from above, X and all.
+  toss(codex, { x: at('ada', codex).x, y: -codex.height }, at('ada', codex), 6, 0);
+  holding.ada = codex;
+  add(say('CODEX MARKS THE SPOT', 'ada'), 18);
+  setDown('ada', codex, A + 16);
+  add(undefined, 2);
+  // Grok on: Theo hops twice.
+  const grok = say('GROK ON!', 'theo');
+  for (const dy of [0, -2, -4, -2, 0, -2, -4, -2, 0, 0, 0, 0]) {
+    theo.y = Y + dy;
+    add(grok);
+  }
+  theo.y = Y;
+  // The lesson sticks to the wall, with a bonk.
+  holding.ada = note;
+  add(undefined, 2);
+  const wall = { x: 52, y: 20 };
+  holding.ada = undefined;
+  toss(note, at('ada', note), wall, 6, 6);
+  down.push({ img: note, ...wall });
+  add((img) => drawImage(img, BONK, wall.x + 1, wall.y + 1));
+  add(say('LESSON? IT STUCK.', 'ada'), 16);
+  // A brain in Theo's hands, and the key that opens it.
+  holding.theo = brain;
+  add(undefined, 4);
+  holding.ada = key;
+  add(undefined, 2);
+  const slot = { x: at('theo', brain).x - 5, y: at('theo', brain).y + 1 };
+  holding.ada = undefined;
+  toss(key, at('ada', key), slot, 6, 8);
+  const keyIn = (img: Image) => drawImage(img, key, slot.x, slot.y);
+  holding.theo = BRAIN_LIT;
+  add((img) => {
+    keyIn(img);
+    drawImage(img, BONK, slot.x - 3, slot.y - 2);
+  });
+  const noBrainer = say('NO BRAINER!', 'theo');
+  add((img) => {
+    keyIn(img);
+    noBrainer(img);
+  }, 14);
+  // Backsies: the key comes back out, and the brain goes dark.
+  holding.theo = brain;
+  toss(key, slot, at('ada', key), 6, 8);
+  holding.ada = key;
+  add(say('BACKSIES!', 'ada'), 12);
+  // They turn to face you.
+  ada.pose = 'idle-down';
+  theo.pose = 'idle-down';
+  add(undefined, 14);
+  // The still: both facing you, the note on the wall, the folder and the book
+  // on the floor, the brain and the key in hand.
+  frames.push({ image: shot(), delay: 0 });
+  return frames;
+}
+
 /**
  * Every release's art. `share` is the GIF frame, counted from 0, that becomes
  * the link preview while that release is the newest one, and `shareLight` is
@@ -466,7 +704,9 @@ const ART: {
   // Ada facing the street beside the locked door, by night, where the glass glows.
   { name: 'locked-door', frames: (l) => lockedDoor(l.door), share: 60, shareLight: 'night' },
   // Ada mid-hall among the windows, by day, where the sky shows.
-  { name: 'windows', frames: (l) => windows(l.hall), share: 0, shareLight: 'day' }
+  { name: 'windows', frames: (l) => windows(l.hall), share: 0, shareLight: 'day' },
+  // Theo's brain lit with Ada's key in it: no brainer.
+  { name: 'hand-off', frames: (l) => handOff(l.hall), share: 158, shareLight: 'night' }
 ];
 
 // The link preview's size, and the ink it sits on.
