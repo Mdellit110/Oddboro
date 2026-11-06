@@ -650,8 +650,9 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
     `src/lib/ui/PixelDrawing.svelte` paints a bust pixel by pixel beside the
     stage and the time. Step three picks the level and the tool its runs go
     through ("Runs on", Claude Code unless the owner picks another, item 9).
-    Hiring grants no tools: access goes through the
-    Odd's Settings tab when they ask. A first job reports to the owner's desk unless they
+    Hiring grants no tools. The Odd tells the owner,
+    in its reply, to switch on Run commands or Browse the web in its Settings tab,
+    under Office; outside tools come through `ask_for_access`. A first job reports to the owner's desk unless they
     untick it; a proposal can say either way. "Draft it" drafts the job
     description. Both run as the office (`src/lib/server/office-run.ts`),
     never as an Odd, so a new office can hire its first. An office run goes
