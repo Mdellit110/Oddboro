@@ -1,11 +1,15 @@
 <script lang="ts">
   import type { Check } from '@oddboro/ledger/checks';
+  import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
+  import OfficeTools from './OfficeTools.svelte';
+  import { selectOnFocus } from './select-on-focus.ts';
   import UpdatesSection from './UpdatesSection.svelte';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
-  // and the same checks `npm run setup` runs.
+  // what the office runs on (the same list as setup's Your AI card), and the
+  // same checks `npm run setup` runs.
   type Props = {
     office: string;
     welcomed: boolean;
@@ -28,6 +32,7 @@
   let checking = $state(false);
   let saving = $state(false);
   let problem = $state('');
+  const agentTools = new AgentTools();
 
   async function load() {
     checking = true;
@@ -85,7 +90,13 @@
       <h3 class="text-xs tracking-[0.16em] text-sea uppercase">1 · You</h3>
       <label class="flex flex-col gap-1">
         <span class="text-xs text-muted">What should your Odds call you?</span>
-        <input class={field} placeholder="Your first name" maxlength="30" bind:value={name} />
+        <input
+          class={field}
+          placeholder="Your first name"
+          maxlength="30"
+          bind:value={name}
+          {@attach selectOnFocus}
+        />
       </label>
       {#if setup}
         <p class="text-xs text-muted">
@@ -141,6 +152,15 @@
           >
         </div>
       {/if}
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h3 class="text-xs tracking-[0.16em] text-sea uppercase">4 · Your AI</h3>
+      <p class="text-xs text-muted">
+        What your office runs on: its Office Manager and every new Odd. Each Odd can move to another
+        tool on its Settings tab.
+      </p>
+      <OfficeTools tools={agentTools} />
     </section>
 
     {#if welcomed}

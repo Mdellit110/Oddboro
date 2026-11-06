@@ -34,4 +34,5 @@ npm run check-types
 npm run format:check
 ```
 
-All three at zero.
+All three at zero. A change to setup (onboarding or the Setup window) also
+gets a pass on a Mac, Linux and Windows: hard rule 14 in `CLAUDE.md`.

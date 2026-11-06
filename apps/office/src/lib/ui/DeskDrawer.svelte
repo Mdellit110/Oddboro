@@ -10,9 +10,10 @@
   import { replyAbout, showInChat } from './chat-about.svelte.ts';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import { describe } from '@oddboro/ledger/time';
-  import { tickable } from '@oddboro/ledger/tools';
+  import { tickable, yesOrNo } from '@oddboro/ledger/tools';
   import { untrack } from 'svelte';
   import { goalWhen } from '@oddboro/ledger/goals';
+  import { LEVEL_LABEL } from '@oddboro/ledger/access';
   import type { StaffProfile } from '../staff/roster.ts';
 
   type Props = {
@@ -156,7 +157,6 @@
   const picked = (a: AskRow) => a.plan?.items.filter((_, i) => !skip[i]).length ?? 0;
   const nameOf = (id: string) => staff.find((p) => p.id === id)?.name ?? id;
   const toolName = (id: string) => OFFICE_TOOLS.find((t) => t.id === id)?.name ?? id;
-  const LEVEL = { read: 'Reads and reports', draft: 'Drafts for your yes', act: 'Acts on its own' };
   const step = (t: TaskRow, index: number, body: Record<string, unknown>) =>
     act(() => call(`/api/tasks/${t.id}`, { index, ...body }));
   async function saveSecret(t: TaskRow, index: number) {
@@ -322,7 +322,7 @@
               <dd class="mt-1 flex flex-col gap-1 rounded-lg bg-raise px-2.5 py-2 text-xs">
                 <div><span class="text-muted">Who:</span> {h.name}, {h.role}</div>
                 <div><span class="text-muted">For:</span> {h.remit}</div>
-                <div><span class="text-muted">Permission:</span> {LEVEL[h.permission]}</div>
+                <div><span class="text-muted">Permission:</span> {LEVEL_LABEL[h.permission]}</div>
                 {#if h.room}<div><span class="text-muted">Room:</span> {h.room}</div>{/if}
                 {#if h.tools?.length}
                   <div>
@@ -385,7 +385,7 @@
                         <span class="text-sm text-ink">Hire {h.name}, {h.role}</span>
                         <span>{item.part}</span>
                         <span class="text-muted"
-                          >{LEVEL[h.permission]}{h.room ? ` · ${h.room}` : ''}</span
+                          >{LEVEL_LABEL[h.permission]}{h.room ? ` · ${h.room}` : ''}</span
                         >
                         {#if h.job}
                           <span class="text-muted"
@@ -470,12 +470,16 @@
         {#key open.key}
           <Attachments items={attached('ask', a.id)} ondirty={(d) => (unsaved = d)} />
         {/key}
-        <label class="mt-4 block text-xs text-muted" for="reason">Reason, or what to change</label>
+        <label class="mt-4 block text-xs text-muted" for="reason"
+          >{yesOrNo(a.kind) ? 'Reason' : 'Reason, or what to change'}</label
+        >
         <textarea
           id="reason"
           rows="3"
           class="mt-1 w-full resize-y rounded-lg bg-raise px-3 py-2 text-sm outline-none placeholder:text-faint"
-          placeholder="Optional to approve or deny. Needed to iterate: say what to change."
+          placeholder={yesOrNo(a.kind)
+            ? 'Optional to approve or deny.'
+            : 'Optional to approve or deny. Needed to iterate: say what to change.'}
           bind:value={reason}></textarea>
         {#if a.kind === 'approval'}
           <label class="mt-2 flex items-center gap-2 text-xs text-muted">
@@ -490,14 +494,16 @@
           <button
             class="flex-1 rounded-lg bg-raise px-3 py-2 text-sm font-medium hover:bg-coral/25 disabled:opacity-40"
             disabled={busy || unsaved}
-            onclick={() => decide(a, 'deny')}>Deny</button
+            onclick={() => decide(a, 'deny')}>{a.kind === 'window' ? 'Pause it' : 'Deny'}</button
           >
-          <button
-            class="flex-1 rounded-lg bg-raise px-3 py-2 text-sm font-medium hover:bg-sea/25 disabled:opacity-40"
-            disabled={busy || unsaved || !reason.trim()}
-            title={reason.trim() ? '' : 'Say what to change in the box above first'}
-            onclick={() => decide(a, 'iterate')}>Iterate</button
-          >
+          {#if !yesOrNo(a.kind)}
+            <button
+              class="flex-1 rounded-lg bg-raise px-3 py-2 text-sm font-medium hover:bg-sea/25 disabled:opacity-40"
+              disabled={busy || unsaved || !reason.trim()}
+              title={reason.trim() ? '' : 'Say what to change in the box above first'}
+              onclick={() => decide(a, 'iterate')}>Iterate</button
+            >
+          {/if}
           {#if a.kind === 'hire'}
             <button
               class="flex-[1.4] rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
@@ -511,16 +517,20 @@
               onclick={() => decide(a, 'approve')}
               >{a.kind === 'goal'
                 ? 'Set the goal'
-                : a.plan && picked(a) < a.plan.items.length
-                  ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                  : 'Approve'}</button
+                : a.kind === 'window'
+                  ? 'Let it carry on'
+                  : a.plan && picked(a) < a.plan.items.length
+                    ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                    : 'Approve'}</button
             >
           {/if}
         </div>
-        <p class="mt-1.5 text-[11px] text-faint">
-          Iterate sends it back to {who(a.staffId)?.name ?? 'the Odd'} with your words, and the new version
-          comes back to your desk.
-        </p>
+        {#if !yesOrNo(a.kind)}
+          <p class="mt-1.5 text-[11px] text-faint">
+            Iterate sends it back to {who(a.staffId)?.name ?? 'the Odd'} with your words, and the new
+            version comes back to your desk.
+          </p>
+        {/if}
       {:else if open.kind === 'task'}
         {@const t = open.row}
         <p class="mt-2 text-sm leading-relaxed text-muted">{t.why}</p>

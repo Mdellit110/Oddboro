@@ -24,12 +24,15 @@ const lib = loadLibrary();
 const c = lib.colours;
 const rows: LookSpec[] = [];
 const only = process.argv[2] as PartKind | undefined;
-const kinds: PartKind[] = (['hair', 'top', 'bottom'] as const).filter((k) => !only || k === only);
+const kinds: PartKind[] = (['hair', 'top', 'bottom', 'face'] as const).filter(
+  (k) => !only || k === only
+);
 let n = 0;
 for (const kind of kinds)
   for (const name of partNames(lib, kind)) {
     n++;
     rows.push({
+      ...(kind === 'face' ? { face: name } : {}),
       hair: kind === 'hair' ? name : 'short-crop',
       top: kind === 'top' ? name : 'long-sleeve',
       bottom: kind === 'bottom' ? name : 'trousers',

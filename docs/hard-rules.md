@@ -57,11 +57,14 @@ The office will grow for years. If a new room needed engine code, every room
 would carry risk. A stamp and a plan in JSON can be added, moved and removed
 without touching the engine.
 
-## 9. Family data stays on the owner's computer.
+## 9. Family data never reaches a tracked file.
 
-The office holds the owner's family data: names, birthdays, schedules. It
-stays in the gitignored `data/` folder on the owner's computer. Moving any of
-it off that computer is its own decision.
+The office holds the owner's family data: names, birthdays, schedules. The
+code is open source, so the risk is that data landing in a commit. It lives
+in the gitignored `data/` folder, and `scripts/check-private.ts` fails on any
+private word in a tracked file. Every Odd reads that folder, whichever AI tool
+it runs on: which tool that is, and so who sees what it reads, is the owner's
+choice per Odd.
 
 ## 10. Every `CLAUDE.md` is named in its nearest ancestor.
 
@@ -88,3 +91,13 @@ to build and again every time someone has to read it. On 2026-10-29 the floor
 redrew all 10,464 sprites 60 times a second and an Odd's card looped a shine
 forever. Together they used about 31% of a core while nothing moved. Drawing
 only on change and sweeping the shine once cut that to about 6%.
+
+## 14. Setup works on a Mac, Linux and Windows.
+
+Setup is the first thing a new owner sees, and Oddboro ships on all three
+systems. Grok, Codex and Gemini were built and measured on a Mac while the
+Linux and Windows releases were going out, so a setup screen that assumed a
+Mac would have offered tools those systems cannot run, or hidden the one they
+can. A tool not offered on a system still shows there, greyed, with why. The
+office's tests run each system's answer with `onPlatform`, and a person walks
+through setup on each before a release reaches owners. (Decided 2026-11-05.)

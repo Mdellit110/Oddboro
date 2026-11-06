@@ -17,7 +17,7 @@ import { writeEnv } from '@oddboro/ledger/env';
 import { currentDesign, moveInWhenDone } from '#lib/server/design-job.ts';
 import { drawnFrom, preview, problemsWith } from '#lib/server/looks.ts';
 import { sayInChat } from '#lib/server/staff.ts';
-import { toProfile } from '#lib/staff/roster.ts';
+import { toProfile } from '#lib/server/profile.ts';
 import type { RequestHandler } from './$types';
 
 /** The four ready-made managers, each with a portrait and a walk to show on the lot. */

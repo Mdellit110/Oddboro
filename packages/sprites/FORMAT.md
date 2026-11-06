@@ -221,6 +221,7 @@ frames on the server.
 | `hair/*.px`      | Hairstyles, `tag hair`                                                |
 | `tops/*.px`      | Tops, `tag top <rules>`                                               |
 | `bottoms/*.px`   | Bottoms, `tag bottom <rules>`                                         |
+| `faces/*.px`     | Face shapes, `tag face`; a look may leave the face out                |
 | `colours.json`   | Swatches by name: light, body and shade (and deep, for skin)          |
 | `portraits/*.px` | Two portraits in the looks palette, the examples for drawing new ones |
 
@@ -252,6 +253,10 @@ is under it. The first tag is the kind; the rest are rules.
 - Clothing draws in `z Z +` (shirt), `o O 0` (second colour), `a A` (accent),
   `^ & %` (bottom), `k K`, `f F E`, `-`. It paints over clothing, the neck
   and empty space beside the body.
+- A face draws in `k f F E G x b c p P = ! i`, from the head down to the
+  chin, under the hair: it reshapes the jaw and adds lips, blush or brows.
+  It keeps `x` wherever a beard grows. Without a face the body's own shows.
+  Without a beard, `x` and `b` are plain skin.
 - Top rules: `sleeves-short`, `sleeves-none`, `torso-second` and
   `sleeves-second` (a jacket: those regions take the second colour, and `z`
   in the part draws the shirt under it), `bottom-top` (a dress), and

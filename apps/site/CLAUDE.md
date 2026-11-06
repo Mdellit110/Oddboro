@@ -44,10 +44,11 @@ access its job needs, and every claim rests on the office's real rules:
 | An Odd pokes the owner in chat at a time it sets                      | `poke_owner` in `packages/ledger/src/mcp.ts`                              |
 | Every Odd reads the people list, which stays on the owner's computer  | `readable` in `staff.ts`; hard rule 9                                     |
 
-An Odd has no web search of its own: Claude Code runs with Read, Glob, Grep,
-Write and Edit only. Copy that searches the web says it uses a search tool the
-owner connects from the MCP Registry. When any of these rules changes in the
-office, change the site in the same change.
+An Odd has web search only when the owner turns on Browse the web for it,
+through its tool's own search and fetch; otherwise it has file tools only.
+Copy that searches the web says it uses a search tool the owner connects from
+the MCP Registry. When any of these rules changes in the office, change the
+site in the same change.
 
 ## The promise
 

@@ -4,6 +4,10 @@
 // With neither, the office keeps its own database (local-db.ts), which the
 // office server starts and everything else reaches over a local socket.
 // ODDBORO_ENV names another .env, to try an office out beside the real one.
+// A .env this process may not read is skipped: Grok's sandbox shows the file
+// to the staff tool server but refuses to open it, and loading it then threw
+// before the server offered a tool (seen 2026-11-05). The office passes that
+// server what it needs from .env instead (`access` in the office's staff.ts).
 import { existsSync } from 'node:fs';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -11,7 +15,11 @@ import { ENV_FILE as ENV } from './env.ts';
 import { DATABASE_PORT, home } from './home.ts';
 import * as schema from './schema.ts';
 
-if (existsSync(ENV)) process.loadEnvFile(ENV);
+try {
+  if (existsSync(ENV)) process.loadEnvFile(ENV);
+} catch {
+  // Unreadable here, as inside Grok's sandbox: the environment carries what is needed.
+}
 
 export const LOCAL_DATABASE_DIR = home('db');
 export const LOCAL_DATABASE_PORT = DATABASE_PORT;
