@@ -9,10 +9,49 @@ import {
   approvePlan,
   ask,
   decideAsk,
+  DECISIONS,
   precedent,
-  type Decision
+  type AskKind,
+  type AskRow
 } from '@oddboro/ledger';
+import { OWNER_ANSWERS, type AskEffect } from '@oddboro/ledger/desk-answers';
 import type { RequestHandler } from './$types';
+
+type Yes = (typeof OWNER_ANSWERS.ask)[AskKind]['approve'];
+/** The ask kinds whose yes does work of its own (`approval_work`) before the answer goes back. */
+type WorksOnYes = {
+  [K in AskKind]: (typeof OWNER_ANSWERS.ask)[K]['approve'] extends readonly (infer E)[]
+    ? 'approval_work' extends E
+      ? K
+      : never
+    : never;
+}[AskKind];
+
+const worksOnYes = (kind: AskKind): kind is WorksOnYes => {
+  const yes: Yes = OWNER_ANSWERS.ask[kind].approve;
+  return !('by' in yes) && (yes as readonly AskEffect[]).includes('approval_work');
+};
+
+/**
+ * The work a yes does, one per kind whose row says `approval_work`, so a new
+ * one fails the type check here until it says what approving it means.
+ */
+const APPROVAL_WORK: Record<
+  WorksOnYes,
+  (a: AskRow, reason: string | null, picks: unknown) => Promise<Response>
+> = {
+  goal: async (a, reason) => {
+    await approveGoal(a.id, reason).catch((e: Error) => error(400, e.message));
+    return json({ ok: true });
+  },
+  plan: async (a, reason, picks) => {
+    const ticked = Array.isArray(picks)
+      ? picks.filter((p): p is number => Number.isInteger(p))
+      : [];
+    const done = await approvePlan(a.id, ticked, reason).catch((e: Error) => error(400, e.message));
+    return json({ ok: true, hires: done.hires });
+  }
+};
 
 export const GET: RequestHandler = async ({ params }) => {
   const a = await ask(Number(params.id));
@@ -31,24 +70,15 @@ export const POST: RequestHandler = async ({ params, request }) => {
     report?: unknown;
     picks?: unknown;
   };
-  const decision = (['approve', 'deny', 'iterate'] as Decision[]).find((d) => d === body.decision);
-  if (!decision) error(400, 'Say approve, deny or iterate');
+  const decision = DECISIONS.find((d) => d === body.decision);
+  if (!decision) error(400, `Say ${DECISIONS.slice(0, -1).join(', ')} or ${DECISIONS.at(-1)}`);
   const a = await ask(Number(params.id));
   if (!a) error(404, 'No such ask');
-  if (a.kind === 'hire' && decision === 'approve') error(400, 'Approve a hire by hiring');
+  const yes: Yes = OWNER_ANSWERS.ask[a.kind].approve;
+  if (decision === 'approve' && 'by' in yes) error(400, `Approve a ${a.kind} by ${yes.by}`);
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 2000) : '';
-  if (decision === 'approve' && a.kind === 'goal') {
-    await approveGoal(a.id, reason || null).catch((e: Error) => error(400, e.message));
-    return json({ ok: true });
-  }
-  if (decision === 'approve' && a.kind === 'plan') {
-    const picks = Array.isArray(body.picks)
-      ? body.picks.filter((p): p is number => Number.isInteger(p))
-      : [];
-    const done = await approvePlan(a.id, picks, reason || null).catch((e: Error) =>
-      error(400, e.message)
-    );
-    return json({ ok: true, hires: done.hires });
+  if (decision === 'approve' && worksOnYes(a.kind)) {
+    return APPROVAL_WORK[a.kind](a, reason || null, body.picks);
   }
   try {
     await decideAsk(a.id, decision, reason || null, body.report === true);
