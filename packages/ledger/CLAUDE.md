@@ -39,12 +39,15 @@ reaches the owner's real office (`test/home.test.ts`).
    `schema.ts` cannot say goes in a migration by hand the same way.
    `0002_hand-offs` is the one exception: it replaced a run of migrations
    that only trial offices ran. Drizzle runs a migration only when its
-   journal time is later than the last one the office recorded, so `0002`
+   journal time is later than the last one the office recorded
+   (`test/migrations.test.ts` holds each later than the one before), so `0002`
    carries the time of the last of them those offices ran, and such an
    office skips it. `0003_simplify-cuts` then takes out what they added that
    the office no longer has, and adds what they lack. An office stopped partway through them fails at
    `0002`, since its tables already exist: run `npm run reset` to start it
-   over.
+   over. Before a migration that changes stored data merges, run it against
+   a copy of a real office's database (`<home>/db`, copied, never the
+   original), and say so in the pull request.
 4. Before the app's new version opens the database, `src/backup.ts` copies
    `<home>/db` to `<home>/backups/pre-<version>-<time>/db`. It compares
    `ODDBORO_VERSION` with `<home>/version`, the version that last started, and
