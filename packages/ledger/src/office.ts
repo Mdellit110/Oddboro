@@ -27,7 +27,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db, sql as pg } from './db.ts';
 import { deleteSecret } from './secrets.ts';
 import { embed } from './embed.ts';
-import { chatSession, CODE, home } from './home.ts';
+import { accountsHome, chatSession, CODE, home } from './home.ts';
 import {
   answeredAll,
   handBack,
@@ -499,16 +499,17 @@ export function shownFolder(path: string): string {
 
 /**
  * Whether the folder at `path`, by its real path, is a secret store
- * (`SECRET_STORES`), sits in one or holds one. `checkFolder` refuses such a
- * folder as it is given, and `ownTools` leaves out one stored before its
- * store was listed, or written past `setFolder`, so no run is given it. By
- * real path, so on a disk that ignores case `~/.SSH` is `~/.ssh`.
+ * (`SECRET_STORES`) or the office's own accounts folder, where each tool's
+ * sign-ins live (`accountsHome`), sits in one or holds one. `checkFolder`
+ * refuses such a folder as it is given, and `ownTools` leaves out one stored
+ * before its store was listed, or written past `setFolder`, so no run is
+ * given it. By real path, so on a disk that ignores case `~/.SSH` is `~/.ssh`.
  */
 export function touchesSecretStore(path: string): boolean {
   const p = real(path);
   const h = real(homedir());
-  return SECRET_STORES.some((s) => {
-    const store = real(join(h, s));
+  return [...SECRET_STORES.map((s) => join(h, s)), accountsHome()].some((s) => {
+    const store = real(s);
     return within(p, store) || within(store, p);
   });
 }

@@ -252,14 +252,25 @@ test('on Windows, PATH and every name its list holds reach each run, whatever th
   assert.ok(launches > 0, 'no tool runs on Windows: nothing was checked');
 });
 
-test('a secret store stored as a folder never reaches any run, in any case the disk ignores', () =>
+test("a secret store, or the office's accounts folder, stored as a folder never reaches any run, in any case the disk ignores", () =>
   ownerHome(async (home) => {
     for (const s of ['.ssh', '.docker']) mkdirSync(join(home, s));
+    const accounts = L.accountsHome();
+    mkdirSync(join(accounts, 'claude'), { recursive: true });
     // Stored straight to the table, as a folder given before a rule named
-    // its store was, which the folder check no longer sees.
-    const stored = ['.ssh', '.SSH', '.docker'].map((s) => join(home, s));
-    const stores = ['.ssh', '.docker'].map((s) => realpathSync.native(join(home, s)));
+    // its store was, which the folder check no longer sees: each store, one
+    // inside the accounts folder, and the office's home, which holds it.
+    const stored = [
+      ...['.ssh', '.SSH', '.docker'].map((s) => join(home, s)),
+      accounts,
+      join(accounts, 'claude'),
+      folder
+    ];
     const real = (p: string) => (existsSync(p) ? realpathSync.native(p) : p);
+    const stores = ['.ssh', '.docker'].map((s) => real(join(home, s)));
+    // A run reads its own account's folder (Grok's temp folder sits there),
+    // so for the accounts folder only the stored folders themselves count.
+    const grants = new Set(stored.map(real));
     const given: string[] = [];
     const launches = await eachLaunch((gave, agent, platform) => {
       const reads = WALLS[agent](gave).reads.map(real);
@@ -268,8 +279,8 @@ test('a secret store stored as a folder never reaches any run, in any case the d
         `${agent} lost its read folder`
       );
       for (const r of new Set(reads))
-        if (stores.some((s) => r === s || r.startsWith(s + '/')))
-          given.push(`${agent} on ${platform}: ${r.slice(real(home).length)}`);
+        if (grants.has(r) || stores.some((s) => r === s || r.startsWith(s + '/')))
+          given.push(`${agent} on ${platform}: ${r}`);
     }, stored);
     assert.deepEqual(given, [], 'a run was given a secret store');
     assert.ok(launches > 0, 'no tool runs anywhere: nothing was checked');
