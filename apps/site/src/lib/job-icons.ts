@@ -3,6 +3,20 @@
 // same grid as the site's other pixel marks, where # is a lit pixel. The grid
 // compiles once to one path of unit squares, drawn in currentColor.
 const GRIDS: Record<string, string[]> = {
+  inbox: [
+    '............',
+    '............',
+    '############',
+    '##........##',
+    '#.#......#.#',
+    '#..#....#..#',
+    '#...#..#...#',
+    '#....##....#',
+    '#..........#',
+    '#..........#',
+    '############',
+    '............'
+  ],
   workouts: [
     '............',
     '............',

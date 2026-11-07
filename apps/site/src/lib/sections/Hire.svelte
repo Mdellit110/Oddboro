@@ -26,6 +26,21 @@
 
   const JOBS: Job[] = [
     {
+      id: 'inbox',
+      for: 'managing your email inbox',
+      role: 'Inbox Odd',
+      line: 'Keeps your inbox down to what needs you.',
+      portrait: 'ada',
+      does: [
+        'Reads your Gmail, once you connect it, and tells you what needs an answer.',
+        'Drafts replies for you to change and send.',
+        'Proposes filters that label and archive the rest.'
+      ],
+      level: 'read',
+      tools: [{ name: 'Gmail', can: ['read'] }],
+      you: 'You click Send on each reply, and Create on each filter.'
+    },
+    {
       id: 'workouts',
       for: 'planning your workouts',
       role: 'Training Odd',
