@@ -124,16 +124,28 @@ export function decodeEntities(text: string): string {
   });
 }
 
+/**
+ * Replace until nothing more matches. One pass can leave a tag behind:
+ * removing `<scr<script>ipt>` once makes a new `<script>`.
+ */
+function untilStable(text: string, pattern: RegExp, by: string): string {
+  let before: string;
+  do {
+    before = text;
+    text = text.replace(pattern, by);
+  } while (text !== before);
+  return text;
+}
+
 /** An HTML email or page as plain text: blocks become lines, tags and scripts go. */
 export function htmlToText(html: string): string {
-  const text = html
-    .replace(/<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
+  let text = untilStable(html, /<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, '');
+  text = untilStable(text, /<!--[\s\S]*?-->/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li\b[^>]*>/gi, '\n- ')
     .replace(/<\/(p|div|tr|h[1-6]|li|ul|ol|table|blockquote)\s*>/gi, '\n')
-    .replace(/<\/t[dh]\s*>/gi, ' ')
-    .replace(/<[^>]*>/g, '');
+    .replace(/<\/t[dh]\s*>/gi, ' ');
+  text = untilStable(text, /<[^>]*>/g, '');
   return decodeEntities(text)
     .replace(/[ \t ]+/g, ' ')
     .replace(/ *\n */g, '\n')

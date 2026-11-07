@@ -8,14 +8,21 @@
 export const MAIL_FOOTER = 'Sent from Oddboro';
 const SITE = 'https://oddboro.com';
 
-/** Whether the body already ends with the footer, in words or as a link. */
+/** The footer as a line may say it: in words, or as the link it once was. */
+const FOOTER_LINES = new Set([
+  'sent from oddboro',
+  'sent from [oddboro](https://oddboro.com)',
+  'sent from [oddboro](https://oddboro.com/)'
+]);
+
+/** Whether any line of the body is the footer. Line by line: no pattern runs over the whole body. */
 const hasFooter = (body: string) =>
-  /^sent from (oddboro|\[oddboro\]\(https:\/\/oddboro\.com\/?\))\s*$/im.test(body);
+  body.split('\n').some((line) => FOOTER_LINES.has(line.trim().toLowerCase()));
 
 /** The body with a blank line and the footer after it, unless it already says it. */
 export function withFooter(body: string): string {
   if (hasFooter(body)) return body;
-  return `${body.replace(/\s+$/, '')}\n\n${MAIL_FOOTER}`;
+  return `${body.trimEnd()}\n\n${MAIL_FOOTER}`;
 }
 
 /**
@@ -25,7 +32,7 @@ export function withFooter(body: string): string {
  * Anywhere else the words stay as the owner left them.
  */
 export function linkFooter(body: string): string {
-  const lines = body.replace(/\s+$/, '').split('\n');
+  const lines = body.trimEnd().split('\n');
   const last = lines.length - 1;
   if (lines[last].trim().toLowerCase() !== MAIL_FOOTER.toLowerCase()) return body;
   lines[last] = `Sent from [Oddboro](${SITE})`;
