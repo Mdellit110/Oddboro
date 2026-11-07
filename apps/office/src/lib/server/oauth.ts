@@ -8,7 +8,9 @@
 // so no owner makes one of their own. Its id ships in the code; its secret,
 // which Google says a desktop app cannot keep, comes from the build
 // (ODDBORO_GOOGLE_CLIENT_SECRET) and never sits in the repo. Each Google
-// connector signs in on its own, with its own scopes.
+// connector signs in on its own, with its product's scopes, and one Google
+// account is one connector: a sign-in to an address another connector of the
+// same product holds is not kept.
 import { randomUUID } from 'node:crypto';
 import { auth, type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
@@ -17,8 +19,16 @@ import type {
   OAuthTokens
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { connector, GOOGLE_NAMES, nameConnector, tickKey, OFFICE_URL } from '@oddboro/ledger';
-import { getSecret, setSecret } from './keychain.ts';
+import {
+  connector,
+  googleAccountHeld,
+  OFFICE_URL,
+  sayOnSignIn,
+  signedInAs,
+  tickKey,
+  type GoogleProduct
+} from '@oddboro/ledger';
+import { deleteSecret, getSecret, setSecret } from './keychain.ts';
 
 export const REDIRECT = `${OFFICE_URL}/connect/callback`;
 /** Refresh a token this long before it runs out. */
@@ -27,13 +37,19 @@ const MARGIN_MS = 5 * 60_000;
 const GOOGLE_ISSUER = 'https://accounts.google.com';
 const GOOGLE_CLIENT_ID = '143017077978-dd33kak7rf2m1praobmbc0olv7kjf5gp.apps.googleusercontent.com';
 /**
- * The scopes each Google connector asks for, space-separated. Gmail's
+ * The scopes each Google product asks for, space-separated. Gmail's
  * settings.basic is for the filters the office creates on the owner's click.
  */
-export const GOOGLE_SCOPES: Record<string, string> = {
+export const GOOGLE_SCOPES: Record<GoogleProduct, string> = {
   gmail:
     'https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.settings.basic',
-  'google-drive': 'https://www.googleapis.com/auth/drive'
+  drive: 'https://www.googleapis.com/auth/drive'
+};
+
+/** Where each Google product says which account a token reaches. */
+const WHO: Record<GoogleProduct, string> = {
+  gmail: 'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+  drive: 'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)'
 };
 
 /**
@@ -192,8 +208,8 @@ class KeychainProvider implements OAuthClientProvider {
 async function signInFor(id: string): Promise<{ provider: KeychainProvider; serverUrl: string }> {
   const c = await connector(id);
   if (c?.config.oauth === 'google') {
-    const scope = GOOGLE_SCOPES[id];
-    if (!scope) throw new Error(`${id} has no Google scope`);
+    const scope = c.config.google && GOOGLE_SCOPES[c.config.google];
+    if (!scope) throw new Error(`${c.name} does not say which Google product it is`);
     return { provider: new KeychainProvider(id, scope), serverUrl: GOOGLE_ISSUER };
   }
   if (!c?.config.url) throw new Error(`${id} is not a hosted server`);
@@ -224,31 +240,60 @@ export async function finishSignIn(state: string, code: string): Promise<string>
   if (!id) throw new Error('This sign-in link is old. Click Sign in on the task again.');
   pending.delete(state);
   const { provider, serverUrl } = await signInFor(id);
+  // What the store held before, to put back if this Google sign-in is not kept.
+  const before = getSecret(id, 'oauth');
   await auth(provider, { serverUrl, authorizationCode: code, fetchFn: steadyFetch });
-  if (provider.google) await nameGoogleAccount(id, provider.tokens()?.access_token);
+  if (provider.google) await keepGoogleAccount(id, provider.tokens()?.access_token, before);
   await tickKey(`oauth:${id}`);
   return id;
 }
 
 /**
  * Show which Google account a connector reaches, as "Gmail (ada@example.com)",
- * so the owner knows whose mail or files an Odd holds. Best effort: a name
- * that cannot be read leaves the plain one.
+ * so the owner knows whose mail or files an Odd holds. One account is one
+ * connector: a sign-in to an address another connector of the same product
+ * holds comes out of the secret store, and the store holds what it did
+ * before. Google is not told, since cancelling there would end the other
+ * connector's sign-in too. The owner reads why on this page and on the task.
+ * Best effort: an address that cannot be read leaves the plain name.
  */
-async function nameGoogleAccount(id: string, token: string | undefined): Promise<void> {
-  if (!token) return;
-  const ask =
-    id === 'gmail'
-      ? 'https://gmail.googleapis.com/gmail/v1/users/me/profile'
-      : 'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)';
+async function keepGoogleAccount(
+  id: string,
+  token: string | undefined,
+  before: string | undefined
+): Promise<void> {
+  const c = await connector(id);
+  const address = c?.config.google && token ? await googleAddress(c.config.google, token) : '';
+  if (!address) return;
+  const held = await googleAccountHeld(id, address);
+  if (!held) return signedInAs(id, address);
+  if (before && hadTokens(before)) setSecret(id, 'oauth', before);
+  else deleteSecret(id, 'oauth');
+  const words = `${address} is already connected as ${held.name}.`;
+  await sayOnSignIn(id, `${words} Sign in with another Google account.`);
+  throw new Error(
+    `${words} This sign-in was not kept. Click Sign in on the task again and pick another Google account.`
+  );
+}
+
+/** Whether a stored sign-in held tokens, rather than only a sign-in under way. */
+function hadTokens(saved: string): boolean {
   try {
-    const res = await fetch(ask, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return;
-    const body = (await res.json()) as { emailAddress?: string; user?: { emailAddress?: string } };
-    const address = body.emailAddress ?? body.user?.emailAddress;
-    if (address) await nameConnector(id, `${GOOGLE_NAMES[id] ?? id} (${address})`);
+    return !!(JSON.parse(saved) as Saved).tokens;
   } catch {
-    // The plain name stays.
+    return false;
+  }
+}
+
+/** The address a Google token reaches, or nothing when Google does not say. */
+async function googleAddress(product: GoogleProduct, token: string): Promise<string> {
+  try {
+    const res = await fetch(WHO[product], { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return '';
+    const body = (await res.json()) as { emailAddress?: string; user?: { emailAddress?: string } };
+    return body.emailAddress ?? body.user?.emailAddress ?? '';
+  } catch {
+    return '';
   }
 }
 

@@ -138,6 +138,9 @@
   <div class="mt-3 rounded-xl bg-raise px-3 py-2.5 text-sm">
     <div class="text-xs text-muted">{from}'s summary</div>
     <p class="mt-0.5 leading-relaxed">{a.filter.summary}</p>
+    {#if a.filter.account}
+      <p class="mt-1.5 text-xs text-muted">In the Gmail of {a.filter.account}</p>
+    {/if}
   </div>
 
   <div class="mt-3 text-sm">

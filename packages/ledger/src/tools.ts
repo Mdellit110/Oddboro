@@ -22,6 +22,12 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     does: 'Gives you the steps to connect a tool again, one you already gave it, when its key or sign-in stops working.',
     always: true
   },
+  {
+    id: 'ask_for_folder',
+    name: 'Ask for folders',
+    does: 'Asks you for a folder on this computer, to read or to change. You give it with one click, or a narrower one.',
+    always: true
+  },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
   {
     id: 'keep_lesson',

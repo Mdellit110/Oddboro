@@ -172,6 +172,7 @@ test('revoking the last grant cancels the sign-in at Google and forgets it here'
   const c = await gmail();
   assert.equal(c.name, 'Gmail');
   assert.equal(c.readyAt, null);
-  const [line] = await L.pg`select body from ledger where title = 'Revoked gmail for gail'`;
+  const [line] =
+    await L.pg`select body from ledger where title = 'Revoked Gmail (gail@example.com) for Gail'`;
   assert.match(line.body, /Google cancelled the sign-in too/);
 });

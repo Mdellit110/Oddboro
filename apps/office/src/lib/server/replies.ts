@@ -2,15 +2,18 @@
 // sends them from the Desk. The office calls Gmail itself, with its own
 // token, and only on the owner's click: no Odd ever sends. The ask closes
 // only once Gmail took the email, with the owner's final version, and the Odd
-// then reads any change they made for a lesson (`learnFromReply`). Filters
-// (filters.ts) reach Gmail through the same token and refusals.
+// then reads any change they made for a lesson (`learnFromReply`). Each goes
+// through the Gmail account its ask names (`mailboxOf`), so a reply leaves
+// from the account the email came to. Filters (filters.ts) reach Gmail
+// through the same token and refusals.
 import {
   approveReply,
   ask,
-  connector,
+  mailboxOf,
   reconnectTask,
   staffer,
   type AskRow,
+  type ConnectorRow,
   type ReplyDraft
 } from '@oddboro/ledger';
 import { learnFromReply } from './files.ts';
@@ -53,43 +56,46 @@ const NEEDS: Record<GmailUse, string> = {
 };
 
 /**
- * Gmail is not signed in, or its sign-in lacks a scope (`lacksScope`): the
- * office puts its own steps to sign in again on the desk (`reconnectTask`,
- * one open at a time), and the refusal names them.
+ * The ask's Gmail account is not signed in, or its sign-in lacks a scope
+ * (`lacksScope`): the office puts its own steps to sign that account in
+ * again on the desk (`reconnectTask`, one open at a time), and the refusal
+ * names them.
  */
 async function notSignedIn(
-  staffId: string,
+  a: AskRow,
   nothing: string,
   use: GmailUse = 'reply',
   scope = false
 ): Promise<GmailRefusal> {
-  const r = await reconnectTask(staffId, 'gmail', NEEDS[use], []);
-  if ('problem' in r) {
-    const name = (await staffer(staffId))?.name ?? 'this Odd';
+  const c = await mailboxOf(a);
+  const gmail = c?.name ?? 'Gmail';
+  const r = c ? await reconnectTask(a.staffId, c.id, NEEDS[use], []) : undefined;
+  if (!r || 'problem' in r) {
+    const name = (await staffer(a.staffId))?.name ?? 'this Odd';
     return new GmailRefusal(
       409,
-      `Gmail is not connected. ${nothing}. Give ${name} Gmail again in its Settings tab, under Services.`
+      `${gmail} is not connected. ${nothing}. Give ${name} ${gmail} again in its Settings tab, under Services.`
     );
   }
   const state = scope
-    ? "Gmail's sign-in is from before filters, so Gmail needs signing in again"
-    : 'Gmail is not signed in';
+    ? `${gmail}'s sign-in is from before filters, so ${gmail} needs signing in again`
+    : `${gmail} is not signed in`;
   return new GmailRefusal(
     409,
     `${state}. ${nothing}. Sign in from "${r.task.title}" on your desk, then try again.`
   );
 }
 
-/** A token for Gmail, or the refusal that says how to sign in again. */
+/** A token for the ask's Gmail account, or the refusal that says how to sign in again. */
 export async function gmailToken(
-  staffId: string,
+  a: AskRow,
   nothing: string,
   use: GmailUse = 'reply'
 ): Promise<Token> {
-  const c = await connector('gmail');
-  if (!c?.readyAt || !(await bearer('gmail'))) throw await notSignedIn(staffId, nothing, use);
+  const c: ConnectorRow | undefined = await mailboxOf(a);
+  if (!c?.readyAt || !(await bearer(c.id))) throw await notSignedIn(a, nothing, use);
   return async () => {
-    const t = await bearer('gmail');
+    const t = await bearer(c.id);
     if (!t) throw new SignedOut();
     return t;
   };
@@ -98,13 +104,13 @@ export async function gmailToken(
 /** A Gmail failure in plain words, or the sign-in refusal when Google turned the token down. */
 export async function gmailFailed(
   e: unknown,
-  staffId: string,
+  a: AskRow,
   nothing: string,
   use: GmailUse = 'reply'
 ): Promise<GmailRefusal> {
   if (e instanceof SignedOut || (e instanceof GoogleError && e.status === 401))
-    return notSignedIn(staffId, nothing, use);
-  if (lacksScope(e)) return notSignedIn(staffId, nothing, use, true);
+    return notSignedIn(a, nothing, use);
+  if (lacksScope(e)) return notSignedIn(a, nothing, use, true);
   const said = e instanceof GoogleError ? `Gmail said: ${e.message}` : (e as Error).message;
   return new GmailRefusal(502, `${nothing}. ${said}`);
 }
@@ -126,7 +132,7 @@ export async function sendReply(
   sending.add(id);
   try {
     const nothing = action === 'send' ? 'Nothing was sent' : 'Nothing was saved';
-    const token = await gmailToken(a.staffId, nothing);
+    const token = await gmailToken(a, nothing);
     const out: Outgoing = {
       to: fields.to.join(', '),
       cc: fields.cc.join(', ') || undefined,
@@ -139,7 +145,7 @@ export async function sendReply(
     try {
       gmailId = action === 'send' ? await sendMail(token, out) : await saveDraft(token, out);
     } catch (e) {
-      throw await gmailFailed(e, a.staffId, nothing);
+      throw await gmailFailed(e, a, nothing);
     }
     const final: ReplyDraft = {
       ...a.reply,
@@ -165,10 +171,10 @@ export async function original(id: number): Promise<Received> {
   const a = await replyAsk(id);
   if (!a.reply.gmailThreadId) throw new GmailRefusal(404, 'This is a new email. It answers none.');
   const nothing = 'The email it answers could not be read';
-  const token = await gmailToken(a.staffId, nothing);
+  const token = await gmailToken(a, nothing);
   const found = await answered(token, a.reply.gmailThreadId, a.reply.inReplyTo).catch(
     async (e: unknown) => {
-      throw await gmailFailed(e, a.staffId, nothing);
+      throw await gmailFailed(e, a, nothing);
     }
   );
   if (!found) throw new GmailRefusal(404, 'That Gmail thread has no email in it now.');

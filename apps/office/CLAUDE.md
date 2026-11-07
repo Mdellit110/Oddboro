@@ -156,7 +156,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (`src/lib/ui/ReplyReview.svelte`): "Reply 1 of 3 · from Paige", the Odd's
    summary, the email it answers unfolded on demand
    (`GET /api/asks/[id]/original`, read from Gmail with the office's token,
-   shown as plain text), then To, Cc, Subject and the body to edit. Send or
+   shown as plain text), then From (the account, `reply.account`), To, Cc,
+   Subject and the body to edit. Replies and filters go through the Gmail
+   account their ask names (`mailboxOf`), and a sign-in that is gone puts
+   that account's reconnect task on the desk. Send or
    Save to Gmail drafts posts to `/api/asks/[id]/reply`: the office calls
    Gmail itself (`src/lib/server/replies.ts`, building the email with
    `message` in `google/gmail.ts`), and only once Gmail took it approves the
@@ -189,7 +192,18 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    twice, then approves with `approveFilter`. A Gmail failure leaves it open;
    a sign-in from before filters (403, `lacksScope`) puts the reconnect task
    on the desk. Ask for changes and Discard work as on a reply, and Back and
-   Next step through the open filters. An item a lead raised from a colleague's
+   Next step through the open filters. A `folder` ask (an Odd's
+   `ask_for_folder`) shows the folder with the home written `~` (the desk's
+   `folders`, worked out on the server) and its level in words
+   (`FolderAsk.svelte`), with Deny, Send back (Iterate), Change and Give
+   access. Change opens the path field, the system's picker
+   (`/api/folders/pick`) and the level toggle, so the owner can narrow it
+   first. Give access posts `{ path, level, reason }` to
+   `/api/asks/[id]/folder`: `giveFolder` in the ledger checks it as the
+   Folders tab does and gives it in the transaction that approves the ask,
+   with one Ledger line in the Settings tab's words, and the `carry_out` run
+   that answer starts reaches it. A refusal leaves it open and shows the
+   Folders tab's line. Plain Approve refuses a folder ask. An item a lead raised from a colleague's
    handed-back work says so on its sender line ("Marshall, from Paige's
    work", `via` on the ask or task), and the colleague's name opens their
    chat; the item still belongs to the lead.
@@ -412,7 +426,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Odd's tool can't take: [", `FOLDER_REFUSED.glob`; a folder given before
    that rule is not checked again), and `setFolder` refuses one inside or holding
    a folder the Odd already has ("That folder is inside one this Odd already
-   has, or holds one."); the line shows under the field. The
+   has, or holds one."); the line shows under the field. An Odd asks for a
+   folder with `ask_for_folder` (item 7), never with steps for this tab: a
+   rule in `house.ts` says so for folders and both switches. The
    list reads the profile's folders, each with the home folder written `~`
    (`shown`), so it loads nothing of its own and the staff route has no GET;
    a level change or Remove sends the path as stored. `run()` takes the
@@ -704,9 +720,22 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    sign-in that lacks one signs in afresh, `covers`; the
    secret from `ODDBORO_GOOGLE_CLIENT_SECRET`, which the shell passes from the
    build, or `.env` in development). Each Google call asks `bearer` for a live
-   token, so it never leaves the office process. A sign-in renames the
-   connector after the account ("Gmail (ada@example.com)"), and revoking the
-   last grant cancels it at Google first (`revokeAtGoogle` in the ledger). A
+   token, so it never leaves the office process. One connector is one Google
+   account of one product, found by `config.google` (`gmail` or `drive`),
+   never by its id: scopes, the server `builtin` makes, and the reply and
+   filter routes all go by it. A sign-in keeps the address
+   (`config.account`) and renames the connector ("Gmail (ada@example.com)",
+   `signedInAs`); one to an address another connector of the product holds
+   is not kept (`keepGoogleAccount` in `oauth.ts`): the store gets back what
+   it had, Google is not told, and the callback page and the task's sign-in
+   step say why. Each account's tools end by naming it (`accountServer` in
+   `google/http.ts`). Revoking the last grant cancels the sign-in at Google
+   first (`revokeAtGoogle` in the ledger), unless another Google connector,
+   either product, is signed in to the same account. A further account
+   (`gmail-2`) no Odd holds leaves the catalog. On the Services tab, picking
+   Gmail or Google Drive once one is connected lists each connected account
+   and "Another Google account" (a connector still waiting on its sign-in,
+   or a new one, `another` on the grant). A
    Claude Code run gets its servers as a file in `<home>/mcp/` only the owner
    reads, and a Codex run reads the gateway's token from
    `ODDBORO_GATEWAY_TOKEN`, so no token is on a command line. When a tool an Odd holds stops working, it calls
@@ -744,11 +773,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     describes them, LookStudio asks `/api/looks`, and
     the owner sees the portrait and the walk, then redraws with a note or keeps it.
     Built: `src/lib/ui/OddParts.svelte` cycles hair, top and bottom and
-    picks colours and glasses, each change rendered at once by
-    `/api/looks/parts` from the list at `/api/me/parts`. Only offices whose
-    tool draws looks (`drawsLooks`, `/api/agents`) offer drawing; the rest
-    build. The onboarding manager card offers the same, as "Build your own".
-    Nobody is hired without a kept look. While it draws,
+    picks colours and glasses (the shuffle in the image's corner picks all of them at random), each change rendered at once by
+    `/api/looks/parts` from the list at `/api/me/parts`. Building comes first and is the default, since it takes no time; only offices
+    whose tool draws looks (`drawsLooks`, `/api/agents`) also offer drawing. The onboarding manager card offers the same, as "Build your own".
+    Nobody is hired without a kept look; in the hire window a look built from parts is kept as it lands (`autoKeep` on `LookStudio`), so Next is the one click, and name and role share a line. While it draws,
     `src/lib/ui/PixelDrawing.svelte` paints a bust pixel by pixel beside the
     stage and the time. Step three picks the level and the tool its runs go
     through ("Runs on", Claude Code unless the owner picks another, item 9).

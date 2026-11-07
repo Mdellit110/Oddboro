@@ -20,7 +20,7 @@ import type { LookSpec, PartKind } from '@oddboro/sprites/look';
 import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/world';
 import { STARTER_TOOLS } from './tools.ts';
 import type { Agent, Effort, GrantedFolder } from './agents.ts';
-import type { Level } from './access-words.ts';
+import type { FolderAccess, Level } from './access-words.ts';
 import type { GmailFilter } from './filter-words.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
@@ -91,14 +91,39 @@ export type AccountRow = typeof accounts.$inferSelect;
  * them until then. `reply` is one email reply an Odd proposes (`asks.reply`):
  * the owner edits it, then the office sends it or saves it to Gmail drafts.
  * `filter` is one Gmail filter an Odd proposes (`asks.filter`): the owner may
- * change it, then the office creates it in Gmail.
+ * change it, then the office creates it in Gmail. `folder` is a folder on this
+ * computer an Odd asks for (`asks.folder`): the owner may narrow it, then the
+ * office gives it (`setFolder`).
  */
 export type AskKind =
-  'approval' | 'access' | 'hire' | 'goal' | 'plan' | 'hand_offs' | 'window' | 'reply' | 'filter';
+  | 'approval'
+  | 'access'
+  | 'hire'
+  | 'goal'
+  | 'plan'
+  | 'hand_offs'
+  | 'window'
+  | 'reply'
+  | 'filter'
+  | 'folder';
 /** `revise` means the owner sent it back to be reworked. */
 export type AskStatus = 'open' | 'approved' | 'denied' | 'revise';
-/** What an access ask wants: a connector and a level. */
-export type AccessRequest = { connector: string; level: Level };
+/**
+ * What an access ask wants: a connector and a level. `another` asks for one
+ * more Google account of that product: approving it makes a new connector
+ * (`addGoogleAccount`) and `connector` then names it.
+ */
+export type AccessRequest = { connector: string; level: Level; another?: GoogleProduct };
+/**
+ * What a folder ask wants: a folder by its real path (`checkFolder`), to read
+ * or to read and change. `given` is set once the owner gave a folder for it:
+ * the one they picked, which may be narrower than the Odd asked.
+ */
+export type FolderRequest = {
+  path: string;
+  level: FolderAccess;
+  given?: { path: string; level: FolderAccess };
+};
 /**
  * One email reply an Odd proposes. The owner may change the recipients,
  * subject and body; the office stores their final version with `sent` once
@@ -115,6 +140,10 @@ export type ReplyDraft = {
   body: string;
   /** The Odd's one or two lines on the email it answers. */
   summary: string;
+  /** The Gmail connector it goes out through: the account the email came to. */
+  connector?: string;
+  /** That account's address, as the desk shows it. */
+  account?: string;
   /** Set once Gmail sent it or saved it as a draft. */
   sent?: { action: 'send' | 'draft'; at: string; gmailId: string };
 };
@@ -248,6 +277,8 @@ export const asks = pgTable('asks', {
   reply: jsonb().$type<ReplyDraft>(),
   /** A filter ask's Gmail filter. */
   filter: jsonb().$type<GmailFilter>(),
+  /** A folder ask's folder and level. */
+  folder: jsonb().$type<FolderRequest>(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
@@ -476,7 +507,13 @@ export type ConnectorConfig = {
    * with New Altitude's own Google client (oauth.ts).
    */
   oauth?: boolean | 'google';
+  /** Which Google product a Google connector serves. The office looks a Google connector up by this, never by its id. */
+  google?: GoogleProduct;
+  /** The Google account a Google connector is signed in to, once its sign-in landed. */
+  account?: string;
 };
+/** The Google products the office serves itself. One connector is one account of one product. */
+export type GoogleProduct = 'gmail' | 'drive';
 
 export const connectors = pgTable('connectors', {
   id: text().primaryKey(),

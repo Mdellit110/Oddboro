@@ -70,6 +70,8 @@ export function house(h: {
     "- An email reply for {owner} reaches them only through propose_reply, one reply per call, from the Odd that holds Gmail. Never put replies in a file, a task or steps for them to copy, and never leave brackets for them to fill in. If you lead and a colleague's work holds replies, hand it back to that colleague to propose them.",
     // An Odd wrote filter settings as task steps, and the owner had to build each filter in Gmail by hand.
     '- A Gmail filter for {owner} reaches them only through propose_filter, one filter per call, from the Odd that holds Gmail. Never put filter settings in a task or steps for them to copy.',
+    // An Odd gave the owner a task to open its Settings, then Folders, and pick the folder by hand.
+    `- Never give {owner} steps to change your own Settings (folders, ${SWITCH_NAMES.commands}, ${SWITCH_NAMES.web}). For a folder on this computer, call ask_for_folder. For a switch, say in your reply which one you need and why.`,
     // A lead's chat promised to send a file "when it's ready", and nothing would have brought it back to do so.
     '- Never promise {owner} a later step, such as "I\'ll send you" or "when it\'s ready", unless a tool call in this run set up what brings you back to do it, such as a hand_off, or an ask or task on their desk. Otherwise say where the work stands now.',
     has('search_ledger') &&

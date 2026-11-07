@@ -50,12 +50,12 @@ export async function previewFilter(
   const query = filterQuery(criteria ?? a.filter.criteria);
   if (!query) throw new GmailRefusal(400, 'Say which mail it matches first.');
   const nothing = 'The matching mail could not be counted';
-  const token = await gmailToken(a.staffId, nothing, 'filter');
+  const token = await gmailToken(a, nothing, 'filter');
   try {
     const about = await countMatching(token, query);
     return { query, about, more: about >= COUNT_CAP };
   } catch (e) {
-    throw await gmailFailed(e, a.staffId, nothing, 'filter');
+    throw await gmailFailed(e, a, nothing, 'filter');
   }
 }
 
@@ -83,7 +83,7 @@ export async function createFilter(
   making.add(id);
   try {
     const nothing = 'Nothing was created';
-    const token = await gmailToken(a.staffId, nothing, 'filter');
+    const token = await gmailToken(a, nothing, 'filter');
     const query = filterQuery(fields.criteria);
     let created: NonNullable<GmailFilter['created']>;
     let matching: number;
@@ -98,7 +98,7 @@ export async function createFilter(
       created = { at: new Date().toISOString(), gmailId, tidied };
     } catch (e) {
       if (e instanceof GmailOwnLabel) throw new GmailRefusal(400, `${nothing}. ${e.message}`);
-      throw await gmailFailed(e, a.staffId, nothing, 'filter');
+      throw await gmailFailed(e, a, nothing, 'filter');
     }
     const final: GmailFilter = { ...a.filter, ...fields, matching, created };
     if (!(await approveFilter(id, final)))

@@ -124,6 +124,8 @@ import {
   ownToolsSaid,
   runsOnLine,
   SECRET_STORES,
+  FOLDER_SAID,
+  shownFolder,
   settingsTab,
   SWITCH_NAMES,
   type OwnTools,
@@ -1448,9 +1450,32 @@ function followUpBrief(
           : []),
         ...(a.filter
           ? [`- The filter: ${filterWords(a.filter)}`, `- Its summary: ${a.filter.summary}`]
+          : []),
+        ...(a.folder
+          ? [
+              `- The folder you asked for: ${shownFolder(a.folder.path)} (${FOLDER_SAID[a.folder.level]})`
+            ]
           : [])
       ]
     : [];
+  // What the owner gave for a folder ask, which may be narrower than it asked.
+  const given = a?.folder?.given;
+  if (f.kind === 'carry_out' && given)
+    return [
+      `{owner} approved your ask #${a?.id} and gave you ${shownFolder(given.path)} (${FOLDER_SAID[given.level]}). This run reaches it.`,
+      ...(also.length
+        ? [
+            `This also answers your ${also.length > 1 ? 'asks' : 'ask'} ${also.map((x) => `#${x.id}`).join(', ')}, which another of your runs raised for the same folder: do that work once, here.`
+          ]
+        : []),
+      '',
+      ...askLines,
+      `- Their reason: ${a?.reason ?? 'none given'}`,
+      '',
+      '1. Check you can reach it: list the folder.',
+      '2. If work was waiting on it, do it now, within what they gave you. If they gave less than you asked and the work needs more, say so in your reply.',
+      '3. If nothing was waiting, stop there.'
+    ];
   if (f.kind === 'carry_out' && a?.access)
     return [
       `{owner} approved your ask #${a.id}, and the access is ready now.`,
@@ -1495,7 +1520,7 @@ function followUpBrief(
       `- What they want changed: ${f.note}`,
       '',
       '1. Do any work the new version needs first, such as rewriting a file in your folder.',
-      `2. Raise the new version with the same tool as before (raise_ask, propose_reply, propose_filter, propose_hire, ask_for_access, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
+      `2. Raise the new version with the same tool as before (raise_ask, propose_reply, propose_filter, propose_hire, ask_for_access, ask_for_folder, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
       '3. Do not carry out the ask itself. They decide the new version.'
     ];
   return [
@@ -1634,7 +1659,10 @@ export async function followThrough(
                 : `Feedback on ${r?.title ?? 'a report'}`));
   const task = t ? { row: t, files: await taskFiles(t.id) } : undefined;
   // One carry-out may stand for twin asks that start no run of their own.
-  const also = f.kind === 'carry_out' && a?.kind === 'access' ? await standsFor(a) : [];
+  const also =
+    f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder')
+      ? await standsFor(a)
+      : [];
   const details: Record<FollowUpKind, string> = {
     carry_out: `Carrying out ask #${a?.id}`,
     rework: `Reworking ask #${a?.id}`,
