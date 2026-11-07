@@ -54,9 +54,9 @@ const tool = (id: string, name: string) => ({
   kind: 'http' as const,
   readyAt: new Date()
 });
-await db
-  .insert(connectors)
-  .values([tool('gmail', 'Gmail'), tool('slack', 'Slack'), tool('drive', 'Drive')]);
+// Every office has Gmail (0009_google): mark it connected, and add the rest.
+await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
+await db.insert(connectors).values([tool('slack', 'Slack'), tool('drive', 'Drive')]);
 const grant = (staffId: string, connectorId: string, level: Level = 'read') => ({
   staffId,
   connectorId,

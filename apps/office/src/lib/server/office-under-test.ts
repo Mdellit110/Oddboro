@@ -20,7 +20,7 @@ import {
 } from 'node:fs';
 import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { after, mock } from 'node:test';
 import { onPath } from './on-path.ts';
 
@@ -112,7 +112,9 @@ function reply() {
   const after = (flag) => args[args.indexOf(flag) + 1];
   const gave = {
     args,
-    env: JSON.parse(after('--mcp-config')).mcpServers.office.env,
+    // The office passes the servers as a file, read here while the run goes.
+    mcp: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')),
+    env: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')).mcpServers.office.env,
     system: after('--append-system-prompt'),
     message,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
@@ -136,8 +138,9 @@ function reply() {
 );
 chmodSync(join(bin, 'claude'), 0o755);
 // The stand-in for Grok, which reads no input: it sends back its arguments, the
-// Grok, git and key variables it got, the tool server's environment from its agent
-// file, and its sandbox profile. Then one MCP call the way Grok streams it
+// Grok, git and key variables it got, its agent file's MCP servers and the tool
+// server's environment from them, and its sandbox profile when it has one (none
+// on Windows). Then one MCP call the way Grok streams it
 // (through use_tool), and a result. A message that says "Replay <file>"
 // gets that recorded stream instead, and its arguments go in replay-args.json.
 // "grok models", which renews the sign-in, adds a dot to models.log in the
@@ -206,16 +209,20 @@ if (replay) {
   process.exit(0);
 }
 const agent = fs.readFileSync(after('--agent'), 'utf8');
-const profile = fs
-  .readFileSync(process.env.GROK_HOME + '/sandbox.toml', 'utf8')
-  .split(/^(?=\\[profiles\\.)/m)
-  .find((b) => b.startsWith('[profiles.' + after('--sandbox') + ']'));
+const profile = args.includes('--sandbox')
+  ? fs
+      .readFileSync(process.env.GROK_HOME + '/sandbox.toml', 'utf8')
+      .split(/^(?=\\[profiles\\.)/m)
+      .find((b) => b.startsWith('[profiles.' + after('--sandbox') + ']'))
+  : undefined;
+const servers = Object.assign({}, ...JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]));
 const gave = {
   args,
   grokEnv: Object.fromEntries(
     Object.entries(process.env).filter(([k]) => /^(GROK_|XAI_|ANTHROPIC_API_KEY|TMPDIR|NODE_OPTIONS|GIT_)/.test(k))
   ),
-  env: JSON.parse(/^mcpServers: (.*)$/m.exec(agent)[1]).find((s) => s.office)?.office.env,
+  env: servers.office?.env,
+  servers,
   agentMode: fs.statSync(after('--agent')).mode & 0o777,
   profile,
   system: joined('--rules'),
@@ -312,7 +319,8 @@ process.stdin.on('end', () => {
     servers: set.mcp_servers,
     // Whether each picture was there as the run read it (an office run's).
     pictures: args.filter((a) => a.startsWith('--image=')).map((a) => fs.existsSync(a.slice(8))),
-    permissions: set.permissions[set.default_permissions],
+    // None on Windows, where the run has Codex's read-only mode instead.
+    permissions: set.permissions?.[set.default_permissions],
     system: set.developer_instructions,
     message,
     temp: fs.existsSync(process.env.TMPDIR)
@@ -562,6 +570,8 @@ await L.pg`insert into staff ${L.pg([
 /** What the stand-in says the run gave it. */
 export type Gave = {
   args: string[];
+  /** The servers a Claude Code run got, read from the file `--mcp-config` names while the run went. */
+  mcp?: unknown;
   env: Record<string, string>;
   system: string;
   message: string;
@@ -584,7 +594,7 @@ export type Gave = {
   agentMode?: number;
   profile?: string;
   codexEnv?: Record<string, string>;
-  /** The Codex run's MCP servers, as its `-c mcp_servers` said them. */
+  /** The Codex run's MCP servers, as its `-c mcp_servers` said them, or the Grok run's, as its agent file names them. */
   servers?: Record<string, Record<string, unknown>>;
   /** The permission profile the Codex run used, as its `-c permissions` said it. */
   permissions?: { filesystem: Record<string, string>; network: { enabled: boolean } };
@@ -597,6 +607,27 @@ export type Gave = {
   runMode?: number;
   policy?: string;
 };
+/** The folders the office's file server holds a run to, as `ODDBORO_FILES` names them. */
+export type FileWalls = { cwd: string; reads: string[]; writes: string[]; noWrite: string[] };
+/**
+ * The office's file server (`files`) a run was given, in any tool's shape:
+ * Claude Code's `--mcp-config`, Codex's `-c mcp_servers` or Grok's agent
+ * file. Its command, its arguments and the walls it holds, or nothing.
+ */
+export function filesOf(
+  run: Gave
+): { command: string; args: string[]; walls: FileWalls } | undefined {
+  const servers =
+    run.servers ?? (run.mcp as { mcpServers: Record<string, Record<string, unknown>> }).mcpServers;
+  const files = servers.files as
+    { command: string; args: string[]; env: { ODDBORO_FILES: string } } | undefined;
+  if (!files) return undefined;
+  return {
+    command: files.command,
+    args: files.args,
+    walls: JSON.parse(files.env.ODDBORO_FILES) as FileWalls
+  };
+}
 /** What one follow-up's run was given, and the run keys going while it ran. */
 export async function runOf(id: number, ask?: number): Promise<Gave & { going: string[] }> {
   const f = await L.startFollowUp(id);
@@ -638,6 +669,24 @@ export async function onPlatform<T>(
   } finally {
     if (real) Object.defineProperty(process, 'platform', real);
   }
+}
+/**
+ * The stand-in Grok and Codex by the names a Windows office starts, grok.exe
+ * and codex.exe (`agentCommand`), in a folder of their own.
+ */
+const windowsTools = join(folder, 'windows-tools');
+mkdirSync(windowsTools);
+for (const tool of ['grok', 'codex'])
+  symlinkSync(join(bin, tool), join(windowsTools, `${tool}.exe`));
+/**
+ * `fn`, run as if the office ran on Windows, with the stand-in Grok and Codex
+ * first on PATH as grok.exe and codex.exe. Without them a Windows run finds
+ * neither by name, and the run would start whatever grok or codex this Mac has.
+ */
+export async function onWindows<T>(fn: () => T | Promise<T>): Promise<T> {
+  return withEnv({ PATH: `${windowsTools}${delimiter}${process.env.PATH ?? ''}` }, () =>
+    onPlatform('win32', fn)
+  );
 }
 /** `fn`, run with `vars` set in the office's own environment, which is then put back. */
 export async function withEnv<T>(

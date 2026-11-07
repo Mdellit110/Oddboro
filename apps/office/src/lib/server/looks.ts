@@ -389,12 +389,14 @@ async function lookAndFix(
     staffId?: string;
     photo: { mediaType: string; data: string };
     model?: string;
+    signal?: AbortSignal;
   }
 ): Promise<Drawn> {
   const r = await runAsOffice(`${ask}\n\n${FIX}\n\n## Your reply\n\n${reply}`, {
     system: SYSTEM,
     kind: 'look',
     timeoutMs: 10 * 60_000,
+    signal: req.signal,
     effort: 'medium',
     ...(req.model ? { model: req.model } : {}),
     images: [req.photo, { mediaType: 'image/png', data: await drawingImage(drawn) }]
@@ -423,6 +425,8 @@ export async function drawLook(req: {
   photo?: { mediaType: string; data: string };
   /** A model to draw with other than the default, to compare them. */
   model?: string;
+  /** Stops the drawing: the owner left it for parts, or closed the page. */
+  signal?: AbortSignal;
 }): Promise<Preview> {
   if (!req.model && !officeDrawsLooks()) throw new Error(cannotDrawLook());
   const lib = await library();
@@ -454,6 +458,7 @@ export async function drawLook(req: {
       // seven minutes in all.
       timeoutMs: (req.photo ? 10 : 5) * 60_000,
       effort: req.photo ? 'medium' : 'low',
+      signal: req.signal,
       ...(req.model ? { model: req.model } : {}),
       ...(req.photo ? { images: [req.photo] } : {})
     });
@@ -473,6 +478,7 @@ export async function drawLook(req: {
     if (!req.photo) writeFileSync(home('office', 'last-look.md'), r.text);
     console.error(`[looks] attempt ${attempt} for ${req.name}: ${problems.join('; ')}`);
     if (attempt >= 2) throw new Error(`The drawing did not come out right: ${problems.join('; ')}`);
+    if (req.signal?.aborted) throw new Error('Stopped.');
     message = `${ask}\n\n## Your last reply\n\n${r.text}\n\n## What was wrong with it\n\n${problems.map((p) => `- ${p}`).join('\n')}\n\nReply again in full, with every problem fixed.`;
   }
 }

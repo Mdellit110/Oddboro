@@ -55,3 +55,7 @@ export const DATABASE_PORT = Number(process.env.ODDBORO_DB_PORT) || (UNDER_TEST 
 export const STAFF_SERVER = fileURLToPath(
   new URL(`./mcp${extname(fileURLToPath(import.meta.url))}`, import.meta.url)
 );
+/** The office's file tools beside this file (files-server.ts): how a run reads and changes files. */
+export const FILES_SERVER = fileURLToPath(
+  new URL(`./files-server${extname(fileURLToPath(import.meta.url))}`, import.meta.url)
+);

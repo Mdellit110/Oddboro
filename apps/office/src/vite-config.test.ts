@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { createServer } from 'vite';
-import config, { noEditorLaunch } from '../vite.config.ts';
+import config, { noEditorLaunch, siteUrl } from '../vite.config.ts';
 
 const folder = mkdtempSync(join(tmpdir(), 'oddboro-vite-'));
 const launched = join(folder, 'launched.log');
@@ -42,6 +42,17 @@ after(async () => {
 test("the office's dev config refuses the editor route before any other plugin", () => {
   const { plugins } = config({ command: 'serve', mode: 'development' });
   assert.equal((plugins?.[0] as { name?: string }).name, noEditorLaunch().name);
+});
+
+test("the office links to the site's dev server only under a developer's npm run dev", () => {
+  assert.equal(siteUrl({ npm_lifecycle_event: 'dev' }), 'http://localhost:4501');
+  // A build, and the office npm run setup keeps running, which starts Vite itself.
+  assert.equal(siteUrl({ npm_lifecycle_event: 'build' }), 'https://oddboro.com');
+  assert.equal(siteUrl({}), 'https://oddboro.com');
+  assert.equal(
+    siteUrl({ npm_lifecycle_event: 'dev', ODDBORO_SITE_URL: 'http://localhost:4521/' }),
+    'http://localhost:4521'
+  );
 });
 
 test('a page asking the dev server to open a file in an editor is refused, and no editor starts', async () => {

@@ -2,6 +2,8 @@
 // ledger, in Postgres. Server only.
 export * from './office.ts';
 export * from './schema.ts';
+export * from './filter-words.ts';
+export * from './mail-footer.ts';
 export * from './agents.ts';
 export * from './accounts.ts';
 export * from './first-questions.ts';
@@ -21,6 +23,7 @@ export * from './read-only.ts';
 export {
   searchRegistry,
   ensureConnector,
+  BUILT_IN,
   HEADER_NAME,
   type Candidate,
   type WayIn

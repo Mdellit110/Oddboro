@@ -20,7 +20,8 @@ import type { LookSpec, PartKind } from '@oddboro/sprites/look';
 import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/world';
 import { STARTER_TOOLS } from './tools.ts';
 import type { Agent, Effort, GrantedFolder } from './agents.ts';
-import type { Level } from './access-words.ts';
+import type { FolderAccess, Level } from './access-words.ts';
+import type { GmailFilter } from './filter-words.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
 const created = (name = 'created_at') => at(name).notNull().defaultNow();
@@ -87,13 +88,81 @@ export type AccountRow = typeof accounts.$inferSelect;
  * (threads.ts): a yes starts another round, and a no stops the thread. `window` is the
  * office's one ask when the plan's 5-hour window passes its guard
  * (usage-window.ts): a yes lets hand-offs run until it resets, and a no holds
- * them until then.
+ * them until then. `reply` is one email reply an Odd proposes (`asks.reply`):
+ * the owner edits it, then the office sends it or saves it to Gmail drafts.
+ * `filter` is one Gmail filter an Odd proposes (`asks.filter`): the owner may
+ * change it, then the office creates it in Gmail. `folder` is a folder on this
+ * computer an Odd asks for (`asks.folder`): the owner may narrow it, then the
+ * office gives it (`setFolder`). `call` is one call to an outside tool that
+ * changes something, held by the gateway for an Odd at Draft (`asks.call`):
+ * on the owner's yes the office makes that exact call.
  */
-export type AskKind = 'approval' | 'access' | 'hire' | 'goal' | 'plan' | 'hand_offs' | 'window';
+export type AskKind =
+  | 'approval'
+  | 'access'
+  | 'hire'
+  | 'goal'
+  | 'plan'
+  | 'hand_offs'
+  | 'window'
+  | 'reply'
+  | 'filter'
+  | 'folder'
+  | 'call';
 /** `revise` means the owner sent it back to be reworked. */
 export type AskStatus = 'open' | 'approved' | 'denied' | 'revise';
-/** What an access ask wants: a connector and a level. */
-export type AccessRequest = { connector: string; level: Level };
+/**
+ * What an access ask wants: a connector and a level. `another` asks for one
+ * more Google account of that product: approving it makes a new connector
+ * (`addGoogleAccount`) and `connector` then names it.
+ */
+export type AccessRequest = { connector: string; level: Level; another?: GoogleProduct };
+/**
+ * What a folder ask wants: a folder by its real path (`checkFolder`), to read
+ * or to read and change. `given` is set once the owner gave a folder for it:
+ * the one they picked, which may be narrower than the Odd asked.
+ */
+export type FolderRequest = {
+  path: string;
+  level: FolderAccess;
+  given?: { path: string; level: FolderAccess };
+};
+/**
+ * One email reply an Odd proposes. The owner may change the recipients,
+ * subject and body; the office stores their final version with `sent` once
+ * Gmail took it.
+ */
+export type ReplyDraft = {
+  /** The Gmail thread it answers, for a reply. */
+  gmailThreadId?: string;
+  /** The Gmail message id it answers. */
+  inReplyTo?: string;
+  to: string[];
+  cc: string[];
+  subject: string;
+  body: string;
+  /** The Odd's one or two lines on the email it answers. */
+  summary: string;
+  /** The Gmail connector it goes out through: the account the email came to. */
+  connector?: string;
+  /** That account's address, as the desk shows it. */
+  account?: string;
+  /** Set once Gmail sent it or saved it as a draft. */
+  sent?: { action: 'send' | 'draft'; at: string; gmailId: string };
+};
+/**
+ * One call to an outside tool an Odd at Draft made, held for the owner's yes:
+ * the tool, by its connector and its own name, and the exact arguments. The
+ * office makes this call, and no other, once the owner approves, and keeps
+ * what came back in `result`.
+ */
+export type HeldCall = {
+  connector: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  /** Set once the office made the call: whether the tool took it, and its words. */
+  result?: { ok: boolean; text: string; at: string };
+};
 /** A proposed hire. Approving it opens the hire window filled in with this. */
 export type HireProposal = {
   name: string;
@@ -220,6 +289,14 @@ export const asks = pgTable('asks', {
   goal: jsonb().$type<GoalDraft>(),
   /** A plan ask's plan. */
   plan: jsonb().$type<GoalPlan>(),
+  /** A reply ask's email. */
+  reply: jsonb().$type<ReplyDraft>(),
+  /** A filter ask's Gmail filter. */
+  filter: jsonb().$type<GmailFilter>(),
+  /** A folder ask's folder and level. */
+  folder: jsonb().$type<FolderRequest>(),
+  /** A call ask's held call to an outside tool. */
+  call: jsonb().$type<HeldCall>(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
@@ -228,6 +305,8 @@ export const asks = pgTable('asks', {
   threadId: integer(),
   /** On a `hand_offs` ask, the hand-off past the limit it held: the owner's yes starts it. */
   held: jsonb().$type<HeldHandOff>(),
+  /** The colleague whose handed-back work the lead raised this from (a staff id). */
+  via: text(),
   status: text().$type<AskStatus>().notNull().default('open'),
   reason: text(),
   createdAt: created(),
@@ -242,6 +321,7 @@ export const asks = pgTable('asks', {
 export type StepAction =
   | { kind: 'secret'; connector: string; name: string }
   | { kind: 'oauth'; connector: string }
+  | { kind: 'aws'; connector: string }
   | { kind: 'choice'; options: string[] }
   | { kind: 'tools'; connector: string };
 /** Steps that share a `key` tick together, e.g. the two steps of one sign-in. */
@@ -263,6 +343,8 @@ export const tasks = pgTable('tasks', {
   handOffId: integer(),
   /** The thread the staffer gave this on: the owner's answer moves it on. */
   threadId: integer(),
+  /** The colleague whose handed-back work the lead gave this from (a staff id). */
+  via: text(),
   title: text().notNull(),
   why: text().notNull(),
   steps: jsonb().$type<Step[]>().notNull(),
@@ -423,11 +505,13 @@ export const ledger = pgTable(
 );
 
 /**
- * How a staffer reaches an outside tool: a server it starts (`stdio`) or a
- * hosted one (`http`), found in the MCP Registry or named by its address. A
- * secret named in `secrets` lives in the macOS keychain, never here.
+ * How a staffer reaches an outside tool: a server it starts (`stdio`), a
+ * hosted one (`http`), found in the MCP Registry or named by its address, or
+ * one the office serves itself (`builtin`: Gmail and Google Drive, in
+ * apps/office/src/lib/server/google/). A secret named in `secrets` lives in
+ * the system's secret store, never here.
  */
-export type ConnectorKind = 'stdio' | 'http';
+export type ConnectorKind = 'stdio' | 'http' | 'builtin';
 export type ConnectorConfig = {
   command?: string;
   args?: string[];
@@ -436,9 +520,42 @@ export type ConnectorConfig = {
   secrets?: string[];
   /** HTTP header names whose whole values the keychain holds. */
   headers?: string[];
-  /** A hosted server the owner signs in to with OAuth. The office keeps the tokens. */
-  oauth?: boolean;
+  /**
+   * A server the owner signs in to with OAuth. The office keeps the tokens.
+   * `true` finds the sign-in from the server's address; `'google'` signs in
+   * with New Altitude's own Google client (oauth.ts).
+   */
+  oauth?: boolean | 'google';
+  /** One of the AWS tools: the role it uses from the office's one AWS sign-in (`AWS_SIGN_IN`). */
+  aws?: AwsConfig;
+  /**
+   * Every tool only reads, because the service's own permissions allow
+   * nothing else (AWS read only's role), so a Read only grant reaches them all.
+   */
+  readsByRole?: boolean;
+  /**
+   * Environment variables or headers whose value the office fetches from the
+   * owner's AWS Secrets Manager when a run first uses the tool, in place of a
+   * pasted one: the secret's name, and a key when the secret holds JSON.
+   */
+  fromAws?: Record<string, AwsSecretRef>;
+  /** Which Google product a Google connector serves. The office looks a Google connector up by this, never by its id. */
+  google?: GoogleProduct;
+  /** The Google account a Google connector is signed in to, once its sign-in landed. */
+  account?: string;
 };
+/** The Google products the office serves itself. One connector is one account of one product. */
+export type GoogleProduct = 'gmail' | 'drive';
+
+/** The role an AWS tool uses, and where. None of it is secret. */
+export type AwsConfig = {
+  accountId: string;
+  role: string;
+  /** The Region the owner's secrets or work are in. */
+  region: string;
+};
+
+export type AwsSecretRef = { secret: string; key?: string };
 
 export const connectors = pgTable('connectors', {
   id: text().primaryKey(),

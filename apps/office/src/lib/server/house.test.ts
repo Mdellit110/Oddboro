@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { OFFICE_SECTION, SETTINGS_TAB } from '@oddboro/ledger/access';
-import { house } from './house.ts';
+import { house, stillOnDeskSection } from './house.ts';
 
 const section = house({ has: () => false, now: '9:00', zone: 'London time' });
 
@@ -69,4 +69,27 @@ test('a run that can ask for access is told where more outside tools come from',
     /reply\. For more outside tools, call ask_for_access\. When an outside tool/
   );
   assert.doesNotMatch(section, /For more outside tools/);
+});
+
+test("every run is told to read what it has on the owner's desk before raising anything, and to revise rather than raise again", () => {
+  assert.ok(
+    section.includes(
+      `- Before you put anything on {owner}'s desk, read "Still on {owner}'s desk from you" above, when it is there. To change an item on it, raise it again with revises set to its id. Never put the same thing on their desk twice.`
+    ),
+    section
+  );
+});
+
+test('the desk section lists each open item with its id, says how many more, and is absent when the Odd has none', () => {
+  assert.equal(stillOnDeskSection({ items: [], more: 0 }), '');
+  assert.equal(
+    stillOnDeskSection({
+      items: [
+        { kind: 'task', id: 9, title: 'Sign the form' },
+        { kind: 'ask', id: 4, title: 'Reply to Re: Lunch' }
+      ],
+      more: 3
+    }),
+    "\n## Still on {owner}'s desk from you\n\n- Task #9: Sign the form\n- Ask #4: Reply to Re: Lunch\n- And 3 more.\n"
+  );
 });

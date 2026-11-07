@@ -37,7 +37,8 @@ const tasksFor = (staffId: string) => db.select().from(tasks).where(eq(tasks.sta
 
 test('a tool not connected yet puts its connect steps on the desk', async () => {
   assert.deepEqual(await grantAccess('cole', { connector: 'brain', level: 'read' }), {
-    task: true
+    task: true,
+    connector: 'brain'
   });
   const [t] = await tasksFor('cole');
   assert.equal(t.title, 'Connect Brain for Cole');
@@ -49,7 +50,8 @@ test('a tool already connected puts nothing on the desk', async () => {
     .set({ tools: ['search'], readTools: ['search'], readyAt: new Date() })
     .where(eq(connectors.id, 'brain'));
   assert.deepEqual(await grantAccess('paige', { connector: 'brain', level: 'read' }), {
-    task: false
+    task: false,
+    connector: 'brain'
   });
   assert.equal((await tasksFor('paige')).length, 0);
 });

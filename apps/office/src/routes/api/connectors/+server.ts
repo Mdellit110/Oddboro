@@ -1,7 +1,7 @@
 // Tools a staffer could be given: the office catalog, plus the public MCP
 // Registry when there is a search.
 import { json } from '@sveltejs/kit';
-import { catalog, searchRegistry } from '@oddboro/ledger';
+import { catalog, GOOGLE, searchRegistry } from '@oddboro/ledger';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
@@ -14,7 +14,15 @@ export const GET: RequestHandler = async ({ url }) => {
     ready: !!c.readyAt,
     /** A hosted server named by its address, so the owner picks how it lets the office in. */
     byAddress: c.kind === 'http' && !c.registry,
-    keyHeader: c.config.oauth ? undefined : c.config.headers?.[0]
+    keyHeader: c.config.oauth ? undefined : c.config.headers?.[0],
+    /** A Google connector's product, its plain name and signed-in address, so the owner can add another account. */
+    google: c.config.google
+      ? {
+          product: c.config.google,
+          name: GOOGLE[c.config.google].name,
+          account: c.config.account
+        }
+      : undefined
   }));
   let registry: Awaited<ReturnType<typeof searchRegistry>> = [];
   let problem: string | undefined;

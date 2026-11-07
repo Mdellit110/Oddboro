@@ -22,6 +22,8 @@ export type RunFacts = {
   handOffId?: number;
   /** The thread the run works on, either side. */
   threadId?: number;
+  /** On a lead's pick-up of a colleague's result, that colleague: what the run puts on the desk names them. */
+  via?: string;
   /** A run that only reads the owner's reason or edit for a lesson: it hands nothing on. */
   lessonRun: boolean;
   /** The office holds the network, after a Claude Code refused the open one (`networkHeld`), whatever this run's own tool or switches. */
@@ -54,6 +56,7 @@ export function officeEnv(r: RunFacts): Record<string, string> {
     ...(r.ceiling ? { CEILING: r.ceiling } : {}),
     ...(r.handOffId ? { HAND_OFF_ID: String(r.handOffId) } : {}),
     ...(r.threadId ? { THREAD_ID: String(r.threadId) } : {}),
+    ...(r.via ? { VIA: r.via } : {}),
     ...(r.lessonRun ? { LESSON_RUN: '1' } : {}),
     // On every run while held, so my_access and office_report apply the hold
     // to each Odd they speak of, as the office's own readers do (`heldReach`).

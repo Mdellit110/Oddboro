@@ -28,6 +28,13 @@
     /** The look the owner kept, if any. */
     kept?: Drawn;
     onkeep: (d: Drawn) => void | Promise<void>;
+    /**
+     * Keep each look built from parts as it lands, with no Keep button: the
+     * hire window's Next is the one click. A look still rendering clears it
+     * (`onclear`), so Next never moves on with the one before.
+     */
+    autoKeep?: boolean;
+    onclear?: () => void;
     keepLabel?: string;
     /** Told when a drawing starts and ends, so the window can show it. */
     onbusy?: (busy: boolean) => void;
@@ -40,6 +47,8 @@
     description = $bindable(''),
     kept,
     onkeep,
+    autoKeep = false,
+    onclear,
     keepLabel = 'Keep',
     onbusy
   }: Props = $props();
@@ -50,7 +59,8 @@
   // only parts show.
   const agentTools = new AgentTools();
   let way = $state<'draw' | 'parts' | undefined>();
-  const mode = $derived(agentTools.drawsLooks ? (way ?? 'draw') : 'parts');
+  // Parts first: it takes no time. Drawing is there for a look made to order.
+  const mode = $derived(agentTools.drawsLooks ? (way ?? 'parts') : 'parts');
   /** The look built from parts, as it stands. */
   let built = $state<Built | undefined>();
   let builtKept = $state(false);
@@ -63,6 +73,11 @@
   let busy = $state(false);
   let drawing = $state(false);
   let problem = $state('');
+  /** Stops the drawing under way: Build from parts, or Stop drawing. The office ends its run too. */
+  let stopping: AbortController | undefined;
+  function stopDrawing() {
+    stopping?.abort();
+  }
   $effect(() => onbusy?.(drawing));
 
   onMount(() => {
@@ -97,24 +112,31 @@
     busy = true;
     drawing = true;
     problem = '';
+    const stop = (stopping = new AbortController());
     try {
       const previous =
         drawn ?? (current ? { look: current, portraitPx: '', newParts: [] } : undefined);
-      drawn = await call<Drawn>('/api/looks', {
-        description,
-        name,
-        role,
-        staffId,
-        note: previous ? note : undefined,
-        previous,
-        photo
-      });
+      drawn = await call<Drawn>(
+        '/api/looks',
+        {
+          description,
+          name,
+          role,
+          staffId,
+          note: previous ? note : undefined,
+          previous,
+          photo
+        },
+        'POST',
+        stop.signal
+      );
       note = '';
     } catch (e) {
-      problem = e instanceof Error ? e.message : String(e);
+      if (!stop.signal.aborted) problem = e instanceof Error ? e.message : String(e);
     } finally {
       busy = false;
       drawing = false;
+      stopping = undefined;
     }
   }
 
@@ -172,15 +194,17 @@
       role="radiogroup"
       aria-label="How to make the look"
     >
-      {#each [{ id: 'draw', label: 'Draw them' }, { id: 'parts', label: 'Build from parts' }] as const as w (w.id)}
+      {#each [{ id: 'parts', label: 'Build from parts' }, { id: 'draw', label: 'Draw them' }] as const as w (w.id)}
         <button
           class="flex-1 rounded-md px-2 py-1 text-xs {mode === w.id
             ? 'bg-sea/25 text-ink'
             : 'text-muted hover:text-ink'}"
           role="radio"
           aria-checked={mode === w.id}
-          disabled={drawing}
-          onclick={() => (way = w.id)}>{w.label}</button
+          onclick={() => {
+            if (w.id === 'parts') stopDrawing();
+            way = w.id;
+          }}>{w.label}</button
         >
       {/each}
     </div>
@@ -199,13 +223,18 @@
       onlook={(b) => {
         built = b;
         builtKept = false;
+        if (!autoKeep) return;
+        if (b && !b.problems.length) void keepBuilt();
+        else onclear?.();
       }}
     />
-    <button
-      class="rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
-      disabled={busy || !built || built.problems.length > 0 || builtKept}
-      onclick={keepBuilt}>{builtKept ? 'Kept' : keepLabel}</button
-    >
+    {#if !autoKeep}
+      <button
+        class="rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
+        disabled={busy || !built || built.problems.length > 0 || builtKept}
+        onclick={keepBuilt}>{builtKept ? 'Kept' : keepLabel}</button
+      >
+    {/if}
   {:else if agentTools.loaded}
     <label class="flex flex-col gap-1">
       <span class="text-xs text-muted">What do they look like?</span>
@@ -252,6 +281,10 @@
 
     {#if drawing && !drawn}
       <PixelDrawing {name} photo={!!photo} />
+      <button
+        class="self-start text-xs text-muted underline underline-offset-2 hover:text-ink"
+        onclick={stopDrawing}>Stop drawing</button
+      >
     {:else if !drawn}
       <button
         class="rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
@@ -283,6 +316,10 @@
       {/if}
       {#if drawing}
         <PixelDrawing {name} redraw photo={!!photo} />
+        <button
+          class="self-start text-xs text-muted underline underline-offset-2 hover:text-ink"
+          onclick={stopDrawing}>Stop drawing</button
+        >
       {:else}
         <input
           class="rounded-lg bg-raise px-3 py-2 text-sm outline-none placeholder:text-faint"

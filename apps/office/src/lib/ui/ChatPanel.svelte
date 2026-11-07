@@ -10,7 +10,9 @@
   import { when, workLine } from './format.ts';
   import { chatRequest, takeDraft, type Delivered } from './chat-about.svelte.ts';
   import type { StaffProfile } from '../staff/roster.ts';
-  import { toolWords } from '../staff/work.ts';
+  import { runningFor, toolWords, type Work } from '../staff/work.ts';
+  import { counting, dayBreaks, fullDate, stamp, took } from './chat-lines.ts';
+  import { serviceNames } from './service-names.svelte.ts';
 
   type Props = {
     profile: StaffProfile;
@@ -24,9 +26,13 @@
     visible: boolean;
     /** Opens something the staffer delivered, on the start side. */
     onitem: (item: Delivered) => void;
+    /** Everything the Odd is working on now, shown at the foot of the chat. */
+    work: Work[];
+    /** Opens the info page at In progress. */
+    onwork: () => void;
   };
 
-  let { profile, version, onstart, onend, visible, onitem }: Props = $props();
+  let { profile, version, onstart, onend, visible, onitem, work, onwork }: Props = $props();
 
   // A hidden list has no height to scroll, so catch up when it shows.
   $effect(() => {
@@ -51,6 +57,8 @@
     handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
     /** A thread the staffer leads, with each hand-off it gave on it. */
     thread?: { line: ThreadLine; steps: HandOffLine[] };
+    /** How long the run behind a reply took, in milliseconds. */
+    took?: number;
   };
   type Entry = {
     at: string;
@@ -62,6 +70,7 @@
     lesson?: LessonLine;
     handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
     thread?: { line: ThreadLine; steps: HandOffLine[] };
+    took?: number;
   };
 
   /** Where a hand-off stands, in words, and whether the owner has to act. */
@@ -198,6 +207,48 @@
     };
   }
 
+  /**
+   * The clock the chat's times read. It moves when the page re-renders
+   * anyway, and once a minute only while a stamp still counts minutes or work
+   * is in progress, so a still chat redraws nothing.
+   */
+  let clock = $state(Date.now());
+  const ticking = $derived(
+    work.length > 0 || lines.some((l) => l.at && counting(l.at, new Date(clock)))
+  );
+  $effect(() => {
+    if (!visible || !ticking) return;
+    const timer = setInterval(() => (clock = Date.now()), 60_000);
+    return () => clearInterval(timer);
+  });
+  $effect(() => {
+    void work;
+    void lines.length;
+    void visible;
+    clock = Date.now();
+  });
+  /** The day break above each line, if any. */
+  const breaks = $derived(
+    dayBreaks(
+      lines.map((l) => l.at),
+      new Date(clock)
+    )
+  );
+
+  /** The line whose text was just copied, which says so for a moment. */
+  let copied = $state<number | undefined>();
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  async function copy(i: number, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return;
+    }
+    copied = i;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copied = undefined), 1500);
+  }
+
   /** Pokes the staffer set that have not landed yet. */
   let upcoming = $state<PokeRow[]>([]);
 
@@ -269,7 +320,7 @@
   async function say(message: string, re?: Delivered) {
     sending = true;
     status = 'Thinking';
-    lines.push({ from: 'owner', text: message, re });
+    lines.push({ from: 'owner', text: message, re, at: new Date().toISOString() });
     lines.push({ from: 'staff', text: '', pending: true });
     const reply = lines[lines.length - 1];
     scrollDown();
@@ -300,10 +351,11 @@
           if (ev.type === 'delta') {
             reply.text += ev.text;
             status = '';
-          } else if (ev.type === 'tool') status = toolWords(ev.name);
+          } else if (ev.type === 'tool') status = toolWords(ev.name, serviceNames.byId);
           else if (ev.type === 'done') {
             reply.text = ev.text;
             reply.pending = false;
+            reply.at = new Date().toISOString();
           } else if (ev.type === 'error') {
             reply.text = ev.message;
             reply.pending = false;
@@ -460,6 +512,51 @@
   </div>
 {/snippet}
 
+<!-- The line under a message: when, how long its run took, Reply when there is something to reply about, then Copy, split by thin bars. -->
+{#snippet meta(line: Line, i: number)}
+  <div
+    class="meta -mt-1 flex items-center text-[11px] leading-none text-faint {line.from === 'owner'
+      ? 'owner ms-auto me-1'
+      : 'ms-1 me-auto'}"
+  >
+    {#if line.at}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex: focusing the time shows its full date, as hovering does. -->
+      <span class="stamp" tabindex="0">
+        <time datetime={line.at}>{stamp(line.at, new Date(clock))}</time>
+        <span class="tip" role="tooltip">{fullDate(line.at)}</span>
+      </span>
+    {/if}
+    {#if line.took}<span>{took(line.took)}</span>{/if}
+    {#if line.item}
+      {@const it = line.item}
+      <button
+        class="hover:text-ink"
+        aria-label={`Reply about ${it.title}`}
+        onclick={() => reply(it)}>Reply</button
+      >
+    {/if}
+    <button
+      class="stamp hover:text-ink"
+      aria-label={copied === i ? 'Copied' : 'Copy this message'}
+      onclick={() => copy(i, line.text)}
+    >
+      <svg
+        class="size-3"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        ><rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5" /><path
+          d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"
+        /></svg
+      >
+      {#if copied === i}<span class="tip shown" aria-live="polite">Copied</span>{/if}
+    </button>
+  </div>
+{/snippet}
+
 <div class="flex h-full min-h-0 flex-col" bind:this={root}>
   <div
     bind:this={list}
@@ -472,6 +569,14 @@
       </p>
     {/if}
     {#each lines as line, i (i)}
+      {#if breaks[i]}
+        <!-- A new day in the office's time zone. -->
+        <div class="flex items-center gap-2 py-1 text-[11px] text-faint">
+          <span class="h-px flex-1 bg-hairline"></span>{breaks[i]}<span
+            class="h-px flex-1 bg-hairline"
+          ></span>
+        </div>
+      {/if}
       {#if line.lesson}
         <Lesson lesson={line.lesson} name={profile.name} />
       {:else if line.thread}
@@ -571,9 +676,9 @@
       {:else if line.item}
         {@const it = line.item}
         <div class="-mb-1 ms-1 text-[10px] tracking-[0.16em] text-sea uppercase">
-          {KIND[it.kind]}{line.at ? ` · ${when(line.at)}` : ''}
+          {KIND[it.kind]}
         </div>
-        <div class="me-auto flex w-[85%] flex-col items-start gap-1" data-item={keyOf(it)}>
+        <div class="me-auto w-[85%]" data-item={keyOf(it)}>
           <button
             class="w-full rounded-2xl rounded-es-md bg-raise px-3 py-2 text-start text-sm transition-colors hover:bg-sea/15 {selected ===
             keyOf(it)
@@ -590,12 +695,8 @@
                 : 'text-muted'}">{STATUS[it.status] ?? it.status}</span
             >
           </button>
-          <button
-            class="ms-1 text-xs text-muted hover:text-ink"
-            aria-label={`Reply about ${it.title}`}
-            onclick={() => reply(it)}>Reply</button
-          >
         </div>
+        {@render meta(line, i)}
       {:else}
         {#if line.re}
           <button
@@ -605,9 +706,7 @@
           >
         {/if}
         {#if line.poke}
-          <div class="-mb-1 ms-1 text-[10px] tracking-[0.16em] text-ember uppercase">
-            Poke{line.at ? ` · ${clockTime(new Date(line.at))}` : ''}
-          </div>
+          <div class="-mb-1 ms-1 text-[10px] tracking-[0.16em] text-ember uppercase">Poke</div>
         {/if}
         <div
           class="max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed break-words
@@ -629,16 +728,19 @@
           <div class="-mt-1 ms-1 text-xs text-muted" aria-live="polite">
             {profile.name} is {status ? status.toLowerCase() : 'replying'}…
           </div>
+        {:else}
+          {@render meta(line, i)}
         {/if}
       {/if}
     {/each}
     {#if answers.length}
-      <div class="ms-auto flex max-w-[85%] flex-wrap justify-end gap-1.5" aria-label="Answers">
-        {#each answers as a (a)}
-          <button
-            class="rounded-full border border-sea/50 px-3 py-1 text-xs text-ink hover:bg-sea/20"
-            onclick={() => say(a)}>{a}</button
-          >
+      <!-- Each answer a full-width choice on the owner's side, the default first and marked. -->
+      <div class="ms-auto flex w-[85%] flex-col gap-1.5" role="group" aria-label="Answers">
+        {#each answers as a, n (a)}
+          <button class="choice" onclick={() => say(a)}>
+            <span class="min-w-0 flex-1">{a}</span>
+            {#if n === 0}<span class="default">Default</span>{/if}
+          </button>
         {/each}
       </div>
     {/if}
@@ -655,6 +757,30 @@
       </div>
     {/each}
   </div>
+
+  {#if work.length}
+    <!-- What the Odd is working on now, one line each; a click opens In progress. -->
+    <button
+      class="flex flex-col gap-0.5 border-t border-hairline px-3 py-1.5 text-start text-xs text-muted transition-colors hover:bg-raise"
+      title="Open In progress"
+      onclick={onwork}
+    >
+      {#each work as w (w.id)}
+        <span class="flex w-full min-w-0 items-center gap-1.5">
+          <span class="size-1.5 shrink-0 rounded-full {w.queued ? 'bg-faint' : 'bg-ember'}"></span>
+          <span class="min-w-0 truncate text-ink">{w.label}</span>
+          <span class="shrink-0 text-faint"
+            >· {w.queued ? 'waiting for a free slot' : runningFor(w.since, clock)}</span
+          >
+          {#if !w.queued}
+            <span class="min-w-0 truncate"
+              >· {w.doing ? toolWords(w.doing, serviceNames.byId) : 'Thinking'}</span
+            >
+          {/if}
+        </span>
+      {/each}
+    </button>
+  {/if}
 
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions: a focusable separator is the ARIA pattern for a keyboard-resizable pane. -->
   <div
@@ -749,6 +875,59 @@
     40% {
       opacity: 1;
     }
+  }
+  /* The line under a message: its parts split by a thin bar. */
+  .meta > * + * {
+    margin-inline-start: 0.5rem;
+    padding-inline-start: 0.5rem;
+    border-inline-start: 1px solid var(--color-hairline);
+  }
+  .meta button {
+    padding-block: 2px;
+  }
+  /* The full date over a time, and Copied over the copy button: CSS only. */
+  .stamp {
+    position: relative;
+    border-radius: 3px;
+  }
+  .stamp:focus-visible {
+    outline: 1px solid var(--color-sea);
+    outline-offset: 2px;
+  }
+  .tip {
+    position: absolute;
+    inset-block-end: calc(100% + 6px);
+    inset-inline-start: -4px;
+    z-index: 10;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--color-panel-solid);
+    box-shadow: var(--shadow-float);
+    color: var(--color-ink);
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+    pointer-events: none;
+    visibility: hidden;
+  }
+  .owner .tip {
+    inset-inline-start: auto;
+    inset-inline-end: -4px;
+  }
+  .stamp:hover .tip,
+  .stamp:focus-visible .tip,
+  .tip.shown {
+    visibility: visible;
+  }
+  .choice:first-child {
+    border-color: color-mix(in srgb, var(--color-sea) 55%, transparent);
+  }
+  .default {
+    flex-shrink: 0;
+    color: var(--color-sea);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
   }
   /* A long hand-off text fades out where it is cut, until the owner opens it. */
   .clamped {
