@@ -26,6 +26,37 @@
 
   const JOBS: Job[] = [
     {
+      id: 'inbox',
+      for: 'managing your email inbox',
+      role: 'Inbox Odd',
+      line: 'Keeps your inbox down to what needs you.',
+      portrait: 'ada',
+      does: [
+        'Reads your Gmail, once you connect it, and tells you what needs an answer.',
+        'Drafts replies for you to change and send.',
+        'Proposes filters that label and archive the rest.'
+      ],
+      level: 'read',
+      tools: [{ name: 'Gmail', can: ['read'] }],
+      you: 'You click Send on each reply, and Create on each filter.'
+    },
+    {
+      id: 'drive',
+      for: 'keeping your shared docs up to date',
+      role: 'Docs Odd',
+      line: 'Keeps the files you share with your team current.',
+      portrait: 'juno',
+      does: [
+        'Reads the Docs and Sheets in your Google Drive, once you connect it.',
+        'Adds notes and decisions to a shared Doc, and fills in your tracker Sheet.',
+        'Starts a new Doc or Sheet when a project needs one.'
+      ],
+      level: 'draft',
+      tools: [{ name: 'Google Drive', can: ['read', 'write'] }],
+      note: 'At draft, each change waits for your yes.',
+      you: 'You say yes to each change before your team sees it.'
+    },
+    {
       id: 'workouts',
       for: 'planning your workouts',
       role: 'Training Odd',
