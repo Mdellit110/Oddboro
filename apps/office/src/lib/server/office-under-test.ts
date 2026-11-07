@@ -618,12 +618,7 @@ export function filesOf(
   run: Gave
 ): { command: string; args: string[]; walls: FileWalls } | undefined {
   const servers =
-    run.servers ??
-    (
-      JSON.parse(run.args[run.args.indexOf('--mcp-config') + 1]) as {
-        mcpServers: Record<string, Record<string, unknown>>;
-      }
-    ).mcpServers;
+    run.servers ?? (run.mcp as { mcpServers: Record<string, Record<string, unknown>> }).mcpServers;
   const files = servers.files as
     { command: string; args: string[]; env: { ODDBORO_FILES: string } } | undefined;
   if (!files) return undefined;

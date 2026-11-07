@@ -212,6 +212,8 @@ async function runOn(
         text: `${tool} stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
       });
     });
+    // A run stopped before it read its message closes its input: the stop says so, not this.
+    child.stdin.on('error', () => {});
     child.stdin.end(launch.stdin);
   });
 }
@@ -295,6 +297,7 @@ async function run(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
         text: `Claude Code stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
       })
     );
+    child.stdin.on('error', () => {});
     child.stdin.end(
       opts.images?.length
         ? `${JSON.stringify({
