@@ -86,7 +86,8 @@ export function modelArgs(): string[] {
  * office process's own git variables either (every `GIT_` name, such as
  * `GIT_DIR` or `GIT_CONFIG_PARAMETERS`), since the owner's git settings never
  * shape an Odd's git: a run with a shell gets the office's own (`gitEnv`)
- * after this. Every coding tool's run, install and sign-in starts here. A run's own
+ * after this. Nor `ODDBORO_SECRETS`: only the office itself holds the pipes
+ * to the app's Keychain. Every coding tool's run, install and sign-in starts here. A run's own
  * instructions come in its arguments and its message, which this leaves alone.
  */
 export function cleanEnv(): NodeJS.ProcessEnv {
@@ -96,7 +97,8 @@ export function cleanEnv(): NodeJS.ProcessEnv {
       k === 'CLAUDECODE' ||
       k.startsWith('CLAUDE_CODE_') ||
       k === 'CLAUDE_CONFIG_DIR' ||
-      k.startsWith('GIT_')
+      k.startsWith('GIT_') ||
+      k === 'ODDBORO_SECRETS'
     )
       delete env[k];
   env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';

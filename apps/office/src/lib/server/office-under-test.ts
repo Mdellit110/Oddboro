@@ -112,7 +112,9 @@ function reply() {
   const after = (flag) => args[args.indexOf(flag) + 1];
   const gave = {
     args,
-    env: JSON.parse(after('--mcp-config')).mcpServers.office.env,
+    // The office passes the servers as a file, read here while the run goes.
+    mcp: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')),
+    env: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')).mcpServers.office.env,
     system: after('--append-system-prompt'),
     message,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
@@ -562,6 +564,8 @@ await L.pg`insert into staff ${L.pg([
 /** What the stand-in says the run gave it. */
 export type Gave = {
   args: string[];
+  /** The servers a Claude Code run got, read from the file `--mcp-config` names while the run went. */
+  mcp?: unknown;
   env: Record<string, string>;
   system: string;
   message: string;

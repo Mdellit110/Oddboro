@@ -42,6 +42,8 @@
     reach: string;
     heldBack: HeldBack | null;
   };
+  /** A Google connector: one account of Gmail or Google Drive. */
+  type Google = { product: 'gmail' | 'drive'; name: string; account?: string };
   type Own = {
     id: string;
     name: string;
@@ -50,9 +52,18 @@
     ready: boolean;
     byAddress: boolean;
     keyHeader?: string;
+    google?: Google;
   };
   /** A hosted server named by its address lets the office in with a sign-in, or a key in a header. */
-  type Pick = { id: string; name: string; kind: string; byAddress?: boolean; keyHeader?: string };
+  type Pick = {
+    id: string;
+    name: string;
+    kind: string;
+    byAddress?: boolean;
+    keyHeader?: string;
+    ready?: boolean;
+    google?: Google;
+  };
   type Props = { profile: StaffProfile; version: number };
   let { profile, version }: Props = $props();
 
@@ -70,9 +81,31 @@
   /** Pick a tool. One named by its address starts on the way in it has, or a sign-in. */
   function choose(p: Pick) {
     pick = p;
+    another = false;
     useKey = !!p.keyHeader;
     keyHeader = p.keyHeader ?? 'Authorization';
   }
+  /** Gmail or Google Drive, picked once one account of it is connected: the connected accounts, to pick one or add another. */
+  const accounts = $derived(
+    pick?.google
+      ? found.catalog.filter((c) => c.ready && c.google?.product === pick?.google?.product)
+      : []
+  );
+  /** A new connector for one more Google account, made as the grant goes. */
+  let another = $state(false);
+  /**
+   * Another Google account: one of this product still waiting on its sign-in
+   * when there is one, so empty ones never pile up, else a new one.
+   */
+  function addAnother() {
+    const spare = found.catalog.find(
+      (c) => !c.ready && c.google?.product === pick?.google?.product
+    );
+    another = !spare;
+    if (spare) pick = { ...spare, byAddress: false };
+  }
+  /** Whether the grant goes to an account not signed in yet: a new one, or a connector still waiting on its sign-in. */
+  const newAccount = $derived(another || (!!pick?.google && !pick.ready));
   let problem = $state('');
   /** Why the one-click move was refused. It shows under its button, since the tab's foot is out of sight. */
   let refused = $state('');
@@ -105,14 +138,32 @@
       const r = await call<{ task: boolean }>(`/api/staff/${profile.id}/access`, {
         connector: pick.id,
         level,
+        another: another || undefined,
         way: pick.byAddress ? { keyHeader: useKey ? keyHeader.trim() : undefined } : undefined
       });
+      const what =
+        accounts.length && newAccount
+          ? `another Google account for ${pick.google?.name}`
+          : pick.name;
       done = r.task
-        ? `A task with the steps to connect ${pick.name} is on your desk.`
+        ? `A task with the steps to connect ${what} is on your desk.`
         : `${profile.name} can use ${pick.name} now.`;
       adding = false;
       pick = undefined;
       q = '';
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  /** Read only or Read and write, in place: the tool stays signed in. */
+  async function relevel(g: Grant, to: GrantLevel) {
+    if (g.level === to) return;
+    problem = '';
+    try {
+      await call(`/api/staff/${profile.id}/access`, { connector: g.connector, level: to }, 'PATCH');
+      // The grants table's change brings the list back from the office, as a revoke does.
+      g.level = to;
     } catch (e) {
       problem = e instanceof Error ? e.message : String(e);
     }
@@ -812,7 +863,36 @@
               {/if}
             </ul>
           {:else}
-            <div class="text-sm font-medium">{pick.name}</div>
+            <div class="text-sm font-medium">{pick.google?.name ?? pick.name}</div>
+            {#if accounts.length}
+              <div class="flex flex-col gap-1" role="group" aria-label="Which Google account">
+                {#each accounts as c (c.id)}
+                  {@const on = !newAccount && pick.id === c.id}
+                  <button
+                    class="rounded-lg px-2 py-1.5 text-start text-xs {on
+                      ? 'bg-sea/25'
+                      : 'bg-night/60'}"
+                    aria-pressed={on}
+                    onclick={() => {
+                      another = false;
+                      pick = { ...c, byAddress: false };
+                    }}>{c.google?.account ?? c.name}</button
+                  >
+                {/each}
+                <button
+                  class="rounded-lg px-2 py-1.5 text-start text-xs {newAccount
+                    ? 'bg-sea/25'
+                    : 'bg-night/60'}"
+                  aria-pressed={newAccount}
+                  onclick={addAnother}>Another Google account</button
+                >
+              </div>
+              {#if newAccount}
+                <p class="text-[11px] text-faint">
+                  You sign in to it from a task on your desk next, and pick the account there.
+                </p>
+              {/if}
+            {/if}
             {#if pick.byAddress}
               <div class="flex gap-1.5" role="group" aria-label="How it lets the office in">
                 {#each [false, true] as key (key)}
@@ -898,6 +978,21 @@
               <button class="text-xs text-muted hover:text-coral" onclick={() => revoke(g)}
                 >Revoke</button
               >
+            </div>
+            <div class="mt-2 flex gap-1" role="group" aria-label={`${g.name} level`}>
+              {#each levels as l (l)}
+                <button
+                  class="flex-1 rounded-lg px-2 py-1 text-xs disabled:opacity-40 {g.level === l
+                    ? 'bg-sea/25 text-ink'
+                    : 'bg-night/40 text-muted hover:text-ink'}"
+                  aria-pressed={g.level === l}
+                  disabled={!allowed(l)}
+                  title={allowed(l)
+                    ? ''
+                    : `${profile.name} needs the ${l} level first. Change it above.`}
+                  onclick={() => relevel(g, l)}>{GRANT_LABEL[l]}</button
+                >
+              {/each}
             </div>
           </li>
         {/each}

@@ -41,7 +41,7 @@ import {
   withEnv
 } from './office-under-test.ts';
 
-const { mcpServers } = await import('./codex.ts');
+const { mcpServers, GATEWAY_TOKEN } = await import('./codex.ts');
 const { stopGroups } = await import('./launch.ts');
 
 await L.pg`insert into staff ${L.pg([
@@ -596,6 +596,25 @@ test("a Codex run's MCP servers call their tools without asking, a server grante
       enabled_tools: ['search', 'read']
     }
   });
+});
+
+test("a Codex run reads the gateway's token from its environment, never its command line", () => {
+  const servers = mcpServers(
+    {
+      mail: {
+        type: 'http',
+        url: 'http://127.0.0.1:4500/api/gateway/gmail',
+        headers: { Authorization: 'Bearer tok' }
+      }
+    },
+    ['mcp__mail']
+  );
+  assert.deepEqual(servers.mail, {
+    url: 'http://127.0.0.1:4500/api/gateway/gmail',
+    bearer_token_env_var: GATEWAY_TOKEN,
+    default_tools_approval_mode: 'approve'
+  });
+  assert.doesNotMatch(JSON.stringify(servers), /the-run-secret/);
 });
 
 test('no test reached the keychain', () => {

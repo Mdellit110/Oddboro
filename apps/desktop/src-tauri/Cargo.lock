@@ -2521,6 +2521,7 @@ dependencies = [
  "getrandom 0.3.4",
  "libc",
  "mac-notification-sys",
+ "security-framework",
  "serde_json",
  "tauri",
  "tauri-build",

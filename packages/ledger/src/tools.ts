@@ -22,6 +22,12 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     does: 'Gives you the steps to connect a tool again, one you already gave it, when its key or sign-in stops working.',
     always: true
   },
+  {
+    id: 'ask_for_folder',
+    name: 'Ask for folders',
+    does: 'Asks you for a folder on this computer, to read or to change. You give it with one click, or a narrower one.',
+    always: true
+  },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
   {
     id: 'keep_lesson',
@@ -92,6 +98,21 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     id: 'poke_owner',
     name: 'Poke you',
     does: 'Sends you a chat message later, once: a check-in or a nudge.'
+  },
+  {
+    id: 'propose_reply',
+    name: 'Propose replies',
+    does: 'Brings you one email reply at a time to edit, then send or save to Gmail drafts. Only with Gmail, and nothing goes until you click.',
+    // Every Odd's, offered only while it holds Gmail (mcp.ts): a hire proposal's
+    // list of tools once left it out, and its replies went into a file instead.
+    always: true
+  },
+  {
+    id: 'propose_filter',
+    name: 'Propose filters',
+    does: 'Brings you one Gmail filter at a time to change, then create. Only with Gmail, and nothing changes until you click.',
+    // Every Odd's, offered only while it holds Gmail, as propose_reply is.
+    always: true
   },
   {
     id: 'propose_hire',

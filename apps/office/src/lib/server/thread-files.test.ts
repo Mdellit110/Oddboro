@@ -403,12 +403,20 @@ async function lenasTools() {
   return client;
 }
 /** Lena gives the owner a result task with `attach`: what the tool said, and the desk's attachments for it. */
+/** How many result tasks Lena gave: each gets its own title, since a repeat is refused. */
+let results = 0;
 async function resultTask(...attach: string[]) {
+  results += 1;
   const r = await (
     await lenasTools()
   ).callTool({
     name: 'give_owner_a_task',
-    arguments: { title: 'Try the game', why: 'It is built.', steps: ['Play it.'], attach }
+    arguments: {
+      title: `Try the game, take ${results}`,
+      why: 'It is built.',
+      steps: ['Play it.'],
+      attach
+    }
   });
   const text = (r.content as { text: string }[])[0].text;
   const id = Number(/^Task (\d+) /.exec(text)?.[1]);

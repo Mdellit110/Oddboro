@@ -2,7 +2,7 @@
   import type { AskRow } from '@oddboro/ledger';
   import Markdown from './Markdown.svelte';
   import { call } from './api.ts';
-  import { toolWords, type Work } from '../staff/work.ts';
+  import { runningFor, toolWords, type Work } from '../staff/work.ts';
   import type { StaffProfile } from '../staff/roster.ts';
 
   // What an Odd is working on right now, on its info page: each job, approved
@@ -14,8 +14,11 @@
   let asks = $state<Record<number, AskRow>>({});
   let now = $state(Date.now());
 
+  // Whole minutes: a tick a minute while something runs, and none otherwise.
   $effect(() => {
-    const timer = setInterval(() => (now = Date.now()), 15_000);
+    if (!items.length) return;
+    now = Date.now();
+    const timer = setInterval(() => (now = Date.now()), 60_000);
     return () => clearInterval(timer);
   });
 
@@ -32,13 +35,6 @@
         .catch(() => asked.delete(w.askId!));
     }
   });
-
-  function since(iso: string): string {
-    const min = Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
-    if (min < 1) return 'just now';
-    if (min < 60) return `${min} min`;
-    return `${Math.floor(min / 60)} h ${min % 60} min`;
-  }
 </script>
 
 <section class="flex flex-col gap-2" aria-label="In progress">
@@ -55,7 +51,7 @@
     <section class="rounded-xl bg-raise p-3" aria-label={w.label}>
       <div class="flex items-center gap-2 text-[10px] tracking-[0.16em] uppercase">
         <span class={w.queued ? 'text-faint' : 'text-ember'}>{w.detail}</span>
-        <span class="text-faint">· {w.queued ? 'waiting' : since(w.since)}</span>
+        <span class="text-faint">· {w.queued ? 'waiting' : runningFor(w.since, now)}</span>
       </div>
       <h3 class="mt-1 text-sm leading-snug font-medium">{w.label}</h3>
       {#if w.queued}

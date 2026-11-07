@@ -10,12 +10,19 @@ import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
+  AlreadyOnDesk,
   ask,
   asksFor,
   cancelPoke,
   catalog,
+  checkFolder,
+  folderAskRefused,
+  shownFolder,
   editOwnJob,
   giveTask,
+  GOOGLE,
+  googleConnectors,
+  grantsFor,
   reconnectTask,
   jobsFor,
   officeActivity,
@@ -52,7 +59,14 @@ import {
   ownToolsSaid
 } from './capabilities.ts';
 import { AGENT_NAMES } from './agents.ts';
-import { levelAtMost, LEVELS, NOT_OWN_TOOLS, SWITCH_NAMES } from './access-words.ts';
+import {
+  FOLDER_SAID,
+  levelAtMost,
+  LEVELS,
+  NOT_OWN_TOOLS,
+  SETTINGS_TAB,
+  SWITCH_NAMES
+} from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
   APPLIES_TO_MAX,
@@ -74,6 +88,14 @@ import {
   workFile
 } from './threads.ts';
 import { THREADS_DIR, workName, workPath } from './work-paths.ts';
+import { withFooter } from './mail-footer.ts';
+import {
+  doesSomething,
+  filterWords,
+  matchesSomething,
+  type FilterAction,
+  type FilterCriteria
+} from './filter-words.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
 import { ensureConnector, searchRegistry } from './registry.ts';
@@ -143,6 +165,12 @@ const RUN_KEY = process.env.RUN_KEY || undefined;
  * lesson (`servesNoThread`): it hands nothing on, so it gets no hand_off.
  */
 const LESSON_RUN = process.env.LESSON_RUN === '1';
+/**
+ * Set by the office when a lead's run picks up a colleague's handed-back
+ * result: the colleague's id. What the run puts on the desk names them, so
+ * the owner sees whose work it came from.
+ */
+const VIA = process.env.VIA || undefined;
 /** What an ask or task raised in this run is part of. */
 const RAISED_ON = { handOffId: HAND_OFF_ID, threadId: THREAD_ID };
 /** Whether this run gets hand_off, and whether it is told the threads it leads. */
@@ -381,10 +409,20 @@ function tool<Shape extends z.ZodRawShape>(
   // parses to the same arguments, and reads a shape spread from a union
   // (raisedArgs) as unknown fields. Named here because inference picks the raw
   // shape; the first is the output schema, which no office tool has.
+  // The ledger refuses a repeat on the owner's desk (`AlreadyOnDesk`): the
+  // Odd reads why as a tool error, never as a crash.
+  const guarded = (async (...args: unknown[]) => {
+    try {
+      return await (run as (...a: unknown[]) => unknown)(...args);
+    } catch (e) {
+      if (e instanceof AlreadyOnDesk) return refused(e.message);
+      throw e;
+    }
+  }) as ToolCallback<Shape>;
   server.registerTool<z.ZodRawShape, typeof strict>(
     name,
     { description, inputSchema: strict },
-    run
+    guarded
   );
 }
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -488,7 +526,7 @@ async function placed(a: {
 tool(
   'raise_ask',
   {
-    description: `Ask ${OWNER} to approve something. It lands on their desk and they approve, deny, or send it back with what to change, maybe with a reason. Use it for anything that needs their yes. One decision per ask, worded as the exact action: if they approve, you carry it out at once in a new run, with only the ask to go on. The reply lists their closest past decisions: if one matches and gave no reason, tell ${OWNER} that a reason would let Odds handle these without asking next time. For an outside tool, use ask_for_access; for ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, see my_access; and for a new Odd, use propose_hire.${raisedNote}`,
+    description: `Ask ${OWNER} to approve something. It lands on their desk and they approve, deny, or send it back with what to change, maybe with a reason. Use it for anything that needs their yes. One decision per ask, worded as the exact action: if they approve, you carry it out at once in a new run, with only the ask to go on. The reply lists their closest past decisions: if one matches and gave no reason, tell ${OWNER} that a reason would let Odds handle these without asking next time. For an outside tool, use ask_for_access; for a folder on this computer, ask_for_folder; for ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, see my_access; and for a new Odd, use propose_hire.${raisedNote}`,
     inputSchema: {
       title: z
         .string()
@@ -514,6 +552,7 @@ tool(
       why,
       ifApproved: if_approved,
       revises,
+      via: VIA,
       attach: files.paths
     });
     return text(
@@ -549,11 +588,17 @@ if (has('give_owner_a_task'))
   tool(
     'give_owner_a_task',
     {
-      description: `Give ${OWNER}, the human operator, a task: something only they can do. Steps are numbered and each is one action, written so anyone can follow them without guessing: name the button, the place, the exact thing. If they must choose, pass choices and the task ends with them, e.g. for 'Should this kind of email reach you?' pass ['Yes, keep sending these', 'No, filter these out']. When they must fill in or read a file, write it in your folder and attach it: a step says 'Answer each question in intake.md below', never where the file lives. Never write steps to connect or reconnect a tool: ask_for_access and reconnect_access give the office's own.${raisedNote}`,
+      description: `Give ${OWNER}, the human operator, a task: something only they can do. Steps are numbered and each is one action, written so anyone can follow them without guessing: name the button, the place, the exact thing. When a step opens a page, give its full address (https://mail.google.com/...), which the owner clicks; when they type or paste something, put exactly that in \`backticks\`, which the owner copies with one click (In the From box, type \`dmarc@example.com\`). If they must choose, pass choices and the task ends with them, e.g. for 'Should this kind of email reach you?' pass ['Yes, keep sending these', 'No, filter these out']. When they must fill in or read a file, write it in your folder and attach it: a step says 'Answer each question in intake.md below', never where the file lives. Never write steps to connect or reconnect a tool: ask_for_access and reconnect_access give the office's own.${raisedNote}`,
       inputSchema: {
         title: z.string().max(140),
         why: z.string().describe('One or two sentences on why this is theirs to do.'),
-        steps: z.array(z.string()).min(1).max(12).describe('One action per step. No "and then".'),
+        steps: z
+          .array(z.string())
+          .min(1)
+          .max(12)
+          .describe(
+            'One action per step. No "and then". A page to open as its full address; anything to type or paste in `backticks`.'
+          ),
         choices: z.array(z.string()).min(2).max(4).optional(),
         attach: attachArg,
         ...raisedArgs
@@ -581,9 +626,224 @@ if (has('give_owner_a_task'))
         why,
         steps: all,
         attach: files.paths,
+        via: VIA,
         ...on
       });
       return text(`Task ${t.id} is on ${OWNER}'s desk. The ledger records it when they finish it.`);
+    }
+  );
+
+// An email reply waits on the owner's desk, one per ask: they edit it, then the
+// office sends it or saves it to Gmail drafts. Only for an Odd that holds
+// Gmail at any level, since it answers mail the Odd read there.
+const gmailId = z.string().regex(/^[\w-]+$/, 'A Gmail id holds only letters, digits, _ and -.');
+const address = z
+  .string()
+  .min(3)
+  .max(320)
+  .regex(/^[^\r\n,;]+$/, 'One address each, on one line.');
+// Each Gmail account is a connector of its own. With more than one, the Odd
+// names the one the email came to, and the reply goes out from it.
+const mailboxes = (await grantsFor(ME))
+  .filter((g) => g.connector.config.google === 'gmail')
+  .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
+const mailboxIds = mailboxes.map((m) => m.id) as [string, ...string[]];
+const mailboxArg = mailboxes.length
+  ? (() => {
+      const listed = mailboxes
+        .map((m) => `${m.id}${m.account ? ` (${m.account})` : ''}`)
+        .join(', ');
+      const arg = z.enum(mailboxIds);
+      return mailboxes.length > 1
+        ? arg.describe(
+            `The Gmail account the email came to, by id: ${listed}. Required, since you hold more than one.`
+          )
+        : arg
+            .optional()
+            .describe(`The Gmail account, by id: ${listed}. Leave out for your only one.`);
+    })()
+  : z.never().optional();
+/** The Gmail account a reply or filter goes through: the one named, or the Odd's only one. */
+function mailbox(
+  named: string | undefined
+): { connector: string; account?: string } | { problem: string } {
+  const m = named ? mailboxes.find((x) => x.id === named) : mailboxes[0];
+  if (!m) return { problem: `You do not hold a Gmail account called ${named}.` };
+  if (!named && mailboxes.length > 1)
+    return {
+      problem: `You hold more than one Gmail account. Pass account: one of ${mailboxIds.join(', ')}.`
+    };
+  return { connector: m.id, account: m.account };
+}
+
+if (has('propose_reply') && mailboxes.length)
+  tool(
+    'propose_reply',
+    {
+      description: `Put one email reply on ${OWNER}'s desk, ready to send. One reply per call: for three emails, call it three times. ${OWNER} reads your summary and the email it answers, may edit the recipients, subject and body, then sends it or saves it to Gmail drafts. Nothing is sent until ${OWNER} sends it. Never put reply drafts in a file for ${OWNER}, and never leave brackets for them to fill in: write the whole reply, and if a fact only they know is missing, say so in why. The office ends the body with a line "Sent from Oddboro", which ${OWNER} may delete: never write it yourself. To rework one ${OWNER} sent back, pass its id as revises.${raisedNote}`,
+      inputSchema: {
+        gmail_thread_id: gmailId
+          .optional()
+          .describe('The Gmail thread it answers, from search_threads. Leave out for a new email.'),
+        in_reply_to: gmailId
+          .optional()
+          .describe(
+            "The Gmail message id it answers. Leave out to answer the thread's latest message."
+          ),
+        to: z.array(address).min(1).max(20).describe('Each address, e.g. "Ada <ada@example.com>".'),
+        cc: z.array(address).max(20).optional(),
+        subject: z.string().min(1).max(200),
+        body: z.string().min(1).max(20_000).describe('The reply as plain text, ready to send.'),
+        summary: z
+          .string()
+          .max(400)
+          .describe('One or two lines on the email it answers: who wrote and what they want.'),
+        why: z.string().max(1000).describe('Why this reply, in one or two plain sentences.'),
+        account: mailboxArg,
+        revises: revisesArg,
+        ...raisedArgs
+      }
+    },
+    async ({
+      account,
+      gmail_thread_id,
+      in_reply_to,
+      to,
+      cc = [],
+      subject,
+      body,
+      summary,
+      why,
+      revises,
+      ...where
+    }) => {
+      const box = mailbox(account);
+      if ('problem' in box) return refused(box.problem);
+      const on = await placed(where);
+      if ('problem' in on) return refused(on.problem);
+      const more = to.length > 1 ? ` and ${to.length - 1} more` : '';
+      const { ask } = await raiseAsk(ME, {
+        ...on,
+        kind: 'reply',
+        title: `${gmail_thread_id ? 'Reply' : 'Email'} to ${to[0]}${more}: ${subject}`.slice(
+          0,
+          140
+        ),
+        why,
+        ifApproved: `You send it, or save it to Gmail drafts, with any changes you make. Nothing goes before you click.`,
+        reply: {
+          gmailThreadId: gmail_thread_id,
+          inReplyTo: in_reply_to,
+          to,
+          cc,
+          subject,
+          // The footer goes in now, where the owner sees it and may delete it.
+          body: withFooter(body),
+          summary,
+          ...box
+        },
+        revises,
+        via: VIA
+      });
+      return text(
+        `Reply ${ask.id} is on ${OWNER}'s desk. Nothing is sent until they send it. Check my_asks later for what they did.`
+      );
+    }
+  );
+
+// A Gmail filter waits on the owner's desk, one per ask: they may change it,
+// then the office creates it in Gmail. Only for an Odd that holds Gmail at any
+// level, since it files mail the Odd read there.
+const filterText = z.string().trim().max(500).optional();
+if (has('propose_filter') && mailboxes.length)
+  tool(
+    'propose_filter',
+    {
+      description: `Put one Gmail filter on ${OWNER}'s desk, ready to create. One filter per call: for three kinds of mail, call it three times. Call list_filters first, so you never propose a filter ${OWNER} already has. Say plainly in summary what mail it matches and what it does to it. ${OWNER} sees how many emails it matches today, may change it, then creates it, and may tidy the mail it already matches the same way. Nothing changes in Gmail until ${OWNER} clicks Create filter. A filter only files mail: it skips the inbox, marks read, adds a label or stars, never deletes or forwards. Never put filter settings in a task or steps for ${OWNER} to copy. To rework one ${OWNER} sent back, pass its id as revises.${raisedNote}`,
+      inputSchema: {
+        from: filterText.describe('Mail from this sender, e.g. "news@shop.example.com".'),
+        to: filterText.describe('Mail to this address.'),
+        subject: filterText.describe('Words in the subject.'),
+        query: filterText.describe(
+          'Gmail search words the mail has, as typed in Gmail, e.g. "unsubscribe".'
+        ),
+        negated_query: filterText.describe('Gmail search words the mail does not have.'),
+        has_attachment: z.boolean().optional(),
+        skip_inbox: z.boolean().optional().describe('Archive it: it skips the inbox.'),
+        mark_read: z.boolean().optional(),
+        add_label: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            "A label's name. The office makes it when the filter is created, if it is missing."
+          ),
+        star: z.boolean().optional(),
+        summary: z
+          .string()
+          .min(1)
+          .max(400)
+          .describe('One or two plain lines: what mail it matches and what it does to it.'),
+        why: z.string().max(1000).describe('Why this filter, in one or two plain sentences.'),
+        account: mailboxArg,
+        revises: revisesArg,
+        ...raisedArgs
+      }
+    },
+    async ({
+      account,
+      from,
+      to,
+      subject,
+      query,
+      negated_query,
+      has_attachment,
+      skip_inbox,
+      mark_read,
+      add_label,
+      star,
+      summary,
+      why,
+      revises,
+      ...where
+    }) => {
+      const criteria: FilterCriteria = {
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(subject ? { subject } : {}),
+        ...(query ? { query } : {}),
+        ...(negated_query ? { negatedQuery: negated_query } : {}),
+        ...(has_attachment ? { hasAttachment: true } : {})
+      };
+      const action: FilterAction = {
+        ...(skip_inbox ? { skipInbox: true } : {}),
+        ...(mark_read ? { markRead: true } : {}),
+        ...(add_label ? { addLabel: add_label } : {}),
+        ...(star ? { star: true } : {})
+      };
+      if (!matchesSomething(criteria))
+        return refused('Say which mail it matches: from, to, subject, query or has_attachment.');
+      if (!doesSomething(action))
+        return refused('Say what it does: skip_inbox, mark_read, add_label or star.');
+      const box = mailbox(account);
+      if ('problem' in box) return refused(box.problem);
+      const on = await placed(where);
+      if ('problem' in on) return refused(on.problem);
+      const { ask } = await raiseAsk(ME, {
+        ...on,
+        kind: 'filter',
+        title: `Gmail filter: ${filterWords({ criteria, action })}`.slice(0, 140),
+        why,
+        ifApproved: `The office creates it in your Gmail, with any changes you make, and tidies the mail it already matches if you tick that. Nothing changes before you click.`,
+        filter: { criteria, action, summary, ...box },
+        revises,
+        via: VIA
+      });
+      return text(
+        `Filter ${ask.id} is on ${OWNER}'s desk. Nothing changes in Gmail until they create it. Check my_asks later for what they did.`
+      );
     }
   );
 
@@ -641,7 +901,7 @@ if (has('ask_for_access'))
   tool(
     'ask_for_access',
     {
-      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
+      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). For a second Google account of Gmail or Google Drive, pass that connector with another_account. If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
       inputSchema: {
         connector: z.string(),
         level: z
@@ -655,10 +915,16 @@ if (has('ask_for_access'))
           .describe(
             `Only for an https address that takes a key instead of a sign-in: the name of the header the key goes in, as the server's docs or ${OWNER} give it, e.g. x-api-key or Authorization. ${OWNER} pastes the key on their desk. Never ask for the key itself.`
           ),
+        another_account: z
+          .boolean()
+          .optional()
+          .describe(
+            `Only for Gmail or Google Drive, for each Google account beyond the first. When ${OWNER} uses more than one, ask for all of them in one run: the first without another_account, then one ask with it for each further account. ${OWNER} signs in to each as a tool of its own.`
+          ),
         revises: revisesArg
       }
     },
-    async ({ connector: wanted, level: asked, why, key_header, revises }) => {
+    async ({ connector: wanted, level: asked, why, key_header, another_account, revises }) => {
       const on = await placed({});
       if ('problem' in on) return refused(on.problem);
       const level = asked === 'write' ? 'act' : 'read';
@@ -670,16 +936,49 @@ if (has('ask_for_access'))
       );
       if (!found.connector) return text(`${found.problem} Use find_connectors.`);
       const conn = found.connector;
-      const title = `Connect ${conn.name} (${asked})`;
+      const product = conn.config.google;
+      if (another_account && !product)
+        return refused(`another_account is only for Gmail and Google Drive.`);
+      // Another account only beside a first one: connected, or on its way (this
+      // Odd's open ask for it, or a grant still being connected). So an Odd that
+      // needs two mailboxes can ask for both at once, on its first day.
+      const firstOnItsWay = async (p: NonNullable<typeof product>) => {
+        const ids = new Set((await googleConnectors(p)).map((c) => c.id));
+        const asking = (await asksFor(ME)).some(
+          (a) =>
+            a.kind === 'access' &&
+            a.status === 'open' &&
+            !!a.access &&
+            ids.has(a.access.connector) &&
+            !a.access.another
+        );
+        return asking || (await grantsFor(ME)).some((g) => ids.has(g.connectorId));
+      };
+      const another =
+        another_account &&
+        product &&
+        ((await googleConnectors(product)).some((c) => c.readyAt) || (await firstOnItsWay(product)))
+          ? product
+          : undefined;
+      if (another_account && !another)
+        return refused(
+          `Ask for ${GOOGLE[product!].id} without another_account first. Then ask again with another_account for each further account, in the same run if you need them all.`
+        );
+      const plain = another ? GOOGLE[another].name : conn.name;
+      const title = another
+        ? `Connect another ${plain} account (${asked})`
+        : `Connect ${conn.name} (${asked})`;
       const { ask, precedent } = await raiseAsk(ME, {
         ...on,
         title,
         why,
-        ifApproved: conn.readyAt
-          ? `${me.name} can use ${conn.name} at once: you connected it already, so there are no steps.`
-          : `You get numbered steps to connect ${conn.name} for ${me.name}.`,
+        ifApproved: another
+          ? `You get numbered steps to sign in to another Google account for ${plain}, for ${me.name}.`
+          : conn.readyAt
+            ? `${me.name} can use ${conn.name} at once: you connected it already, so there are no steps.`
+            : `You get numbered steps to connect ${conn.name} for ${me.name}.`,
         revises,
-        access: { connector: conn.id, level }
+        access: { connector: conn.id, level, ...(another ? { another } : {}) }
       });
       return text(
         `Ask ${ask.id} is on ${OWNER}'s desk.` +
@@ -689,6 +988,51 @@ if (has('ask_for_access'))
       );
     }
   );
+
+// A folder on this computer, outside the office: only the owner gives one,
+// from this ask's card or the Settings tab. Checked here with the Settings
+// tab's rules, so a folder they could not give never reaches the desk.
+tool(
+  'ask_for_folder',
+  {
+    description: `Ask ${OWNER} for a folder on this computer, outside the office, to read or to read and change. Ask with this instead of giving ${OWNER} steps for your ${SETTINGS_TAB} tab: they give it with one click, or a narrower one. Ask for the narrowest folder and the lowest level the work needs: read to look, write only to change files there. You reach it from your next run, which starts when they give it. my_access lists the folders you have.${raisedNote}`,
+    inputSchema: {
+      path: z
+        .string()
+        .trim()
+        .min(1)
+        .max(1000)
+        .describe('The folder\'s full path, starting with / or ~, e.g. "~/Documents/Taxes".'),
+      level: z.enum(['read', 'write']).describe('read to look, write to change files there.'),
+      why: z.string().max(1000).describe('What work needs it, in one or two plain sentences.'),
+      revises: revisesArg
+    }
+  },
+  async ({ path, level, why, revises }) => {
+    const on = await placed({});
+    if ('problem' in on) return refused(on.problem);
+    if (!isAbsolute(path) && !/^~(?=$|\/)/.test(path))
+      return refused("Give the folder's full path, starting with / or ~.");
+    const checked = checkFolder(path);
+    if ('refused' in checked) return refused(checked.refused);
+    const held = folderAskRefused((await staffer(ME)) ?? me, checked.real, level);
+    if (held) return refused(held);
+    const shown = shownFolder(checked.real);
+    const { ask } = await raiseAsk(ME, {
+      ...on,
+      kind: 'folder',
+      title: `${level === 'write' ? 'Read and change' : 'Read'} ${shown}`,
+      why,
+      ifApproved: `The office gives ${me.name} ${shown} (${FOLDER_SAID[level]}), or the folder and level you pick, and ${me.name} picks up the work with it.`,
+      folder: { path: checked.real, level },
+      revises,
+      via: VIA
+    });
+    return text(
+      `Ask ${ask.id} is on ${OWNER}'s desk. When they give the folder, a new run of yours picks up the work with it. Check my_asks later for their decision.`
+    );
+  }
+);
 
 tool(
   'reconnect_access',
