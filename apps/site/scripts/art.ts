@@ -26,7 +26,12 @@ import {
   type SpriteDef
 } from '@oddboro/sprites/px';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
-import { writeReleaseArt, type DeskLayers, type HallLayers } from './release-art.ts';
+import {
+  writeReleaseArt,
+  type DeskLayers,
+  type GymLayers,
+  type HallLayers
+} from './release-art.ts';
 import {
   loadLibrary,
   lookFrame,
@@ -50,9 +55,11 @@ import {
   type DrawCmd,
   type OfficeSpec,
   type PlacedSpot,
+  type RoomTemplate,
   type SpriteCatalog,
   type World
 } from '@oddboro/world';
+import { loadSpaces } from '@oddboro/world/load';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ART = join(ROOT, 'static', 'art');
@@ -320,6 +327,95 @@ for (let t = 0; t < HALL.w / TILE; t++) {
     for (const l of catalog['gym-wall-light'].lights)
       hallLights.push({ ...l, x: x + l.x, y: y + l.y, clip: { x: 0, y: 0, w: HALL.w, h: HALL.h } });
   }
+}
+
+/**
+ * The gym in 0.0.8's release art: the office's gym stamp, its walls, floor and
+ * equipment, packed into a room that fits the eight by six tiles every release
+ * art shows. Along the back wall stand the treadmill, the dumbbells and the
+ * rack; on the floor, the bike and the bench, with room to jog between them.
+ * The view cuts off the side walls, the top of the back wall and the front
+ * wall.
+ */
+const GYM_STAMP = loadSpaces().rooms.gym;
+const GYM_ROOM: RoomTemplate = {
+  ...GYM_STAMP,
+  map: [
+    'WWWWWWWWWW',
+    'WWWWWNWWWW',
+    'WWWWWNWWWW',
+    'W........W',
+    'W........W',
+    'W........W',
+    'W........W',
+    'W........W',
+    'WWWWWWWWWW'
+  ],
+  props: [
+    { sprite: 'gym-mirror', at: [2, 2] },
+    { sprite: 'gym-wall-light', at: [1, 2] },
+    { sprite: 'gym-wall-light', at: [7, 2] },
+    { sprite: 'gym-treadmill', at: [1, 3] },
+    { sprite: 'gym-dumbbells', at: [3, 3] },
+    { sprite: 'gym-rack', at: [6, 3] },
+    { sprite: 'gym-bottle', at: [2, 3] },
+    { sprite: 'gym-bike', at: [2, 5] },
+    { sprite: 'gym-bench', at: [6, 5] },
+    { sprite: 'gym-kettlebells', at: [8, 6] }
+  ]
+};
+const gymWorld = composeWorld(
+  { id: 'release-gym', name: GYM_STAMP.name, rooms: [{ room: 'gym', at: [0, 0] }] },
+  { gym: GYM_ROOM },
+  catalog
+);
+if (gymWorld.missing.length) {
+  console.error(`Missing sprites in the gym: ${gymWorld.missing.join(', ')}`);
+  process.exit(1);
+}
+const GYM_VIEW: Rect = { x: TILE, y: TILE + 4, w: 8 * TILE, h: 6 * TILE };
+// The bench has no seat of its own. Theo sits this many pixels up from its
+// near tile, on the middle of the pad.
+const BENCH_SEAT = 6;
+
+// The rack with its bar lifted off, and the bar alone, both from the rack's
+// own pixels. UNRACK covers the rack's rows 14 to 21, which hold the bar and
+// its plates: x marks a pixel unracking takes away (the plates, and the bar
+// between the J-hooks) and k one it inks, to close the stub of bar left on
+// each upright. The bar is every x pixel, and the whole bar where it crosses
+// the uprights.
+const RACK = sprites.get('gym-rack')!;
+const RACK_BAR = { top: 14, mid: 17 };
+const UNRACK = [
+  'xxxxx........................................xxx',
+  'xxxxxx......................................xxxx',
+  'xxxx.........xxxxxxxxxxxxxxxxxxxxxx..........xxx',
+  'xxxx........kxxxxxxxxxxxxxxxxxxxxxxk.........xxx',
+  'xxxx.........xxxxxxxxxxxxxxxxxxxxxx..........xxx',
+  'xxxxxx....................................xxxxxx',
+  'xxxxxx....................................xxxxxx',
+  'xxxxxx....................................xxxxxx'
+];
+{
+  const f = RACK.frames[0];
+  const mark = (r: number, c: number) => UNRACK[r - RACK_BAR.top]?.[c] ?? '.';
+  const unracked = f.rows.map((row, r) =>
+    [...row].map((ch, c) => (mark(r, c) === 'x' ? '.' : mark(r, c) === 'k' ? 'k' : ch)).join('')
+  );
+  const bar = f.rows.map((row, r) =>
+    [...row]
+      .map((ch, c) => (Math.abs(r - RACK_BAR.mid) <= 1 || mark(r, c) === 'x' ? ch : '.'))
+      .join('')
+  );
+  // The rack's sprite gains the two as frames, for this script only.
+  sprites.set('gym-rack', {
+    ...RACK,
+    frames: [
+      ...RACK.frames,
+      { ...f, name: 'unracked', rows: unracked },
+      { ...f, name: 'bar', rows: bar }
+    ]
+  });
 }
 
 // The floor states, as vignettes cut from a second office that has a mail
@@ -700,10 +796,60 @@ function renderSet(hour: number, dir: string): Image {
     mate: oddFrame(STAFF[2]),
     shade: (img) => shade(img, 1)
   };
+  // The gym, lit once per frame of the treadmill's belt, and once with the
+  // bar off the rack. Theo's places are the office's own spots on its
+  // equipment; the bench has none, so he sits on its pad.
+  const gymLit = (frames: Record<string, string>) => {
+    const draws = gymWorld.draws.map((d) =>
+      frames[d.sprite] ? { ...d, frame: frames[d.sprite] } : d
+    );
+    const w = gymWorld.width * TILE;
+    const h = gymWorld.height * TILE;
+    return cropTo(light(paint(draws, true, w, h), gymWorld, draws), GYM_VIEW);
+  };
+  const belts = catalog['gym-treadmill'].frames;
+  const place = (tx: number, ty: number) => ({
+    x: tx * TILE - GYM_VIEW.x,
+    y: ty * TILE - TILE - GYM_VIEW.y
+  });
+  const spotAt = (prop: string) => {
+    const s = gymWorld.spots.find((x) => x.prop === prop);
+    if (!s) throw new Error(`the gym art needs a spot on ${prop}`);
+    return place(...s.tile);
+  };
+  const [bx, by] = GYM_ROOM.props.find((p) => p.sprite === 'gym-bench')!.at;
+  const seat = place(bx, by + 1);
+  const rack = gymWorld.draws.find((d) => d.sprite === 'gym-rack')!;
+  const barImage = cropTo(frameImage(sprites.get('gym-rack')!, 'bar'), {
+    x: 0,
+    y: RACK_BAR.top,
+    w: RACK.width,
+    h: 8
+  });
+  const gym: GymLayers = {
+    room: belts.map((b) => gymLit({ 'gym-treadmill': b })),
+    unracked: gymLit({ 'gym-rack': 'unracked' }),
+    view: { w: GYM_VIEW.w, h: GYM_VIEW.h },
+    at: {
+      run: spotAt('gym-treadmill'),
+      cycle: spotAt('gym-bike'),
+      curl: spotAt('gym-dumbbells'),
+      rack: spotAt('gym-rack'),
+      bench: { x: seat.x, y: seat.y - BENCH_SEAT }
+    },
+    bar: {
+      img: shade(barImage, 1),
+      x: rack.x - GYM_VIEW.x,
+      y: rack.y + RACK_BAR.top - GYM_VIEW.y,
+      mid: RACK_BAR.mid - RACK_BAR.top
+    },
+    odd: oddFrame(STAFF[2])
+  };
   writeReleaseArt(
     {
       desk,
       hall,
+      gym,
       door: {
         room: cropTo(lit, doorAt),
         door: { ...doorRect, x: doorRect.x - doorAt.x, y: doorRect.y - doorAt.y },

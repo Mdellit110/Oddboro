@@ -26,6 +26,28 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.0.8',
+    date: '2026-11-07',
+    title: 'Odds work in Gmail, Google Drive and AWS.',
+    summary:
+      'Connect Gmail, Google Drive or your AWS account, and an Odd can work in it. An Odd at Drafts for your yes can now make changes too, and each one waits for your yes.',
+    notes: [
+      'An Odd writes each email reply for you to edit, then send or save to your Gmail drafts.',
+      'An Odd can suggest a Gmail filter. Filters only sort mail. They never delete or forward it.',
+      'Connect more than one Google account. Each one signs in and revokes on its own.',
+      "Connect AWS three ways: Secrets Manager, read only, or builder. One AWS sign-in covers all three, and Odds never see a secret's value.",
+      'A key for any other tool can come from an AWS secret, instead of one you paste.',
+      'Odds reach files only through Oddboro now, on every system, so they reach only the folders you gave them. Grok Odds take a little longer with files.',
+      'On a Mac, the keys Oddboro keeps in your Keychain open only for Oddboro.'
+    ],
+    builds: ['mac', 'windows-x64', 'windows-arm64', 'linux-x86_64', 'linux-aarch64'],
+    art: {
+      name: 'gym',
+      alt: 'In the office gym, an Odd runs on a treadmill, pedals an exercise bike, curls dumbbells, and lifts a loaded bar off the rack and presses it overhead. It carries the bar to a bench, sits facing you, and presses it overhead three times.',
+      shareAlt: 'In a pixel-art office gym, an Odd sits on a bench and holds a bar overhead.'
+    }
+  },
+  {
     version: '0.0.7',
     date: '2026-11-06',
     title: 'Updating on Windows no longer starts over.',
