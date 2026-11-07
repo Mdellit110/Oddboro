@@ -16,7 +16,8 @@ and `data/`, the folder every Odd may read. `CODE` is the code
 (`ODDBORO_CODE`, else this repo; the app's `Resources/server` in a release).
 `OFFICE_PORT` and `DATABASE_PORT` come from `ODDBORO_PORT` and
 `ODDBORO_DB_PORT` (4500 and 54329). `STAFF_SERVER` is `mcp.ts` beside it, or
-`mcp.js` in a release. Never write `~/.oddboro` or a port anywhere else.
+`mcp.js` in a release, and `FILES_SERVER` the file tools (`files-server.ts`)
+the same way. Never write `~/.oddboro` or a port anywhere else.
 Under `node --test` (`NODE_TEST_CONTEXT`), with no `ODDBORO_HOME`, `home()` is
 a folder under the system's temp folder, made on first use and removed at
 exit, and with no `ODDBORO_DB_PORT`, `DATABASE_PORT` is 54399: a test never
@@ -202,18 +203,20 @@ hand-off or number, which ledger tests and the office's format test share.
   run), and after through `setAgent()`, which also
   removes the Odd's chat session (`chatSession`), since the other tool
   cannot resume it. `AGENT_PLATFORMS` says, per tool, which systems offer it
-  (`runs`: Claude Code on Mac, Linux and Windows, Grok and Codex on Mac only,
-  Gemini on none until a live run holds its walls; `agentsOn()`, and
-  `offeredAgent()` for a hire or a move), and where its Run commands switch
-  follows the owner (`commands`: Claude Code on a Mac only, since its sandbox
-  held commands to the Odd's folders only there).
+  (`runs`: Claude Code, Grok and Codex on Mac, Linux and Windows, Gemini on
+  none until a live run holds its walls; `agentsOn()`, and `offeredAgent()`
+  for a hire or a move), and where its Run commands switch follows the owner
+  (`commands`: Claude Code on a Mac, Codex on a Mac and Linux, where their
+  sandboxes held commands to the Odd's folders). `FILES_VIA_OFFICE` says
+  where the office carries a tool's files through its own file tools
+  (`filesViaOffice()`): Claude Code, Codex and Grok on every system.
 - `staff.commands` and `staff.web` are the owner's Run commands and Browse the
   web switches, and `staff.folders` the folders outside the office the owner
   gave the Odd, each to read or to read and change, by real path. Only the
   owner sets them (`setOwnTool()`, `setFolder()`), each change one ledger line.
   The stored value is the owner's choice; whether a run gets a shell also
-  depends on its tool (`commandsHow()`: Claude Code on a Mac follows the
-  switch, Codex always has one, Grok and Gemini never), so a tool switch never
+  depends on its tool (`commandsHow()`: Claude Code on a Mac and Codex on a
+  Mac and Linux follow the switch, Grok and Gemini never), so a tool switch never
   rewrites it. Under a switch locked off, `commandsHow()` names the tool on
   this system that follows it (`offer`), which the Settings tab offers to move
   the Odd to in one click, with the switch on. With Run commands and Browse

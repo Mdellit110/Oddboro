@@ -115,6 +115,8 @@ import {
   zone,
   zoneName,
   STAFF_SERVER,
+  FILES_SERVER,
+  filesViaOffice,
   AGENT_NAMES,
   folderLines,
   heldReach,
@@ -146,7 +148,7 @@ import { workPath } from '@oddboro/ledger/work-paths';
 import { filterWords } from '@oddboro/ledger/filters';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
-import type { Work } from '../staff/work.ts';
+import { floorTool, type Work } from '../staff/work.ts';
 import { closeGateway, openGateway } from './gateway.ts';
 import { awsReady } from './aws.ts';
 import { bearer } from './oauth.ts';
@@ -962,6 +964,26 @@ async function run(
     granted: extraWrites,
     edited: opts.ownerEdit?.path
   });
+  // Where the office carries the run's files (`FILES_VIA_OFFICE`), its tool's
+  // own file tools are off and the office's file server is its one way to
+  // files, holding the same folders on every system: it reads what the run
+  // reads, writes what it writes, and never writes what `deniedEdits` names.
+  const officeFiles = filesViaOffice(who.agent, process.platform);
+  if (officeFiles) {
+    servers.files = {
+      command: process.execPath,
+      args: [FILES_SERVER],
+      env: {
+        ODDBORO_FILES: JSON.stringify({
+          cwd: dir,
+          reads: readsBeyond(dir, reads, extraReads, claudeDir),
+          writes,
+          noWrite: denied
+        })
+      }
+    };
+    allowed.push('mcp__files');
+  }
   // Bash writes in every folder Claude Code works in (the cwd and each
   // --add-dir), whatever the Edit rules say. So with commands, only the
   // folders the run writes are added, and the sandbox's denyWrite, which beats
@@ -990,9 +1012,11 @@ async function run(
       'stream-json',
       '--verbose',
       '--include-partial-messages',
+      // With the office carrying its files, no file tool of its own; with no
+      // other tool either, an empty list, which Claude Code takes as none.
       '--tools',
       [
-        'Read,Glob,Grep,Write,Edit',
+        ...(officeFiles ? [] : ['Read,Glob,Grep,Write,Edit']),
         ...(own.commands ? ['Bash'] : []),
         ...(own.web ? ['WebSearch,WebFetch'] : [])
       ].join(','),
@@ -1193,7 +1217,7 @@ async function run(
         if (launch.read) {
           for (const ev of launch.read(e)) {
             if (ev.type === 'session') session = ev.id;
-            else if (ev.type === 'tool') opts.onEvent?.({ type: 'tool', name: ev.name });
+            else if (ev.type === 'tool') opts.onEvent?.({ type: 'tool', name: floorTool(ev.name) });
             else if (ev.type === 'message') {
               const text = (reply ? '\n\n' : '') + ev.text;
               reply += text;
@@ -1212,7 +1236,8 @@ async function run(
         if (e.type === 'rate_limit_event') void notePlan(e.rate_limit_info);
         if (e.type === 'result' && e.modelUsage)
           void recordUsage(who.id, opts.kind, e.modelUsage as ModelUsage).catch(() => {});
-        for (const name of streamTools(who.agent, e)) opts.onEvent?.({ type: 'tool', name });
+        for (const name of streamTools(who.agent, e))
+          opts.onEvent?.({ type: 'tool', name: floorTool(name) });
         if (e.type === 'stream_event') {
           const ev = e.event as { type: string; delta?: { type: string; text?: string } };
           if (
