@@ -66,8 +66,10 @@
     { key: 'star', label: 'Star it' }
   ];
 
-  /** About how many emails match today, from Gmail, counted again after a change to what it matches. */
+  /** How many emails match today, counted in Gmail, and again after a change to what it matches. */
   let about = $state<number | undefined>();
+  /** The count stopped at its cap: there are at least that many. */
+  let more = $state(false);
   let counting = $state(false);
   let countProblem = $state('');
   let counted = '';
@@ -86,8 +88,13 @@
     }
     counting = true;
     try {
-      const r = await call<{ about: number }>(`/api/asks/${a.id}/filter-preview?${asked}`);
-      if (counted === asked) about = r.about;
+      const r = await call<{ about: number; more: boolean }>(
+        `/api/asks/${a.id}/filter-preview?${asked}`
+      );
+      if (counted === asked) {
+        about = r.about;
+        more = r.more;
+      }
     } catch (e) {
       if (counted === asked) countProblem = e instanceof Error ? e.message : String(e);
     } finally {
@@ -98,7 +105,8 @@
     untrack(count);
   });
 
-  const emails = (n: number) => `${n} ${n === 1 ? 'email' : 'emails'}`;
+  const emails = (n: number) =>
+    `${n.toLocaleString()}${more ? ' or more' : ''} ${n === 1 && !more ? 'email' : 'emails'}`;
   const sentence = $derived(filterWords({ criteria, action }));
 
   async function act(fn: () => Promise<unknown>) {
@@ -182,7 +190,7 @@
       {:else if counting || about === undefined}
         Counting the mail it matches in Gmail.
       {:else}
-        About {emails(about)} match today.
+        {emails(about)} match today.
       {/if}
     </p>
   </div>
