@@ -15,7 +15,8 @@ import {
   setConnectorConfig,
   tickKey,
   toolCommand,
-  type ConnectorRow
+  type ConnectorRow,
+  type GoogleProduct
 } from '@oddboro/ledger';
 import { secretNamesClient, toolKeys } from './aws.ts';
 import { cleanEnv } from './claude.ts';
@@ -54,19 +55,23 @@ export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
   return client;
 }
 
-/** The servers the office serves itself, by connector id. */
-const BUILTIN: Record<string, (token: () => Promise<string>) => McpServer> = {
+/** The servers the office serves itself, by the Google product a connector serves. */
+const BUILTIN: Record<
+  GoogleProduct,
+  (token: () => Promise<string>, account?: string) => McpServer
+> = {
   gmail: gmailServer,
-  'google-drive': driveServer
+  drive: driveServer
 };
 
 /**
  * A server the office serves itself, inside this process: Gmail and Google
- * Drive. Each call asks `bearer` for a live token, so the Google sign-in
- * never leaves the office, not even to a process of its own.
+ * Drive, one server per account, whose tools name the account they reach.
+ * Each call asks `bearer` for a live token, so the Google sign-in never
+ * leaves the office, not even to a process of its own.
  */
 async function builtin(c: ConnectorRow): Promise<Client> {
-  const make = BUILTIN[c.id];
+  const make = c.config.google && BUILTIN[c.config.google];
   if (!make) throw new Error(`The office serves no tool named ${c.id}`);
   const token = async () => {
     const t = await bearer(c.id);
@@ -74,7 +79,7 @@ async function builtin(c: ConnectorRow): Promise<Client> {
     return t;
   };
   const [ours, theirs] = InMemoryTransport.createLinkedPair();
-  await make(token).connect(theirs);
+  await make(token, c.config.account).connect(theirs);
   const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
   await client.connect(ours);
   return client;

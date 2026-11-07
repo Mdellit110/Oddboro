@@ -1,8 +1,35 @@
 // What the office's own Google tool servers (gmail.ts, drive.ts) share: one
 // way to call Google with the owner's token, one way to turn a failure into
 // a tool result the Odd can read, and the fence around text from strangers.
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+
+/**
+ * A Google tool server for one account. Each account is a connector, and so
+ * a server, of its own: with its address known, every tool's description
+ * ends by naming it ("It reaches the Gmail account ada@example.com only."),
+ * so an Odd holding two always knows which one it is in.
+ */
+export function accountServer(name: string, account: string | undefined, where: string): McpServer {
+  const server = new McpServer({ name, version: '1.0.0' });
+  if (!account) return server;
+  const register = server.registerTool.bind(server) as (
+    tool: string,
+    config: { description?: string },
+    cb: unknown
+  ) => unknown;
+  server.registerTool = ((tool: string, config: { description?: string }, cb: unknown) =>
+    register(
+      tool,
+      {
+        ...config,
+        description: `${config.description ?? ''} It reaches ${where} ${account} only.`
+      },
+      cb
+    )) as typeof server.registerTool;
+  return server;
+}
 
 /** Gives a fresh access token, refreshing it first when it has run out. */
 export type Token = () => Promise<string>;

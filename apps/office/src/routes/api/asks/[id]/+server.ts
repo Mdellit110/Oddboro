@@ -5,7 +5,8 @@
 // (`picks`) and answers with the hire asks it made, for the page to open.
 // Approving an access ask answers with the connect task it made, if any, so the
 // desk goes straight on to it. A reply is approved only by sending it or saving
-// it (`reply/+server.ts`), and a filter only by creating it (`filter/+server.ts`).
+// it (`reply/+server.ts`), a filter only by creating it (`filter/+server.ts`),
+// and a folder ask only by giving the folder (`folder/+server.ts`).
 import { error, json } from '@sveltejs/kit';
 import {
   approveGoal,
@@ -44,6 +45,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
     error(400, 'Send the reply, or save it to Gmail drafts');
   if (a.kind === 'filter' && decision === 'approve')
     error(400, 'Create the filter from its card on the desk');
+  if (a.kind === 'folder' && decision === 'approve')
+    error(400, 'Give the folder from its card on the desk');
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 2000) : '';
   if (decision === 'approve' && a.kind === 'goal') {
     await approveGoal(a.id, reason || null).catch((e: Error) => error(400, e.message));

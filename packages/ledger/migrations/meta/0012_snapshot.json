@@ -1,5 +1,5 @@
 {
-  "id": "5bbd2f4f-c38a-44be-98ef-62cf134812fc",
+  "id": "b7a5422b-72fa-4c34-9e19-265a2c1038ce",
   "prevId": "160370ec-3fd9-4d73-a034-0d44ae3d1583",
   "version": "7",
   "dialect": "postgresql",
@@ -285,8 +285,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "call": {
-          "name": "call",
+        "folder": {
+          "name": "folder",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

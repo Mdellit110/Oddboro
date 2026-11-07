@@ -87,7 +87,8 @@ test('each call raises one filter ask in plain words, and one that matches nothi
   assert.deepEqual(a?.filter, {
     criteria: { from: 'news@shop.example.com' },
     action: { skipInbox: true, addLabel: 'Newsletters' },
-    summary: 'The shop sends a newsletter every day.'
+    summary: 'The shop sends a newsletter every day.',
+    connector: 'gmail'
   });
   const none = await c.callTool({
     name: 'propose_filter',

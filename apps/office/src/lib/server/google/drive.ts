@@ -3,9 +3,20 @@
 // Doc's text or a Sheet's cells. The gateway reaches it in memory, so the
 // owner's Google token never leaves the office. There is no tool to delete
 // or trash a file.
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { call, cap, DATA_NOTE, google, id, run, send, untrusted, type Token } from './http.ts';
+import {
+  accountServer,
+  call,
+  cap,
+  DATA_NOTE,
+  google,
+  id,
+  run,
+  send,
+  untrusted,
+  type Token
+} from './http.ts';
 
 const DRIVE = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
@@ -49,8 +60,8 @@ const range = z
   .min(1)
   .refine((r) => !/^\.+$/.test(r), 'That is not an A1 range.');
 
-export function driveServer(token: Token): McpServer {
-  const server = new McpServer({ name: 'google-drive', version: '1.0.0' });
+export function driveServer(token: Token, account?: string): McpServer {
+  const server = accountServer('google-drive', account, 'the Google Drive of');
   const READ = { readOnlyHint: true };
   const WRITE = { readOnlyHint: false };
   const file = { file_id: id.describe('The file id, from search_files.') };

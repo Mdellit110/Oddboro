@@ -4,7 +4,7 @@
 // for good, only moved to the trash, and gmail.settings.basic for filters,
 // which only the office creates, on the owner's click (filters.ts).
 import { randomUUID } from 'node:crypto';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { linkFooter, withFooter } from '@oddboro/ledger';
 import { z } from 'zod';
 import {
@@ -15,6 +15,7 @@ import {
   type FilterCriteria
 } from '@oddboro/ledger/filters';
 import {
+  accountServer,
   base64url,
   DATA_NOTE,
   decodeEntities,
@@ -393,8 +394,8 @@ export async function tidyMatching(
   return ids.length;
 }
 
-export function gmailServer(token: Token): McpServer {
-  const server = new McpServer({ name: 'gmail', version: '1.0.0' });
+export function gmailServer(token: Token, account?: string): McpServer {
+  const server = accountServer('gmail', account, 'the Gmail account');
   const get = <T>(path: string) => google<T>(token, `${GMAIL}${path}`);
   const post = <T>(path: string, body: unknown = {}) =>
     google<T>(token, `${GMAIL}${path}`, send('POST', body));

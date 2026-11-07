@@ -169,13 +169,9 @@
 
 <section class="flex h-full min-h-0 flex-col" aria-label="Hire an Odd">
   <header class="border-b border-hairline p-3">
-    <div class="flex items-center">
-      <div class="flex-1">
-        <div class="font-pixel text-lg leading-none">Hire</div>
-        <div class="mt-1 text-xs text-muted">
-          Step {step + 1} of {STEPS.length}: {STEPS[step]}{from ? ' · from a proposal' : ''}
-        </div>
-      </div>
+    <!-- No title: the window's tab already says Hire. -->
+    <div class="text-xs text-muted">
+      Step {step + 1} of {STEPS.length}: {STEPS[step]}{from ? ' · from a proposal' : ''}
     </div>
     <ol class="mt-2 flex gap-1" aria-hidden="true">
       {#each STEPS as s, i (s)}
@@ -202,23 +198,27 @@
 
   <div class="flex flex-1 flex-col gap-3 overflow-y-auto p-3 text-sm">
     {#if step === 0}
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-muted">Name</span>
-        <input class={field} placeholder="e.g. Mira" bind:value={name} />
-      </label>
-      <label class="flex flex-col gap-1">
-        <span class="text-xs text-muted">Role</span>
-        <input class={field} placeholder="e.g. Mail Clerk" bind:value={role} />
-      </label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="flex min-w-0 flex-col gap-1">
+          <span class="text-xs text-muted">Name</span>
+          <input class={field} placeholder="e.g. Mira" bind:value={name} />
+        </label>
+        <label class="flex min-w-0 flex-col gap-1">
+          <span class="text-xs text-muted">Role</span>
+          <input class={field} placeholder="e.g. Mail Clerk" bind:value={role} />
+        </label>
+      </div>
       <LookStudio
         {name}
         {role}
         bind:description={appearance}
         kept={look}
         keepLabel="Keep this look"
+        autoKeep
         onkeep={(d) => {
           look = d;
         }}
+        onclear={() => (look = undefined)}
         onbusy={(b) => (wins.busy[id] = b)}
       />
     {:else if step === 1}
