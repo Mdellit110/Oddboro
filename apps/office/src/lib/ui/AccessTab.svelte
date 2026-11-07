@@ -4,7 +4,9 @@
     GRANT_LABEL,
     LEVEL_LABEL,
     LEVELS,
-    levelAtMost,
+    GRANT_NEEDS,
+    grantWorks,
+    writesWait,
     MODEL_SECTION,
     OFFICE_SECTION,
     SWITCH_NAMES,
@@ -136,13 +138,13 @@
 
   /** Why its runs leave a granted tool out, for the owner. Grants are read or act, so only act can sit above a level. */
   const HELD_BACK: Record<HeldBack, string> = {
-    'above its level': `held back until you set its level to ${LEVEL_LABEL.act}`,
+    'above its level': `held back until you set its level to ${LEVEL_LABEL[GRANT_NEEDS.act]} or higher`,
     'still connecting': 'waiting on your steps',
     'sign-in ran out': 'sign in again'
   };
   const levels: GrantLevel[] = ['read', 'act'];
-  /** Never above the staffer's own level. */
-  const allowed = (l: GrantLevel) => levelAtMost(l, profile.permission);
+  /** Write works from Draft, where each change waits for the owner's yes. */
+  const allowed = (l: GrantLevel) => grantWorks(l, profile.permission);
   const isUrl = $derived(/^https:\/\/\S+$/.test(q.trim()));
 
   const GRANTABLE = OFFICE_TOOLS.filter((t) => !t.always);
@@ -860,12 +862,17 @@
             {#if !allowed('act')}
               <!-- Said in sight, not in a tooltip, with the one click that allows it. -->
               <p class="text-[11px] text-muted">
-                {GRANT_LABEL.act} needs {profile.name} at {LEVEL_LABEL.act}.
+                {GRANT_LABEL.act} needs {profile.name} at {LEVEL_LABEL[GRANT_NEEDS.act]} or higher.
                 <button
                   class="text-sea underline underline-offset-2 hover:text-ink"
-                  onclick={() => setPermission('act')}
-                  >Set {profile.name} to {LEVEL_LABEL.act}</button
+                  onclick={() => setPermission(GRANT_NEEDS.act)}
+                  >Set {profile.name} to {LEVEL_LABEL[GRANT_NEEDS.act]}</button
                 >
+              </p>
+            {:else if level === 'act' && writesWait('act', profile.permission)}
+              <p class="text-[11px] text-muted">
+                At {LEVEL_LABEL.draft}, each change {profile.name} makes in {pick.name} waits on your
+                desk for your yes.
               </p>
             {/if}
             <div class="flex gap-2">
@@ -904,7 +911,9 @@
                 <div class="text-xs text-muted">
                   {GRANT_LABEL[g.level]} · {g.reach}{g.heldBack
                     ? ` · ${HELD_BACK[g.heldBack]}`
-                    : ''}
+                    : writesWait(g.level, profile.permission)
+                      ? ' · each change waits for your yes'
+                      : ''}
                 </div>
               </div>
               <button class="text-xs text-muted hover:text-coral" onclick={() => revoke(g)}

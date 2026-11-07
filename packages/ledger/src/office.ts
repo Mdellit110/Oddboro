@@ -76,6 +76,7 @@ import {
   type GoalPlan,
   type HireProposal,
   type Outcome,
+  type HeldCall,
   type ReplyDraft,
   type LedgerKind,
   type RunTrigger,
@@ -98,7 +99,7 @@ import {
 } from './agents.ts';
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
-import { levelAtMost, type Level } from './access-words.ts';
+import { grantWorks, levelAtMost, type Level } from './access-words.ts';
 import { filterWords, sameCriteria, type GmailFilter } from './filter-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
@@ -803,8 +804,10 @@ export async function raiseAsk(
     reply?: ReplyDraft;
     /** A filter ask's Gmail filter (`propose_filter`). */
     filter?: GmailFilter;
-    /** `goal`, `plan`, `reply` and `filter` say so; the rest follow from access or hire. */
-    kind?: 'goal' | 'plan' | 'reply' | 'filter';
+    /** A call ask's held call, from the gateway (`holdCall` in the office's gateway.ts). */
+    call?: HeldCall;
+    /** `goal`, `plan`, `reply`, `filter` and `call` say so; the rest follow from access or hire. */
+    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'call';
     revises?: number;
     /** The colleague whose handed-back work the lead raised this from (`VIA`). */
     via?: string;
@@ -1031,6 +1034,64 @@ export async function approveFilter(id: number, filter: GmailFilter): Promise<bo
   return decide(id, 'approve', null, { filter });
 }
 
+/**
+ * The office made a call ask's held call on the owner's yes: keep what came
+ * back (`call.result`) and approve the ask, which starts the Odd's carry-out
+ * run with the result. Returns false when the ask was no longer open.
+ */
+export async function approveCall(id: number, call: HeldCall): Promise<boolean> {
+  if (!call.result) throw new Error('A call is approved only once the office made it');
+  return decide(id, 'approve', null, { call });
+}
+
+/** Where a held call lands: the run's Odd, and what its own asks carry. */
+export type CallPlace = {
+  staffId: string;
+  /** The run's key, which a thread it is raised on keeps (`raiseAsk`). */
+  run: string;
+  handOffId?: number;
+  threadId?: number;
+  via?: string;
+};
+
+/**
+ * An Odd at Draft called a tool that changes something: the gateway holds
+ * the call and it goes on the desk as a `call` ask, showing the exact call.
+ * The same call still open is not raised twice: the Odd hears the one there.
+ */
+export async function raiseCall(
+  place: CallPlace,
+  call: HeldCall,
+  service: string
+): Promise<{ ask: AskRow; already: boolean }> {
+  const same = (r: AskRow) =>
+    r.call?.connector === call.connector &&
+    r.call.tool === call.tool &&
+    JSON.stringify(r.call.arguments) === JSON.stringify(call.arguments);
+  const open = await db
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, place.staffId), eq(asks.kind, 'call'), eq(asks.status, 'open')));
+  const there = open.find(same);
+  if (there) return { ask: there, already: true };
+  const { ask } = await raiseAsk(place.staffId, {
+    kind: 'call',
+    title: `Use ${call.tool} in ${service}`,
+    why: `Called while working at Drafts for your yes, so the office held it for you.`,
+    ifApproved: `The office makes this exact call to ${service}, and the work carries on with what it returns.`,
+    call,
+    handOffId: place.handOffId,
+    threadId: place.threadId,
+    via: place.via,
+    run: place.run
+  });
+  return { ask, already: false };
+}
+
+/** What a made call returned, cut to fit a ledger line or a brief. */
+export const callResultText = (r: NonNullable<HeldCall['result']>, max = 4000): string =>
+  `${r.ok ? '' : 'The tool said it failed: '}${r.text.length > max ? `${r.text.slice(0, max)}…` : r.text}`;
+
 /** A created filter in one line, for its ledger line and the answer: what it does, and what was tidied. */
 const filterDone = (f: GmailFilter) =>
   `${filterWords(f)}${f.created?.tidied ? `, and tidied ${f.created.tidied} ${f.created.tidied === 1 ? 'email' : 'emails'}` : ''}`;
@@ -1043,7 +1104,12 @@ async function decide(
   id: number,
   decision: Decision,
   reason: string | null,
-  o: Approval & { reportWhenDone?: boolean; reply?: ReplyDraft; filter?: GmailFilter }
+  o: Approval & {
+    reportWhenDone?: boolean;
+    reply?: ReplyDraft;
+    filter?: GmailFilter;
+    call?: HeldCall;
+  }
 ): Promise<boolean> {
   if (decision === 'iterate' && !reason) throw new Error('Say what to change');
   if (decision !== 'deny') {
@@ -1056,6 +1122,9 @@ async function decide(
     // Only the office's Create filter approves a filter, once Gmail made it.
     if (decision === 'approve' && raised?.kind === 'filter' && !o.filter)
       throw new Error('Create the filter from its card on the desk');
+    // Only the office's own call approves a held call, once it made it.
+    if (decision === 'approve' && raised?.kind === 'call' && !o.call)
+      throw new Error('Approve the call from its card on the desk');
   }
   const status = decision === 'approve' ? 'approved' : decision === 'deny' ? 'denied' : 'revise';
   const at = new Date();
@@ -1067,7 +1136,8 @@ async function decide(
         reason: reason || null,
         decidedAt: at,
         ...(o.reply ? { reply: o.reply } : {}),
-        ...(o.filter ? { filter: o.filter } : {})
+        ...(o.filter ? { filter: o.filter } : {}),
+        ...(o.call ? { call: o.call } : {})
       })
       .where(and(eq(asks.id, id), eq(asks.status, 'open')))
       .returning();
@@ -1101,14 +1171,19 @@ async function decide(
   if (!ask) return false;
   const sent = decision === 'approve' && ask.reply?.sent ? ask.reply : undefined;
   const made = decision === 'approve' && ask.filter?.created ? ask.filter : undefined;
+  const called = decision === 'approve' && ask.call?.result ? ask.call.result : undefined;
   const verb = sent
     ? replyDone(sent)
     : { approve: 'Approved', deny: 'Denied', iterate: 'Sent back' }[decision];
   await record({
     kind: 'decision',
     actor: 'owner',
-    title: made ? `Created a Gmail filter: ${filterDone(made)}` : `${verb}: ${ask.title}`,
-    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}Asked by ${ask.staffId}. ${ask.why}${
+    title: made
+      ? `Created a Gmail filter: ${filterDone(made)}`
+      : called
+        ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
+        : `${verb}: ${ask.title}`,
+    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}${called ? `It returned: ${callResultText(called, 600)} ` : ''}Asked by ${ask.staffId}. ${ask.why}${
       twins.length
         ? ` This also answers ${twins.map((t) => `#${t.id}`).join(', ')}, the same ask from another of ${ask.staffId}'s runs.`
         : ''
@@ -1122,7 +1197,7 @@ async function decide(
     // Connected already: the work that waited picks up now. Otherwise finishing
     // the connect task starts it (`finishTask`).
     if (!task) await carryOutTogether([ask, ...twins]);
-  } else if (decision === 'approve' && ask.kind === 'approval')
+  } else if (decision === 'approve' && (ask.kind === 'approval' || ask.kind === 'call'))
     await followUp(ask.staffId, 'carry_out', {
       askId: ask.id,
       note: ask.reason,
@@ -1568,7 +1643,7 @@ export async function grantAccess(
   const conn = await connector(req.connector);
   if (!who || !conn) throw new Error('No such Odd or connector');
   if (req.level === 'draft') throw new Error(`${conn.name} connects to read, or to read and write`);
-  if (!levelAtMost(req.level, who.permission))
+  if (!grantWorks(req.level, who.permission))
     throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${req.level}`);
   await db
     .insert(grants)
@@ -1951,7 +2026,7 @@ export async function narrowReadTools(id: string, gone: string[]): Promise<void>
     kind: 'access',
     actor: 'office',
     title: `Read only for ${c.name} no longer reaches ${gone.join(', ')}`,
-    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. Read and write reaches ${gone.length === 1 ? 'it' : 'them'}, at Acts on its own.`
+    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. Read and write reaches ${gone.length === 1 ? 'it' : 'them'}: at Drafts for your yes each use waits for your yes, and at Acts on its own it goes.`
   });
 }
 

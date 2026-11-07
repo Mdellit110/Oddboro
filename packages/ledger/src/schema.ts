@@ -91,10 +91,21 @@ export type AccountRow = typeof accounts.$inferSelect;
  * them until then. `reply` is one email reply an Odd proposes (`asks.reply`):
  * the owner edits it, then the office sends it or saves it to Gmail drafts.
  * `filter` is one Gmail filter an Odd proposes (`asks.filter`): the owner may
- * change it, then the office creates it in Gmail.
+ * change it, then the office creates it in Gmail. `call` is one call to an
+ * outside tool that changes something, held by the gateway for an Odd at
+ * Draft (`asks.call`): on the owner's yes the office makes that exact call.
  */
 export type AskKind =
-  'approval' | 'access' | 'hire' | 'goal' | 'plan' | 'hand_offs' | 'window' | 'reply' | 'filter';
+  | 'approval'
+  | 'access'
+  | 'hire'
+  | 'goal'
+  | 'plan'
+  | 'hand_offs'
+  | 'window'
+  | 'reply'
+  | 'filter'
+  | 'call';
 /** `revise` means the owner sent it back to be reworked. */
 export type AskStatus = 'open' | 'approved' | 'denied' | 'revise';
 /** What an access ask wants: a connector and a level. */
@@ -117,6 +128,19 @@ export type ReplyDraft = {
   summary: string;
   /** Set once Gmail sent it or saved it as a draft. */
   sent?: { action: 'send' | 'draft'; at: string; gmailId: string };
+};
+/**
+ * One call to an outside tool an Odd at Draft made, held for the owner's yes:
+ * the tool, by its connector and its own name, and the exact arguments. The
+ * office makes this call, and no other, once the owner approves, and keeps
+ * what came back in `result`.
+ */
+export type HeldCall = {
+  connector: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  /** Set once the office made the call: whether the tool took it, and its words. */
+  result?: { ok: boolean; text: string; at: string };
 };
 /** A proposed hire. Approving it opens the hire window filled in with this. */
 export type HireProposal = {
@@ -248,6 +272,8 @@ export const asks = pgTable('asks', {
   reply: jsonb().$type<ReplyDraft>(),
   /** A filter ask's Gmail filter. */
   filter: jsonb().$type<GmailFilter>(),
+  /** A call ask's held call to an outside tool. */
+  call: jsonb().$type<HeldCall>(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */

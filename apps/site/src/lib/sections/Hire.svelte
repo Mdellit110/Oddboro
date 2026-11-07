@@ -95,11 +95,11 @@
       does: [
         'Finds the app in the public MCP Registry and asks you for it.',
         'Works in it once you connect it: read only, or read and write.',
-        'Acts in it on its own only if you give it write.'
+        'Changes things in it only with write: at draft each change waits for your yes, at act it goes ahead.'
       ],
       level: 'read',
       tools: [{ name: 'Your tool', can: ['read'] }],
-      note: 'Write needs the act level.',
+      note: 'Write needs the draft level or higher.',
       you: 'You approve the tool, sign in yourself, and can take it back any time.'
     }
   ];

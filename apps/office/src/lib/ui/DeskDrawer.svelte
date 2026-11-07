@@ -185,6 +185,14 @@
       if (r.task) made = r.task;
       show(r.task ? `task-${r.task.id}` : undefined);
     });
+  /** A held call: the office makes that exact call, then the Odd carries on with what came back. */
+  const makeCall = (a: AskRow) =>
+    act(async () => {
+      await call(`/api/asks/${a.id}/call`, {});
+      show(undefined);
+    });
+  /** A held call's inputs, as the tool takes them, for the owner to read. */
+  const inputs = (args: Record<string, unknown>) => JSON.stringify(args, null, 2);
   const picked = (a: AskRow) => a.plan?.items.filter((_, i) => !skip[i]).length ?? 0;
   const nameOf = (id: string) => staff.find((p) => p.id === id)?.name ?? id;
   const toolName = (id: string) => OFFICE_TOOLS.find((t) => t.id === id)?.name ?? id;
@@ -510,6 +518,24 @@
                 hire window.
               </p>
             </div>
+          {:else if a.call}
+            {@const c = a.call}
+            <div>
+              <dt class="text-xs text-muted">The call, exactly as the office makes it</dt>
+              <dd class="mt-1 flex flex-col gap-1 rounded-lg bg-raise px-2.5 py-2 text-xs">
+                <div><span class="text-muted">Tool:</span> {c.tool}</div>
+                <div class="text-muted">Inputs:</div>
+                <pre
+                  class="max-h-72 overflow-auto rounded-md bg-night/50 px-2 py-1.5 font-mono text-[11px] whitespace-pre-wrap">{inputs(
+                    c.arguments
+                  )}</pre>
+              </dd>
+              <p class="mt-1.5 text-[11px] text-faint">
+                Nothing has changed yet. Approve, and the office makes this call once, then {who(
+                  a.staffId
+                )?.name ?? 'the Odd'} carries on with what it returns.
+              </p>
+            </div>
           {:else}
             <div>
               <dt class="text-xs text-muted">If you approve</dt>
@@ -581,16 +607,20 @@
             <button
               class="flex-1 rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
               disabled={busy || unsaved || (a.kind === 'plan' && !picked(a))}
-              onclick={() => decide(a, 'approve')}
+              onclick={() => (a.kind === 'call' ? makeCall(a) : decide(a, 'approve'))}
               >{a.kind === 'goal'
                 ? 'Set the goal'
-                : a.access
-                  ? 'Connect'
-                  : a.kind === 'window'
-                    ? 'Let it carry on'
-                    : a.plan && picked(a) < a.plan.items.length
-                      ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                      : 'Approve'}</button
+                : a.kind === 'call'
+                  ? busy
+                    ? 'Making the call'
+                    : 'Make this call'
+                  : a.access
+                    ? 'Connect'
+                    : a.kind === 'window'
+                      ? 'Let it carry on'
+                      : a.plan && picked(a) < a.plan.items.length
+                        ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                        : 'Approve'}</button
             >
           {/if}
         </div>

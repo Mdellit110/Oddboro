@@ -11,12 +11,14 @@ import { existsSync } from 'node:fs';
 import {
   FOLDER_SAID,
   GRANT_LABEL,
+  GRANT_NEEDS,
+  grantWorks,
   LEVEL_NAME,
-  levelAtMost,
   levelRoute,
   officeSection,
   parseLevel,
   SWITCH_NAMES,
+  writesWait,
   type Level
 } from './access-words.ts';
 import {
@@ -97,7 +99,7 @@ export async function capabilities(who: StaffRow): Promise<Capabilities> {
 
 /** One grant as a run finds it: what it reaches, or why it is held back. */
 export function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: Level): Access {
-  const heldBack: HeldBack | undefined = !levelAtMost(g.level, permission)
+  const heldBack: HeldBack | undefined = !grantWorks(g.level, permission)
     ? 'above its level'
     : g.connector.readyAt
       ? undefined
@@ -107,8 +109,10 @@ export function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: 
 
 /**
  * What a run below the Odd's own level can do (a hand-off's, either side, or
- * a hub's pick-up): its level is `ceiling`, and a grant above it that the run
- * still loads comes down to read, since a grant is only read or act. A grant
+ * a hub's pick-up): its level is `ceiling`, and a grant that does not work
+ * there comes down to read, since a grant is only read or act. At a Draft
+ * ceiling a write grant stays, and each change through it waits for the
+ * owner's yes (`writesWait`), as it does for an Odd at Draft. A grant
  * already held back stays as it is. Its own tools stay as they are: a
  * handed-over run keeps the Odd's Run commands, Browse the web and folders,
  * so it can still do the work; only outside tools come down. The run's tools,
@@ -119,7 +123,7 @@ export function capped(caps: Capabilities, ceiling: Level): Capabilities {
     ...caps,
     level: ceiling,
     outside: caps.outside.map((a) =>
-      a.heldBack || levelAtMost(a.level, ceiling) ? a : { ...a, level: 'read' }
+      a.heldBack || grantWorks(a.level, ceiling) ? a : { ...a, level: 'read' }
     )
   };
 }
@@ -228,22 +232,33 @@ export function outsideLines(c: Capabilities, owner: string, about?: string): st
     const what = `${a.connector.name} (${GRANT_LABEL[a.level === 'act' ? 'act' : 'read'].toLowerCase()})`;
     switch (a.heldBack) {
       case 'above its level':
-        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${levelRoute(owner, whoseOf(about))}`;
+        return `${what}: held back. It needs the ${LEVEL_NAME[GRANT_NEEDS[a.level === 'act' ? 'act' : 'read']]} level or higher, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${levelRoute(owner, whoseOf(about))}`;
       case 'still connecting':
         return `${what}: held back until ${owner} finishes connecting it.`;
       case 'sign-in ran out':
         return `${what}: held back. Its sign-in ran out, and ${owner} needs to sign in again.`;
       case undefined:
-        return `${what}: ${reachOf(a)}.`;
+        return writesWait(a.level, c.level)
+          ? `${what}: ${reachOf(a)}. ${WRITES_WAIT(owner, about)}`
+          : `${what}: ${reachOf(a)}.`;
     }
   });
 }
+
+/**
+ * How a write grant works at Draft, said to the Odd (or about it, in
+ * office_report): call it as the work needs, and the gateway holds each change.
+ */
+export const WRITES_WAIT = (owner: string, about?: string): string =>
+  about === undefined
+    ? `Each call that changes something waits for ${owner}'s yes: the office puts that exact call on their desk and makes it once they approve, then you carry on with what it returned. Call it once and move on; never call it again to retry, and never say it is done before you hear.`
+    : `Each call ${about} makes that changes something waits for ${owner}'s yes on their desk.`;
 
 /** The Odd's level, said to the Odd. */
 export function levelLine(level: Level, owner: string): string {
   return {
     read: 'Your level is Read: you look and report. You change nothing outside the office.',
-    draft: `Your level is Draft: you prepare things for ${owner}'s yes, drafts included. Nothing you make goes out until they say yes.`,
+    draft: `Your level is Draft: you prepare things for ${owner}'s yes, drafts included. Nothing you make goes out until they say yes. A tool you hold at read and write is yours to call as the work needs, and each call that changes something waits for their yes on its own.`,
     act: `Your level is Act: you do housekeeping inside the office on your own, and use a tool ${owner} connected for you at read and write without asking each time.`
   }[level];
 }

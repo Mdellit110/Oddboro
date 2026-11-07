@@ -30,8 +30,9 @@
       value.
     </p>
     <p class="text-muted mt-3 leading-relaxed">
-      An Odd with Read and write acts without asking each time. What it creates costs what AWS
-      charges, so keep an eye on your bill.
+      At Acts on its own, an Odd with Read and write builds without asking each time. At Drafts for
+      your yes, each change waits on your desk for your yes. What it creates costs what AWS charges,
+      so keep an eye on your bill.
     </p>
   {/snippet}
   {#snippet before()}

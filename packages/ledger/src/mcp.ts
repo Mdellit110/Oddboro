@@ -54,7 +54,7 @@ import {
   ownToolsSaid
 } from './capabilities.ts';
 import { AGENT_NAMES } from './agents.ts';
-import { levelAtMost, LEVELS, NOT_OWN_TOOLS, SWITCH_NAMES } from './access-words.ts';
+import { grantWorks, LEVELS, NOT_OWN_TOOLS, SWITCH_NAMES } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
   APPLIES_TO_MAX,
@@ -852,7 +852,7 @@ if (has('ask_for_access'))
   tool(
     'ask_for_access',
     {
-      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
+      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs Draft or Act; at Draft each change waits for ${OWNER}'s yes). If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
       inputSchema: {
         connector: z.string(),
         level: z
@@ -873,7 +873,7 @@ if (has('ask_for_access'))
       const on = await placed({});
       if ('problem' in on) return refused(on.problem);
       const level = asked === 'write' ? 'act' : 'read';
-      if (!levelAtMost(level, me.permission))
+      if (!grantWorks(level, me.permission))
         return text(askAboveLevel(me.permission, asked, OWNER));
       const found = await ensureConnector(
         wanted,

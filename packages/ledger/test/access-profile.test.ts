@@ -150,7 +150,7 @@ test('ownTools is what a run reaches: the switch as its tool takes it, the web, 
   ]);
 });
 
-test('a handed-over run keeps its own commands, web and folders; only outside tools come down', () => {
+test('a handed-over run keeps its own commands, web and folders; a write grant waits for the yes', () => {
   const caps: Capabilities = {
     level: 'act',
     remit: '',
@@ -166,7 +166,9 @@ test('a handed-over run keeps its own commands, web and folders; only outside to
   };
   const run = C.capped(caps, 'draft');
   assert.deepEqual(run.own, caps.own);
-  assert.equal(run.outside[0].level, 'read');
+  // At Draft a write grant still works, and each change waits for the owner's yes.
+  assert.equal(run.outside[0].level, 'act');
+  assert.equal(C.capped(caps, 'read').outside[0].level, 'read');
 });
 
 /** The line an Odd hears for each own tool it lacks, when {owner} can switch it on, by whose card it is. */
@@ -491,7 +493,7 @@ test("office_report says where a colleague's level is set on that Odd's card, an
   const text = (r.content as { type: string; text: string }[])[0]?.text ?? '';
   const report = JSON.parse(text) as { staff: { id: string; outsideTools?: string[] }[] };
   assert.deepEqual(report.staff.find((s) => s.id === 'rae')?.outsideTools, [
-    "Notion (read and write): held back. It needs the Act level, and the current level is Read. It works again once the owner raises it. the owner sets Rae's level on Rae's Settings tab, under Model."
+    "Notion (read and write): held back. It needs the Draft level or higher, and the current level is Read. It works again once the owner raises it. the owner sets Rae's level on Rae's Settings tab, under Model."
   ]);
   const asked = await rae.callTool({
     name: 'ask_for_access',

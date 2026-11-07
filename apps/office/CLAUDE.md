@@ -703,14 +703,26 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    and whatever outside access the owner granted: servers at read (the tools
    the server marks as only reading, less any whose name says it changes
    something: `readsOnly` in `packages/ledger/src/read-only.ts`) or write
-   (every tool, only while the Odd holds Act). Every outside tool reaches the
+   (every tool, from Draft; at Draft each call that changes something waits
+   for the owner's yes, below). Every outside tool reaches the
    run through the office's gateway (`src/lib/server/gateway.ts`, at
    `/api/gateway/<connector>`): the run gets the office's address and a
    token that lives as long as the run, never the server's address, key or
    sign-in. The gateway connects to the real server (`upstream` in
    `access.ts`), lists only the tools the grant reaches, refuses any other
    call, and takes a tool that no longer passes `readsOnly` off the
-   connector's stored list with a Ledger line (`narrowReadTools`). The run's
+   connector's stored list with a Ledger line (`narrowReadTools`). A write
+   grant at Draft (`writesWait`, either the Odd's own level or a run capped
+   there) lists every tool, passes reads on, and holds each call that does
+   not pass `readsOnly` (or `readsByRole`) as a `call` ask on the desk
+   (`raiseCall`), placed as the run's own asks are (`CallPlace`: its key,
+   thread, hand-off and `via`); the same call still open is not raised twice,
+   and a lesson run, with no place, is refused one. The run hears that nothing
+   changed yet. The desk shows the tool and its exact inputs, with Make this
+   call: `/api/asks/[id]/call` makes that call itself (`makeCall`, once per
+   ask even on a second click), then `approveCall` keeps the result and
+   starts the Odd's `carry_out` run, which carries on with what it returned.
+   A service the office cannot reach leaves the ask open. The run's
    tool still gets its own per-tool allow list, so either one alone holds. Which outside tools a run gets comes from `capabilities()` in
    `packages/ledger/src/capabilities.ts`, which also says why a granted one is
    held back (above the Odd's level, still connecting). The prompt's "What you
@@ -1251,7 +1263,7 @@ sends every action as JSON, body or not.
 - Never show demo numbers as real ones. The card's back shows only measured
   usage.
 - A tool connects at read or write: read gets the tools the owner ticked as
-  read-only, write gets every tool, and only while the Odd holds Act.
+  read-only, write gets every tool from Draft, and at Draft each change waits for the owner's yes.
 - A headless Odd cannot reuse Claude Code's own MCP sign-ins (it reports
   `needs-auth`). That is why the office runs OAuth itself.
 - Charts use LayerChart. Its tooltip reads `--color-surface-*`; set them from
