@@ -50,8 +50,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init: RequestInit = {}) => 
   const path = url.slice(GMAIL.length);
   if (path === '/labels' && method === 'GET') return Response.json({ labels: LABELS });
   if (path === '/labels') return Response.json({ id: 'Label_new', name: 'made' });
-  if (path.startsWith('/messages?') && path.endsWith('maxResults=1'))
-    return Response.json({ resultSizeEstimate: 1200 });
   if (path.startsWith('/messages?') && path.includes('pageToken=p2'))
     return Response.json({ messages: ids(700, 500) });
   if (path.startsWith('/messages?'))
@@ -111,10 +109,11 @@ const linesOf = (id: number) =>
 
 test("the card's count comes from Gmail's search for the criteria, the ask's own or the owner's changes", async () => {
   const { id, from } = await proposed();
-  assert.deepEqual(await counted(id), { query: `from:(${from})`, about: 1200 });
+  // Counted page by page (700, then 500), never Gmail's rough estimate.
+  assert.deepEqual(await counted(id), { query: `from:(${from})`, about: 1200, more: false });
   assert.equal(
     google[0].url,
-    `${GMAIL}/messages?q=${encodeURIComponent(`from:(${from})`)}&maxResults=1`
+    `${GMAIL}/messages?q=${encodeURIComponent(`from:(${from})`)}&maxResults=500`
   );
   const changed = await counted(id, '?subject=Weekly&negatedQuery=sale&hasAttachment=true');
   assert.equal(changed.query, 'subject:(Weekly) -(sale) has:attachment');

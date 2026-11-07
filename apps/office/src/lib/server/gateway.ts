@@ -45,8 +45,15 @@ type Held = { level: Level; waits: boolean; client?: Promise<Client>; tools?: Pr
 /** `place` is where a held call lands; a run with none (a lesson run) changes nothing. */
 type GatewayRun = { held: Map<string, Held>; until: number; place?: CallPlace };
 
-/** Runs going, by token. Each goes when its run ends, or at the latest when its time is up. */
-const runs = new Map<string, GatewayRun>();
+/**
+ * Runs going, by token. Each goes when its run ends, or at the latest when its
+ * time is up. Kept on the process, not the module: in development Vite reloads
+ * the server's code under a running office, and a run the old code opened was
+ * refused by the new code's guard (403) until the office restarted.
+ */
+const runs: Map<string, GatewayRun> = ((
+  globalThis as { oddboroGatewayRuns?: Map<string, GatewayRun> }
+).oddboroGatewayRuns ??= new Map());
 
 /** A server entry as a run's tool takes it: Claude Code's --mcp-config, Codex's and Grok's alike. */
 export type GatewayServer = { type: 'http'; url: string; headers: Record<string, string> };
