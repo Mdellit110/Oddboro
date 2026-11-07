@@ -50,7 +50,12 @@ type OfficeRunOpts = {
   images?: { mediaType: string; data: string }[];
   /** A Claude model other than the owner's pick. Claude Code only. */
   model?: string;
+  /** Stops the run, such as when the owner leaves a drawing for parts. */
+  signal?: AbortSignal;
 };
+
+/** What an office run says when its signal stopped it. */
+const STOPPED = 'Stopped.';
 
 /** One office run. Prompts name the owner as {owner}, filled in with this install's name. */
 export async function runAsOffice(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
@@ -74,6 +79,13 @@ const ONE_REPLY =
 
 /** Where an office run's refusal sends the owner to sign its tool in: setup, not an Odd's Settings tab. */
 const SIGN_IN_HERE = 'in Setup, under Your AI';
+
+/** Call `stop` once when `signal` aborts, at once if it already has. */
+function onStop(signal: AbortSignal | undefined, stop: () => void): void {
+  if (!signal) return;
+  if (signal.aborted) stop();
+  else signal.addEventListener('abort', stop, { once: true });
+}
 
 /** One office run on Grok or Codex. */
 async function runOn(
@@ -150,6 +162,10 @@ async function runOn(
       stop();
       finish({ ok: false, text: `No reply after ${opts.timeoutMs / 60_000} minutes.` });
     }, opts.timeoutMs);
+    onStop(opts.signal, () => {
+      stop();
+      finish({ ok: false, text: STOPPED });
+    });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       buffer += chunk;
@@ -240,6 +256,10 @@ async function run(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
       child.kill();
       finish({ ok: false, text: `No reply after ${opts.timeoutMs / 60_000} minutes.` });
     }, opts.timeoutMs);
+    onStop(opts.signal, () => {
+      child.kill();
+      finish({ ok: false, text: STOPPED });
+    });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       buffer += chunk;

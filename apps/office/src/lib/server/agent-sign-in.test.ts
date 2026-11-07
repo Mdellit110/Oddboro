@@ -1058,3 +1058,20 @@ test('only Claude Code on Opus or Codex on Sol or Astra draws a look; on any oth
     assert.equal(((await listing()) as Listing & { drawsLooks: boolean }).drawsLooks, true)
   );
 });
+
+test('an office run stops when its signal does, as a drawing left for parts', async () => {
+  const { runAsOffice } = await import('./office-run.ts');
+  const runs = join(folder, 'office', 'runs');
+  const stopped = new AbortController();
+  stopped.abort();
+  const run = await withEnv({ OFFICE_AGENT: 'codex' }, () =>
+    runAsOffice('Draw a desk.', {
+      system: 'You draw.',
+      kind: 'look',
+      timeoutMs: 60_000,
+      signal: stopped.signal
+    })
+  );
+  assert.deepEqual(run, { ok: false, text: 'Stopped.' });
+  assert.deepEqual(existsSync(runs) ? readdirSync(runs) : [], []);
+});

@@ -4,7 +4,9 @@
     GRANT_LABEL,
     LEVEL_LABEL,
     LEVELS,
-    levelAtMost,
+    GRANT_NEEDS,
+    grantWorks,
+    writesWait,
     MODEL_SECTION,
     OFFICE_SECTION,
     SWITCH_NAMES,
@@ -27,6 +29,7 @@
   import { call } from './api.ts';
   import FoldersList from './FoldersList.svelte';
   import RunsOn from './RunsOn.svelte';
+  import ServiceActions from './ServiceActions.svelte';
   import ToolTiles from './ToolTiles.svelte';
   import { toolAction } from './tool-action.ts';
   import type { StaffProfile } from '../staff/roster.ts';
@@ -41,6 +44,8 @@
     /** What a run reaches, like "3 tools" or "every tool". */
     reach: string;
     heldBack: HeldBack | null;
+    /** An AWS tool already connected, which can move to another role or Region. */
+    changes: boolean;
   };
   /** A Google connector: one account of Gmail or Google Drive. */
   type Google = { product: 'gmail' | 'drive'; name: string; account?: string };
@@ -184,13 +189,13 @@
 
   /** Why its runs leave a granted tool out, for the owner. Grants are read or act, so only act can sit above a level. */
   const HELD_BACK: Record<HeldBack, string> = {
-    'above its level': `held back until you set its level to ${LEVEL_LABEL.act}`,
+    'above its level': `held back until you set its level to ${LEVEL_LABEL[GRANT_NEEDS.act]} or higher`,
     'still connecting': 'waiting on your steps',
     'sign-in ran out': 'sign in again'
   };
   const levels: GrantLevel[] = ['read', 'act'];
-  /** Never above the staffer's own level. */
-  const allowed = (l: GrantLevel) => levelAtMost(l, profile.permission);
+  /** Write works from Draft, where each change waits for the owner's yes. */
+  const allowed = (l: GrantLevel) => grantWorks(l, profile.permission);
   const isUrl = $derived(/^https:\/\/\S+$/.test(q.trim()));
 
   const GRANTABLE = OFFICE_TOOLS.filter((t) => !t.always);
@@ -810,7 +815,8 @@
               placeholder="Search tools, or paste a hosted server's https address"
               bind:value={q}
             />
-            <ul class="flex max-h-60 flex-col gap-1 overflow-y-auto">
+            <!-- No scroll box of its own: the list runs the panel's full height, and the panel scrolls. -->
+            <ul class="flex flex-col gap-1">
               {#if isUrl}
                 <li>
                   <button
@@ -929,13 +935,26 @@
                     ? 'bg-sea/25'
                     : 'bg-night/60'}"
                   disabled={!allowed(l)}
-                  title={allowed(l)
-                    ? ''
-                    : `${profile.name} needs the ${l} level first. Change it above.`}
                   onclick={() => (level = l)}>{GRANT_LABEL[l]}</button
                 >
               {/each}
             </div>
+            {#if !allowed('act')}
+              <!-- Said in sight, not in a tooltip, with the one click that allows it. -->
+              <p class="text-[11px] text-muted">
+                {GRANT_LABEL.act} needs {profile.name} at {LEVEL_LABEL[GRANT_NEEDS.act]} or higher.
+                <button
+                  class="text-sea underline underline-offset-2 hover:text-ink"
+                  onclick={() => setPermission(GRANT_NEEDS.act)}
+                  >Set {profile.name} to {LEVEL_LABEL[GRANT_NEEDS.act]}</button
+                >
+              </p>
+            {:else if level === 'act' && writesWait('act', profile.permission)}
+              <p class="text-[11px] text-muted">
+                At {LEVEL_LABEL.draft}, each change {profile.name} makes in {pick.name} waits on your
+                desk for your yes.
+              </p>
+            {/if}
             <div class="flex gap-2">
               <button
                 class="rounded-lg px-3 py-1.5 text-xs text-muted hover:text-ink"
@@ -972,7 +991,9 @@
                 <div class="text-xs text-muted">
                   {GRANT_LABEL[g.level]} · {g.reach}{g.heldBack
                     ? ` · ${HELD_BACK[g.heldBack]}`
-                    : ''}
+                    : writesWait(g.level, profile.permission)
+                      ? ' · each change waits for your yes'
+                      : ''}
                 </div>
               </div>
               <button class="text-xs text-muted hover:text-coral" onclick={() => revoke(g)}
@@ -989,11 +1010,12 @@
                   disabled={!allowed(l)}
                   title={allowed(l)
                     ? ''
-                    : `${profile.name} needs the ${l} level first. Change it above.`}
+                    : `${profile.name} needs Drafts for your yes or higher first. Change it above.`}
                   onclick={() => relevel(g, l)}>{GRANT_LABEL[l]}</button
                 >
               {/each}
             </div>
+            <ServiceActions id={g.connector} name={g.name} changes={g.changes} />
           </li>
         {/each}
       </ul>

@@ -63,7 +63,9 @@ import {
   handsOff,
   hasTool,
   jobsFor,
+  callResultText,
   levelAtMost,
+  writesWait,
   levelLine,
   lessonLine,
   lessonsOf,
@@ -139,6 +141,7 @@ import {
   accountsHome,
   OFFICE_ACCOUNT,
   toolHome,
+  type CallPlace,
   type ConnectorRow
 } from '@oddboro/ledger';
 import { workPath } from '@oddboro/ledger/work-paths';
@@ -147,6 +150,7 @@ import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
 import { closeGateway, openGateway } from './gateway.ts';
+import { awsReady } from './aws.ts';
 import { bearer } from './oauth.ts';
 import {
   apiKey,
@@ -466,9 +470,12 @@ const officeSettings = (): Record<string, string> =>
  * Every outside tool reaches the run through the office's gateway
  * (gateway.ts), which keeps the keys and passes on only the tools the grant
  * reaches; `gate` is the run's token, closed when the run ends. The tool's own
- * allow list names the same tools, so either one alone holds.
+ * allow list names the same tools, so either one alone holds. A write grant
+ * at Draft lists every tool, and the gateway holds each change for the
+ * owner's yes (`writesWait`), on the desk where `place` says; a run with no
+ * place (a lesson run) changes nothing.
  */
-async function access(who: StaffRow, ceiling: Level, ms: number) {
+async function access(who: StaffRow, ceiling: Level, ms: number, place?: CallPlace) {
   const servers: Record<string, Server> = {
     office: {
       command: process.execPath,
@@ -485,7 +492,7 @@ async function access(who: StaffRow, ceiling: Level, ms: number) {
   };
   const allowed = ['mcp__office'];
   const caps = capped(await capabilities(who), ceiling);
-  const reach: { connector: ConnectorRow; level: Level }[] = [];
+  const reach: { connector: ConnectorRow; level: Level; waits: boolean }[] = [];
   for (const a of caps.outside) {
     if (a.heldBack) continue;
     const c = a.connector;
@@ -494,11 +501,16 @@ async function access(who: StaffRow, ceiling: Level, ms: number) {
       a.heldBack = 'sign-in ran out';
       continue;
     }
-    reach.push({ connector: c, level: a.level });
+    // So does an AWS sign-in that ended, for AWS itself and any tool whose key is kept there.
+    if (!(await awsReady(c))) {
+      a.heldBack = 'sign-in ran out';
+      continue;
+    }
+    reach.push({ connector: c, level: a.level, waits: writesWait(a.level, caps.level) });
     if (a.level === 'act') allowed.push(`mcp__${c.id}`);
     else allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
   }
-  const { token: gate, servers: outside } = openGateway(reach, ms);
+  const { token: gate, servers: outside } = openGateway(reach, ms, place);
   Object.assign(servers, outside);
   return { servers, allowed, caps, gate };
 }
@@ -854,7 +866,24 @@ async function run(
   /** Claude Code's folder for this run: the account's, or ~/.claude for the owner's own login. */
   const claudeDir = toolDir || join(homedir(), '.claude');
   const ceiling = opts.draftOnly && levelAtMost('draft', who.permission) ? 'draft' : who.permission;
-  const { servers, allowed, caps, gate } = await access(who, ceiling, opts.timeoutMs);
+  // Every run gets a key: a thread it hands off on keeps it, and holds the
+  // Odd's pick-ups there until it ends (`runsGoing`), even when it is a
+  // follow-up on no thread. A call the gateway holds for the owner carries it too.
+  const key = randomUUID();
+  const { servers, allowed, caps, gate } = await access(
+    who,
+    ceiling,
+    opts.timeoutMs,
+    opts.lessonRun
+      ? undefined
+      : {
+          staffId: who.id,
+          run: key,
+          handOffId: opts.handOffId,
+          threadId: opts.threadId,
+          via: opts.via
+        }
+  );
   // Prompts name the owner as {owner}: each install's staff use its own name.
   const owner = await ownerName();
   const say = (s: string) => s.replaceAll('{owner}', owner);
@@ -903,10 +932,7 @@ async function run(
   const sections = sectionsOf(system, say(who.desk));
   const preface = prior ? catchUp(saved?.seen, sections, time) : '';
   // In a chat, the office tools get the owner's own words, so a change the owner asks for
-  // there is recorded as their decision without an ask. Every run gets a key: a
-  // thread it hands off on keeps it, and holds the Odd's pick-ups there until it
-  // ends (`runsGoing`), even when it is a follow-up on no thread.
-  const key = randomUUID();
+  // there is recorded as their decision without an ask.
   Object.assign(
     servers.office.env as Record<string, string>,
     officeEnv({
@@ -1455,6 +1481,12 @@ function followUpBrief(
           ? [
               `- The folder you asked for: ${shownFolder(a.folder.path)} (${FOLDER_SAID[a.folder.level]})`
             ]
+          : []),
+        ...(a.call
+          ? [
+              `- The call: ${a.call.tool} on ${a.call.connector}, with ${JSON.stringify(a.call.arguments)}`,
+              ...(a.call.result ? [`- What it returned: ${callResultText(a.call.result)}`] : [])
+            ]
           : [])
       ]
     : [];
@@ -1490,6 +1522,16 @@ function followUpBrief(
       '1. Check the tool answers: one small read.',
       '2. If work was waiting on this access, do it now.',
       '3. If nothing was waiting, stop there.'
+    ];
+  if (f.kind === 'carry_out' && a?.call)
+    return [
+      `{owner} said yes to your call #${a.id}, and the office made it for you. Do not make it again.`,
+      '',
+      ...askLines,
+      '',
+      '1. Carry on with the work that waited on it, using what it returned.',
+      '2. If it failed, say so plainly and what you would try instead. Do not call it again without a reason {owner} would want.',
+      '3. If nothing more waited on it, stop there.'
     ];
   if (f.kind === 'carry_out')
     return [

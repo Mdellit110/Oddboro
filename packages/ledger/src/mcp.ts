@@ -61,6 +61,7 @@ import {
 import { AGENT_NAMES } from './agents.ts';
 import {
   FOLDER_SAID,
+  grantWorks,
   levelAtMost,
   LEVELS,
   NOT_OWN_TOOLS,
@@ -98,7 +99,7 @@ import {
 } from './filter-words.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
-import { ensureConnector, searchRegistry } from './registry.ts';
+import { BUILT_IN, ensureConnector, searchRegistry } from './registry.ts';
 import type { GoalPlanItem, HireProposal } from './schema.ts';
 import {
   clockTime,
@@ -867,9 +868,15 @@ if (has('find_connectors'))
     },
     async ({ need }) => {
       const words = need.toLowerCase().split(/\W+/).filter(Boolean);
-      const own = (await catalog()).filter((c) =>
-        words.some((w) => `${c.name} ${c.description}`.toLowerCase().includes(w))
-      );
+      const added = await catalog();
+      // The tools the office connects itself count as its own before anyone asks for one.
+      const own = [
+        ...added,
+        ...BUILT_IN.filter((b) => !added.some((c) => c.id === b.id)).map((b) => ({
+          ...b,
+          readyAt: null
+        }))
+      ].filter((c) => words.some((w) => `${c.name} ${c.description}`.toLowerCase().includes(w)));
       let found: Awaited<ReturnType<typeof searchRegistry>> = [];
       let note = '';
       try {
@@ -901,7 +908,7 @@ if (has('ask_for_access'))
   tool(
     'ask_for_access',
     {
-      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). For a second Google account of Gmail or Google Drive, pass that connector with another_account. If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
+      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs Draft or Act; at Draft each change waits for ${OWNER}'s yes). For a second Google account of Gmail or Google Drive, pass that connector with another_account. If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
       inputSchema: {
         connector: z.string(),
         level: z
@@ -928,7 +935,7 @@ if (has('ask_for_access'))
       const on = await placed({});
       if ('problem' in on) return refused(on.problem);
       const level = asked === 'write' ? 'act' : 'read';
-      if (!levelAtMost(level, me.permission))
+      if (!grantWorks(level, me.permission))
         return text(askAboveLevel(me.permission, asked, OWNER));
       const found = await ensureConnector(
         wanted,

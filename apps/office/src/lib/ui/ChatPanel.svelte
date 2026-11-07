@@ -12,6 +12,7 @@
   import type { StaffProfile } from '../staff/roster.ts';
   import { runningFor, toolWords, type Work } from '../staff/work.ts';
   import { counting, dayBreaks, fullDate, stamp, took } from './chat-lines.ts';
+  import { serviceNames } from './service-names.svelte.ts';
 
   type Props = {
     profile: StaffProfile;
@@ -350,7 +351,7 @@
           if (ev.type === 'delta') {
             reply.text += ev.text;
             status = '';
-          } else if (ev.type === 'tool') status = toolWords(ev.name);
+          } else if (ev.type === 'tool') status = toolWords(ev.name, serviceNames.byId);
           else if (ev.type === 'done') {
             reply.text = ev.text;
             reply.pending = false;
@@ -772,7 +773,9 @@
             >· {w.queued ? 'waiting for a free slot' : runningFor(w.since, clock)}</span
           >
           {#if !w.queued}
-            <span class="min-w-0 truncate">· {w.doing ? toolWords(w.doing) : 'Thinking'}</span>
+            <span class="min-w-0 truncate"
+              >· {w.doing ? toolWords(w.doing, serviceNames.byId) : 'Thinking'}</span
+            >
           {/if}
         </span>
       {/each}

@@ -3,6 +3,7 @@
   import Markdown from './Markdown.svelte';
   import { call } from './api.ts';
   import { runningFor, toolWords, type Work } from '../staff/work.ts';
+  import { serviceNames } from './service-names.svelte.ts';
   import type { StaffProfile } from '../staff/roster.ts';
 
   // What an Odd is working on right now, on its info page: each job, approved
@@ -61,7 +62,7 @@
       {:else}
         <p class="mt-1 flex items-center gap-1.5 text-xs text-muted">
           <span class="busy"></span>
-          {w.doing ? toolWords(w.doing) : 'Thinking'}
+          {w.doing ? toolWords(w.doing, serviceNames.byId) : 'Thinking'}
           <span class="text-faint">· {w.steps} {w.steps === 1 ? 'step' : 'steps'}</span>
         </p>
       {/if}

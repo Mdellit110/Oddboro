@@ -23,6 +23,7 @@ export * from './read-only.ts';
 export {
   searchRegistry,
   ensureConnector,
+  BUILT_IN,
   HEADER_NAME,
   type Candidate,
   type WayIn

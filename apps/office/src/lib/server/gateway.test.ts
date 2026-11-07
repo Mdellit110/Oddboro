@@ -15,7 +15,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { chatOf, folder, L, odd, secrets } from './office-under-test.ts';
 
-const { closeGateway, gateway, openGateway } = await import('./gateway.ts');
+const { closeGateway, gateway, makeCall, openGateway } = await import('./gateway.ts');
 
 const KEY = 'the-notes-key-for-tests-01';
 // The stand-in tool server, on the SDK the office itself uses. `search` says
@@ -165,4 +165,68 @@ test("a run gets the office's gateway for its outside tools, and never their key
     'notes'
   );
   assert.equal(after.status, 401);
+});
+
+test("at Draft, Read and write passes reads on and holds each change for the owner's yes", async () => {
+  await L.pg`insert into staff ${L.pg({ ...odd('dora', 'Dora'), permission: 'draft' })}`;
+  const place = { staffId: 'dora', run: 'run-dora-1' };
+  const { token } = openGateway(
+    [{ connector: await notes(), level: 'act', waits: true }],
+    60_000,
+    place
+  );
+  const client = await connect(token);
+  try {
+    // Every tool is listed, so the Odd can ask for a change at all.
+    assert.equal((await client.listTools()).tools.length, 4);
+    assert.deepEqual(text(await client.callTool({ name: 'search' })), ['found, key given']);
+    const held = (await client.callTool({
+      name: 'capture',
+      arguments: { text: 'a thought' }
+    })) as CallToolResult;
+    assert.notEqual(held.isError, true);
+    assert.match(
+      text(held)[0],
+      /^Held for .*'s yes as ask \d+\. Nothing has changed in Notes yet\./
+    );
+    // The same call again finds the one on the desk, and raises no second.
+    const again = (await client.callTool({
+      name: 'capture',
+      arguments: { text: 'a thought' }
+    })) as CallToolResult;
+    assert.match(text(again)[0], /already on .*'s desk/);
+  } finally {
+    await client.close();
+    await closeGateway(token);
+  }
+  const calls =
+    await L.pg`select id, title, call from asks where staff_id = 'dora' and kind = 'call'`;
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].title, 'Use capture in Notes');
+  assert.deepEqual(calls[0].call, {
+    connector: 'notes',
+    tool: 'capture',
+    arguments: { text: 'a thought' }
+  });
+  // A plain Approve never makes the call: only the office's own, from the desk.
+  await assert.rejects(L.approveAsk(calls[0].id, null, {}), /Approve the call from its card/);
+  // On the owner's yes the office makes that exact call, and the Odd carries on with the result.
+  const result = await makeCall(calls[0].call);
+  assert.deepEqual({ ok: result.ok, text: result.text }, { ok: true, text: 'captured' });
+  assert.equal(await L.approveCall(calls[0].id, { ...calls[0].call, result }), true);
+  const [carry] = await L.pg`select kind from follow_ups where ask_id = ${calls[0].id}`;
+  assert.equal(carry.kind, 'carry_out');
+});
+
+test('a run with nowhere to put a change, such as a lesson run, cannot ask for one', async () => {
+  const { token } = openGateway([{ connector: await notes(), level: 'act', waits: true }], 60_000);
+  const client = await connect(token);
+  try {
+    const r = (await client.callTool({ name: 'wipe' })) as CallToolResult;
+    assert.equal(r.isError, true);
+    assert.match(text(r)[0], /only reads/);
+  } finally {
+    await client.close();
+    await closeGateway(token);
+  }
 });

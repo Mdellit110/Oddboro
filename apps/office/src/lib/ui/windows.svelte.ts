@@ -17,6 +17,7 @@ export type Win =
   | { id: 'goals'; kind: 'goals' }
   | { id: 'lessons'; kind: 'lessons'; filter: LessonsFilter }
   | { id: 'ledger'; kind: 'ledger' }
+  | { id: 'services'; kind: 'services' }
   | { id: 'office'; kind: 'office' }
   | { id: 'setup'; kind: 'setup' }
   | { id: string; kind: 'hire'; from?: HireFrom }
@@ -35,6 +36,12 @@ export const wins = $state<{
   /** A close waiting on the owner's word, because the window has unsaved edits or is drawing. */
   confirm?: { id: string; go: () => void };
 }>({ list: [], shown: false, titles: {}, dirty: {}, busy: {} });
+
+/**
+ * An item a window wants opened on the desk, such as the task a service's
+ * Change put there. The page takes it, reloads the desk and opens it.
+ */
+export const deskRequest = $state<{ focus?: string }>({});
 
 /** The window each one was opened from, so closing it goes back there. */
 const opener: Record<string, string | undefined> = {};

@@ -7,6 +7,7 @@ import {
   capabilities,
   ensureConnector,
   grantAccess,
+  isAws,
   reachOf,
   revoke,
   setGrantLevel,
@@ -25,7 +26,9 @@ export const GET: RequestHandler = async ({ params }) => {
       name: a.connector.name,
       level: a.level,
       reach: reachOf(a),
-      heldBack: a.heldBack ?? null
+      heldBack: a.heldBack ?? null,
+      // An AWS tool once connected can move to another role or Region.
+      changes: isAws(a.connector.id) && !!a.connector.readyAt
     }))
   );
 };
