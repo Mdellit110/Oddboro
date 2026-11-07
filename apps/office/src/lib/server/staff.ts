@@ -147,6 +147,7 @@ import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
 import { closeGateway, openGateway } from './gateway.ts';
+import { awsReady } from './aws.ts';
 import { bearer } from './oauth.ts';
 import {
   apiKey,
@@ -491,6 +492,11 @@ async function access(who: StaffRow, ceiling: Level, ms: number) {
     const c = a.connector;
     // A sign-in that ran out shows only now, as the office asks for a fresh token.
     if (c.config.oauth && !(await bearer(c.id).catch(() => undefined))) {
+      a.heldBack = 'sign-in ran out';
+      continue;
+    }
+    // So does an AWS sign-in that ended, for AWS itself and any tool whose key is kept there.
+    if (!(await awsReady(c))) {
       a.heldBack = 'sign-in ran out';
       continue;
     }

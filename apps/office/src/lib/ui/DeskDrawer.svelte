@@ -3,11 +3,14 @@
   import Pixel from './Pixel.svelte';
   import Markdown from './Markdown.svelte';
   import Attachments from './Attachments.svelte';
+  import AwsSignIn from './AwsSignIn.svelte';
+  import AwsSecretPick from './AwsSecretPick.svelte';
   import SelectToChat from './SelectToChat.svelte';
   import ReplyReview from './ReplyReview.svelte';
   import FilterReview from './FilterReview.svelte';
   import FolderAsk from './FolderAsk.svelte';
   import { call } from './api.ts';
+  import { AWS_GUIDES, siteLink } from '../site.ts';
   import { ago, when } from './format.ts';
   import { openFile, wins } from './windows.svelte.ts';
   import { chatAbout, replyAbout, showInChat } from './chat-about.svelte.ts';
@@ -667,12 +670,26 @@
                       onchange={() => step(t, index, { op: s.done ? 'untick' : 'tick' })}
                     />
                   {/if}
-                  <Markdown
-                    text={stepText(s.text)}
-                    staff={t.staffId ?? undefined}
-                    copyCode
-                    class="min-w-0 flex-1 {s.done ? 'line-through' : ''}"
-                  />
+                  <div class="min-w-0 flex-1">
+                    <Markdown
+                      text={stepText(s.text)}
+                      staff={t.staffId ?? undefined}
+                      copyCode
+                      class={s.done ? 'line-through' : ''}
+                    />
+                    {#if s.action?.kind === 'aws' && !s.done && AWS_GUIDES[s.action.connector]}
+                      {@const guide = AWS_GUIDES[s.action.connector]}
+                      <p class="mt-1 leading-relaxed">
+                        New to this?
+                        <a
+                          class="text-sea underline hover:text-ink"
+                          href={siteLink(guide.path)}
+                          target="_blank"
+                          rel="noopener">{guide.label}, step by step</a
+                        >: the role, and where to find each of these.
+                      </p>
+                    {/if}
+                  </div>
                   {#if s.done && !tickable(s)}
                     <button
                       class="ms-auto shrink-0 text-xs text-muted underline hover:text-ink disabled:opacity-40"
@@ -687,6 +704,12 @@
                     disabled={busy}
                     onclick={() => hostedSignIn(t, index)}>Sign in</button
                   >
+                {:else if s.action?.kind === 'aws'}
+                  {#if s.done}
+                    {#if s.answer}<p class="mt-1.5 text-xs text-muted">{s.answer}</p>{/if}
+                  {:else}
+                    <AwsSignIn taskId={t.id} {index} connector={s.action.connector} />
+                  {/if}
                 {:else if s.action?.kind === 'secret' && !s.done}
                   <div class="mt-2 flex gap-2">
                     <input
@@ -701,6 +724,9 @@
                       onclick={() => saveSecret(t, index)}>Save</button
                     >
                   </div>
+                  <AwsSecretPick taskId={t.id} {index} />
+                {:else if s.action?.kind === 'secret' && s.answer}
+                  <p class="mt-1.5 text-xs text-muted">{s.answer}</p>
                 {:else if s.action?.kind === 'tools' && !s.done}
                   {#if !toolList[index]}
                     <button
