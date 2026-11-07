@@ -103,7 +103,6 @@
   let toolList = $state<Record<number, { name: string; description: string; readOnly: boolean }[]>>(
     {}
   );
-  let readPick = $state<Record<string, boolean>>({});
   /** The parts of a goal plan the owner unticked. Every part starts ticked. */
   let skip = $state<Record<number, boolean>>({});
 
@@ -183,7 +182,6 @@
         { op: 'tools', index }
       );
       toolList[index] = r.tools;
-      for (const tool of r.tools) readPick[tool.name] = tool.readOnly;
     });
   }
 
@@ -601,35 +599,27 @@
                   {:else}
                     {@const list = toolList[index]}
                     <p class="mt-2 text-xs text-muted">
-                      Ticked tools are the ones the Odd may use. Only tick tools that read.
+                      Read only reaches the tools marked reads only: the ones the service says only
+                      read, less any whose name says it changes something. Read and write reaches
+                      every tool.
                     </p>
                     <ul class="mt-1.5 flex max-h-48 flex-col gap-1 overflow-y-auto">
                       {#each list as tool (tool.name)}
-                        <li>
-                          <label class="flex items-start gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              class="mt-0.5"
-                              bind:checked={readPick[tool.name]}
-                            />
-                            <span>
-                              <code class="text-sea">{tool.name}</code>
-                              {#if tool.readOnly}<span class="text-moss"> reads only</span>{/if}
-                              <span class="block text-faint">{tool.description.slice(0, 120)}</span>
-                            </span>
-                          </label>
+                        <li class="text-xs">
+                          <code class="text-sea">{tool.name}</code>
+                          {#if tool.readOnly}<span class="text-moss"> reads only</span>{:else}<span
+                              class="text-faint"
+                            >
+                              Read and write only</span
+                            >{/if}
+                          <span class="block text-faint">{tool.description.slice(0, 120)}</span>
                         </li>
                       {/each}
                     </ul>
                     <button
                       class="mt-2 rounded-lg bg-sea px-3 py-1.5 text-xs font-medium text-night disabled:opacity-40"
                       disabled={busy}
-                      onclick={() =>
-                        step(t, index, {
-                          op: 'confirm-tools',
-                          tools: list.map((x) => x.name),
-                          readTools: list.filter((x) => readPick[x.name]).map((x) => x.name)
-                        })}>Confirm</button
+                      onclick={() => step(t, index, { op: 'confirm-tools' })}>Confirm</button
                     >
                   {/if}
                 {:else if s.action?.kind === 'choice'}

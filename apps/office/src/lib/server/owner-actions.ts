@@ -39,6 +39,12 @@ export const OWNER_ACTIONS = {
     notAnAction:
       "Opens the system's folder picker; a picked folder is given through the staff PATCH."
   },
+  // An Odd's run reaching its outside tools, with the token the office gave
+  // that run (gateway.ts). From the owner's page it answers 401 and changes
+  // nothing; what a run's call there changes, the office records itself
+  // (`narrowReadTools`).
+  'POST /api/gateway/[connector]': { notAnAction: "Only an Odd's run reaches it." },
+  'DELETE /api/gateway/[connector]': { notAnAction: "Only an Odd's run reaches it." },
   'POST /api/goals': { records: 'decision' },
   'PUT /api/goals/[id]': { records: 'decision' },
   'POST /api/goals/[id]/staff': { records: 'decision' },

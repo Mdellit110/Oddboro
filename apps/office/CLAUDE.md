@@ -601,8 +601,19 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    among them). It gets the office's own MCP server (`packages/ledger/src/mcp.ts`) with
    only the office tools the owner ticked under "In the office" on the Settings tab,
    and whatever outside access the owner granted: servers at read (the tools
-   the owner ticked as read-only) or write (every tool, only while the Odd
-   holds Act). Which outside tools a run gets comes from `capabilities()` in
+   the server marks as only reading, less any whose name says it changes
+   something: `readsOnly` in `packages/ledger/src/read-only.ts`) or write
+   (every tool, only while the Odd holds Act). Every outside tool reaches the
+   run through the office's gateway (`src/lib/server/gateway.ts`, at
+   `/api/gateway/<connector>`): the run gets the office's address and a
+   token that lives as long as the run, never the server's address, key or
+   sign-in. The gateway connects to the real server (`upstream` in
+   `access.ts`, which starts a command's server with only the names a run
+   may have, `outsideToolEnv` in `run-env-allow.ts`, and its own secrets),
+   lists only the tools the grant reaches, refuses any other
+   call, and takes a tool that no longer passes `readsOnly` off the
+   connector's stored list with a Ledger line (`narrowReadTools`). The run's
+   tool still gets its own per-tool allow list, so either one alone holds. Which outside tools a run gets comes from `capabilities()` in
    `packages/ledger/src/capabilities.ts`, which also says why a granted one is
    held back (above the Odd's level, still connecting). The prompt's "What you
    can do" section, `my_access`, `office_report` and the owner's Settings tab all
@@ -618,8 +629,8 @@ the app ships them whole (`apps/desktop/scripts/stage.ts`). In the app
    says Draft and why, with a write grant read only, as the prompt does
    (`capped`, `accessInRun`). Hosted servers sign in with
    OAuth (`src/lib/server/oauth.ts`): the task's Sign in opens the service, it
-   returns to `/connect/callback`, the tokens go in the keychain, and each run
-   gets a fresh access token as a header. When a tool an Odd holds stops working, it calls
+   returns to `/connect/callback`, the tokens go in the keychain, and each run's
+   gateway connects with a fresh access token as a header. When a tool an Odd holds stops working, it calls
    `reconnect_access` (every Odd has it): the office puts its own connect
    steps on the desk again (`reconnectTask`), after the Odd's steps for
    getting a new key, with no ask, one open per tool. Odds never write
@@ -1069,6 +1080,15 @@ sends every action as JSON, body or not.
   rests at those levels.
 - The camera never shows past the grounds' edge: the farthest zoom out still
   fills the screen, and panning stops at the edge.
+- The page loads the floor's PixiJS code with `import()` as it mounts
+  (`src/lib/floor/index.ts`), and the Office designer and an Odd's usage
+  charts load when opened, so the first page carries none of PixiJS or
+  layerchart. Import a floor module's values only through `index.ts`; a
+  type import is free.
+- Third-party packages go under `devDependencies` in `package.json`, even
+  the ones the office runs: the build bundles those, and the app ships only
+  what the workspace packages load (`apps/desktop/scripts/stage.ts`).
+  `dependencies` holds the workspace packages alone.
 - The floor draws only when something on screen changed. Pixi's own
   every-frame draw is off. Anything that changes the picture outside the
   camera calls `floor.invalidate()`. Name tags and room signs move in
@@ -1106,8 +1126,9 @@ sends every action as JSON, body or not.
   (`src/lib/ui/Welcome.svelte`) after that.
 - Never show demo numbers as real ones. The card's back shows only measured
   usage.
-- A tool connects at read or write: read gets the tools the owner ticked as
-  read-only, write gets every tool, and only while the Odd holds Act.
+- A tool connects at read or write: read gets the tools its server marks as
+  only reading (`readsOnly`), write gets every tool, and only while the Odd
+  holds Act.
 - A headless Odd cannot reuse Claude Code's own MCP sign-ins (it reports
   `needs-auth`). That is why the office runs OAuth itself.
 - Charts use LayerChart. Its tooltip reads `--color-surface-*`; set them from

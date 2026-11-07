@@ -195,8 +195,9 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   hardened runtime. No App Sandbox: the server spawns `claude` and reads
   `~/.claude`.
 - `scripts/stage.ts`. Builds the office and the sprites, then lays out
-  `stage/`: the office build, production `node_modules` at the versions
-  installed in the repo, and the ledger, sprites and world as plain
+  `stage/`: the office build, which bundles every third-party package the
+  office itself runs, the production `node_modules` that the ledger, sprites
+  and world load, at the versions installed in the repo, and those three as plain
   JavaScript (types stripped, `.ts` imports rewritten) in
   `node_modules/@oddboro/`, with their files beside them. Packages' test
   folders (`__screenshots__`, `__tests__`) stay out, and a staged path

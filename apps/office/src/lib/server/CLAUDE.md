@@ -12,7 +12,8 @@ then names every other place.
 - To let a run have a variable from the office's own environment, add its
   name to `RUN_ENV_ALLOW` in `run-env-allow.ts`, for every system, one system
   or one tool, with a comment saying which tool needs it and why. A run gets
-  nothing else of the office's environment (`runEnv`).
+  nothing else of the office's environment (`runEnv`), and nor does an
+  outside tool's server the gateway starts for it (`outsideToolEnv`).
 - A variable the office's tool server reads as it starts goes in
   `TOOL_SERVER_ENV` in `run-env-allow.ts`. The tool server's entry, which
   every tool's launch reads, sets it by name (`toolServerEnv`), so the server

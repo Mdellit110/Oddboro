@@ -26,6 +26,24 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.0.7',
+    date: '2026-11-06',
+    title: 'Updating on Windows no longer starts over.',
+    summary:
+      'On Windows, the update to 0.0.6 installed 0.0.5 again and started over, with no way to stop it. We shipped the wrong installer. Windows now updates straight to 0.0.7.',
+    notes: [
+      'Each try left a copy of the installer behind. To get the space back, delete the Oddboro-0.0.6-updater folders in %TEMP%.',
+      'When you give an Odd a service that is already connected, Oddboro now says the Odd can use it. It no longer points you to a task that is not there.'
+    ],
+    builds: ['mac', 'windows-x64', 'windows-arm64', 'linux-x86_64', 'linux-aarch64'],
+    art: {
+      name: 'loop',
+      alt: 'An Odd walks along the office hallway, off its end and back in at its start, three times, saying "UPDATING!", then "AGAIN?", then "AND AGAIN?". The fourth time, it stops halfway, turns to face you and says "OUT OF THE LOOP!"',
+      shareAlt:
+        'An Odd stands in a pixel-art office hallway, facing out, and says "OUT OF THE LOOP!"'
+    }
+  },
+  {
     version: '0.0.6',
     date: '2026-11-05',
     title: 'Odds pass the work along.',

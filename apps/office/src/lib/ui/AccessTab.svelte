@@ -102,12 +102,14 @@
     if (!pick) return;
     problem = refused = '';
     try {
-      await call(`/api/staff/${profile.id}/access`, {
+      const r = await call<{ task: boolean }>(`/api/staff/${profile.id}/access`, {
         connector: pick.id,
         level,
         way: pick.byAddress ? { keyHeader: useKey ? keyHeader.trim() : undefined } : undefined
       });
-      done = `A task with the steps to connect ${pick.name} is on your desk.`;
+      done = r.task
+        ? `A task with the steps to connect ${pick.name} is on your desk.`
+        : `${profile.name} can use ${pick.name} now.`;
       adding = false;
       pick = undefined;
       q = '';

@@ -227,7 +227,7 @@ export function runsOnLine(agent: Agent): string {
   return `Your runs go through ${AGENT_NAMES[agent]}.`;
 }
 
-/** How many tools a grant reaches, in words: every tool at write, else the read-only ones. */
+/** How many tools a grant reaches, in words: every tool at write, else the Read only ones (`readsOnly`). */
 export function reachOf(a: Access): string {
   const n = a.connector.readTools.length;
   return a.level === 'act' ? 'every tool' : `${n} ${n === 1 ? 'tool' : 'tools'}`;

@@ -15,8 +15,9 @@
 // loads no project settings, skills or plugins, and is denied anything not
 // pre-approved. It always gets the office server (asks,
 // tasks, the ledger), plus whatever access the owner granted: servers at read
-// level (the tools the owner ticked as read-only) or at write level (every
-// tool). Hosted servers get a fresh OAuth token per run.
+// level (the tools the server marks as only reading, `readsOnly`) or at write
+// level (every tool), each through the office's gateway (gateway.ts), which
+// keeps the keys and sign-ins. Hosted servers get a fresh OAuth token per run.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
@@ -117,20 +118,20 @@ import {
   chatSession,
   home,
   rulePath,
-  toolCommand,
   effortFor,
   MANAGER_ROLE,
   modelFor,
   accountOf,
   accountsHome,
   OFFICE_ACCOUNT,
-  toolHome
+  toolHome,
+  type ConnectorRow
 } from '@oddboro/ledger';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
 import type { ChatEntry, ChatEvent, ChatRef } from '../staff/chat.ts';
-import { getSecret, headerSecret } from './keychain.ts';
+import { closeGateway, openGateway } from './gateway.ts';
 import { bearer } from './oauth.ts';
 import { apiKey, claudeAccountOf, claudeRunHome, claudeSettings, modelArgs } from './claude.ts';
 import { notifyMac } from './notify.ts';
@@ -413,8 +414,12 @@ export async function runHomeOf(who: StaffRow): Promise<string> {
  * `capabilities` says it holds. A run from a hand-off works at Draft at most
  * (`ceiling`), so a colleague's words never stand in for the owner's yes. Its
  * caps come down to the ceiling too (`capped`), so its prompt lists what it loads.
+ * Every outside tool reaches the run through the office's gateway
+ * (gateway.ts), which keeps the keys and passes on only the tools the grant
+ * reaches; `gate` is the run's token, closed when the run ends. The tool's own
+ * allow list names the same tools, so either one alone holds.
  */
-async function access(who: StaffRow, ceiling: Level) {
+async function access(who: StaffRow, ceiling: Level, ms: number) {
   const office: McpServer = {
     type: 'stdio',
     command: process.execPath,
@@ -426,44 +431,22 @@ async function access(who: StaffRow, ceiling: Level) {
   const servers: Record<string, McpServer> = { office };
   const allowed = ['mcp__office'];
   const caps = capped(await capabilities(who), ceiling);
+  const reach: { connector: ConnectorRow; level: Level }[] = [];
   for (const a of caps.outside) {
     if (a.heldBack) continue;
     const c = a.connector;
-    const env = Object.fromEntries(
-      (c.config.secrets ?? []).map((n) => [n, getSecret(c.id, n) ?? ''])
-    );
-    const headers: Record<string, string> = Object.fromEntries(
-      (c.config.headers ?? []).map((n) => [n, headerSecret(c.id, n)])
-    );
-    if (c.config.oauth) {
-      const token = await bearer(c.id).catch(() => undefined);
-      if (!token) {
-        a.heldBack = 'sign-in ran out';
-        continue;
-      }
-      headers.Authorization = `Bearer ${token}`;
+    // A sign-in that ran out shows only now, as the office asks for a fresh token.
+    if (c.config.oauth && !(await bearer(c.id).catch(() => undefined))) {
+      a.heldBack = 'sign-in ran out';
+      continue;
     }
-    switch (c.kind) {
-      case 'http':
-        // A hosted connector is saved with its address (registry.ts).
-        servers[c.id] = { type: 'http', url: c.config.url!, headers };
-        break;
-      case 'stdio':
-        servers[c.id] = {
-          type: 'stdio',
-          ...toolCommand(c.config.command!, c.config.args ?? []),
-          env
-        };
-        break;
-      default: {
-        const missed: never = c.kind;
-        throw new Error(`No way to start a ${String(missed)} connector`);
-      }
-    }
+    reach.push({ connector: c, level: a.level });
     if (a.level === 'act') allowed.push(`mcp__${c.id}`);
     else allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
   }
-  return { servers, office, allowed, caps };
+  const { token: gate, servers: outside } = openGateway(reach, ms);
+  Object.assign(servers, outside);
+  return { servers, office, allowed, caps, gate };
 }
 
 /**
@@ -818,7 +801,7 @@ async function run(
   /** Claude Code's folder for this run: the account's, or ~/.claude for the owner's own login. */
   const claudeDir = toolDir || join(homedir(), '.claude');
   const ceiling = opts.draftOnly && levelAtMost('draft', who.permission) ? 'draft' : who.permission;
-  const { servers, office, allowed, caps } = await access(who, ceiling);
+  const { servers, office, allowed, caps, gate } = await access(who, ceiling, opts.timeoutMs);
   // Prompts name the owner as {owner}: each install's staff use its own name.
   const owner = await ownerName();
   const say = (s: string) => s.replaceAll('{owner}', owner);
@@ -1088,6 +1071,7 @@ async function run(
       clearTimeout(timer);
       runsGoing.delete(key);
       launch.done();
+      void closeGateway(gate);
       bus.emit(RUN_ENDED);
       // Saved however the run ended: once the tool names a session, it holds the message.
       const saved = !!(session && opts.sessionFile);

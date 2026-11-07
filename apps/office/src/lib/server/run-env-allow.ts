@@ -100,20 +100,35 @@ function listed(name: string, names: Names, platform: NodeJS.Platform): boolean 
  * (`cleanEnv` says why). Each launch then sets its tool's own variables.
  */
 export function runEnv(agent: Agent): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = allowedEnv(RUN_ENV_ALLOW.tool[agent]);
+  env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';
+  env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
+  return env;
+}
+
+/**
+ * The environment the office starts an outside tool's own server in for the
+ * gateway (`upstream` in access.ts): what `RUN_ENV_ALLOW` lists for every
+ * system and this one, and none of any AI tool's own names. Each run's tool
+ * started that server before the gateway, so it got no more than a run.
+ */
+export const outsideToolEnv = (): Record<string, string> => allowedEnv([]);
+
+/** The office's variables `RUN_ENV_ALLOW` lists for every system and this one, and `extra`. */
+function allowedEnv(extra: Names): Record<string, string> {
   const platform = currentPlatform();
   const allowed = [
     ...RUN_ENV_ALLOW.all,
     ...(platform === 'darwin' || platform === 'linux' || platform === 'win32'
       ? RUN_ENV_ALLOW[platform]
       : []),
-    ...RUN_ENV_ALLOW.tool[agent]
+    ...extra
   ];
-  const env: NodeJS.ProcessEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([k]) => listed(k, allowed, platform))
+  return Object.fromEntries(
+    Object.entries(process.env).flatMap(([k, v]) =>
+      v !== undefined && listed(k, allowed, platform) ? [[k, v]] : []
+    )
   );
-  env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';
-  env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
-  return env;
 }
 
 /**

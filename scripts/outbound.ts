@@ -20,8 +20,9 @@ export const OUTBOUND: readonly Outbound[] = [
     file: 'apps/office/src/lib/server/access.ts',
     calls: 1,
     to: 'A hosted connector, at the address it was saved with.',
-    sends: "The connector's own secrets in its headers, and a request for its tools.",
-    yes: 'The owner adding that connector.'
+    sends:
+      "The connector's own secrets in its headers, a request for its tools, and each call an Odd's run makes to it through the office's gateway (gateway.ts), with that call's arguments.",
+    yes: 'The owner adding that connector, and granting the Odd it at Read only or Read and write.'
   },
   {
     file: 'apps/office/src/lib/server/address.ts',

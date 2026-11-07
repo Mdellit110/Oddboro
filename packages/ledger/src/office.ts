@@ -99,7 +99,7 @@ import {
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
 import { currentPlatform } from './platform.ts';
-import { levelAtMost, type Level } from './access-words.ts';
+import { GRANT_LABEL, LEVEL_LABEL, levelAtMost, type Level } from './access-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { HIRE_DEFAULTS } from './grantable.ts';
@@ -1341,12 +1341,15 @@ async function titleOf(f: FollowUpRow): Promise<string | undefined> {
 
 // Access
 
-/** Grant access, then give the owner whatever steps connecting it still needs. */
+/**
+ * Grant access, then give the owner whatever steps connecting it still needs.
+ * Says whether that put a task on the desk: a tool already connected needs none.
+ */
 export async function grantAccess(
   staffId: string,
   req: AccessRequest,
   askId?: number
-): Promise<void> {
+): Promise<{ task: boolean }> {
   const who = await staffer(staffId);
   const conn = await connector(req.connector);
   if (!who || !conn) throw new Error('No such Odd or connector');
@@ -1369,7 +1372,7 @@ export async function grantAccess(
       why: `${who.name} needs ${conn.name} at ${req.level} level.`,
       steps
     });
-    return;
+    return { task: true };
   }
   // Already connected: the staffer can use it now, and nothing waits on the owner.
   await record({
@@ -1380,6 +1383,7 @@ export async function grantAccess(
     askId
   });
   if (askId) await followUp(staffId, 'carry_out', { askId, note: null });
+  return { task: false };
 }
 
 /**
@@ -1545,6 +1549,26 @@ export async function connectorReady(
     .update(connectors)
     .set({ tools, readTools, readyAt: new Date() })
     .where(eq(connectors.id, id));
+}
+
+/**
+ * Take tools out of what a Read only grant to a connector reaches, when they
+ * no longer pass `readsOnly`: a connector the owner connected before the rule
+ * held, or a server that changed its marks. Records which ones went and why,
+ * so the owner can see it in the Ledger.
+ */
+export async function narrowReadTools(id: string, gone: string[]): Promise<void> {
+  const c = await connector(id);
+  if (!c || !gone.length) return;
+  const keep = c.readTools.filter((t) => !gone.includes(t));
+  if (keep.length === c.readTools.length) return;
+  await db.update(connectors).set({ readTools: keep }).where(eq(connectors.id, id));
+  await record({
+    kind: 'access',
+    actor: 'office',
+    title: `${GRANT_LABEL.read} for ${c.name} no longer reaches ${gone.join(', ')}`,
+    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. ${GRANT_LABEL.act} reaches ${gone.length === 1 ? 'it' : 'them'}, at ${LEVEL_LABEL.act}.`
+  });
 }
 
 export async function grantsFor(
