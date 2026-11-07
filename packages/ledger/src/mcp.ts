@@ -10,12 +10,14 @@ import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
+  AlreadyOnDesk,
   ask,
   asksFor,
   cancelPoke,
   catalog,
   editOwnJob,
   giveTask,
+  grantsFor,
   reconnectTask,
   jobsFor,
   officeActivity,
@@ -74,6 +76,14 @@ import {
   workFile
 } from './threads.ts';
 import { THREADS_DIR, workName, workPath } from './work-paths.ts';
+import { withFooter } from './mail-footer.ts';
+import {
+  doesSomething,
+  filterWords,
+  matchesSomething,
+  type FilterAction,
+  type FilterCriteria
+} from './filter-words.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
 import { BUILT_IN, ensureConnector, searchRegistry } from './registry.ts';
@@ -143,6 +153,12 @@ const RUN_KEY = process.env.RUN_KEY || undefined;
  * lesson (`servesNoThread`): it hands nothing on, so it gets no hand_off.
  */
 const LESSON_RUN = process.env.LESSON_RUN === '1';
+/**
+ * Set by the office when a lead's run picks up a colleague's handed-back
+ * result: the colleague's id. What the run puts on the desk names them, so
+ * the owner sees whose work it came from.
+ */
+const VIA = process.env.VIA || undefined;
 /** What an ask or task raised in this run is part of. */
 const RAISED_ON = { handOffId: HAND_OFF_ID, threadId: THREAD_ID };
 /** Whether this run gets hand_off, and whether it is told the threads it leads. */
@@ -381,10 +397,20 @@ function tool<Shape extends z.ZodRawShape>(
   // parses to the same arguments, and reads a shape spread from a union
   // (raisedArgs) as unknown fields. Named here because inference picks the raw
   // shape; the first is the output schema, which no office tool has.
+  // The ledger refuses a repeat on the owner's desk (`AlreadyOnDesk`): the
+  // Odd reads why as a tool error, never as a crash.
+  const guarded = (async (...args: unknown[]) => {
+    try {
+      return await (run as (...a: unknown[]) => unknown)(...args);
+    } catch (e) {
+      if (e instanceof AlreadyOnDesk) return refused(e.message);
+      throw e;
+    }
+  }) as ToolCallback<Shape>;
   server.registerTool<z.ZodRawShape, typeof strict>(
     name,
     { description, inputSchema: strict },
-    run
+    guarded
   );
 }
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
@@ -514,6 +540,7 @@ tool(
       why,
       ifApproved: if_approved,
       revises,
+      via: VIA,
       attach: files.paths
     });
     return text(
@@ -549,11 +576,17 @@ if (has('give_owner_a_task'))
   tool(
     'give_owner_a_task',
     {
-      description: `Give ${OWNER}, the human operator, a task: something only they can do. Steps are numbered and each is one action, written so anyone can follow them without guessing: name the button, the place, the exact thing. If they must choose, pass choices and the task ends with them, e.g. for 'Should this kind of email reach you?' pass ['Yes, keep sending these', 'No, filter these out']. When they must fill in or read a file, write it in your folder and attach it: a step says 'Answer each question in intake.md below', never where the file lives. Never write steps to connect or reconnect a tool: ask_for_access and reconnect_access give the office's own.${raisedNote}`,
+      description: `Give ${OWNER}, the human operator, a task: something only they can do. Steps are numbered and each is one action, written so anyone can follow them without guessing: name the button, the place, the exact thing. When a step opens a page, give its full address (https://mail.google.com/...), which the owner clicks; when they type or paste something, put exactly that in \`backticks\`, which the owner copies with one click (In the From box, type \`dmarc@example.com\`). If they must choose, pass choices and the task ends with them, e.g. for 'Should this kind of email reach you?' pass ['Yes, keep sending these', 'No, filter these out']. When they must fill in or read a file, write it in your folder and attach it: a step says 'Answer each question in intake.md below', never where the file lives. Never write steps to connect or reconnect a tool: ask_for_access and reconnect_access give the office's own.${raisedNote}`,
       inputSchema: {
         title: z.string().max(140),
         why: z.string().describe('One or two sentences on why this is theirs to do.'),
-        steps: z.array(z.string()).min(1).max(12).describe('One action per step. No "and then".'),
+        steps: z
+          .array(z.string())
+          .min(1)
+          .max(12)
+          .describe(
+            'One action per step. No "and then". A page to open as its full address; anything to type or paste in `backticks`.'
+          ),
         choices: z.array(z.string()).min(2).max(4).optional(),
         attach: attachArg,
         ...raisedArgs
@@ -581,9 +614,181 @@ if (has('give_owner_a_task'))
         why,
         steps: all,
         attach: files.paths,
+        via: VIA,
         ...on
       });
       return text(`Task ${t.id} is on ${OWNER}'s desk. The ledger records it when they finish it.`);
+    }
+  );
+
+// An email reply waits on the owner's desk, one per ask: they edit it, then the
+// office sends it or saves it to Gmail drafts. Only for an Odd that holds
+// Gmail at any level, since it answers mail the Odd read there.
+const gmailId = z.string().regex(/^[\w-]+$/, 'A Gmail id holds only letters, digits, _ and -.');
+const address = z
+  .string()
+  .min(3)
+  .max(320)
+  .regex(/^[^\r\n,;]+$/, 'One address each, on one line.');
+if (has('propose_reply') && (await grantsFor(ME)).some((g) => g.connectorId === 'gmail'))
+  tool(
+    'propose_reply',
+    {
+      description: `Put one email reply on ${OWNER}'s desk, ready to send. One reply per call: for three emails, call it three times. ${OWNER} reads your summary and the email it answers, may edit the recipients, subject and body, then sends it or saves it to Gmail drafts. Nothing is sent until ${OWNER} sends it. Never put reply drafts in a file for ${OWNER}, and never leave brackets for them to fill in: write the whole reply, and if a fact only they know is missing, say so in why. The office ends the body with a line "Sent from Oddboro", which ${OWNER} may delete: never write it yourself. To rework one ${OWNER} sent back, pass its id as revises.${raisedNote}`,
+      inputSchema: {
+        gmail_thread_id: gmailId
+          .optional()
+          .describe('The Gmail thread it answers, from search_threads. Leave out for a new email.'),
+        in_reply_to: gmailId
+          .optional()
+          .describe(
+            "The Gmail message id it answers. Leave out to answer the thread's latest message."
+          ),
+        to: z.array(address).min(1).max(20).describe('Each address, e.g. "Ada <ada@example.com>".'),
+        cc: z.array(address).max(20).optional(),
+        subject: z.string().min(1).max(200),
+        body: z.string().min(1).max(20_000).describe('The reply as plain text, ready to send.'),
+        summary: z
+          .string()
+          .max(400)
+          .describe('One or two lines on the email it answers: who wrote and what they want.'),
+        why: z.string().max(1000).describe('Why this reply, in one or two plain sentences.'),
+        revises: revisesArg,
+        ...raisedArgs
+      }
+    },
+    async ({
+      gmail_thread_id,
+      in_reply_to,
+      to,
+      cc = [],
+      subject,
+      body,
+      summary,
+      why,
+      revises,
+      ...where
+    }) => {
+      const on = await placed(where);
+      if ('problem' in on) return refused(on.problem);
+      const more = to.length > 1 ? ` and ${to.length - 1} more` : '';
+      const { ask } = await raiseAsk(ME, {
+        ...on,
+        kind: 'reply',
+        title: `${gmail_thread_id ? 'Reply' : 'Email'} to ${to[0]}${more}: ${subject}`.slice(
+          0,
+          140
+        ),
+        why,
+        ifApproved: `You send it, or save it to Gmail drafts, with any changes you make. Nothing goes before you click.`,
+        reply: {
+          gmailThreadId: gmail_thread_id,
+          inReplyTo: in_reply_to,
+          to,
+          cc,
+          subject,
+          // The footer goes in now, where the owner sees it and may delete it.
+          body: withFooter(body),
+          summary
+        },
+        revises,
+        via: VIA
+      });
+      return text(
+        `Reply ${ask.id} is on ${OWNER}'s desk. Nothing is sent until they send it. Check my_asks later for what they did.`
+      );
+    }
+  );
+
+// A Gmail filter waits on the owner's desk, one per ask: they may change it,
+// then the office creates it in Gmail. Only for an Odd that holds Gmail at any
+// level, since it files mail the Odd read there.
+const filterText = z.string().trim().max(500).optional();
+if (has('propose_filter') && (await grantsFor(ME)).some((g) => g.connectorId === 'gmail'))
+  tool(
+    'propose_filter',
+    {
+      description: `Put one Gmail filter on ${OWNER}'s desk, ready to create. One filter per call: for three kinds of mail, call it three times. Call list_filters first, so you never propose a filter ${OWNER} already has. Say plainly in summary what mail it matches and what it does to it. ${OWNER} sees how many emails it matches today, may change it, then creates it, and may tidy the mail it already matches the same way. Nothing changes in Gmail until ${OWNER} clicks Create filter. A filter only files mail: it skips the inbox, marks read, adds a label or stars, never deletes or forwards. Never put filter settings in a task or steps for ${OWNER} to copy. To rework one ${OWNER} sent back, pass its id as revises.${raisedNote}`,
+      inputSchema: {
+        from: filterText.describe('Mail from this sender, e.g. "news@shop.example.com".'),
+        to: filterText.describe('Mail to this address.'),
+        subject: filterText.describe('Words in the subject.'),
+        query: filterText.describe(
+          'Gmail search words the mail has, as typed in Gmail, e.g. "unsubscribe".'
+        ),
+        negated_query: filterText.describe('Gmail search words the mail does not have.'),
+        has_attachment: z.boolean().optional(),
+        skip_inbox: z.boolean().optional().describe('Archive it: it skips the inbox.'),
+        mark_read: z.boolean().optional(),
+        add_label: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            "A label's name. The office makes it when the filter is created, if it is missing."
+          ),
+        star: z.boolean().optional(),
+        summary: z
+          .string()
+          .min(1)
+          .max(400)
+          .describe('One or two plain lines: what mail it matches and what it does to it.'),
+        why: z.string().max(1000).describe('Why this filter, in one or two plain sentences.'),
+        revises: revisesArg,
+        ...raisedArgs
+      }
+    },
+    async ({
+      from,
+      to,
+      subject,
+      query,
+      negated_query,
+      has_attachment,
+      skip_inbox,
+      mark_read,
+      add_label,
+      star,
+      summary,
+      why,
+      revises,
+      ...where
+    }) => {
+      const criteria: FilterCriteria = {
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(subject ? { subject } : {}),
+        ...(query ? { query } : {}),
+        ...(negated_query ? { negatedQuery: negated_query } : {}),
+        ...(has_attachment ? { hasAttachment: true } : {})
+      };
+      const action: FilterAction = {
+        ...(skip_inbox ? { skipInbox: true } : {}),
+        ...(mark_read ? { markRead: true } : {}),
+        ...(add_label ? { addLabel: add_label } : {}),
+        ...(star ? { star: true } : {})
+      };
+      if (!matchesSomething(criteria))
+        return refused('Say which mail it matches: from, to, subject, query or has_attachment.');
+      if (!doesSomething(action))
+        return refused('Say what it does: skip_inbox, mark_read, add_label or star.');
+      const on = await placed(where);
+      if ('problem' in on) return refused(on.problem);
+      const { ask } = await raiseAsk(ME, {
+        ...on,
+        kind: 'filter',
+        title: `Gmail filter: ${filterWords({ criteria, action })}`.slice(0, 140),
+        why,
+        ifApproved: `The office creates it in your Gmail, with any changes you make, and tidies the mail it already matches if you tick that. Nothing changes before you click.`,
+        filter: { criteria, action, summary },
+        revises,
+        via: VIA
+      });
+      return text(
+        `Filter ${ask.id} is on ${OWNER}'s desk. Nothing changes in Gmail until they create it. Check my_asks later for what they did.`
+      );
     }
   );
 

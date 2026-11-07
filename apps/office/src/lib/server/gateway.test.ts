@@ -143,8 +143,9 @@ test("a run gets the office's gateway for its outside tools, and never their key
   await L.pg`insert into staff ${L.pg(odd('nell', 'Nell'))}`;
   await L.pg`insert into grants ${L.pg({ staff_id: 'nell', connector_id: 'notes', level: 'read' })}`;
   const gave = await chatOf('nell');
-  const config = gave.args[gave.args.indexOf('--mcp-config') + 1];
-  const { mcpServers } = JSON.parse(config) as {
+  // The servers come as a file, never on the command line, where any program could read the token.
+  assert.doesNotMatch(gave.args.join(' '), /Bearer/);
+  const { mcpServers } = gave.mcp as {
     mcpServers: Record<string, { type: string; url: string; headers: Record<string, string> }>;
   };
   assert.equal(mcpServers.notes.type, 'http');

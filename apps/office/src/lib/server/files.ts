@@ -5,9 +5,12 @@
 // owner does not browse the Mac. A page an Odd built opens in the owner's
 // browser instead (`openStaffPage`), found the same way.
 import {
+  closeSync,
+  constants,
   type Dirent,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -291,6 +294,41 @@ export async function writeStaffFile(
     (e: unknown) => console.error(`No lesson run for ${staff}'s ${saved.path}:`, e)
   );
   return saved;
+}
+
+/** A reply as the file its Odd's edit run reads: the subject, a blank line, the body. */
+export const replyFile = (r: { subject: string; body: string }) =>
+  `Subject: ${r.subject}\n\n${r.body}\n`;
+
+/**
+ * The owner sent or saved a reply an Odd proposed, with their own changes:
+ * keep their version as `replies/<ask id>.md` in the Odd's folder and start
+ * the same `edited` run a save in the viewer starts (`learnFromEdit`), with
+ * the Odd's proposal as the file before. No ledger line: sending it wrote one.
+ * Never through a link the Odd made.
+ */
+export async function learnFromReply(
+  staff: string,
+  askId: number,
+  proposed: { subject: string; body: string },
+  sent: { subject: string; body: string }
+): Promise<boolean> {
+  const before = replyFile(proposed);
+  const after = replyFile(sent);
+  if (before === after) return false;
+  mkdirSync(join(HOMES, staff, 'replies'), { recursive: true });
+  const root = realpathSync(join(HOMES, staff));
+  const folder = join(root, 'replies');
+  if (!isFolder(folder)) throw new FileError('replies is not a folder');
+  const path = `replies/${askId}.md`;
+  const { O_CREAT, O_NOFOLLOW, O_TRUNC, O_WRONLY } = constants;
+  const fd = openSync(join(root, path), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW);
+  try {
+    writeFileSync(fd, after);
+  } finally {
+    closeSync(fd);
+  }
+  return learnFromEdit(staff, { path, before }, after);
 }
 
 /**

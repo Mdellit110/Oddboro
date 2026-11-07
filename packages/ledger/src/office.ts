@@ -25,7 +25,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, sep } from 'node:path';
 import { alias } from 'drizzle-orm/pg-core';
 import { db, sql as pg } from './db.ts';
-import { deleteSecret } from './secrets.ts';
+import { deleteSecret, getSecret } from './secrets.ts';
 import { embed } from './embed.ts';
 import { chatSession, CODE, home } from './home.ts';
 import {
@@ -70,11 +70,13 @@ import {
   followUps,
   goals,
   type AccessRequest,
+  type AskKind,
   type FollowUpKind,
   type GoalDraft,
   type GoalPlan,
   type HireProposal,
   type Outcome,
+  type ReplyDraft,
   type LedgerKind,
   type RunTrigger,
   type Schedule,
@@ -97,6 +99,7 @@ import {
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
 import { levelAtMost, type Level } from './access-words.ts';
+import { filterWords, sameCriteria, type GmailFilter } from './filter-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
@@ -654,6 +657,138 @@ export async function precedent(text: string, limit = 3): Promise<LedgerRow[]> {
 
 // Asks
 
+/**
+ * Something an Odd tried to put on the owner's desk that is there already, or
+ * an email that already has its reply. The tool server returns the message as
+ * a tool error the Odd reads.
+ */
+export class AlreadyOnDesk extends Error {}
+
+/** Two titles as the desk compares them: case and spacing ignored. */
+const sameTitle = (a: string, b: string) => {
+  const plain = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+  return plain(a) === plain(b);
+};
+
+/**
+ * Lines up an Odd's raises until this transaction ends. Each run has its own
+ * tool server process, so two runs raising the same thing at once would both
+ * find the desk clear; with the lock the second sees the first.
+ */
+async function lockDesk(tx: Tx, staffId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`desk:${staffId}`}))`);
+}
+
+/**
+ * Refuses an item whose title matches an ask or task the Odd already has open.
+ * The ask it `revises` does not count: that is how an Odd changes one.
+ */
+async function refuseRepeat(
+  tx: Tx,
+  staffId: string,
+  title: string,
+  revises?: number
+): Promise<void> {
+  const mine = and(eq(asks.staffId, staffId), eq(asks.status, 'open'));
+  const openAsks = await tx.select({ id: asks.id, title: asks.title }).from(asks).where(mine);
+  const ask = openAsks.find((a) => a.id !== revises && sameTitle(a.title, title));
+  if (ask)
+    throw new AlreadyOnDesk(
+      `Your ask #${ask.id}, "${ask.title}", is already there. To change it, raise it again with revises: ${ask.id}. Never raise the same thing twice.`
+    );
+  const openTasks = await tx
+    .select({ id: tasks.id, title: tasks.title })
+    .from(tasks)
+    .where(and(eq(tasks.staffId, staffId), eq(tasks.status, 'open')));
+  const task = openTasks.find((t) => sameTitle(t.title, title));
+  if (task)
+    throw new AlreadyOnDesk(
+      `Your task #${task.id}, "${task.title}", is already there. Never give the same thing twice.`
+    );
+}
+
+/** Whether two replies answer the same email: the same Gmail thread, or with none, the same people and subject. */
+function sameEmail(a: ReplyDraft, b: ReplyDraft): boolean {
+  if (a.gmailThreadId || b.gmailThreadId) return a.gmailThreadId === b.gmailThreadId;
+  const people = (r: ReplyDraft) =>
+    r.to
+      .map((t) => t.toLowerCase().trim())
+      .sort()
+      .join(',');
+  return people(a) === people(b) && sameTitle(a.subject, b.subject);
+}
+
+/**
+ * Refuses a second reply to one email: one still open (unless this revises
+ * it), or one the owner already sent or saved for the same message.
+ */
+async function refuseSecondReply(
+  tx: Tx,
+  staffId: string,
+  reply: ReplyDraft,
+  revises?: number
+): Promise<void> {
+  const replies = await tx
+    .select()
+    .from(asks)
+    .where(
+      and(
+        eq(asks.staffId, staffId),
+        eq(asks.kind, 'reply'),
+        inArray(asks.status, ['open', 'approved'])
+      )
+    );
+  const open = replies.find(
+    (r) => r.status === 'open' && r.id !== revises && r.reply && sameEmail(r.reply, reply)
+  );
+  if (open)
+    throw new AlreadyOnDesk(
+      `Your reply #${open.id} to this email is already there. To change it, call propose_reply again with revises: ${open.id}.`
+    );
+  const done =
+    reply.inReplyTo && replies.find((r) => r.reply?.sent && r.reply.inReplyTo === reply.inReplyTo);
+  if (done)
+    throw new AlreadyOnDesk(
+      `That email already has a reply: your reply #${done.id} was ${done.reply?.sent?.action === 'draft' ? 'saved to Gmail drafts' : 'sent'}. Do not propose another.`
+    );
+}
+
+/**
+ * Refuses a second filter for the same mail: one still open (unless this
+ * revises it), or one the owner already created from this Odd.
+ */
+async function refuseSecondFilter(
+  tx: Tx,
+  staffId: string,
+  filter: GmailFilter,
+  revises?: number
+): Promise<void> {
+  const filters = await tx
+    .select()
+    .from(asks)
+    .where(
+      and(
+        eq(asks.staffId, staffId),
+        eq(asks.kind, 'filter'),
+        inArray(asks.status, ['open', 'approved'])
+      )
+    );
+  const same = (r: AskRow) => !!r.filter && sameCriteria(r.filter.criteria, filter.criteria);
+  const open = filters.find((r) => r.status === 'open' && r.id !== revises && same(r));
+  if (open)
+    throw new AlreadyOnDesk(
+      `Your filter #${open.id} for this mail is already there. To change it, call propose_filter again with revises: ${open.id}.`
+    );
+  const made = filters.find((r) => r.filter?.created && same(r));
+  if (made)
+    throw new AlreadyOnDesk(
+      `That filter already exists: your filter #${made.id} was created in Gmail. Do not propose it again.`
+    );
+}
+
+/** The asks an Odd raises in its own words, which may not repeat one already open. Access asks have twins instead (`asksNoMore`). */
+const ONCE_ONLY: AskKind[] = ['approval', 'goal'];
+
 export async function raiseAsk(
   staffId: string,
   a: {
@@ -664,9 +799,15 @@ export async function raiseAsk(
     hire?: HireProposal;
     goal?: GoalDraft;
     plan?: GoalPlan;
-    /** `goal` and `plan` say so; the rest follow from access or hire. */
-    kind?: 'goal' | 'plan';
+    /** A reply ask's email (`propose_reply`). */
+    reply?: ReplyDraft;
+    /** A filter ask's Gmail filter (`propose_filter`). */
+    filter?: GmailFilter;
+    /** `goal`, `plan`, `reply` and `filter` say so; the rest follow from access or hire. */
+    kind?: 'goal' | 'plan' | 'reply' | 'filter';
     revises?: number;
+    /** The colleague whose handed-back work the lead raised this from (`VIA`). */
+    via?: string;
     /** Raised while working on this hand-off: the owner's answer goes back to it. */
     handOffId?: number;
     /** Raised on this thread: the owner's answer moves it on. A plan ignores it. */
@@ -681,8 +822,18 @@ export async function raiseAsk(
     run?: string;
   }
 ): Promise<{ ask: AskRow; precedent: LedgerRow[] }> {
-  const { attach, kind, run, ...fields } = a;
+  const { attach, run, ...fields } = a;
+  const kind = a.kind ?? (a.access ? 'access' : a.hire ? 'hire' : 'approval');
   const ask = await db.transaction(async (tx) => {
+    // An Odd's own ask may not repeat one on the desk, a reply may not
+    // answer an email twice, and a filter may not file the same mail twice.
+    // Office-raised kinds and access twins are left alone.
+    if (ONCE_ONLY.includes(kind) || a.reply || a.filter) {
+      await lockDesk(tx, staffId);
+      if (a.reply) await refuseSecondReply(tx, staffId, a.reply, a.revises);
+      else if (a.filter) await refuseSecondFilter(tx, staffId, a.filter, a.revises);
+      else await refuseRepeat(tx, staffId, a.title, a.revises);
+    }
     // A plan goes on its goal's one thread, whatever run raised it: a chat,
     // the weekly review, or the goal's own planning run. So approving it
     // always brings the goal's lead back there to lead the work.
@@ -693,11 +844,18 @@ export async function raiseAsk(
       .insert(asks)
       .values({
         staffId,
-        kind: kind ?? (a.access ? 'access' : a.hire ? 'hire' : 'approval'),
         ...fields,
+        kind,
         ...on
       })
       .returning();
+    // A new version the Odd made of its own ask, still open, takes its place
+    // on the desk: the old one closes as replaced, so the owner sees one.
+    if (a.revises)
+      await tx
+        .update(asks)
+        .set({ status: 'revise', reason: 'Replaced by a new version.', decidedAt: new Date() })
+        .where(and(eq(asks.id, a.revises), eq(asks.staffId, staffId), eq(asks.status, 'open')));
     if (row.threadId) {
       // The thread keeps the run's key, so the owner's answer cannot start the
       // hub there while the run that raised it, such as a chat, still goes.
@@ -730,6 +888,85 @@ export async function asksFor(staffId: string): Promise<AskRow[]> {
 }
 
 export type Decision = 'approve' | 'deny' | 'iterate';
+
+/**
+ * Whether `later` asks for nothing `first` does not: the same Odd, the same
+ * tool, at the same level or lower. Two runs of one Odd can each find a tool
+ * missing at once (a hire's first day and its lead's first hand-off), and
+ * each raises its own ask. The owner sees the first alone (`desk`), and their
+ * answer to it answers the twin too (`decide`), each back where it came from.
+ */
+function asksNoMore(first: AskRow, later: AskRow): boolean {
+  return (
+    first.id !== later.id &&
+    first.kind === 'access' &&
+    later.kind === 'access' &&
+    first.staffId === later.staffId &&
+    !!first.access &&
+    !!later.access &&
+    first.access.connector === later.access.connector &&
+    levelAtMost(later.access.level, first.access.level)
+  );
+}
+
+/**
+ * The other access asks the owner's one answer settled with `a`: the same Odd
+ * and tool, decided in the same moment, whichever of them the owner saw.
+ */
+export async function answeredWith(a: AskRow): Promise<AskRow[]> {
+  if (a.kind !== 'access' || !a.decidedAt) return [];
+  const rows = await db
+    .select()
+    .from(asks)
+    .where(
+      and(eq(asks.staffId, a.staffId), eq(asks.kind, 'access'), eq(asks.decidedAt, a.decidedAt))
+    );
+  return rows.filter(
+    (r) => r.id !== a.id && r.status === a.status && r.access?.connector === a.access?.connector
+  );
+}
+
+/**
+ * Which of the asks one answer settled start a `carry_out`: one for each place
+ * a result must go back to, never one per ask. A hand-off's twin comes first,
+ * then a thread's; a twin on neither starts a run only when no other does.
+ * Two runs of one Odd once each did the same work after one answer, and the
+ * owner got every email reply twice.
+ */
+function carriedOutBy(together: AskRow[]): AskRow[] {
+  const rank = (a: AskRow) => (a.handOffId ? 0 : a.threadId ? 1 : 2);
+  const places = new Set<string>();
+  const runs: AskRow[] = [];
+  for (const a of [...together].sort((x, y) => rank(x) - rank(y) || x.id - y.id)) {
+    const place = a.handOffId
+      ? `hand-off ${a.handOffId}`
+      : a.threadId
+        ? `thread ${a.threadId}`
+        : '';
+    if (places.has(place) || (place === '' && runs.length)) continue;
+    places.add(place);
+    runs.push(a);
+  }
+  return runs;
+}
+
+/** Start the carry-outs for asks one answer settled (`carriedOutBy`). */
+async function carryOutTogether(together: AskRow[]): Promise<void> {
+  for (const a of carriedOutBy(together))
+    await followUp(a.staffId, 'carry_out', { askId: a.id, note: null });
+}
+
+/**
+ * The twins the carry-out of `a` stands for: answered with it, starting no
+ * run of their own. Only the first run told of them does their work, so it
+ * is done once.
+ */
+export async function standsFor(a: AskRow): Promise<AskRow[]> {
+  const together = [a, ...(await answeredWith(a))];
+  const runs = carriedOutBy(together);
+  if (runs[0]?.id !== a.id) return [];
+  return together.filter((x) => !runs.some((r) => r.id === x.id));
+}
 
 /**
  * The owner's decision. Approving an access ask grants it and gives the owner the steps
@@ -772,42 +1009,120 @@ export async function approveAsk(
   return decide(id, 'approve', reason, approval);
 }
 
+/**
+ * The owner sent a reply ask's email, or saved it to Gmail drafts, and Gmail
+ * took it: keep their final version with what Gmail did (`reply.sent`), and
+ * approve the ask, so the answer goes back where it came from. No run follows.
+ * Returns false when the ask was no longer open.
+ */
+export async function approveReply(id: number, reply: ReplyDraft): Promise<boolean> {
+  if (!reply.sent) throw new Error('A reply is approved only once Gmail took it');
+  return decide(id, 'approve', null, { reply });
+}
+
+/**
+ * The owner created a filter ask's Gmail filter, and Gmail took it: keep their
+ * final version with what Gmail did (`filter.created`), and approve the ask,
+ * so the answer goes back where it came from. No run follows. Returns false
+ * when the ask was no longer open.
+ */
+export async function approveFilter(id: number, filter: GmailFilter): Promise<boolean> {
+  if (!filter.created) throw new Error('A filter is approved only once Gmail made it');
+  return decide(id, 'approve', null, { filter });
+}
+
+/** A created filter in one line, for its ledger line and the answer: what it does, and what was tidied. */
+const filterDone = (f: GmailFilter) =>
+  `${filterWords(f)}${f.created?.tidied ? `, and tidied ${f.created.tidied} ${f.created.tidied === 1 ? 'email' : 'emails'}` : ''}`;
+
+/** What a reply ask's ledger line and answer say the owner did with it. */
+const replyDone = (r: ReplyDraft) =>
+  r.sent?.action === 'draft' ? 'Saved to Gmail drafts' : 'Sent';
+
 async function decide(
   id: number,
   decision: Decision,
   reason: string | null,
-  o: Approval & { reportWhenDone?: boolean }
+  o: Approval & { reportWhenDone?: boolean; reply?: ReplyDraft; filter?: GmailFilter }
 ): Promise<boolean> {
-  if (decision === 'iterate') {
-    if (!reason) throw new Error('Say what to change');
+  if (decision === 'iterate' && !reason) throw new Error('Say what to change');
+  if (decision !== 'deny') {
     const [raised] = await db.select({ kind: asks.kind }).from(asks).where(eq(asks.id, id));
-    if (yesOrNo(raised?.kind))
+    if (decision === 'iterate' && yesOrNo(raised?.kind))
       throw new Error('Say yes or no: the office raised this, so nobody reworks it');
+    // Only the office's send or save approves a reply, once Gmail took it.
+    if (decision === 'approve' && raised?.kind === 'reply' && !o.reply)
+      throw new Error('Send the reply, or save it to Gmail drafts');
+    // Only the office's Create filter approves a filter, once Gmail made it.
+    if (decision === 'approve' && raised?.kind === 'filter' && !o.filter)
+      throw new Error('Create the filter from its card on the desk');
   }
   const status = decision === 'approve' ? 'approved' : decision === 'deny' ? 'denied' : 'revise';
-  const ask = await db.transaction(async (tx) => {
+  const at = new Date();
+  const { ask, twins } = await db.transaction(async (tx) => {
     const [claimed] = await tx
       .update(asks)
-      .set({ status, reason: reason || null, decidedAt: new Date() })
+      .set({
+        status,
+        reason: reason || null,
+        decidedAt: at,
+        ...(o.reply ? { reply: o.reply } : {}),
+        ...(o.filter ? { filter: o.filter } : {})
+      })
       .where(and(eq(asks.id, id), eq(asks.status, 'open')))
       .returning();
     if (claimed) await o.link?.(claimed, tx);
     if (claimed?.kind === 'hand_offs' && decision === 'approve') await startHeld(tx, claimed);
-    return claimed;
+    // A yes or a no answers the twins too, at the same moment (`answeredWith`).
+    // Sending one back leaves them waiting for the new version's answer.
+    const open =
+      claimed?.kind === 'access' && decision !== 'iterate'
+        ? await tx
+            .select()
+            .from(asks)
+            .where(
+              and(
+                eq(asks.staffId, claimed.staffId),
+                eq(asks.kind, 'access'),
+                eq(asks.status, 'open')
+              )
+            )
+        : [];
+    const ids = open.filter((r) => asksNoMore(claimed!, r)).map((r) => r.id);
+    const answered = ids.length
+      ? await tx
+          .update(asks)
+          .set({ status, reason: reason || null, decidedAt: at })
+          .where(and(inArray(asks.id, ids), eq(asks.status, 'open')))
+          .returning()
+      : [];
+    return { ask: claimed, twins: answered };
   });
   if (!ask) return false;
-  const verb = { approve: 'Approved', deny: 'Denied', iterate: 'Sent back' }[decision];
+  const sent = decision === 'approve' && ask.reply?.sent ? ask.reply : undefined;
+  const made = decision === 'approve' && ask.filter?.created ? ask.filter : undefined;
+  const verb = sent
+    ? replyDone(sent)
+    : { approve: 'Approved', deny: 'Denied', iterate: 'Sent back' }[decision];
   await record({
     kind: 'decision',
     actor: 'owner',
-    title: `${verb}: ${ask.title}`,
-    body: `Asked by ${ask.staffId}. ${ask.why}`,
+    title: made ? `Created a Gmail filter: ${filterDone(made)}` : `${verb}: ${ask.title}`,
+    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}Asked by ${ask.staffId}. ${ask.why}${
+      twins.length
+        ? ` This also answers ${twins.map((t) => `#${t.id}`).join(', ')}, the same ask from another of ${ask.staffId}'s runs.`
+        : ''
+    }`,
     reason: ask.reason,
     askId: ask.id
   });
   await o.carryOut?.(ask);
-  if (decision === 'approve' && ask.access) await grantAccess(ask.staffId, ask.access, ask.id);
-  else if (decision === 'approve' && ask.kind === 'approval')
+  if (decision === 'approve' && ask.access) {
+    const { task } = await grantAccess(ask.staffId, ask.access, ask.id);
+    // Connected already: the work that waited picks up now. Otherwise finishing
+    // the connect task starts it (`finishTask`).
+    if (!task) await carryOutTogether([ask, ...twins]);
+  } else if (decision === 'approve' && ask.kind === 'approval')
     await followUp(ask.staffId, 'carry_out', {
       askId: ask.id,
       note: ask.reason,
@@ -821,7 +1136,11 @@ async function decide(
   // with the claim, and a no stops the thread. A yes to the usage window wakes the threads it held.
   else {
     const owner = await ownerName();
-    const said = `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
+    const said = sent
+      ? `${owner} ${sent.sent?.action === 'draft' ? 'saved to Gmail drafts' : 'sent'} "${ask.title}"`
+      : made
+        ? `${owner} created the Gmail filter "${ask.title}" as: ${filterDone(made)}`
+        : `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
     const answer = ask.reason ? `${said}: ${ask.reason}` : `${said}.`;
     if (ask.kind === 'window') {
       // The title asks whether to pause the work or let it carry on, so "approved" would not say which.
@@ -834,11 +1153,12 @@ async function decide(
     } else if (ask.kind === 'hand_offs' && ask.threadId)
       await answerHandOffs({ ...ask, threadId: ask.threadId }, decision === 'approve', answer);
     else
-      await answerLater(
-        { handOffId: ask.handOffId, threadId: ask.threadId, askId: ask.id },
-        decision === 'deny' ? 'failed' : 'done',
-        answer
-      );
+      for (const a of [ask, ...twins])
+        await answerLater(
+          { handOffId: a.handOffId, threadId: a.threadId, askId: a.id },
+          decision === 'deny' ? 'failed' : 'done',
+          answer
+        );
     // A no with a reason may be a lesson: the Odd that asked reads it once. The
     // office raised a window ask, not the Odd named on it, so it has none to learn.
     if (decision === 'deny' && ask.reason && ask.kind !== 'window')
@@ -1276,7 +1596,7 @@ export async function grantAccess(
     body: `${conn.name} was already connected, so there were no steps for ${await ownerName()}.`,
     askId
   });
-  if (askId) await followUp(staffId, 'carry_out', { askId, note: null });
+  // An ask's carry-out is its caller's to start (`decide`), since one answer may settle twins.
   return { task: false };
 }
 
@@ -1311,7 +1631,8 @@ export async function reconnectTask(
   const task = await giveTask(staffId, {
     title: `Reconnect ${conn.name} for ${who.name}`,
     why: problem,
-    steps: [...getKey, ...steps]
+    steps: [...getKey, ...steps],
+    byOffice: true
   });
   return { task, already: false };
 }
@@ -1429,7 +1750,7 @@ function connectSteps(conn: ConnectorRow, again = false): Step[] {
     ...(conn.config.oauth
       ? [
           {
-            text: `Click Sign in. ${conn.name}'s sign-in page opens in a new tab.`,
+            text: `Click Sign in. ${conn.config.oauth === 'google' ? 'Google' : conn.name}'s sign-in page opens in a new tab.`,
             done: false,
             key,
             action: { kind: 'oauth' as const, connector: conn.id }
@@ -1467,6 +1788,47 @@ export async function catalog(): Promise<ConnectorRow[]> {
 export async function addConnector(c: typeof connectors.$inferInsert): Promise<ConnectorRow> {
   const [row] = await db.insert(connectors).values(c).onConflictDoNothing().returning();
   return row ?? (await connector(c.id))!;
+}
+
+/** The plain names of the connectors the office serves for Google, before a sign-in names the account. */
+export const GOOGLE_NAMES: Record<string, string> = {
+  gmail: 'Gmail',
+  'google-drive': 'Google Drive'
+};
+
+/** Give a connector the name the owner sees, such as the Google account it reaches. */
+export async function nameConnector(id: string, name: string): Promise<void> {
+  await db.update(connectors).set({ name }).where(eq(connectors.id, id));
+}
+
+/**
+ * Tell Google to cancel a sign-in before the office forgets it, so the
+ * permission is gone from the owner's Google account too, not just from this
+ * computer. Best effort: false when Google could not be told.
+ */
+async function revokeAtGoogle(id: string): Promise<boolean> {
+  let token: string | undefined;
+  try {
+    const saved = JSON.parse(getSecret(id, 'oauth') ?? '{}') as {
+      tokens?: { refresh_token?: string; access_token?: string };
+    };
+    token = saved.tokens?.refresh_token ?? saved.tokens?.access_token;
+  } catch {
+    return false;
+  }
+  if (!token) return true;
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }),
+      signal: AbortSignal.timeout(10_000)
+    });
+    // 400 means Google no longer knows the token: already cancelled.
+    return res.ok || res.status === 400;
+  } catch {
+    return false;
+  }
 }
 
 /** Change how the office starts a connector, e.g. when a server turns out to need no sign-in. */
@@ -1530,14 +1892,18 @@ export async function reconfigureConnector(
  * store, so none sit there unused, and it needs connecting again before the
  * next grant uses it. True when there was something to remove.
  */
-async function forgetConnector(id: string): Promise<boolean> {
+async function forgetConnector(id: string): Promise<{ forgot: boolean; googleTold?: boolean }> {
   const c = await connector(id);
-  if (!c) return false;
-  if (isAws(id)) return forgetAws(c);
+  if (!c) return { forgot: false };
+  if (isAws(id)) return { forgot: await forgetAws(c) };
+  const googleTold = c.config.oauth === 'google' ? await revokeAtGoogle(id) : undefined;
   const removed = secretNames(c, true).filter((name) => deleteSecret(id, name));
   if (removed.length)
-    await db.update(connectors).set({ readyAt: null }).where(eq(connectors.id, id));
-  return removed.length > 0;
+    await db
+      .update(connectors)
+      .set({ readyAt: null, ...(GOOGLE_NAMES[id] ? { name: GOOGLE_NAMES[id] } : {}) })
+      .where(eq(connectors.id, id));
+  return { forgot: removed.length > 0, googleTold };
 }
 
 /**
@@ -1612,13 +1978,19 @@ export async function revoke(staffId: string, connectorId: string): Promise<void
     .from(grants)
     .where(eq(grants.connectorId, connectorId))
     .limit(1);
-  const forgot = !held && (await forgetConnector(connectorId));
+  const { forgot, googleTold } = held ? { forgot: false } : await forgetConnector(connectorId);
   await record({
     kind: 'access',
     actor: 'owner',
     title: `Revoked ${connectorId} for ${staffId}`,
     body: forgot
-      ? "No Odd holds it now, so its saved keys and sign-ins came out of this computer's password store."
+      ? `No Odd holds it now, so its saved keys and sign-ins came out of this computer's password store.${
+          googleTold === true
+            ? ' Google cancelled the sign-in too.'
+            : googleTold === false
+              ? ' Google could not be told, so remove Oddboro at myaccount.google.com/permissions.'
+              : ''
+        }`
       : undefined
   });
 }
@@ -1638,10 +2010,19 @@ export async function giveTask(
     threadId?: number;
     /** The key of the run giving it, which its thread keeps, as `raiseAsk` says. */
     run?: string;
+    /** The colleague whose handed-back work the lead gave this from (`VIA`). */
+    via?: string;
+    /** The office gives it in the Odd's name (a plan's steps, a reconnect), so it may repeat a title. */
+    byOffice?: true;
   }
 ): Promise<TaskRow> {
   const steps = t.steps.map((s) => (typeof s === 'string' ? { text: s, done: false } : s));
   return db.transaction(async (tx) => {
+    // An Odd's own task may not repeat an item it already has on the desk.
+    if (staffId && !t.byOffice) {
+      await lockDesk(tx, staffId);
+      await refuseRepeat(tx, staffId, t.title);
+    }
     const [row] = await tx
       .insert(tasks)
       .values({
@@ -1650,7 +2031,8 @@ export async function giveTask(
         why: t.why,
         steps,
         handOffId: t.handOffId,
-        threadId: t.threadId
+        threadId: t.threadId,
+        via: t.via
       })
       .returning();
     if (row.threadId) {
@@ -1698,14 +2080,6 @@ export async function task(id: number): Promise<TaskRow | undefined> {
 }
 
 /** Tick a step, or every step sharing its key, and record an answer if the step asked for one. */
-/** Tick every step the owner can tick by hand, in one write: "I did all of these." */
-export async function tickAll(id: number): Promise<void> {
-  const t = await task(id);
-  if (!t) return;
-  const steps = t.steps.map((s) => (tickable(s) ? { ...s, done: true } : s));
-  await db.update(tasks).set({ steps }).where(eq(tasks.id, id));
-}
-
 export async function tickStep(id: number, index: number, answer?: string): Promise<void> {
   const t = await task(id);
   const step = t?.steps[index];
@@ -1779,7 +2153,7 @@ export async function finishTask(id: number, done: boolean, note: string | null)
   // work that was waiting on it.
   const a = t.askId ? await ask(t.askId) : undefined;
   if (a?.kind === 'access') {
-    await followUp(t.staffId, 'carry_out', { askId: a.id, note: null });
+    await carryOutTogether([a, ...(await answeredWith(a))]);
     return;
   }
   // Any other task a staffer gave them: the staffer picks up whatever waited on
@@ -1830,7 +2204,46 @@ export async function desk(): Promise<Desk> {
       .where(or(eq(asks.status, 'open'), eq(tasks.status, 'open')))
       .orderBy(asc(attachments.id))
   ]);
-  return { asks: a, tasks: t, reports: r, attachments: f.map((x) => x.attachments) };
+  // A twin waits behind the first ask it repeats, and the owner's answer to
+  // that one answers it too (`asksNoMore`, `decide`).
+  const shown = a.filter((x) => !a.some((first) => first.id < x.id && asksNoMore(first, x)));
+  return { asks: shown, tasks: t, reports: r, attachments: f.map((x) => x.attachments) };
+}
+
+/** An ask or task an Odd has open on the owner's desk, as its prompt lists it. */
+export type OnDesk = { kind: 'ask' | 'task'; id: number; title: string };
+
+/**
+ * What an Odd still has open on the owner's desk, newest first: up to `limit`
+ * items, and how many more. A reply shows as "Reply to <subject>".
+ */
+export async function stillOnDesk(
+  staffId: string,
+  limit = 15
+): Promise<{ items: OnDesk[]; more: number }> {
+  const [a, t] = await Promise.all([
+    db
+      .select()
+      .from(asks)
+      .where(and(eq(asks.staffId, staffId), eq(asks.status, 'open'))),
+    db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.staffId, staffId), eq(tasks.status, 'open')))
+  ]);
+  const all = [
+    ...a.map((x) => ({
+      kind: 'ask' as const,
+      id: x.id,
+      title: x.reply ? `Reply to ${x.reply.subject}` : x.title,
+      at: x.createdAt
+    })),
+    ...t.map((x) => ({ kind: 'task' as const, id: x.id, title: x.title, at: x.createdAt }))
+  ].sort((x, y) => y.at.getTime() - x.at.getTime() || y.id - x.id);
+  return {
+    items: all.slice(0, limit).map(({ kind, id, title }) => ({ kind, id, title })),
+    more: Math.max(0, all.length - limit)
+  };
 }
 
 /** Something a staffer put on the owner's desk, as its chat shows it. */

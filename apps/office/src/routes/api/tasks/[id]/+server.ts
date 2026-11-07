@@ -1,15 +1,7 @@
-// The owner works a task: tick a step or all of them, undo one, answer a choice,
+// The owner works a task: tick a step, undo one, answer a choice,
 // run a step's action, or finish it. Finishing writes the ledger row that credits the owner.
 import { error, json } from '@sveltejs/kit';
-import {
-  AWS_SECRETS_ID,
-  connector,
-  finishTask,
-  task,
-  tickAll,
-  tickStep,
-  untickStep
-} from '@oddboro/ledger';
+import { AWS_SECRETS_ID, connector, finishTask, task, tickStep, untickStep } from '@oddboro/ledger';
 import { confirmTools, hostedSignIn, listTools } from '#lib/server/access.ts';
 import {
   awsRoles,
@@ -53,10 +45,6 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const b = (await request.json().catch(() => ({}))) as Body;
   if (b.op === 'finish') {
     await finishTask(id, b.done !== false, typeof b.note === 'string' ? b.note.trim() : null);
-    return json({ ok: true });
-  }
-  if (b.op === 'tick-all') {
-    await tickAll(id);
     return json({ ok: true });
   }
   const step = typeof b.index === 'number' ? t.steps[b.index] : undefined;

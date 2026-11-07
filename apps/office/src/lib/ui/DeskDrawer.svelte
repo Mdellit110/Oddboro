@@ -6,11 +6,13 @@
   import AwsSignIn from './AwsSignIn.svelte';
   import AwsSecretPick from './AwsSecretPick.svelte';
   import SelectToChat from './SelectToChat.svelte';
+  import ReplyReview from './ReplyReview.svelte';
+  import FilterReview from './FilterReview.svelte';
   import { call } from './api.ts';
   import { AWS_GUIDES, siteLink } from '../site.ts';
   import { ago, when } from './format.ts';
   import { openFile, wins } from './windows.svelte.ts';
-  import { replyAbout, showInChat } from './chat-about.svelte.ts';
+  import { chatAbout, replyAbout, showInChat } from './chat-about.svelte.ts';
   import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import { describe } from '@oddboro/ledger/time';
   import { tickable, yesOrNo } from '@oddboro/ledger/tools';
@@ -18,14 +20,13 @@
   import { goalWhen } from '@oddboro/ledger/goals';
   import { LEVEL_LABEL } from '@oddboro/ledger/access';
   import type { StaffProfile } from '../staff/roster.ts';
+  import { stepText, stepsToGo } from './task-steps.ts';
 
   type Props = {
     desk: Desk;
     staff: StaffProfile[];
     /** Open on this item when set, e.g. after clicking a waiting staffer. */
     focus?: string;
-    notify: boolean;
-    onnotify: (on: boolean) => void;
     /** Approving a proposed hire opens the hire window with it. */
     onhire: (a: AskRow) => void;
     /** Approving a goal plan opens a hire window for each hire in it. */
@@ -33,12 +34,24 @@
     /** Open a staffer's card, from the name on an item. */
     onstaff: (id: string) => void;
   };
-  let { desk, staff, focus, notify, onnotify, onhire, onplan, onstaff }: Props = $props();
+  let { desk, staff, focus, onhire, onplan, onstaff }: Props = $props();
 
   type Item =
     | { key: string; kind: 'ask'; at: string; row: AskRow }
     | { key: string; kind: 'task'; at: string; row: TaskRow }
     | { key: string; kind: 'report'; at: string; row: ReportRow };
+
+  /**
+   * The connect task an approved access ask just made, until the desk reloads
+   * with it, so the open card turns into it at once.
+   */
+  let made = $state<TaskRow | undefined>();
+  $effect(() => {
+    if (made && desk.tasks.some((t) => t.id === made?.id)) made = undefined;
+  });
+  const tasks = $derived(
+    made && !desk.tasks.some((t) => t.id === made?.id) ? [...desk.tasks, made] : desk.tasks
+  );
 
   const items = $derived<Item[]>(
     [
@@ -48,7 +61,7 @@
         at: String(row.createdAt),
         row
       })),
-      ...desk.tasks.map((row) => ({
+      ...tasks.map((row) => ({
         key: `task-${row.id}`,
         kind: 'task' as const,
         at: String(row.createdAt),
@@ -93,6 +106,19 @@
     desk.attachments.filter((f) => (kind === 'ask' ? f.askId : f.taskId) === id);
   const open = $derived(items.find((i) => i.key === openKey));
   const who = (id: string | null) => staff.find((p) => p.id === id);
+  /** The open email replies, oldest first, which the review steps through. */
+  const replies = $derived(desk.asks.filter((a) => a.kind === 'reply'));
+  /** The open Gmail filters, oldest first, which their review steps through. */
+  const filters = $derived(desk.asks.filter((a) => a.kind === 'filter'));
+  /** What the list calls an item: a reply or a filter by its kind, else what it is. */
+  const labelOf = (i: Item) =>
+    i.kind === 'ask' && i.row.kind === 'reply'
+      ? 'Reply'
+      : i.kind === 'ask' && i.row.kind === 'filter'
+        ? 'Filter'
+        : LABEL[i.kind];
+  /** The colleague whose work the lead raised an item from, if any. */
+  const viaOf = (i: Item) => (i.kind === 'report' ? null : i.row.via);
 
   let busy = $state(false);
   let problem = $state('');
@@ -148,14 +174,17 @@
   const decide = (a: AskRow, decision: 'approve' | 'deny' | 'iterate') =>
     act(async () => {
       const picks = a.plan?.items.map((_, i) => i).filter((i) => !skip[i]);
-      const r = await call<{ hires?: AskRow[] }>(`/api/asks/${a.id}`, {
+      const r = await call<{ hires?: AskRow[]; task?: TaskRow | null }>(`/api/asks/${a.id}`, {
         decision,
         reason,
         report: reportWhenDone,
         picks
       });
       if (r.hires?.length) onplan(r.hires);
-    }, true);
+      // An approved access ask turns into the connect task it made, in place.
+      if (r.task) made = r.task;
+      show(r.task ? `task-${r.task.id}` : undefined);
+    });
   const picked = (a: AskRow) => a.plan?.items.filter((_, i) => !skip[i]).length ?? 0;
   const nameOf = (id: string) => staff.find((p) => p.id === id)?.name ?? id;
   const toolName = (id: string) => OFFICE_TOOLS.find((t) => t.id === id)?.name ?? id;
@@ -165,10 +194,11 @@
     await step(t, index, { op: 'secret', value: secret[index] });
     if (!problem) secret[index] = '';
   }
-  const tickEvery = (t: TaskRow) => act(() => call(`/api/tasks/${t.id}`, { op: 'tick-all' }));
-  const toTick = (t: TaskRow) => t.steps.filter((s) => !s.done && tickable(s)).length;
   const finish = (t: TaskRow, done: boolean) =>
-    act(() => call(`/api/tasks/${t.id}`, { op: 'finish', done, note }), true);
+    act(async () => {
+      await call(`/api/tasks/${t.id}`, { op: 'finish', done, note });
+      made = undefined;
+    }, true);
 
   /** The service's sign-in page opens in a new tab; the step ticks when the owner comes back. */
   async function hostedSignIn(t: TaskRow, index: number) {
@@ -193,27 +223,28 @@
 </script>
 
 <section class="flex h-full min-h-0 flex-col" aria-label="Your desk">
-  <header class="flex items-center gap-2 border-b border-hairline p-3">
-    {#if open}
+  <!-- No heading: the window's tab already says Desk and how many wait. -->
+  {#if open}
+    <!-- Back to the list: its own row above the item, where the eye starts. -->
+    <div class="border-b border-hairline px-3 py-2">
       <button
-        class="rounded-full px-2 py-1 text-sm text-muted hover:text-ink"
-        onclick={() => go(undefined)}>Back</button
+        class="flex items-center gap-1.5 rounded-lg bg-raise px-2.5 py-1 text-xs text-ink hover:bg-hairline"
+        onclick={() => go(undefined)}
       >
-    {/if}
-    <div class="flex-1">
-      <div class="font-pixel text-lg leading-none">Your desk</div>
-      <div class="mt-1 text-xs text-muted">
-        {items.length ? `${items.length} waiting on you` : 'Nothing waiting on you'}
-      </div>
+        <svg
+          class="size-3 rtl:-scale-x-100"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"><path d="M7.5 2.5 4 6l3.5 3.5" /></svg
+        >
+        All items{items.length > 1 ? ` (${items.length})` : ''}
+      </button>
     </div>
-    <label
-      class="flex items-center gap-1.5 text-[11px] text-muted"
-      title="A Mac notification when something new lands"
-    >
-      <input type="checkbox" checked={notify} onchange={(e) => onnotify(e.currentTarget.checked)} />
-      Notify me
-    </label>
-  </header>
+  {/if}
 
   {#if wins.confirm?.id === 'desk'}
     <div class="flex flex-wrap items-center gap-2 border-b border-hairline bg-ember/10 px-3 py-2">
@@ -256,10 +287,12 @@
               {/if}
               <span class="min-w-0 flex-1">
                 <span class="flex items-center gap-2 text-[10px] tracking-[0.16em] uppercase">
-                  <span class={i.kind === 'report' ? 'text-sea' : 'text-ember'}
-                    >{LABEL[i.kind]}</span
+                  <span class={i.kind === 'report' ? 'text-sea' : 'text-ember'}>{labelOf(i)}</span>
+                  <span class="text-faint"
+                    >{from?.name ?? 'Office'}{viaOf(i)
+                      ? `, from ${who(viaOf(i))?.name ?? viaOf(i)}'s work`
+                      : ''} · {ago(i.at)}</span
                   >
-                  <span class="text-faint">{from?.name ?? 'Office'} · {ago(i.at)}</span>
                 </span>
                 <span class="mt-0.5 block text-sm text-ink">{i.row.title}</span>
                 {#if i.kind === 'task'}
@@ -272,8 +305,33 @@
           </li>
         {/each}
       </ul>
+    {:else if open.kind === 'ask' && open.row.kind === 'reply' && open.row.reply}
+      {@const a = open.row}
+      {#key a.id}
+        <ReplyReview
+          ask={{ ...a, reply: open.row.reply }}
+          {replies}
+          {staff}
+          {reworks}
+          ongo={(id) => go(id === undefined ? undefined : `ask-${id}`)}
+          {onstaff}
+        />
+      {/key}
+    {:else if open.kind === 'ask' && open.row.kind === 'filter' && open.row.filter}
+      {@const a = open.row}
+      {#key a.id}
+        <FilterReview
+          ask={{ ...a, filter: open.row.filter }}
+          {filters}
+          {staff}
+          {reworks}
+          ongo={(id) => go(id === undefined ? undefined : `ask-${id}`)}
+          {onstaff}
+        />
+      {/key}
     {:else}
       {@const from = who(open.row.staffId)}
+      {@const via = viaOf(open)}
       {#if from}
         <button
           class="mb-3 flex w-full items-center gap-3 rounded-xl bg-raise px-3 py-2.5 text-start transition-colors hover:bg-sea/15"
@@ -299,7 +357,15 @@
       {/if}
       <div class="text-[10px] tracking-[0.16em] uppercase">
         <span class={open.kind === 'report' ? 'text-sea' : 'text-ember'}>{LABEL[open.kind]}</span>
-        <span class="text-faint">· {from ? '' : 'Office · '}{when(open.at)}</span>
+        <span class="text-faint"
+          >· {from ? '' : 'Office · '}{#if from && via}{from.name}, from
+            <button
+              class="tracking-[0.16em] uppercase hover:text-ink"
+              title={`Open ${who(via)?.name ?? via}'s chat`}
+              onclick={() => chatAbout(via, '')}>{who(via)?.name ?? via}</button
+            >'s work ·
+          {/if}{when(open.at)}</span
+        >
       </div>
       <h2 class="mt-1 text-base leading-snug font-medium">{open.row.title}</h2>
 
@@ -518,14 +584,22 @@
               onclick={() => decide(a, 'approve')}
               >{a.kind === 'goal'
                 ? 'Set the goal'
-                : a.kind === 'window'
-                  ? 'Let it carry on'
-                  : a.plan && picked(a) < a.plan.items.length
-                    ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                    : 'Approve'}</button
+                : a.access
+                  ? 'Connect'
+                  : a.kind === 'window'
+                    ? 'Let it carry on'
+                    : a.plan && picked(a) < a.plan.items.length
+                      ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                      : 'Approve'}</button
             >
           {/if}
         </div>
+        {#if a.access}
+          <p class="mt-1.5 text-[11px] text-faint">
+            Connect gives {who(a.staffId)?.name ?? 'the Odd'} access. Any steps to connect it open right
+            here.
+          </p>
+        {/if}
         {#if !yesOrNo(a.kind)}
           <p class="mt-1.5 text-[11px] text-faint">
             Iterate sends it back to {who(a.staffId)?.name ?? 'the Odd'} with your words, and the new
@@ -535,15 +609,7 @@
       {:else if open.kind === 'task'}
         {@const t = open.row}
         <p class="mt-2 text-sm leading-relaxed text-muted">{t.why}</p>
-        {#if toTick(t) > 1}
-          <div class="mt-3 flex justify-end">
-            <button
-              class="rounded-lg bg-raise px-2.5 py-1 text-xs text-muted hover:bg-sea/20 hover:text-ink disabled:opacity-40"
-              disabled={busy}
-              onclick={() => tickEvery(t)}>Tick all {toTick(t)}</button
-            >
-          </div>
-        {/if}
+        {@const toGo = stepsToGo(t.steps)}
         <ol class="mt-3 flex flex-col gap-2">
           {#each t.steps as s, index (index)}
             <li
@@ -563,17 +629,26 @@
                       onchange={() => step(t, index, { op: s.done ? 'untick' : 'tick' })}
                     />
                   {/if}
-                  <span class="leading-relaxed" class:line-through={s.done}
-                    >{s.text}
+                  <div class="min-w-0 flex-1">
+                    <Markdown
+                      text={stepText(s.text)}
+                      staff={t.staffId ?? undefined}
+                      copyCode
+                      class={s.done ? 'line-through' : ''}
+                    />
                     {#if s.action?.kind === 'aws' && !s.done && AWS_GUIDES[s.action.connector]}
-                      {@const guide = AWS_GUIDES[s.action.connector]}New to this?
-                      <a
-                        class="text-sea underline hover:text-ink"
-                        href={siteLink(guide.path)}
-                        target="_blank"
-                        rel="noopener">{guide.label}, step by step</a
-                      >: the role, and where to find each of these.{/if}</span
-                  >
+                      {@const guide = AWS_GUIDES[s.action.connector]}
+                      <p class="mt-1 leading-relaxed">
+                        New to this?
+                        <a
+                          class="text-sea underline hover:text-ink"
+                          href={siteLink(guide.path)}
+                          target="_blank"
+                          rel="noopener">{guide.label}, step by step</a
+                        >: the role, and where to find each of these.
+                      </p>
+                    {/if}
+                  </div>
                   {#if s.done && !tickable(s)}
                     <button
                       class="ms-auto shrink-0 text-xs text-muted underline hover:text-ink disabled:opacity-40"
@@ -648,10 +723,10 @@
                   {#if s.answer}
                     <div class="mt-1.5 text-xs text-sea">You chose: {s.answer}</div>
                   {:else}
-                    <div class="mt-2 flex flex-wrap gap-2">
+                    <div class="mt-2 flex flex-col gap-1.5" role="group" aria-label="Choices">
                       {#each s.action.options as option (option)}
                         <button
-                          class="rounded-lg bg-night/60 px-3 py-1.5 text-xs font-medium hover:bg-sea/25 disabled:opacity-40"
+                          class="choice"
                           disabled={busy}
                           onclick={() => step(t, index, { op: 'choose', answer: option })}
                           >{option}</button
@@ -687,12 +762,12 @@
           >
           <button
             class="flex-1 rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
-            disabled={busy || unsaved || doneCount(t.steps) < t.steps.length}
+            disabled={busy || unsaved || toGo > 0}
             onclick={() => finish(t, true)}
             >{unsaved
               ? 'Save the attached file first'
-              : doneCount(t.steps) < t.steps.length
-                ? `${t.steps.length - doneCount(t.steps)} ${t.steps.length - doneCount(t.steps) === 1 ? 'step' : 'steps'} to go`
+              : toGo
+                ? `${toGo} ${toGo === 1 ? 'step' : 'steps'} to go`
                 : 'Mark done'}</button
           >
         </div>

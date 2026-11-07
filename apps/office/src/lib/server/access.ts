@@ -5,6 +5,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   AWS_SECRETS_ID,
   connector,
@@ -17,6 +19,8 @@ import {
 } from '@oddboro/ledger';
 import { secretNamesClient, toolKeys } from './aws.ts';
 import { cleanEnv } from './claude.ts';
+import { driveServer } from './google/drive.ts';
+import { gmailServer } from './google/gmail.ts';
 import { bearer, startSignIn } from './oauth.ts';
 
 export type ToolInfo = { name: string; description: string; readOnly: boolean };
@@ -26,6 +30,7 @@ export type ToolInfo = { name: string; description: string; readOnly: boolean };
  * office. `open` leaves the sign-in out, to see whether it needs one.
  */
 export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
+  if (c.kind === 'builtin') return builtin(c);
   // AWS Secrets Manager's names come from the office itself, never a server.
   if (c.id === AWS_SECRETS_ID) return secretNamesClient();
   const { env, headers } = await toolKeys(c);
@@ -46,6 +51,32 @@ export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
         });
   const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
   await client.connect(transport);
+  return client;
+}
+
+/** The servers the office serves itself, by connector id. */
+const BUILTIN: Record<string, (token: () => Promise<string>) => McpServer> = {
+  gmail: gmailServer,
+  'google-drive': driveServer
+};
+
+/**
+ * A server the office serves itself, inside this process: Gmail and Google
+ * Drive. Each call asks `bearer` for a live token, so the Google sign-in
+ * never leaves the office, not even to a process of its own.
+ */
+async function builtin(c: ConnectorRow): Promise<Client> {
+  const make = BUILTIN[c.id];
+  if (!make) throw new Error(`The office serves no tool named ${c.id}`);
+  const token = async () => {
+    const t = await bearer(c.id);
+    if (!t) throw new Error(`${c.name} needs signing in again. Call reconnect_access.`);
+    return t;
+  };
+  const [ours, theirs] = InMemoryTransport.createLinkedPair();
+  await make(token).connect(theirs);
+  const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
+  await client.connect(ours);
   return client;
 }
 
@@ -88,6 +119,9 @@ export async function hostedSignIn(id: string): Promise<{ url?: string }> {
   try {
     return await startSignIn(id);
   } catch (signInError) {
+    // A Google tool always needs its sign-in: listing its tools takes none, so
+    // the check below would wrongly mark it open.
+    if ((await connector(id))?.config.oauth === 'google') throw signInError;
     try {
       await listTools(id, true);
     } catch {

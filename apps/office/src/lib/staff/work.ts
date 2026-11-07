@@ -21,6 +21,17 @@ export type Work = {
   steps: number;
 };
 
+/**
+ * How long a piece of work has run, in whole minutes: "just started",
+ * "4 min", "1 h 5 min". Whole minutes, so nothing needs redrawing every second.
+ */
+export function runningFor(since: string, now = Date.now()): string {
+  const min = Math.max(0, Math.floor((now - Date.parse(since)) / 60_000));
+  if (min < 1) return 'just started';
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${min % 60} min`;
+}
+
 /** Claude Code's file tools, which Grok's and Gemini's stand for. */
 type FileTool = 'Read' | 'Glob' | 'Grep' | 'Edit' | 'Write';
 
@@ -74,6 +85,8 @@ export const OFFICE_TOOL_WORDS: Record<string, string> = {
   propose_goal: 'Proposing a goal',
   propose_goal_plan: 'Proposing a plan for a goal',
   propose_hire: 'Proposing a hire',
+  propose_reply: 'Drafting an email reply for you',
+  propose_filter: 'Drafting a Gmail filter for you',
   raise_ask: 'Raising an ask',
   reconnect_access: 'Asking you to reconnect a tool',
   resume_at: 'Setting when to pick up again',

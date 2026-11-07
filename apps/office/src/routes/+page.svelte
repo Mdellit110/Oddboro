@@ -1213,8 +1213,6 @@
                   {desk}
                   {staff}
                   focus={deskFocus}
-                  {notify}
-                  onnotify={setNotify}
                   onhire={hireProposal}
                   onplan={planHires}
                   onstaff={select}
@@ -1238,6 +1236,8 @@
                     welcomed = true;
                     close(w.id, true);
                   }}
+                  {notify}
+                  onnotify={setNotify}
                 />
               {:else if w.kind === 'office'}
                 <!-- Loaded when opened: it draws with PixiJS, which the first page leaves out. -->

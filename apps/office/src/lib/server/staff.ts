@@ -20,7 +20,15 @@
 // keeps the keys and sign-ins. Hosted servers get a fresh OAuth token per run.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
 import {
@@ -74,6 +82,8 @@ import {
   editShown,
   ask as askById,
   replyToReport,
+  standsFor,
+  stillOnDesk,
   report as reportById,
   staffer,
   task as taskById,
@@ -130,6 +140,7 @@ import {
   type ConnectorRow
 } from '@oddboro/ledger';
 import { workPath } from '@oddboro/ledger/work-paths';
+import { filterWords } from '@oddboro/ledger/filters';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import type { Work } from '../staff/work.ts';
@@ -156,7 +167,7 @@ import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups } from './launch.ts'
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
-import { ACT_WRITE, house } from './house.ts';
+import { ACT_WRITE, house, stillOnDeskSection } from './house.ts';
 
 /** The owner's data folder, which every staffer may read, whatever tool it runs on. */
 const DATA = home('data');
@@ -188,6 +199,8 @@ export type ChatEntry = {
   /** `back` is which hand-back a reply or pick-up line shows. */
   handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
   thread?: { line: ThreadLine; steps: HandOffLine[] };
+  /** On a reply a chat run wrote: milliseconds from the owner's message to the reply. */
+  took?: number;
 };
 export type ChatEvent =
   | { type: 'delta'; text: string }
@@ -459,7 +472,14 @@ async function access(who: StaffRow, ceiling: Level, ms: number) {
     office: {
       command: process.execPath,
       args: [STAFF_SERVER],
-      env: { STAFF_ID: who.id, DATABASE_URL, ...officeSettings() }
+      env: {
+        STAFF_ID: who.id,
+        DATABASE_URL,
+        ...officeSettings(),
+        // In the app on a Mac only the office reaches the Keychain, through
+        // the shell; the tool server keeps no secret of its own.
+        ...(process.env.ODDBORO_SECRETS === 'shell' ? { ODDBORO_SECRETS: 'office' } : {})
+      }
     }
   };
   const allowed = ['mcp__office'];
@@ -647,6 +667,7 @@ async function prompt(
     (opts.thread
       ? opts.led.flatMap((story) => threadBrief({ story, shown: opts.shown })).join('\n')
       : goalsLedBrief(opts.led)) +
+    stillOnDeskSection(await stillOnDesk(who.id)) +
     house({
       has: (t) => hasTool(who.tools, t),
       now,
@@ -816,6 +837,8 @@ async function run(
     handOffId?: number;
     /** The thread the run works on, either side: it reads the thread's folder and writes its own part. */
     threadId?: number;
+    /** On a lead's pick-up of a colleague's result, that colleague: what the run puts on the desk names them. */
+    via?: string;
     /** The hand-backs this run's brief already holds in full, so its lead's story leaves them out. */
     shown?: number[];
     timeoutMs: number;
@@ -902,6 +925,7 @@ async function run(
       ceiling: ceiling !== who.permission ? ceiling : undefined,
       handOffId: opts.handOffId,
       threadId: opts.threadId,
+      via: opts.via,
       lessonRun: !!opts.lessonRun,
       // Every run while held, whatever its own tool or switches: its
       // office_report speaks of other Odds too.
@@ -968,7 +992,7 @@ async function run(
       'user',
       '--strict-mcp-config',
       '--mcp-config',
-      JSON.stringify({ mcpServers: servers }),
+      mcpFile,
       '--disable-slash-commands',
       '--settings',
       JSON.stringify({
@@ -997,10 +1021,23 @@ async function run(
     ];
   }
   const input = preface + say(message);
+  /**
+   * The run's servers, the gateway's token among them, go to Claude Code in a
+   * file only the owner can read, in a folder no run reads, removed when the
+   * run ends: on the command line any program on this computer could read
+   * them with `ps`, an Odd's own commands included.
+   */
+  const mcpFile = home('mcp', `${key}.json`);
+  function writeMcpFile(): () => void {
+    mkdirSync(home('mcp'), { recursive: true, mode: 0o700 });
+    writeFileSync(mcpFile, JSON.stringify({ mcpServers: servers }), { mode: 0o600 });
+    return () => rmSync(mcpFile, { force: true });
+  }
   /** A Claude Code run; with commands, their temp folder and the git template in it, made now and removed when the run ends. */
   function claudeLaunch(): Launch {
     const env = staffEnv(toolDir || undefined);
-    if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: () => {} };
+    const dropMcp = writeMcpFile();
+    if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: dropMcp };
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
     const shell = shellEnv(tmp);
     mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
@@ -1012,7 +1049,10 @@ async function run(
       args: claudeArgs(env),
       env,
       stdin: input,
-      done: () => rmSync(tmp, { recursive: true, force: true })
+      done: () => {
+        dropMcp();
+        rmSync(tmp, { recursive: true, force: true });
+      }
     };
   }
   // An added Claude account nobody signed in to: say where to sign in, rather than Claude Code's own advice.
@@ -1255,7 +1295,14 @@ export async function chat(
     });
     if (r.ok) {
       addToChat(id, { at: sent, from: 'owner', text: message, re: re?.ref });
-      addToChat(id, { at: new Date().toISOString(), from: 'staff', text: r.text });
+      // `took`: how long the owner waited for this reply, from when they sent.
+      const at = new Date();
+      addToChat(id, {
+        at: at.toISOString(),
+        from: 'staff',
+        text: r.text,
+        took: at.getTime() - Date.parse(sent)
+      });
       if (re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
     }
   } finally {
@@ -1287,7 +1334,9 @@ function followUpBrief(
   a?: AskRow,
   r?: ReportRow,
   t?: { row: TaskRow; files: string[] },
-  g?: GoalRow
+  g?: GoalRow,
+  /** Twins answered with `a` whose work this carry-out does too (`standsFor`). */
+  also: AskRow[] = []
 ): string[] {
   // The owner answered a plan raised on this thread. Sending one back is a
   // `rework` instead, so only an approval or a denial reaches a resume.
@@ -1392,12 +1441,30 @@ function followUpBrief(
     ? [
         `- Ask #${a.id}: ${a.title}`,
         `- Why: ${a.why}`,
-        `- What you said would happen: ${a.ifApproved}`
+        `- What you said would happen: ${a.ifApproved}`,
+        ...(a.reply
+          ? [
+              `- The reply: to ${a.reply.to.join(', ')}${a.reply.cc.length ? `, cc ${a.reply.cc.join(', ')}` : ''}${a.reply.gmailThreadId ? `, in Gmail thread ${a.reply.gmailThreadId}` : ''}${a.reply.inReplyTo ? `, answering message ${a.reply.inReplyTo}` : ''}`,
+              `- Its subject: ${a.reply.subject}`,
+              '- Its body:',
+              '',
+              a.reply.body,
+              ''
+            ]
+          : []),
+        ...(a.filter
+          ? [`- The filter: ${filterWords(a.filter)}`, `- Its summary: ${a.filter.summary}`]
+          : [])
       ]
     : [];
   if (f.kind === 'carry_out' && a?.access)
     return [
       `{owner} approved your ask #${a.id}, and the access is ready now.`,
+      ...(also.length
+        ? [
+            `This also answers your ${also.length > 1 ? 'asks' : 'ask'} ${also.map((x) => `#${x.id}`).join(', ')}, which another of your runs raised for the same tool: do that work once, here.`
+          ]
+        : []),
       '',
       ...askLines,
       '',
@@ -1434,7 +1501,7 @@ function followUpBrief(
       `- What they want changed: ${f.note}`,
       '',
       '1. Do any work the new version needs first, such as rewriting a file in your folder.',
-      `2. Raise the new version with the same tool as before (raise_ask, propose_hire, ask_for_access, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
+      `2. Raise the new version with the same tool as before (raise_ask, propose_reply, propose_filter, propose_hire, ask_for_access, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
       '3. Do not carry out the ask itself. They decide the new version.'
     ];
   return [
@@ -1534,6 +1601,14 @@ export async function followThrough(
     )
   );
   const joinedIds = joined.map((j) => j.id);
+  // What this pick-up raises comes from a colleague's work: the newest result's colleague.
+  const via =
+    handed?.kind === 'handed_back'
+      ? [
+          { id: f.id, from: handed.from },
+          ...joined.map((j) => ({ id: j.id, from: j.h.from }))
+        ].sort((x, y) => y.id - x.id)[0].from
+      : undefined;
   // The owner's edit, read now, so saves while this waited to start are in it.
   let edit: { path: string; saw: string; shown: EditShown } | undefined;
   if (f.kind === 'edited') {
@@ -1564,6 +1639,8 @@ export async function followThrough(
                 ? 'First day'
                 : `Feedback on ${r?.title ?? 'a report'}`));
   const task = t ? { row: t, files: await taskFiles(t.id) } : undefined;
+  // One carry-out may stand for twin asks that start no run of their own.
+  const also = f.kind === 'carry_out' && a?.kind === 'access' ? await standsFor(a) : [];
   const details: Record<FollowUpKind, string> = {
     carry_out: `Carrying out ask #${a?.id}`,
     rework: `Reworking ask #${a?.id}`,
@@ -1593,6 +1670,7 @@ export async function followThrough(
       lessonRun: servesNoThread(f.kind),
       handOffId: serves?.id,
       threadId: thread?.id,
+      via,
       shown: f.kind === 'handed_back' ? [f.id, ...joinedIds] : undefined,
       timeoutMs: JOB_TIMEOUT_MS,
       extra: [
@@ -1615,7 +1693,7 @@ export async function followThrough(
           : edit
             ? editBrief(edit.path, edit.shown)
             : [
-                ...followUpBrief(f, a, r, task, g),
+                ...followUpBrief(f, a, r, task, g, also),
                 ...(serves?.handOff && giver && thread
                   ? handOffContext({
                       h: serves.handOff,
