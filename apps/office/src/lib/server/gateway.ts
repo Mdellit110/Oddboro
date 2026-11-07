@@ -34,8 +34,15 @@ export const GATEWAY_PATH = '/api/gateway';
 type Held = { level: Level; client?: Promise<Client>; tools?: Promise<Tool[]> };
 type GatewayRun = { held: Map<string, Held>; until: number };
 
-/** Runs going, by token. Each goes when its run ends, or at the latest when its time is up. */
-const runs = new Map<string, GatewayRun>();
+/**
+ * Runs going, by token. Each goes when its run ends, or at the latest when its
+ * time is up. Kept on the process, not the module: in development Vite reloads
+ * the server's code under a running office, and a run the old code opened was
+ * refused by the new code's guard (403) until the office restarted.
+ */
+const runs: Map<string, GatewayRun> = ((
+  globalThis as { oddboroGatewayRuns?: Map<string, GatewayRun> }
+).oddboroGatewayRuns ??= new Map());
 
 /** A server entry as a run's tool takes it: Claude Code's --mcp-config, Codex's and Grok's alike. */
 export type GatewayServer = { type: 'http'; url: string; headers: Record<string, string> };
