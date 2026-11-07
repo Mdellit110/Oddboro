@@ -1,7 +1,15 @@
 // Finding MCP servers a staffer could use, in the office catalog first and
 // then the public MCP Registry. Only the search words leave the Mac.
-import { addConnector, connector, reconfigureConnector, type ConnectorRow } from './office.ts';
-import type { ConnectorConfig, ConnectorKind } from './schema.ts';
+import {
+  addConnector,
+  AWS_BUILD_ID,
+  AWS_READ_ID,
+  AWS_SECRETS_ID,
+  connector,
+  reconfigureConnector,
+  type ConnectorRow
+} from './office.ts';
+import type { ConnectorConfig, ConnectorKind, connectors } from './schema.ts';
 
 const REGISTRY = 'https://registry.modelcontextprotocol.io/v0/servers';
 
@@ -110,6 +118,39 @@ export async function fromRegistry(name: string): Promise<Candidate | undefined>
   return undefined;
 }
 
+/**
+ * Tools the office connects in its own way, offered by `find_connectors`
+ * before the registry and added to the catalog the first time one is asked for.
+ * AWS starts once the owner signs in, which fills in its proxy's arguments.
+ */
+const AWS_PICK =
+  'If it is not clear what the owner wants in AWS, ask them before asking for any: use their secrets (AWS Secrets Manager), read their data (AWS, read only), or build in their account (AWS, builder).';
+
+export const BUILT_IN: (typeof connectors.$inferInsert)[] = [
+  {
+    id: AWS_SECRETS_ID,
+    name: 'AWS Secrets Manager',
+    description: `The names and descriptions of the owner's secrets in AWS Secrets Manager, never their values. Ask for read when the owner wants their AWS secrets used: once it is connected, the owner can also have other tools take their keys from AWS. ${AWS_PICK}`,
+    // The office answers it itself (the office's aws.ts), so nothing starts.
+    kind: 'stdio',
+    config: {}
+  },
+  {
+    id: AWS_READ_ID,
+    name: 'AWS, read only',
+    description: `Read the owner's Amazon Web Services (AWS) account through AWS's MCP Server: S3, CloudWatch logs, EC2, Lambda and the rest, as a role that cannot change anything or read a secret value. Ask for read when the owner wants you to read data in AWS. ${AWS_PICK}`,
+    kind: 'stdio',
+    config: { command: 'uvx', args: [], readsByRole: true }
+  },
+  {
+    id: AWS_BUILD_ID,
+    name: 'AWS, builder',
+    description: `Build in the owner's Amazon Web Services (AWS) account through AWS's MCP Server: create and change S3, Lambda, EC2 and the rest, as a role that cannot change IAM or read a secret value. Ask for write when the owner wants you to build in AWS. ${AWS_PICK}`,
+    kind: 'stdio',
+    config: { command: 'uvx', args: [] }
+  }
+];
+
 /** A catalog id for a registry name: io.github.acme/notes becomes acme-notes. */
 export const connectorId = (registry: string) =>
   registry
@@ -160,6 +201,8 @@ export async function ensureConnector(
     }
     return { connector: own };
   }
+  const built = BUILT_IN.find((b) => b.id === id);
+  if (built) return { connector: await addConnector(built) };
   if (url)
     // A hosted server the owner named by its address, not in the registry.
     return {

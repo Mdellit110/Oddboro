@@ -11,6 +11,7 @@
   import { chatRequest, takeDraft, type Delivered } from './chat-about.svelte.ts';
   import type { StaffProfile } from '../staff/roster.ts';
   import { toolWords } from '../staff/work.ts';
+  import { serviceNames } from './service-names.svelte.ts';
 
   type Props = {
     profile: StaffProfile;
@@ -300,7 +301,7 @@
           if (ev.type === 'delta') {
             reply.text += ev.text;
             status = '';
-          } else if (ev.type === 'tool') status = toolWords(ev.name);
+          } else if (ev.type === 'tool') status = toolWords(ev.name, serviceNames.byId);
           else if (ev.type === 'done') {
             reply.text = ev.text;
             reply.pending = false;

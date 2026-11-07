@@ -1316,10 +1316,115 @@ export async function reconnectTask(
   return { task, already: false };
 }
 
+/**
+ * The owner wants an AWS tool on another role or Region: its one desk step
+ * goes on the desk again, from the office, starting on what it uses now.
+ * Picking connects it again. A tool has one open at a time.
+ */
+export async function changeAwsTask(connectorId: string): Promise<TaskRow> {
+  const conn = await connector(connectorId);
+  if (!conn || !isAws(conn.id)) throw new Error('Only an AWS tool has a role and Region to change');
+  const open = await db.select().from(tasks).where(eq(tasks.status, 'open'));
+  const waiting = open.find((t) =>
+    t.steps.some((st) => st.action?.kind === 'aws' && st.action.connector === conn.id)
+  );
+  if (waiting) return waiting;
+  return giveTask(null, {
+    title: `Change the role or Region for ${conn.name}`,
+    why: `You asked to change the AWS role or Region ${conn.name} uses.`,
+    steps: connectSteps(conn, true)
+  });
+}
+
+/** The longest name the owner can give a service. */
+export const SERVICE_NAME_MAX = 60;
+
+/**
+ * The owner names a service, such as Open Brain for a server they added by
+ * its address. Odds read the new name too, since every run reads the row.
+ */
+export async function renameConnector(id: string, name: string): Promise<void> {
+  const c = await connector(id);
+  if (!c) throw new Error('No such service');
+  const named = name.trim().replace(/\s+/g, ' ');
+  if (!named || named.length > SERVICE_NAME_MAX)
+    throw new Error(`Give it a name of 1 to ${SERVICE_NAME_MAX} characters.`);
+  if (named === c.name) return;
+  await db.update(connectors).set({ name: named }).where(eq(connectors.id, id));
+  await record({ kind: 'access', actor: 'owner', title: `Renamed ${c.name} to ${named}` });
+}
+
+/** Each service's name by its id, for the lines that say what an Odd is doing. */
+export async function serviceNames(): Promise<Record<string, string>> {
+  const rows = await db.select({ id: connectors.id, name: connectors.name }).from(connectors);
+  return Object.fromEntries(rows.map((r) => [r.id, r.name]));
+}
+
+/** A service in the office and every Odd that holds it, for the owner's Services window. */
+export type OfficeService = {
+  id: string;
+  name: string;
+  description: string;
+  ready: boolean;
+  aws: boolean;
+  odds: { id: string; name: string; level: Level }[];
+};
+
+/** Every service an Odd holds or that is connected, by name, with who holds it. */
+export async function services(): Promise<OfficeService[]> {
+  const held = await db
+    .select({
+      connectorId: grants.connectorId,
+      level: grants.level,
+      id: staff.id,
+      name: staff.name
+    })
+    .from(grants)
+    .innerJoin(staff, eq(grants.staffId, staff.id))
+    .orderBy(asc(staff.name));
+  return (await catalog())
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      ready: !!c.readyAt,
+      aws: isAws(c.id),
+      odds: held
+        .filter((h) => h.connectorId === c.id)
+        .map((h) => ({ id: h.id, name: h.name, level: h.level }))
+    }))
+    .filter((s) => s.ready || s.odds.length);
+}
+
+/**
+ * The AWS tools, by what the owner wants: their secrets' names (and the
+ * office's keys), reading their account, or building in it. The office signs
+ * in to AWS itself, once for all three (the office's `aws.ts`).
+ */
+export const AWS_SECRETS_ID = 'aws-secrets';
+export const AWS_READ_ID = 'aws-read';
+export const AWS_BUILD_ID = 'aws-build';
+export const AWS_IDS: readonly string[] = [AWS_SECRETS_ID, AWS_READ_ID, AWS_BUILD_ID];
+export const isAws = (id: string): boolean => AWS_IDS.includes(id);
+/** Where the one AWS sign-in sits in the secret store. */
+export const AWS_SIGN_IN = { id: 'aws', name: 'sso' } as const;
+
+const AWS_STEP: Record<string, string> = {
+  [AWS_SECRETS_ID]:
+    'Sign in to AWS, then pick the role the office reads your secrets with. Your Odds see secret names only, never their values.',
+  [AWS_READ_ID]:
+    'Sign in to AWS, then pick the role your Odds read AWS with. The office checks that it cannot read a secret value.',
+  [AWS_BUILD_ID]:
+    'Sign in to AWS, then pick the role your Odds build in AWS with. The office checks that it cannot read a secret value.'
+};
+
 /** The steps that connect a tool. `again` gives them even when it looks connected. */
 function connectSteps(conn: ConnectorRow, again = false): Step[] {
   if (conn.readyAt && !again) return [];
   const key = `oauth:${conn.id}`;
+  // One step: picking the role connects the tool too.
+  if (isAws(conn.id))
+    return [{ text: AWS_STEP[conn.id], done: false, action: { kind: 'aws', connector: conn.id } }];
   return [
     ...(conn.config.oauth
       ? [
@@ -1428,10 +1533,29 @@ export async function reconfigureConnector(
 async function forgetConnector(id: string): Promise<boolean> {
   const c = await connector(id);
   if (!c) return false;
+  if (isAws(id)) return forgetAws(c);
   const removed = secretNames(c, true).filter((name) => deleteSecret(id, name));
   if (removed.length)
     await db.update(connectors).set({ readyAt: null }).where(eq(connectors.id, id));
   return removed.length > 0;
+}
+
+/**
+ * An AWS tool no Odd holds drops its role. Secrets Manager keeps its role
+ * while another tool's key comes from AWS, since the office reads those keys
+ * with it. The one sign-in goes once no AWS tool has a role.
+ */
+async function forgetAws(c: ConnectorRow): Promise<boolean> {
+  const all = await db.select().from(connectors);
+  const keysFromAws = all.some((k) => Object.keys(k.config.fromAws ?? {}).length);
+  if (!c.config.aws || (c.id === AWS_SECRETS_ID && keysFromAws)) return false;
+  await db
+    .update(connectors)
+    .set({ config: { ...c.config, aws: undefined }, readyAt: null })
+    .where(eq(connectors.id, c.id));
+  if (!all.some((k) => k.id !== c.id && isAws(k.id) && k.config.aws))
+    deleteSecret(AWS_SIGN_IN.id, AWS_SIGN_IN.name);
+  return true;
 }
 
 export async function connectorReady(

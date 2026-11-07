@@ -242,6 +242,7 @@ export const asks = pgTable('asks', {
 export type StepAction =
   | { kind: 'secret'; connector: string; name: string }
   | { kind: 'oauth'; connector: string }
+  | { kind: 'aws'; connector: string }
   | { kind: 'choice'; options: string[] }
   | { kind: 'tools'; connector: string };
 /** Steps that share a `key` tick together, e.g. the two steps of one sign-in. */
@@ -438,7 +439,30 @@ export type ConnectorConfig = {
   headers?: string[];
   /** A hosted server the owner signs in to with OAuth. The office keeps the tokens. */
   oauth?: boolean;
+  /** One of the AWS tools: the role it uses from the office's one AWS sign-in (`AWS_SIGN_IN`). */
+  aws?: AwsConfig;
+  /**
+   * Every tool only reads, because the service's own permissions allow
+   * nothing else (AWS read only's role), so a Read only grant reaches them all.
+   */
+  readsByRole?: boolean;
+  /**
+   * Environment variables or headers whose value the office fetches from the
+   * owner's AWS Secrets Manager when a run first uses the tool, in place of a
+   * pasted one: the secret's name, and a key when the secret holds JSON.
+   */
+  fromAws?: Record<string, AwsSecretRef>;
 };
+
+/** The role an AWS tool uses, and where. None of it is secret. */
+export type AwsConfig = {
+  accountId: string;
+  role: string;
+  /** The Region the owner's secrets or work are in. */
+  region: string;
+};
+
+export type AwsSecretRef = { secret: string; key?: string };
 
 export const connectors = pgTable('connectors', {
   id: text().primaryKey(),

@@ -116,7 +116,8 @@ function listed(c: ConnectorRow, h: Held): Promise<Tool[]> {
  */
 export async function reachable(c: ConnectorRow, h: Held): Promise<Tool[]> {
   const tools = await listed(c, h);
-  if (h.level === 'act') return tools;
+  // A tool whose own permissions only read (AWS read only's role) holds itself.
+  if (h.level === 'act' || c.config.readsByRole) return tools;
   const named = tools.filter((t) => c.readTools.includes(t.name));
   const gone = named.filter((t) => !readsOnly(t)).map((t) => t.name);
   if (gone.length) await narrowReadTools(c.id, gone);

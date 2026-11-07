@@ -27,6 +27,7 @@
   import { call } from './api.ts';
   import FoldersList from './FoldersList.svelte';
   import RunsOn from './RunsOn.svelte';
+  import ServiceActions from './ServiceActions.svelte';
   import ToolTiles from './ToolTiles.svelte';
   import { toolAction } from './tool-action.ts';
   import type { StaffProfile } from '../staff/roster.ts';
@@ -41,6 +42,8 @@
     /** What a run reaches, like "3 tools" or "every tool". */
     reach: string;
     heldBack: HeldBack | null;
+    /** An AWS tool already connected, which can move to another role or Region. */
+    changes: boolean;
   };
   type Own = {
     id: string;
@@ -759,7 +762,8 @@
               placeholder="Search tools, or paste a hosted server's https address"
               bind:value={q}
             />
-            <ul class="flex max-h-60 flex-col gap-1 overflow-y-auto">
+            <!-- No scroll box of its own: the list runs the panel's full height, and the panel scrolls. -->
+            <ul class="flex flex-col gap-1">
               {#if isUrl}
                 <li>
                   <button
@@ -849,13 +853,21 @@
                     ? 'bg-sea/25'
                     : 'bg-night/60'}"
                   disabled={!allowed(l)}
-                  title={allowed(l)
-                    ? ''
-                    : `${profile.name} needs the ${l} level first. Change it above.`}
                   onclick={() => (level = l)}>{GRANT_LABEL[l]}</button
                 >
               {/each}
             </div>
+            {#if !allowed('act')}
+              <!-- Said in sight, not in a tooltip, with the one click that allows it. -->
+              <p class="text-[11px] text-muted">
+                {GRANT_LABEL.act} needs {profile.name} at {LEVEL_LABEL.act}.
+                <button
+                  class="text-sea underline underline-offset-2 hover:text-ink"
+                  onclick={() => setPermission('act')}
+                  >Set {profile.name} to {LEVEL_LABEL.act}</button
+                >
+              </p>
+            {/if}
             <div class="flex gap-2">
               <button
                 class="rounded-lg px-3 py-1.5 text-xs text-muted hover:text-ink"
@@ -899,6 +911,7 @@
                 >Revoke</button
               >
             </div>
+            <ServiceActions id={g.connector} name={g.name} changes={g.changes} />
           </li>
         {/each}
       </ul>

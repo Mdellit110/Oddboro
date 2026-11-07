@@ -96,7 +96,11 @@ export function cleanEnv(): NodeJS.ProcessEnv {
       k === 'CLAUDECODE' ||
       k.startsWith('CLAUDE_CODE_') ||
       k === 'CLAUDE_CONFIG_DIR' ||
-      k.startsWith('GIT_')
+      k.startsWith('GIT_') ||
+      // The owner's own AWS settings, like AWS_PROFILE: a tool server runs
+      // outside a run's sandbox and could sign in as the owner. The Odds' AWS
+      // tool gets its own role's credentials (`toolKeys` in aws.ts).
+      k.startsWith('AWS_')
     )
       delete env[k];
   env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';

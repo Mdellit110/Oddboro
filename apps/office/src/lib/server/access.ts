@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
+  AWS_SECRETS_ID,
   connector,
   connectorReady,
   readsOnly,
@@ -14,8 +15,8 @@ import {
   toolCommand,
   type ConnectorRow
 } from '@oddboro/ledger';
+import { secretNamesClient, toolKeys } from './aws.ts';
 import { cleanEnv } from './claude.ts';
-import { getSecret, headerSecret } from './keychain.ts';
 import { bearer, startSignIn } from './oauth.ts';
 
 export type ToolInfo = { name: string; description: string; readOnly: boolean };
@@ -25,26 +26,22 @@ export type ToolInfo = { name: string; description: string; readOnly: boolean };
  * office. `open` leaves the sign-in out, to see whether it needs one.
  */
 export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
+  // AWS Secrets Manager's names come from the office itself, never a server.
+  if (c.id === AWS_SECRETS_ID) return secretNamesClient();
+  const { env, headers } = await toolKeys(c);
   const transport =
     c.kind === 'http'
       ? new StreamableHTTPClientTransport(new URL(c.config.url!), {
           requestInit: {
             headers: {
-              ...Object.fromEntries(
-                (c.config.headers ?? []).map((n) => [n, headerSecret(c.id, n)])
-              ),
+              ...headers,
               ...(c.config.oauth && !open ? { Authorization: `Bearer ${await bearer(c.id)}` } : {})
             }
           }
         })
       : new StdioClientTransport({
           ...toolCommand(c.config.command!, c.config.args ?? []),
-          env: {
-            ...(cleanEnv() as Record<string, string>),
-            ...Object.fromEntries(
-              (c.config.secrets ?? []).map((n) => [n, getSecret(c.id, n) ?? ''])
-            )
-          },
+          env: { ...(cleanEnv() as Record<string, string>), ...env },
           stderr: 'ignore'
         });
   const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
@@ -62,7 +59,7 @@ export async function listTools(id: string, open = false): Promise<ToolInfo[]> {
     return tools.map((t) => ({
       name: t.name,
       description: t.description ?? '',
-      readOnly: readsOnly(t)
+      readOnly: !!c.config.readsByRole || readsOnly(t)
     }));
   } finally {
     await client.close();

@@ -525,6 +525,17 @@ hand-off or number, which ledger tests and the office's format test share.
   Secret Service keyring on Linux through secret-tool, and the Credential
   Manager on Windows through `@napi-rs/keyring`, in pieces of 2,048 bytes,
   since one credential holds at most 2,560.
+- A connector may name AWS secrets for its keys (`fromAws`: the secret, and a
+  key inside a JSON one) in place of values in the secret store; the office
+  reads them when a run first uses the tool, through its gateway. AWS is three
+  built-in tools (`BUILT_IN` in `src/registry.ts`; `AWS_SECRETS_ID`,
+  `AWS_READ_ID`, `AWS_BUILD_ID`), which `find_connectors` offers and
+  `ensureConnector` adds. Their descriptions tell an Odd to ask the owner what
+  they want in AWS when it is not clear. Each one's `aws` config holds its role
+  and Region, none of it secret, and all three share one sign-in in the secret
+  store (`AWS_SIGN_IN`). An AWS tool no Odd holds drops its role (`forgetAws`),
+  except Secrets Manager while a tool's key comes from AWS, and the sign-in
+  goes once no AWS tool has a role (`test/aws-tools.test.ts`).
 - What the office saves in the secret store, it removes. Revoking the last
   grant to a tool removes its keys and sign-in (`forgetConnector`), and a tool
   that changes how it lets the office in loses the secrets the old way used

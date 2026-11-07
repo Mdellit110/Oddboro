@@ -63,6 +63,11 @@
   let busy = $state(false);
   let drawing = $state(false);
   let problem = $state('');
+  /** Stops the drawing under way: Build from parts, or Stop drawing. The office ends its run too. */
+  let stopping: AbortController | undefined;
+  function stopDrawing() {
+    stopping?.abort();
+  }
   $effect(() => onbusy?.(drawing));
 
   onMount(() => {
@@ -97,24 +102,31 @@
     busy = true;
     drawing = true;
     problem = '';
+    const stop = (stopping = new AbortController());
     try {
       const previous =
         drawn ?? (current ? { look: current, portraitPx: '', newParts: [] } : undefined);
-      drawn = await call<Drawn>('/api/looks', {
-        description,
-        name,
-        role,
-        staffId,
-        note: previous ? note : undefined,
-        previous,
-        photo
-      });
+      drawn = await call<Drawn>(
+        '/api/looks',
+        {
+          description,
+          name,
+          role,
+          staffId,
+          note: previous ? note : undefined,
+          previous,
+          photo
+        },
+        'POST',
+        stop.signal
+      );
       note = '';
     } catch (e) {
-      problem = e instanceof Error ? e.message : String(e);
+      if (!stop.signal.aborted) problem = e instanceof Error ? e.message : String(e);
     } finally {
       busy = false;
       drawing = false;
+      stopping = undefined;
     }
   }
 
@@ -179,8 +191,10 @@
             : 'text-muted hover:text-ink'}"
           role="radio"
           aria-checked={mode === w.id}
-          disabled={drawing}
-          onclick={() => (way = w.id)}>{w.label}</button
+          onclick={() => {
+            if (w.id === 'parts') stopDrawing();
+            way = w.id;
+          }}>{w.label}</button
         >
       {/each}
     </div>
@@ -252,6 +266,10 @@
 
     {#if drawing && !drawn}
       <PixelDrawing {name} photo={!!photo} />
+      <button
+        class="self-start text-xs text-muted underline underline-offset-2 hover:text-ink"
+        onclick={stopDrawing}>Stop drawing</button
+      >
     {:else if !drawn}
       <button
         class="rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
@@ -283,6 +301,10 @@
       {/if}
       {#if drawing}
         <PixelDrawing {name} redraw photo={!!photo} />
+        <button
+          class="self-start text-xs text-muted underline underline-offset-2 hover:text-ink"
+          onclick={stopDrawing}>Stop drawing</button
+        >
       {:else}
         <input
           class="rounded-lg bg-raise px-3 py-2 text-sm outline-none placeholder:text-faint"

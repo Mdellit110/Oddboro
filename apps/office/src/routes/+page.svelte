@@ -19,6 +19,8 @@
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
+  import ServicesPanel from '#lib/ui/ServicesPanel.svelte';
+  import { serviceNames } from '#lib/ui/service-names.svelte.ts';
   import GoalsPanel from '#lib/ui/GoalsPanel.svelte';
   import LessonsLibrary from '#lib/ui/LessonsLibrary.svelte';
   import Welcome from '#lib/ui/Welcome.svelte';
@@ -27,6 +29,7 @@
   import ReportView from '#lib/ui/ReportView.svelte';
   import {
     close,
+    deskRequest,
     open,
     openHire,
     openLessons,
@@ -150,6 +153,7 @@
     { id: 'goals', label: 'Goals' },
     { id: 'lessons', label: 'Lessons' },
     { id: 'ledger', label: 'Ledger' },
+    { id: 'services', label: 'Services' },
     { id: 'hire', label: 'Hire' },
     { id: 'office', label: 'Office' }
   ] as const;
@@ -174,6 +178,17 @@
     chatRequest.staff = undefined;
     select(id);
   });
+
+  // An item a window put on the desk, such as a service's Change: reload the desk, then open it.
+  $effect(() => {
+    const focus = deskRequest.focus;
+    if (!focus) return;
+    deskRequest.focus = undefined;
+    void refresh().then(() => openDesk(focus));
+  });
+
+  // svelte-ignore state_referenced_locally
+  serviceNames.byId = data.services;
 
   /** The office keeps its own time zone, wherever the screen is. */
   let officeZone = $state(zone());
@@ -451,6 +466,7 @@
         switchedOff: string[];
         messages: Record<string, number>;
         threads: HeldThread[];
+        services: Record<string, string>;
       }>('/api/office');
       const fresh = [...keys(next.desk)].filter((k) => !seen.has(k));
       if (
@@ -475,6 +491,7 @@
       switchedOff = next.switchedOff;
       messages = next.messages;
       threads = next.threads;
+      serviceNames.byId = next.services;
     })());
   }
 
@@ -529,6 +546,7 @@
     if (leftOpen && front?.kind === id) return hide();
     if (id === 'desk') return void openDesk();
     if (id === 'ledger') return open({ id: 'ledger', kind: 'ledger' });
+    if (id === 'services') return open({ id: 'services', kind: 'services' });
     if (id === 'goals') return open({ id: 'goals', kind: 'goals' });
     if (id === 'lessons') return openLessons();
     if (id === 'office') return open({ id: 'office', kind: 'office' });
@@ -549,6 +567,7 @@
   function winTitle(w: Win): string {
     if (w.kind === 'desk') return 'Desk';
     if (w.kind === 'ledger') return 'Ledger';
+    if (w.kind === 'services') return 'Services';
     if (w.kind === 'goals') return 'Goals';
     if (w.kind === 'lessons') return 'Lessons';
     if (w.kind === 'office') return wins.titles[w.id] ?? 'Office';
@@ -612,7 +631,8 @@
           'switched_off',
           'pokes',
           'lessons',
-          'threads'
+          'threads',
+          'connectors'
         ].includes(e.table)
       )
         refresh();
@@ -1205,6 +1225,8 @@
                 <LessonsLibrary {staff} {version} bind:filter={w.filter} />
               {:else if w.kind === 'ledger'}
                 <LedgerPanel {staff} />
+              {:else if w.kind === 'services'}
+                <ServicesPanel {staff} {version} onstaff={select} />
               {:else if w.kind === 'setup'}
                 <Welcome
                   office={office.name}

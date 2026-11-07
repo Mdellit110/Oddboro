@@ -36,6 +36,15 @@ so its steps quote the office's labels exactly (`AccessTab.svelte`,
 `DeskDrawer.svelte`, `connectSteps` in the ledger) and change with them.
 Building the service itself stays in its own docs, which the page links to.
 
+Every guide renders through `Guide.svelte`: wide, with each step's box
+beside its words on a laptop. A step has at most one box: text to copy
+(`CopyBox`, its Copy button on the right), a page to open (`LinkBox`, the
+address as a link and a Go to button, both opening a new tab), or an example
+to read. AWS has four guides, `aws-sign-in` (shared) and one per AWS tool
+(`aws-secrets`, `aws-read`, `aws-build`), from `src/lib/guides/aws.ts`; the
+office links each tool's connect step to its guide (`AWS_GUIDES` in the
+office's `lib/site.ts`).
+
 ## Least access, never a yes for everything
 
 The site never promises that nothing leaves without the owner's yes, because an
@@ -292,12 +301,13 @@ src/lib/releases.ts          Every published release, for /releases/.
 src/lib/managers.ts          The four managers as the cards show them.
 src/lib/vignettes.json       Where each vignette's Odd stands, written by art.ts.
 src/lib/job-icons.ts         The 12 by 12 pixel icon for each job in Hire, compiled to one path each.
-src/lib/components/          Header (with the theme control), Footer, Meta (head tags), SectionHeader, LegalDoc, GitHubMark, DownloadButton.
+src/lib/components/          Header (with the theme control), Footer, Meta (head tags), SectionHeader, LegalDoc, GitHubMark, DownloadButton, and the guides: Guide, CopyBox, LinkBox, UvSteps.
+src/lib/guides/              The connector guides' parts and fixes as data (types.ts, aws.ts).
 src/lib/sections/            One component per homepage section, and the Cta band.
 src/lib/motion/              The motion helpers above.
 src/lib/hero/                Hero.svelte, HeadlineOdd.svelte, choreo.ts, scene.json.
 src/lib/server/legal.ts      Renders src/content/legal/*.md with markdown-it at prerender.
 src/content/legal/           privacy.md and terms.md. The legal writer owns these.
-src/routes/                  /, /releases/, /connectors/open-brain/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
+src/routes/                  /, /releases/, /connectors/open-brain/, /connectors/aws-*/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
 static/                      favicon.svg (a placeholder O roundel until Oddboro has a mark), robots.txt, art/ (night) and art/day/.
 ```

@@ -76,7 +76,7 @@ import {
 import { THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
-import { ensureConnector, searchRegistry } from './registry.ts';
+import { BUILT_IN, ensureConnector, searchRegistry } from './registry.ts';
 import type { GoalPlanItem, HireProposal } from './schema.ts';
 import {
   clockTime,
@@ -607,9 +607,15 @@ if (has('find_connectors'))
     },
     async ({ need }) => {
       const words = need.toLowerCase().split(/\W+/).filter(Boolean);
-      const own = (await catalog()).filter((c) =>
-        words.some((w) => `${c.name} ${c.description}`.toLowerCase().includes(w))
-      );
+      const added = await catalog();
+      // The tools the office connects itself count as its own before anyone asks for one.
+      const own = [
+        ...added,
+        ...BUILT_IN.filter((b) => !added.some((c) => c.id === b.id)).map((b) => ({
+          ...b,
+          readyAt: null
+        }))
+      ].filter((c) => words.some((w) => `${c.name} ${c.description}`.toLowerCase().includes(w)));
       let found: Awaited<ReturnType<typeof searchRegistry>> = [];
       let note = '';
       try {
