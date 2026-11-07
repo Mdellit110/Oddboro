@@ -373,7 +373,8 @@ export async function approvePlan(
         await giveTask(a.staffId, {
           title: `For "${g.title}": yours to do`,
           why: 'The part of the plan only you can do.',
-          steps: plan.ownerSteps
+          steps: plan.ownerSteps,
+          byOffice: true
         });
     }
   });

@@ -90,18 +90,20 @@ never get IPC without one.
   `ODDBORO_TARGET`, so a debug build finds its copy.
 - Env Node gets:
 
-| Variable               | Value                                                     |
-| ---------------------- | --------------------------------------------------------- |
-| `PORT`                 | the port, 4500 unless the shell's env sets `ODDBORO_PORT` |
-| `ODDBORO_PORT`         | the same                                                  |
-| `HOST`                 | `127.0.0.1`                                               |
-| `ORIGIN`               | `http://127.0.0.1:<port>`                                 |
-| `ODDBORO_HOME`         | `~/.oddboro` (`%USERPROFILE%\.oddboro`), unless set       |
-| `ODDBORO_CODE`         | `<resources>/server`                                      |
-| `ODDBORO_DB_PORT`      | passed through when the shell's env sets it               |
-| `PATH`                 | the login-shell PATH from step 3                          |
-| `ODDBORO_VERSION`      | the app's version, like `0.0.4`                           |
-| `ODDBORO_UPDATE_TOKEN` | a fresh secret per run, release builds only               |
+| Variable                       | Value                                                      |
+| ------------------------------ | ---------------------------------------------------------- |
+| `PORT`                         | the port, 4500 unless the shell's env sets `ODDBORO_PORT`  |
+| `ODDBORO_PORT`                 | the same                                                   |
+| `HOST`                         | `127.0.0.1`                                                |
+| `ORIGIN`                       | `http://127.0.0.1:<port>`                                  |
+| `ODDBORO_HOME`                 | `~/.oddboro` (`%USERPROFILE%\.oddboro`), unless set        |
+| `ODDBORO_CODE`                 | `<resources>/server`                                       |
+| `ODDBORO_DB_PORT`              | passed through when the shell's env sets it                |
+| `PATH`                         | the login-shell PATH from step 3                           |
+| `ODDBORO_VERSION`              | the app's version, like `0.0.4`                            |
+| `ODDBORO_UPDATE_TOKEN`         | a fresh secret per run, release builds only                |
+| `ODDBORO_SECRETS`              | `shell` on a Mac: the shell keeps the office's secrets     |
+| `ODDBORO_GOOGLE_CLIENT_SECRET` | the Google sign-in client's secret, when the build had one |
 
 - `ODDBORO_APP=1`. With it the server quits on SIGTERM once its HTTP server
   closes, and when its stdin closes (`apps/office/src/hooks.server.ts`). It
@@ -112,8 +114,22 @@ never get IPC without one.
   with the Glass sound on a Mac, `notify-send --app-name=Oddboro` on Linux,
   and a toast through `tauri-winrt-notification` on Windows, under the app's
   identifier, which the installer gives its Start menu shortcut. A
-  line `oddboro:update-check` is the owner's Check now. Every other line goes
+  line `oddboro:update-check` is the owner's Check now. A line
+  `oddboro:secret <json>` asks for the Keychain (below). Every other line goes
   to the log.
+- The Keychain, on a Mac (`src-tauri/src/secrets.rs`). The office sends
+  `oddboro:secret {"id":n,"op":"list"|"legacy"|"set"|"remove","account":"...","value":"..."}`
+  and the shell answers on Node's stdin with one line, `{"id":n,"ok":true,...}`
+  or `{"id":n,"ok":false,"error":"..."}`. `list` gives `secrets`, every
+  account and value under the service `com.oddboro.office`; `legacy` gives
+  `accounts`, the names alone under the old service `oddboro`, which macOS
+  shows without a prompt. The shell reads and writes through Apple's Security
+  framework (`security-framework`), in the login keychain, so each item trusts
+  only Oddboro, by its Developer ID team and bundle id: updates keep access,
+  and any other program gets macOS's "allow access" prompt. No line holding
+  `oddboro:secret` ever reaches the log, whole or garbled. The office opts in
+  from `hooks.server.ts` (`useShellSecrets` in the ledger); its child
+  processes never do.
 - Node's stdin is a pipe the shell holds open. It closes when the shell dies
   by any means, Force Quit included, so a force-quit shell never leaves Node
   running on the port.
@@ -169,6 +185,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   `ODDBORO_TARGET`.
 - `src-tauri/src/server.rs`. Starting, watching, restarting and stopping Node.
 - `src-tauri/src/env.rs`. Port, home, log path and the login-shell PATH.
+- `src-tauri/src/secrets.rs`. The office's secrets in the Mac's Keychain, and
+  the line protocol it asks with.
 - `src-tauri/src/update.rs`. Checking, downloading and installing updates,
   and asking the server when.
 - `src-tauri/tauri.conf.json`. The app, with no sidecar or resources, so
@@ -240,7 +258,8 @@ lockfile-only update, so run it by hand for one that should ship. Five jobs:
 3. `linux`, once on x86_64 and once on arm64, installs the libraries Tauri
    builds against and runs `release.ts`: the AppImage, its signature, a copy
    under the site's name, and a `latest.json` for `linux-x86_64` or
-   `linux-aarch64`. Only the updater key is needed.
+   `linux-aarch64`. Only the updater key and the Google client's secret are
+   needed.
 4. `windows`, once on x64 (`windows-latest`) and once on arm64
    (`windows-11-arm`), installs Rust where the runner lacks it, on arm64
    names the Windows SDK's `rc.exe` and Visual Studio's clang (the registry
@@ -248,7 +267,7 @@ lockfile-only update, so run it by hand for one that should ship. Five jobs:
    needs clang there), and runs
    `release.ts`: the installer, its signature, a copy under the site's name,
    and a `latest.json` for `windows-x86_64` or `windows-aarch64`. Only the
-   updater key is needed. The installer is not code-signed, so Windows
+   updater key and the Google client's secret are needed. The installer is not code-signed, so Windows
    SmartScreen warns before it runs.
 5. `draft` merges the five `latest.json` files into one, deletes any draft
    of the same version, and creates a DRAFT release `vX.Y.Z` on the merge
@@ -274,16 +293,17 @@ environment, so a workflow run from any other branch, or a pull request, never
 sees the keys. Set one with `gh secret set <NAME> -R New-Altitude/Oddboro --env
 release`. Never commit a value.
 
-| Secret                               | What it is                                                  | How to make it                                                                                                                                         |
-| ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `APPLE_CERTIFICATE`                  | The Developer ID Application certificate and key, as base64 | Keychain Access, export "Developer ID Application: New Altitude, Inc." as `cert.p12` with a password, then `base64 -i cert.p12 \| pbcopy`              |
-| `APPLE_CERTIFICATE_PASSWORD`         | The password set on that export                             | Chosen at export                                                                                                                                       |
-| `APPLE_API_KEY`                      | The App Store Connect API key, the `.p8` file's contents    | App Store Connect, Users and Access, Integrations, Team Keys, a key with Developer access. Download `AuthKey_<id>.p8`, then `pbcopy < AuthKey_<id>.p8` |
-| `APPLE_API_KEY_ID`                   | That key's ID                                               | The Key ID column on the same page                                                                                                                     |
-| `APPLE_API_ISSUER`                   | The team's issuer ID                                        | The Issuer ID above the keys on the same page                                                                                                          |
-| `TAURI_SIGNING_PRIVATE_KEY`          | The updater signing key, for every build                    | `pbcopy < ~/.tauri/oddboro-updater.key`                                                                                                                |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password                                                | `security find-generic-password -s oddboro-updater-key -a password -w \| pbcopy`                                                                       |
-| `KEYCHAIN_PASSWORD`                  | Any random string, for the runner's temporary keychain      | `openssl rand -hex 24 \| pbcopy`                                                                                                                       |
+| Secret                               | What it is                                                                                                               | How to make it                                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `APPLE_CERTIFICATE`                  | The Developer ID Application certificate and key, as base64                                                              | Keychain Access, export "Developer ID Application: New Altitude, Inc." as `cert.p12` with a password, then `base64 -i cert.p12 \| pbcopy`              |
+| `APPLE_CERTIFICATE_PASSWORD`         | The password set on that export                                                                                          | Chosen at export                                                                                                                                       |
+| `APPLE_API_KEY`                      | The App Store Connect API key, the `.p8` file's contents                                                                 | App Store Connect, Users and Access, Integrations, Team Keys, a key with Developer access. Download `AuthKey_<id>.p8`, then `pbcopy < AuthKey_<id>.p8` |
+| `APPLE_API_KEY_ID`                   | That key's ID                                                                                                            | The Key ID column on the same page                                                                                                                     |
+| `APPLE_API_ISSUER`                   | The team's issuer ID                                                                                                     | The Issuer ID above the keys on the same page                                                                                                          |
+| `TAURI_SIGNING_PRIVATE_KEY`          | The updater signing key, for every build                                                                                 | `pbcopy < ~/.tauri/oddboro-updater.key`                                                                                                                |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password                                                                                                             | `security find-generic-password -s oddboro-updater-key -a password -w \| pbcopy`                                                                       |
+| `KEYCHAIN_PASSWORD`                  | Any random string, for the runner's temporary keychain                                                                   | `openssl rand -hex 24 \| pbcopy`                                                                                                                       |
+| `GOOGLE_OAUTH_CLIENT_SECRET`         | The Desktop OAuth client's secret for Google sign-in. Google treats it as not confidential, but it stays out of the repo | New Altitude's password manager, "Oddboro Google OAuth client"                                                                                         |
 
 ### A test build
 
@@ -362,6 +382,7 @@ ODDBORO_PORT=4510 ODDBORO_DB_PORT=54510 ODDBORO_HOME=/tmp/oddboro-test-home \
 - `getrandom` 0.3.4, for the update token
 - `libc` 0.2.191 (Mac and Linux)
 - `mac-notification-sys` 0.6.15 (Mac only)
+- `security-framework` 3.7.0 (Mac only), for the Keychain
 - `tauri-plugin-single-instance` 2.5.3 (Linux and Windows)
 - `zbus` 5.19.0 (Linux only; the plugin brings the same zbus)
 - `windows-sys` 0.61.2, `tauri-winrt-notification` 0.8.1 (Windows only)

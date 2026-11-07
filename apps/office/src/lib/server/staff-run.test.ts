@@ -90,6 +90,59 @@ test("a run that reads the owner's no for a lesson works at Draft, hands nothing
   assert.match(carry.system, /Plan the picnic/);
 });
 
+test('a twin pair of access asks starts one carry-out, on the hand-off twin, told it also answers the other; and a run lists what its Odd has open on the desk', async () => {
+  const h = await L.handOff({
+    from: 'lead',
+    to: 'cleo',
+    work: { title: 'Read the inbox', brief: 'Read it.' },
+    thread: { title: 'The inbox' }
+  });
+  assert.ok('id' in h, JSON.stringify(h));
+  // Its run ended waiting on the owner, so the carry-out on the thread may start.
+  const handed = await L.startFollowUp(h.id);
+  assert.ok(handed, "Cleo's hand-off could not start");
+  await L.finishFollowUp(handed, 'Read the inbox', 'waiting', 'Asked for Gmail.');
+  const access = { connector: 'gmail', level: 'read' as const };
+  const firstDay = await L.raiseAsk('cleo', {
+    title: 'Connect Gmail (read)',
+    why: 'w',
+    ifApproved: 'i',
+    access
+  });
+  const twin = await L.raiseAsk('cleo', {
+    title: 'Connect Gmail (read)',
+    why: 'w',
+    ifApproved: 'i',
+    access,
+    handOffId: h.id,
+    threadId: h.thread
+  });
+  await L.decideAsk(firstDay.ask.id, 'approve', null);
+  const [connect] = await L.pg<{ id: number }[]>`
+    select id from tasks where ask_id = ${firstDay.ask.id}`;
+  await L.finishTask(connect.id, true, null);
+  const carries = await L.pg<{ id: number; askId: number }[]>`
+    select id, ask_id as "askId" from follow_ups where staff_id = 'cleo' and kind = 'carry_out'`;
+  assert.deepEqual(
+    carries.map((c) => c.askId),
+    [twin.ask.id]
+  );
+  const task = await L.giveTask('cleo', { title: 'Pick a label', why: 'w', steps: ['Pick one.'] });
+  const run = await runOf(carries[0].id, twin.ask.id);
+  assert.ok(
+    run.system.includes(
+      `This also answers your ask #${firstDay.ask.id}, which another of your runs raised for the same tool: do that work once, here.`
+    ),
+    run.system
+  );
+  assert.ok(
+    run.system.includes(
+      `## Still on the owner's desk from you\n\n- Task #${task.id}: Pick a label\n`
+    ),
+    run.system
+  );
+});
+
 test("the colleague's run a yes to keep going starts is handed the held work as the lead wrote it", async () => {
   const stall = (thread: { id: number } | { title: string }) =>
     L.handOff({

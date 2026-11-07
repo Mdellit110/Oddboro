@@ -18,8 +18,11 @@
     onhire: () => void;
     onmeet: (id: string) => void;
     ondone: () => void;
+    /** A notification when something new lands on the desk, per viewer. */
+    notify: boolean;
+    onnotify: (on: boolean) => void;
   };
-  let { office, welcomed, ondesign, onhire, onmeet, ondone }: Props = $props();
+  let { office, welcomed, ondesign, onhire, onmeet, ondone, notify, onnotify }: Props = $props();
 
   type Setup = {
     checks: Check[];
@@ -104,6 +107,21 @@
           The office keeps {setup.zoneName}. Run {@render words('`npm run setup`')} to change it.
         </p>
       {/if}
+      <label class="flex items-start gap-2">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={notify}
+          onchange={(e) => onnotify(e.currentTarget.checked)}
+        />
+        <span class="flex flex-col">
+          <span class="text-xs text-ink">Notify me when something lands on my desk</span>
+          <span class="text-xs text-muted"
+            >A notification on this computer for each new ask, task or report, so you need not keep
+            the office open in front of you.</span
+          >
+        </span>
+      </label>
     </section>
 
     <section class="flex flex-col gap-2">

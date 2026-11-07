@@ -21,6 +21,7 @@ import type { FloorPlan, OfficeSpec, RoomKind, RoomTemplate } from '@oddboro/wor
 import { STARTER_TOOLS } from './tools.ts';
 import type { Agent, Effort, GrantedFolder } from './agents.ts';
 import type { Level } from './access-words.ts';
+import type { GmailFilter } from './filter-words.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
 const created = (name = 'created_at') => at(name).notNull().defaultNow();
@@ -87,13 +88,36 @@ export type AccountRow = typeof accounts.$inferSelect;
  * (threads.ts): a yes starts another round, and a no stops the thread. `window` is the
  * office's one ask when the plan's 5-hour window passes its guard
  * (usage-window.ts): a yes lets hand-offs run until it resets, and a no holds
- * them until then.
+ * them until then. `reply` is one email reply an Odd proposes (`asks.reply`):
+ * the owner edits it, then the office sends it or saves it to Gmail drafts.
+ * `filter` is one Gmail filter an Odd proposes (`asks.filter`): the owner may
+ * change it, then the office creates it in Gmail.
  */
-export type AskKind = 'approval' | 'access' | 'hire' | 'goal' | 'plan' | 'hand_offs' | 'window';
+export type AskKind =
+  'approval' | 'access' | 'hire' | 'goal' | 'plan' | 'hand_offs' | 'window' | 'reply' | 'filter';
 /** `revise` means the owner sent it back to be reworked. */
 export type AskStatus = 'open' | 'approved' | 'denied' | 'revise';
 /** What an access ask wants: a connector and a level. */
 export type AccessRequest = { connector: string; level: Level };
+/**
+ * One email reply an Odd proposes. The owner may change the recipients,
+ * subject and body; the office stores their final version with `sent` once
+ * Gmail took it.
+ */
+export type ReplyDraft = {
+  /** The Gmail thread it answers, for a reply. */
+  gmailThreadId?: string;
+  /** The Gmail message id it answers. */
+  inReplyTo?: string;
+  to: string[];
+  cc: string[];
+  subject: string;
+  body: string;
+  /** The Odd's one or two lines on the email it answers. */
+  summary: string;
+  /** Set once Gmail sent it or saved it as a draft. */
+  sent?: { action: 'send' | 'draft'; at: string; gmailId: string };
+};
 /** A proposed hire. Approving it opens the hire window filled in with this. */
 export type HireProposal = {
   name: string;
@@ -220,6 +244,10 @@ export const asks = pgTable('asks', {
   goal: jsonb().$type<GoalDraft>(),
   /** A plan ask's plan. */
   plan: jsonb().$type<GoalPlan>(),
+  /** A reply ask's email. */
+  reply: jsonb().$type<ReplyDraft>(),
+  /** A filter ask's Gmail filter. */
+  filter: jsonb().$type<GmailFilter>(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
@@ -228,6 +256,8 @@ export const asks = pgTable('asks', {
   threadId: integer(),
   /** On a `hand_offs` ask, the hand-off past the limit it held: the owner's yes starts it. */
   held: jsonb().$type<HeldHandOff>(),
+  /** The colleague whose handed-back work the lead raised this from (a staff id). */
+  via: text(),
   status: text().$type<AskStatus>().notNull().default('open'),
   reason: text(),
   createdAt: created(),
@@ -263,6 +293,8 @@ export const tasks = pgTable('tasks', {
   handOffId: integer(),
   /** The thread the staffer gave this on: the owner's answer moves it on. */
   threadId: integer(),
+  /** The colleague whose handed-back work the lead gave this from (a staff id). */
+  via: text(),
   title: text().notNull(),
   why: text().notNull(),
   steps: jsonb().$type<Step[]>().notNull(),
@@ -423,11 +455,13 @@ export const ledger = pgTable(
 );
 
 /**
- * How a staffer reaches an outside tool: a server it starts (`stdio`) or a
- * hosted one (`http`), found in the MCP Registry or named by its address. A
- * secret named in `secrets` lives in the macOS keychain, never here.
+ * How a staffer reaches an outside tool: a server it starts (`stdio`), a
+ * hosted one (`http`), found in the MCP Registry or named by its address, or
+ * one the office serves itself (`builtin`: Gmail and Google Drive, in
+ * apps/office/src/lib/server/google/). A secret named in `secrets` lives in
+ * the system's secret store, never here.
  */
-export type ConnectorKind = 'stdio' | 'http';
+export type ConnectorKind = 'stdio' | 'http' | 'builtin';
 export type ConnectorConfig = {
   command?: string;
   args?: string[];
@@ -436,8 +470,12 @@ export type ConnectorConfig = {
   secrets?: string[];
   /** HTTP header names whose whole values the keychain holds. */
   headers?: string[];
-  /** A hosted server the owner signs in to with OAuth. The office keeps the tokens. */
-  oauth?: boolean;
+  /**
+   * A server the owner signs in to with OAuth. The office keeps the tokens.
+   * `true` finds the sign-in from the server's address; `'google'` signs in
+   * with New Altitude's own Google client (oauth.ts).
+   */
+  oauth?: boolean | 'google';
 };
 
 export const connectors = pgTable('connectors', {
