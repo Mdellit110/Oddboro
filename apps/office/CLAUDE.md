@@ -389,7 +389,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    tab change. Office lists two switches, Run
    commands and Browse the web, above the office's own tools; Folders
    (`FoldersList.svelte`) lists each folder with Can read and Can write side
-   by side; Services holds the outside tools. Choose a folder asks
+   by side; Services holds the outside tools, each with Read only and Read and write side by side, changed in place (`setGrantLevel`, PATCH on the access route): the tool stays signed in, and only Revoke forgets it. Choose a folder asks
    `/api/folders/pick`, which opens the system's own picker on this computer
    (`src/lib/server/folder-picker.ts`: AppleScript on a Mac, PowerShell's
    Forms dialog on Windows, zenity or kdialog on Linux), one at a time; a

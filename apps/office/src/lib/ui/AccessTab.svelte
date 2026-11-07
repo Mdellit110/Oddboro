@@ -156,6 +156,19 @@
     }
   }
 
+  /** Read only or Read and write, in place: the tool stays signed in. */
+  async function relevel(g: Grant, to: GrantLevel) {
+    if (g.level === to) return;
+    problem = '';
+    try {
+      await call(`/api/staff/${profile.id}/access`, { connector: g.connector, level: to }, 'PATCH');
+      // The grants table's change brings the list back from the office, as a revoke does.
+      g.level = to;
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   async function revoke(g: Grant) {
     problem = '';
     try {
@@ -965,6 +978,21 @@
               <button class="text-xs text-muted hover:text-coral" onclick={() => revoke(g)}
                 >Revoke</button
               >
+            </div>
+            <div class="mt-2 flex gap-1" role="group" aria-label={`${g.name} level`}>
+              {#each levels as l (l)}
+                <button
+                  class="flex-1 rounded-lg px-2 py-1 text-xs disabled:opacity-40 {g.level === l
+                    ? 'bg-sea/25 text-ink'
+                    : 'bg-night/40 text-muted hover:text-ink'}"
+                  aria-pressed={g.level === l}
+                  disabled={!allowed(l)}
+                  title={allowed(l)
+                    ? ''
+                    : `${profile.name} needs the ${l} level first. Change it above.`}
+                  onclick={() => relevel(g, l)}>{GRANT_LABEL[l]}</button
+                >
+              {/each}
             </div>
           </li>
         {/each}

@@ -9,6 +9,7 @@ import {
   grantAccess,
   reachOf,
   revoke,
+  setGrantLevel,
   staffer,
   type Level
 } from '@oddboro/ledger';
@@ -56,6 +57,19 @@ export const POST: RequestHandler = async ({ params, request }) => {
   } catch (e) {
     error(400, e instanceof Error ? e.message : String(e));
   }
+};
+
+/** Change a grant's level in place: no revoke, no new sign-in. */
+export const PATCH: RequestHandler = async ({ params, request }) => {
+  const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const level = (['read', 'act'] as const).find((l) => l === b.level);
+  if (typeof b.connector !== 'string' || !level) error(400, 'Pick a tool and a level');
+  try {
+    await setGrantLevel(params.id, b.connector, level);
+  } catch (e) {
+    error(400, e instanceof Error ? e.message : String(e));
+  }
+  return json({ ok: true });
 };
 
 export const DELETE: RequestHandler = async ({ params, url }) => {

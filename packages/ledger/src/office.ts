@@ -2202,6 +2202,40 @@ export async function grantsFor(
   return rows.map((r) => ({ ...r.grants, connector: r.connectors }));
 }
 
+/**
+ * Change a grant's level in place: Read only or Read and write. The tool stays
+ * connected and signed in, with no new steps, and the change reaches the
+ * Odd's next run. Never above the Odd's own level.
+ */
+export async function setGrantLevel(
+  staffId: string,
+  connectorId: string,
+  level: 'read' | 'act'
+): Promise<void> {
+  const who = await staffer(staffId);
+  const conn = await connector(connectorId);
+  if (!who || !conn) throw new Error('No such Odd or tool');
+  if (!levelAtMost(level, who.permission))
+    throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${level}`);
+  const [changed] = await db
+    .update(grants)
+    .set({ level })
+    .where(
+      and(
+        eq(grants.staffId, staffId),
+        eq(grants.connectorId, connectorId),
+        sql`${grants.level} <> ${level}`
+      )
+    )
+    .returning();
+  if (!changed) return;
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: `${who.name} now has ${conn.name} ${level === 'act' ? 'to read and write' : 'to read only'}`
+  });
+}
+
 export async function revoke(staffId: string, connectorId: string): Promise<void> {
   const [gone] = await db
     .delete(grants)
