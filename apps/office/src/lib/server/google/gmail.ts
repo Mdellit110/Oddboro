@@ -4,7 +4,7 @@
 // for good, only moved to the trash, and gmail.settings.basic for filters,
 // which only the office creates, on the owner's click (filters.ts).
 import { randomUUID } from 'node:crypto';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { linkFooter, withFooter } from '@oddboro/ledger';
 import { z } from 'zod';
 import {
@@ -15,6 +15,7 @@ import {
   type FilterCriteria
 } from '@oddboro/ledger/filters';
 import {
+  accountServer,
   base64url,
   DATA_NOTE,
   decodeEntities,
@@ -295,12 +296,26 @@ export function filterQuery(c: FilterCriteria): string {
 }
 
 /** About how many emails a Gmail search finds today: Gmail's own estimate. */
+/** Where counting stops: past it the card says "or more". Ten pages of ids at most. */
+export const COUNT_CAP = 5000;
+
+/**
+ * How many messages a search matches, counted page by page up to
+ * `COUNT_CAP`. Gmail's own `resultSizeEstimate` is a rough guess that came
+ * back as 201 for nearly every search, so it is not used.
+ */
 export async function countMatching(token: Token, query: string): Promise<number> {
-  const r = await google<{ resultSizeEstimate?: number }>(
-    token,
-    `${GMAIL}/messages?q=${encodeURIComponent(query)}&maxResults=1`
-  );
-  return r.resultSizeEstimate ?? 0;
+  let count = 0;
+  let page: string | undefined;
+  do {
+    const r = await google<{ messages?: { id: string }[]; nextPageToken?: string }>(
+      token,
+      `${GMAIL}/messages?q=${encodeURIComponent(query)}&maxResults=500${page ? `&pageToken=${encodeURIComponent(page)}` : ''}`
+    );
+    count += r.messages?.length ?? 0;
+    page = r.nextPageToken;
+  } while (page && count < COUNT_CAP);
+  return Math.min(count, COUNT_CAP);
 }
 
 /** A label name that is one of Gmail's own (Inbox, Trash, Spam and the rest), which a filter may not add. */
@@ -379,8 +394,8 @@ export async function tidyMatching(
   return ids.length;
 }
 
-export function gmailServer(token: Token): McpServer {
-  const server = new McpServer({ name: 'gmail', version: '1.0.0' });
+export function gmailServer(token: Token, account?: string): McpServer {
+  const server = accountServer('gmail', account, 'the Gmail account');
   const get = <T>(path: string) => google<T>(token, `${GMAIL}${path}`);
   const post = <T>(path: string, body: unknown = {}) =>
     google<T>(token, `${GMAIL}${path}`, send('POST', body));

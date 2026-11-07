@@ -94,7 +94,8 @@ test('each call raises one reply ask with the email, and the owner sees it on th
     cc: [],
     subject: 'Re: Lunch on Friday?',
     body: 'Hi Ada,\n\nFriday works.\n\nSent from Oddboro',
-    summary: 'Ada asks whether Friday lunch works.'
+    summary: 'Ada asks whether Friday lunch works.',
+    connector: 'gmail'
   });
   assert.equal(a?.via, null);
   // A body that already ends with the footer keeps one.

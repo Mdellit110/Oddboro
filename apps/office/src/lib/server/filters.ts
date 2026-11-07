@@ -14,9 +14,10 @@ import {
   type GmailFilter
 } from '@oddboro/ledger';
 import {
+  COUNT_CAP,
+  GmailOwnLabel,
   countMatching,
   filterQuery,
-  GmailOwnLabel,
   labelChanges,
   labelFor,
   makeFilter,
@@ -38,22 +39,23 @@ async function filterAsk(id: number): Promise<AskRow & { filter: GmailFilter }> 
 }
 
 /**
- * About how many emails the filter matches today, by the Gmail search its
+ * How many emails the filter matches today, counted with the Gmail search its
  * criteria make: the ask's own, or the owner's changes to them.
  */
 export async function previewFilter(
   id: number,
   criteria?: FilterCriteria
-): Promise<{ query: string; about: number }> {
+): Promise<{ query: string; about: number; more: boolean }> {
   const a = await filterAsk(id);
   const query = filterQuery(criteria ?? a.filter.criteria);
   if (!query) throw new GmailRefusal(400, 'Say which mail it matches first.');
   const nothing = 'The matching mail could not be counted';
-  const token = await gmailToken(a.staffId, nothing, 'filter');
+  const token = await gmailToken(a, nothing, 'filter');
   try {
-    return { query, about: await countMatching(token, query) };
+    const about = await countMatching(token, query);
+    return { query, about, more: about >= COUNT_CAP };
   } catch (e) {
-    throw await gmailFailed(e, a.staffId, nothing, 'filter');
+    throw await gmailFailed(e, a, nothing, 'filter');
   }
 }
 
@@ -81,7 +83,7 @@ export async function createFilter(
   making.add(id);
   try {
     const nothing = 'Nothing was created';
-    const token = await gmailToken(a.staffId, nothing, 'filter');
+    const token = await gmailToken(a, nothing, 'filter');
     const query = filterQuery(fields.criteria);
     let created: NonNullable<GmailFilter['created']>;
     let matching: number;
@@ -96,7 +98,7 @@ export async function createFilter(
       created = { at: new Date().toISOString(), gmailId, tidied };
     } catch (e) {
       if (e instanceof GmailOwnLabel) throw new GmailRefusal(400, `${nothing}. ${e.message}`);
-      throw await gmailFailed(e, a.staffId, nothing, 'filter');
+      throw await gmailFailed(e, a, nothing, 'filter');
     }
     const final: GmailFilter = { ...a.filter, ...fields, matching, created };
     if (!(await approveFilter(id, final)))

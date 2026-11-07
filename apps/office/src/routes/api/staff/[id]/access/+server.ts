@@ -1,5 +1,7 @@
 // A staffer's access: what the owner granted, grant more directly, or revoke.
 // Granting creates the task with the steps to connect it, unless it is already connected.
+// `another` on Gmail or Google Drive grants a new connector for one more
+// Google account (`grantAccess` makes it).
 import { error, json } from '@sveltejs/kit';
 import {
   capabilities,
@@ -8,6 +10,7 @@ import {
   isAws,
   reachOf,
   revoke,
+  setGrantLevel,
   staffer,
   type Level
 } from '@oddboro/ledger';
@@ -43,13 +46,33 @@ export const POST: RequestHandler = async ({ params, request }) => {
       : undefined
   );
   if (!found.connector) error(400, found.problem ?? 'No such tool');
+  const product = found.connector.config.google;
+  if (b.another === true && !product)
+    error(400, 'Only Gmail and Google Drive take another account');
   try {
-    const { task } = await grantAccess(params.id, { connector: found.connector.id, level });
+    const { task } = await grantAccess(params.id, {
+      connector: found.connector.id,
+      level,
+      ...(b.another === true && product ? { another: product } : {})
+    });
     // A tool already connected needs no steps, so nothing waits on the desk.
     return json({ ok: true, task });
   } catch (e) {
     error(400, e instanceof Error ? e.message : String(e));
   }
+};
+
+/** Change a grant's level in place: no revoke, no new sign-in. */
+export const PATCH: RequestHandler = async ({ params, request }) => {
+  const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const level = (['read', 'act'] as const).find((l) => l === b.level);
+  if (typeof b.connector !== 'string' || !level) error(400, 'Pick a tool and a level');
+  try {
+    await setGrantLevel(params.id, b.connector, level);
+  } catch (e) {
+    error(400, e instanceof Error ? e.message : String(e));
+  }
+  return json({ ok: true });
 };
 
 export const DELETE: RequestHandler = async ({ params, url }) => {

@@ -32,6 +32,10 @@ export type GmailFilter = {
   action: FilterAction;
   /** The Odd's one or two lines on why this mail should be filed this way. */
   summary: string;
+  /** The Gmail connector it is made in. */
+  connector?: string;
+  /** That account's address, as the desk shows it. */
+  account?: string;
   /** About how many emails matched when the owner created it. */
   matching?: number;
   /** Set once Gmail made it: when, its Gmail id, and how many emails were tidied with it. */

@@ -142,6 +142,12 @@
   </div>
 
   <div class="mt-3 flex flex-col gap-2 text-sm">
+    {#if a.reply.account}
+      <div class="flex items-center gap-2">
+        <span class="w-14 shrink-0 text-xs text-muted">From</span>
+        <span class="min-w-0 flex-1 truncate px-2.5">{a.reply.account}</span>
+      </div>
+    {/if}
     <label class="flex items-center gap-2">
       <span class="w-14 shrink-0 text-xs text-muted">To</span>
       <input

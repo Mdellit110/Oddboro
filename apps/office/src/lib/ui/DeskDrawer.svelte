@@ -8,6 +8,7 @@
   import SelectToChat from './SelectToChat.svelte';
   import ReplyReview from './ReplyReview.svelte';
   import FilterReview from './FilterReview.svelte';
+  import FolderAsk from './FolderAsk.svelte';
   import { call } from './api.ts';
   import { AWS_GUIDES, siteLink } from '../site.ts';
   import { ago, when } from './format.ts';
@@ -18,7 +19,7 @@
   import { tickable, yesOrNo } from '@oddboro/ledger/tools';
   import { untrack } from 'svelte';
   import { goalWhen } from '@oddboro/ledger/goals';
-  import { LEVEL_LABEL } from '@oddboro/ledger/access';
+  import { LEVEL_LABEL, type FolderAccess } from '@oddboro/ledger/access';
   import type { StaffProfile } from '../staff/roster.ts';
   import { stepText, stepsToGo } from './task-steps.ts';
 
@@ -134,6 +135,10 @@
   );
   /** The parts of a goal plan the owner unticked. Every part starts ticked. */
   let skip = $state<Record<number, boolean>>({});
+  /** A folder ask's folder and level as the owner will give them, and whether they are changing them. */
+  let folderPath = $state('');
+  let folderLevel = $state<FolderAccess>('read');
+  let changing = $state(false);
 
   // Each newly opened item starts clean, and an ask brings its closest past
   // decisions. Keyed on the item, not its row: the desk reloading (a step
@@ -149,6 +154,10 @@
     reworks = null;
     skip = {};
     secret = {};
+    changing = false;
+    const asked = i?.kind === 'ask' ? i.row : undefined;
+    folderPath = asked?.folder ? (untrack(() => desk.folders[asked.id]) ?? asked.folder.path) : '';
+    folderLevel = asked?.folder?.level ?? 'read';
     if (i?.kind === 'ask')
       call<{ precedent: LedgerRow[]; revises: AskRow | null }>(`/api/asks/${i.row.id}`)
         .then((r) => {
@@ -184,6 +193,12 @@
       // An approved access ask turns into the connect task it made, in place.
       if (r.task) made = r.task;
       show(r.task ? `task-${r.task.id}` : undefined);
+    });
+  /** Give the folder as it stands on the card: the server gives it, then approves the ask. */
+  const giveFolder = (a: AskRow) =>
+    act(async () => {
+      await call(`/api/asks/${a.id}/folder`, { path: folderPath, level: folderLevel, reason });
+      show(undefined);
     });
   const picked = (a: AskRow) => a.plan?.items.filter((_, i) => !skip[i]).length ?? 0;
   const nameOf = (id: string) => staff.find((p) => p.id === id)?.name ?? id;
@@ -510,6 +525,13 @@
                 hire window.
               </p>
             </div>
+          {:else if a.folder}
+            <FolderAsk
+              name={who(a.staffId)?.name ?? 'the Odd'}
+              bind:path={folderPath}
+              bind:level={folderLevel}
+              bind:changing
+            />
           {:else}
             <div>
               <dt class="text-xs text-muted">If you approve</dt>
@@ -568,10 +590,23 @@
               class="flex-1 rounded-lg bg-raise px-3 py-2 text-sm font-medium hover:bg-sea/25 disabled:opacity-40"
               disabled={busy || unsaved || !reason.trim()}
               title={reason.trim() ? '' : 'Say what to change in the box above first'}
-              onclick={() => decide(a, 'iterate')}>Iterate</button
+              onclick={() => decide(a, 'iterate')}>{a.folder ? 'Send back' : 'Iterate'}</button
             >
           {/if}
-          {#if a.kind === 'hire'}
+          {#if a.folder}
+            {#if !changing}
+              <button
+                class="flex-1 rounded-lg bg-raise px-3 py-2 text-sm font-medium hover:bg-sea/25 disabled:opacity-40"
+                disabled={busy || unsaved}
+                onclick={() => (changing = true)}>Change</button
+              >
+            {/if}
+            <button
+              class="flex-[1.4] rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
+              disabled={busy || unsaved || !folderPath.trim()}
+              onclick={() => giveFolder(a)}>Give access</button
+            >
+          {:else if a.kind === 'hire'}
             <button
               class="flex-[1.4] rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
               disabled={busy || unsaved}
@@ -600,10 +635,16 @@
             here.
           </p>
         {/if}
+        {#if a.folder}
+          <p class="mt-1.5 text-[11px] text-faint">
+            Give access gives {who(a.staffId)?.name ?? 'the Odd'} this folder, and it starts on the work
+            that waited for it. Change lets you pick a smaller folder or Can read first.
+          </p>
+        {/if}
         {#if !yesOrNo(a.kind)}
           <p class="mt-1.5 text-[11px] text-faint">
-            Iterate sends it back to {who(a.staffId)?.name ?? 'the Odd'} with your words, and the new
-            version comes back to your desk.
+            {a.folder ? 'Send back' : 'Iterate'} sends it back to {who(a.staffId)?.name ??
+              'the Odd'} with your words, and the new version comes back to your desk.
           </p>
         {/if}
       {:else if open.kind === 'task'}

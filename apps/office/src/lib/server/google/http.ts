@@ -1,8 +1,35 @@
 // What the office's own Google tool servers (gmail.ts, drive.ts) share: one
 // way to call Google with the owner's token, one way to turn a failure into
 // a tool result the Odd can read, and the fence around text from strangers.
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+
+/**
+ * A Google tool server for one account. Each account is a connector, and so
+ * a server, of its own: with its address known, every tool's description
+ * ends by naming it ("It reaches the Gmail account ada@example.com only."),
+ * so an Odd holding two always knows which one it is in.
+ */
+export function accountServer(name: string, account: string | undefined, where: string): McpServer {
+  const server = new McpServer({ name, version: '1.0.0' });
+  if (!account) return server;
+  const register = server.registerTool.bind(server) as (
+    tool: string,
+    config: { description?: string },
+    cb: unknown
+  ) => unknown;
+  server.registerTool = ((tool: string, config: { description?: string }, cb: unknown) =>
+    register(
+      tool,
+      {
+        ...config,
+        description: `${config.description ?? ''} It reaches ${where} ${account} only.`
+      },
+      cb
+    )) as typeof server.registerTool;
+  return server;
+}
 
 /** Gives a fresh access token, refreshing it first when it has run out. */
 export type Token = () => Promise<string>;
@@ -124,16 +151,28 @@ export function decodeEntities(text: string): string {
   });
 }
 
+/**
+ * Replace until nothing more matches. One pass can leave a tag behind:
+ * removing `<scr<script>ipt>` once makes a new `<script>`.
+ */
+function untilStable(text: string, pattern: RegExp, by: string): string {
+  let before: string;
+  do {
+    before = text;
+    text = text.replace(pattern, by);
+  } while (text !== before);
+  return text;
+}
+
 /** An HTML email or page as plain text: blocks become lines, tags and scripts go. */
 export function htmlToText(html: string): string {
-  const text = html
-    .replace(/<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
+  let text = untilStable(html, /<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, '');
+  text = untilStable(text, /<!--[\s\S]*?-->/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li\b[^>]*>/gi, '\n- ')
     .replace(/<\/(p|div|tr|h[1-6]|li|ul|ol|table|blockquote)\s*>/gi, '\n')
-    .replace(/<\/t[dh]\s*>/gi, ' ')
-    .replace(/<[^>]*>/g, '');
+    .replace(/<\/t[dh]\s*>/gi, ' ');
+  text = untilStable(text, /<[^>]*>/g, '');
   return decodeEntities(text)
     .replace(/[ \t ]+/g, ' ')
     .replace(/ *\n */g, '\n')

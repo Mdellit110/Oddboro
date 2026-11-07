@@ -15,8 +15,13 @@ import {
   asksFor,
   cancelPoke,
   catalog,
+  checkFolder,
+  folderAskRefused,
+  shownFolder,
   editOwnJob,
   giveTask,
+  GOOGLE,
+  googleConnectors,
   grantsFor,
   reconnectTask,
   jobsFor,
@@ -54,7 +59,14 @@ import {
   ownToolsSaid
 } from './capabilities.ts';
 import { AGENT_NAMES } from './agents.ts';
-import { levelAtMost, LEVELS, NOT_OWN_TOOLS, SWITCH_NAMES } from './access-words.ts';
+import {
+  FOLDER_SAID,
+  levelAtMost,
+  LEVELS,
+  NOT_OWN_TOOLS,
+  SETTINGS_TAB,
+  SWITCH_NAMES
+} from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
   APPLIES_TO_MAX,
@@ -514,7 +526,7 @@ async function placed(a: {
 tool(
   'raise_ask',
   {
-    description: `Ask ${OWNER} to approve something. It lands on their desk and they approve, deny, or send it back with what to change, maybe with a reason. Use it for anything that needs their yes. One decision per ask, worded as the exact action: if they approve, you carry it out at once in a new run, with only the ask to go on. The reply lists their closest past decisions: if one matches and gave no reason, tell ${OWNER} that a reason would let Odds handle these without asking next time. For an outside tool, use ask_for_access; for ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, see my_access; and for a new Odd, use propose_hire.${raisedNote}`,
+    description: `Ask ${OWNER} to approve something. It lands on their desk and they approve, deny, or send it back with what to change, maybe with a reason. Use it for anything that needs their yes. One decision per ask, worded as the exact action: if they approve, you carry it out at once in a new run, with only the ask to go on. The reply lists their closest past decisions: if one matches and gave no reason, tell ${OWNER} that a reason would let Odds handle these without asking next time. For an outside tool, use ask_for_access; for a folder on this computer, ask_for_folder; for ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, see my_access; and for a new Odd, use propose_hire.${raisedNote}`,
     inputSchema: {
       title: z
         .string()
@@ -630,7 +642,41 @@ const address = z
   .min(3)
   .max(320)
   .regex(/^[^\r\n,;]+$/, 'One address each, on one line.');
-if (has('propose_reply') && (await grantsFor(ME)).some((g) => g.connectorId === 'gmail'))
+// Each Gmail account is a connector of its own. With more than one, the Odd
+// names the one the email came to, and the reply goes out from it.
+const mailboxes = (await grantsFor(ME))
+  .filter((g) => g.connector.config.google === 'gmail')
+  .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
+const mailboxIds = mailboxes.map((m) => m.id) as [string, ...string[]];
+const mailboxArg = mailboxes.length
+  ? (() => {
+      const listed = mailboxes
+        .map((m) => `${m.id}${m.account ? ` (${m.account})` : ''}`)
+        .join(', ');
+      const arg = z.enum(mailboxIds);
+      return mailboxes.length > 1
+        ? arg.describe(
+            `The Gmail account the email came to, by id: ${listed}. Required, since you hold more than one.`
+          )
+        : arg
+            .optional()
+            .describe(`The Gmail account, by id: ${listed}. Leave out for your only one.`);
+    })()
+  : z.never().optional();
+/** The Gmail account a reply or filter goes through: the one named, or the Odd's only one. */
+function mailbox(
+  named: string | undefined
+): { connector: string; account?: string } | { problem: string } {
+  const m = named ? mailboxes.find((x) => x.id === named) : mailboxes[0];
+  if (!m) return { problem: `You do not hold a Gmail account called ${named}.` };
+  if (!named && mailboxes.length > 1)
+    return {
+      problem: `You hold more than one Gmail account. Pass account: one of ${mailboxIds.join(', ')}.`
+    };
+  return { connector: m.id, account: m.account };
+}
+
+if (has('propose_reply') && mailboxes.length)
   tool(
     'propose_reply',
     {
@@ -653,11 +699,13 @@ if (has('propose_reply') && (await grantsFor(ME)).some((g) => g.connectorId === 
           .max(400)
           .describe('One or two lines on the email it answers: who wrote and what they want.'),
         why: z.string().max(1000).describe('Why this reply, in one or two plain sentences.'),
+        account: mailboxArg,
         revises: revisesArg,
         ...raisedArgs
       }
     },
     async ({
+      account,
       gmail_thread_id,
       in_reply_to,
       to,
@@ -669,6 +717,8 @@ if (has('propose_reply') && (await grantsFor(ME)).some((g) => g.connectorId === 
       revises,
       ...where
     }) => {
+      const box = mailbox(account);
+      if ('problem' in box) return refused(box.problem);
       const on = await placed(where);
       if ('problem' in on) return refused(on.problem);
       const more = to.length > 1 ? ` and ${to.length - 1} more` : '';
@@ -689,7 +739,8 @@ if (has('propose_reply') && (await grantsFor(ME)).some((g) => g.connectorId === 
           subject,
           // The footer goes in now, where the owner sees it and may delete it.
           body: withFooter(body),
-          summary
+          summary,
+          ...box
         },
         revises,
         via: VIA
@@ -704,7 +755,7 @@ if (has('propose_reply') && (await grantsFor(ME)).some((g) => g.connectorId === 
 // then the office creates it in Gmail. Only for an Odd that holds Gmail at any
 // level, since it files mail the Odd read there.
 const filterText = z.string().trim().max(500).optional();
-if (has('propose_filter') && (await grantsFor(ME)).some((g) => g.connectorId === 'gmail'))
+if (has('propose_filter') && mailboxes.length)
   tool(
     'propose_filter',
     {
@@ -736,11 +787,13 @@ if (has('propose_filter') && (await grantsFor(ME)).some((g) => g.connectorId ===
           .max(400)
           .describe('One or two plain lines: what mail it matches and what it does to it.'),
         why: z.string().max(1000).describe('Why this filter, in one or two plain sentences.'),
+        account: mailboxArg,
         revises: revisesArg,
         ...raisedArgs
       }
     },
     async ({
+      account,
       from,
       to,
       subject,
@@ -774,6 +827,8 @@ if (has('propose_filter') && (await grantsFor(ME)).some((g) => g.connectorId ===
         return refused('Say which mail it matches: from, to, subject, query or has_attachment.');
       if (!doesSomething(action))
         return refused('Say what it does: skip_inbox, mark_read, add_label or star.');
+      const box = mailbox(account);
+      if ('problem' in box) return refused(box.problem);
       const on = await placed(where);
       if ('problem' in on) return refused(on.problem);
       const { ask } = await raiseAsk(ME, {
@@ -782,7 +837,7 @@ if (has('propose_filter') && (await grantsFor(ME)).some((g) => g.connectorId ===
         title: `Gmail filter: ${filterWords({ criteria, action })}`.slice(0, 140),
         why,
         ifApproved: `The office creates it in your Gmail, with any changes you make, and tidies the mail it already matches if you tick that. Nothing changes before you click.`,
-        filter: { criteria, action, summary },
+        filter: { criteria, action, summary, ...box },
         revises,
         via: VIA
       });
@@ -852,7 +907,7 @@ if (has('ask_for_access'))
   tool(
     'ask_for_access',
     {
-      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
+      description: `Ask ${OWNER} to connect a tool for you. Pass a catalog id or registry name from find_connectors, or the https address of a hosted MCP server. Ask for the lowest level that does the job: read to look, write to change things in the tool (needs act permission). For a second Google account of Gmail or Google Drive, pass that connector with another_account. If they approve, they get numbered steps to connect it, and it shows up in my_access when done. ${NOT_OWN_TOOLS}${raisedNote}`,
       inputSchema: {
         connector: z.string(),
         level: z
@@ -866,10 +921,16 @@ if (has('ask_for_access'))
           .describe(
             `Only for an https address that takes a key instead of a sign-in: the name of the header the key goes in, as the server's docs or ${OWNER} give it, e.g. x-api-key or Authorization. ${OWNER} pastes the key on their desk. Never ask for the key itself.`
           ),
+        another_account: z
+          .boolean()
+          .optional()
+          .describe(
+            `Only for Gmail or Google Drive, for each Google account beyond the first. When ${OWNER} uses more than one, ask for all of them in one run: the first without another_account, then one ask with it for each further account. ${OWNER} signs in to each as a tool of its own.`
+          ),
         revises: revisesArg
       }
     },
-    async ({ connector: wanted, level: asked, why, key_header, revises }) => {
+    async ({ connector: wanted, level: asked, why, key_header, another_account, revises }) => {
       const on = await placed({});
       if ('problem' in on) return refused(on.problem);
       const level = asked === 'write' ? 'act' : 'read';
@@ -881,16 +942,49 @@ if (has('ask_for_access'))
       );
       if (!found.connector) return text(`${found.problem} Use find_connectors.`);
       const conn = found.connector;
-      const title = `Connect ${conn.name} (${asked})`;
+      const product = conn.config.google;
+      if (another_account && !product)
+        return refused(`another_account is only for Gmail and Google Drive.`);
+      // Another account only beside a first one: connected, or on its way (this
+      // Odd's open ask for it, or a grant still being connected). So an Odd that
+      // needs two mailboxes can ask for both at once, on its first day.
+      const firstOnItsWay = async (p: NonNullable<typeof product>) => {
+        const ids = new Set((await googleConnectors(p)).map((c) => c.id));
+        const asking = (await asksFor(ME)).some(
+          (a) =>
+            a.kind === 'access' &&
+            a.status === 'open' &&
+            !!a.access &&
+            ids.has(a.access.connector) &&
+            !a.access.another
+        );
+        return asking || (await grantsFor(ME)).some((g) => ids.has(g.connectorId));
+      };
+      const another =
+        another_account &&
+        product &&
+        ((await googleConnectors(product)).some((c) => c.readyAt) || (await firstOnItsWay(product)))
+          ? product
+          : undefined;
+      if (another_account && !another)
+        return refused(
+          `Ask for ${GOOGLE[product!].id} without another_account first. Then ask again with another_account for each further account, in the same run if you need them all.`
+        );
+      const plain = another ? GOOGLE[another].name : conn.name;
+      const title = another
+        ? `Connect another ${plain} account (${asked})`
+        : `Connect ${conn.name} (${asked})`;
       const { ask, precedent } = await raiseAsk(ME, {
         ...on,
         title,
         why,
-        ifApproved: conn.readyAt
-          ? `${me.name} can use ${conn.name} at once: you connected it already, so there are no steps.`
-          : `You get numbered steps to connect ${conn.name} for ${me.name}.`,
+        ifApproved: another
+          ? `You get numbered steps to sign in to another Google account for ${plain}, for ${me.name}.`
+          : conn.readyAt
+            ? `${me.name} can use ${conn.name} at once: you connected it already, so there are no steps.`
+            : `You get numbered steps to connect ${conn.name} for ${me.name}.`,
         revises,
-        access: { connector: conn.id, level }
+        access: { connector: conn.id, level, ...(another ? { another } : {}) }
       });
       return text(
         `Ask ${ask.id} is on ${OWNER}'s desk.` +
@@ -900,6 +994,51 @@ if (has('ask_for_access'))
       );
     }
   );
+
+// A folder on this computer, outside the office: only the owner gives one,
+// from this ask's card or the Settings tab. Checked here with the Settings
+// tab's rules, so a folder they could not give never reaches the desk.
+tool(
+  'ask_for_folder',
+  {
+    description: `Ask ${OWNER} for a folder on this computer, outside the office, to read or to read and change. Ask with this instead of giving ${OWNER} steps for your ${SETTINGS_TAB} tab: they give it with one click, or a narrower one. Ask for the narrowest folder and the lowest level the work needs: read to look, write only to change files there. You reach it from your next run, which starts when they give it. my_access lists the folders you have.${raisedNote}`,
+    inputSchema: {
+      path: z
+        .string()
+        .trim()
+        .min(1)
+        .max(1000)
+        .describe('The folder\'s full path, starting with / or ~, e.g. "~/Documents/Taxes".'),
+      level: z.enum(['read', 'write']).describe('read to look, write to change files there.'),
+      why: z.string().max(1000).describe('What work needs it, in one or two plain sentences.'),
+      revises: revisesArg
+    }
+  },
+  async ({ path, level, why, revises }) => {
+    const on = await placed({});
+    if ('problem' in on) return refused(on.problem);
+    if (!isAbsolute(path) && !/^~(?=$|\/)/.test(path))
+      return refused("Give the folder's full path, starting with / or ~.");
+    const checked = checkFolder(path);
+    if ('refused' in checked) return refused(checked.refused);
+    const held = folderAskRefused((await staffer(ME)) ?? me, checked.real, level);
+    if (held) return refused(held);
+    const shown = shownFolder(checked.real);
+    const { ask } = await raiseAsk(ME, {
+      ...on,
+      kind: 'folder',
+      title: `${level === 'write' ? 'Read and change' : 'Read'} ${shown}`,
+      why,
+      ifApproved: `The office gives ${me.name} ${shown} (${FOLDER_SAID[level]}), or the folder and level you pick, and ${me.name} picks up the work with it.`,
+      folder: { path: checked.real, level },
+      revises,
+      via: VIA
+    });
+    return text(
+      `Ask ${ask.id} is on ${OWNER}'s desk. When they give the folder, a new run of yours picks up the work with it. Check my_asks later for their decision.`
+    );
+  }
+);
 
 tool(
   'reconnect_access',

@@ -133,7 +133,27 @@
 </script>
 
 <section class="flex flex-col gap-3" aria-label="Build from parts">
-  <div class="flex items-end justify-center gap-4 rounded-xl bg-raise p-3">
+  <div class="relative flex items-end justify-center gap-4 rounded-xl bg-raise p-3">
+    {#if parts}
+      <button
+        class="absolute end-2 top-2 rounded-full p-1.5 text-muted hover:bg-sea/20 hover:text-ink"
+        aria-label="Shuffle: a new look from random parts"
+        title="Shuffle"
+        onclick={shuffle}
+      >
+        <svg
+          class="size-4"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><path d="M13.5 2.5v3h-3" /></svg
+        >
+      </button>
+    {/if}
     {#if built}
       <Pixel
         src={built.portrait}
@@ -223,11 +243,6 @@
         </div>
       </div>
     </div>
-
-    <button
-      class="self-start text-xs text-muted underline underline-offset-2 hover:text-ink"
-      onclick={shuffle}>Shuffle</button
-    >
   {/if}
 
   {#if problem}
