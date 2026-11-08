@@ -1285,7 +1285,7 @@ sends every action as JSON, body or not.
   Odd, a swap to another world) glides through `glideTo` in
   `src/lib/floor/engine.ts`; only the first frame and a resize place it at
   once. A swap keeps the owner's view on the street and glides out only if the
-  new building would not fit. Dragging or zooming takes the camera back. Past the grounds the floor lays a meadow (`MEADOW` tiles a side) with the street carried out to its edges and trees scattered over it (`countryside` in `engine.ts`), so the camera can pull back far enough to fit the whole office between open panels (`viewCover`).
+  new building would not fit. Dragging or zooming takes the camera back. Past the grounds the floor lays a meadow (`MEADOW` tiles a side) with the street and the river carried out to its edges and trees scattered over it (`countryside` in `engine.ts`), so the camera can pull back far enough to fit the whole office between open panels (`viewCover`).
 - No CSS animation loops forever. Play it once, or only while something is
   happening, like the dots while a reply loads.
 - The office keeps the owner's time zone (`zone()` from `@oddboro/ledger/time`),
