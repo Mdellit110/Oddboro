@@ -9,14 +9,17 @@
 // - Anything that is not a read (GET, HEAD, OPTIONS) must come from the
 //   owner's own page (`fromOwnerPage`), in every mode. SvelteKit's own check
 //   covers form posts only, so the office checks every action itself.
-//   The one other client is the app's shell, which reports updates to
-//   /api/update with the token it gave the server (`fromShell`).
+//   The other clients are the app's shell, which reports updates to
+//   /api/update with the token it gave the server (`fromShell`), and an
+//   Odd's run, which reaches its outside tools through /api/gateway with the
+//   token the office gave that run (`fromRun`).
 //
 // A plain comparison of Origin with the office's own address would refuse the
 // owner's page through Caddy, which reaches the office over http while the
 // page is https, so `fromOwnerPage` compares what the browser itself says.
 import type { Handle } from '@sveltejs/kit/hooks';
 import { HOSTS } from './hosts.ts';
+import { fromRun, GATEWAY_PATH } from './gateway.ts';
 import { fromShell } from './update.ts';
 
 /**
@@ -61,7 +64,8 @@ export const guardOffice: Handle = ({ event, resolve }) => {
   if (
     READS.has(request.method) ||
     fromOwnerPage(request) ||
-    (event.url.pathname === '/api/update' && fromShell(request, event.getClientAddress()))
+    (event.url.pathname === '/api/update' && fromShell(request, event.getClientAddress())) ||
+    (event.url.pathname.startsWith(`${GATEWAY_PATH}/`) && fromRun(request))
   )
     return resolve(event);
   return refuse("Only the office's own page can do that");

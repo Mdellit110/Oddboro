@@ -109,19 +109,21 @@ never get IPC without one.
   `ODDBORO_TARGET`, so a debug build finds its copy.
 - Env Node gets:
 
-| Variable                  | Value                                                     |
-| ------------------------- | --------------------------------------------------------- |
-| `PORT`                    | the port, 4500 unless the shell's env sets `ODDBORO_PORT` |
-| `ODDBORO_PORT`            | the same                                                  |
-| `HOST`                    | `127.0.0.1`                                               |
-| `ORIGIN`                  | `http://127.0.0.1:<port>`                                 |
-| `ODDBORO_HOME`            | `~/.oddboro` (`%USERPROFILE%\.oddboro`), unless set       |
-| `ODDBORO_CODE`            | `<resources>/server`                                      |
-| `ODDBORO_DB_PORT`         | passed through when the shell's env sets it               |
-| `PATH`                    | the login-shell PATH from step 3                          |
-| `ODDBORO_VERSION`         | the app's version, like `0.0.4`                           |
-| `ODDBORO_UPDATE_TOKEN`    | a fresh secret per run, release builds only               |
-| `ODDBORO_DIAGNOSTICS_DSN` | the report address from step 11, when the shell found one |
+| Variable                       | Value                                                      |
+| ------------------------------ | ---------------------------------------------------------- |
+| `PORT`                         | the port, 4500 unless the shell's env sets `ODDBORO_PORT`  |
+| `ODDBORO_PORT`                 | the same                                                   |
+| `HOST`                         | `127.0.0.1`                                                |
+| `ORIGIN`                       | `http://127.0.0.1:<port>`                                  |
+| `ODDBORO_HOME`                 | `~/.oddboro` (`%USERPROFILE%\.oddboro`), unless set        |
+| `ODDBORO_CODE`                 | `<resources>/server`                                       |
+| `ODDBORO_DB_PORT`              | passed through when the shell's env sets it                |
+| `PATH`                         | the login-shell PATH from step 3                           |
+| `ODDBORO_VERSION`              | the app's version, like `0.0.4`                            |
+| `ODDBORO_UPDATE_TOKEN`         | a fresh secret per run, release builds only                |
+| `ODDBORO_SECRETS`              | `shell` on a Mac: the shell keeps the office's secrets     |
+| `ODDBORO_GOOGLE_CLIENT_SECRET` | the Google sign-in client's secret, when the build had one |
+| `ODDBORO_DIAGNOSTICS_DSN`      | the report address from step 11, when the shell found one  |
 
 - `ODDBORO_APP=1`. With it the server quits on SIGTERM once its HTTP server
   closes, and when its stdin closes (`apps/office/src/hooks.server.ts`). It
@@ -132,8 +134,22 @@ never get IPC without one.
   with the Glass sound on a Mac, `notify-send --app-name=Oddboro` on Linux,
   and a toast through `tauri-winrt-notification` on Windows, under the app's
   identifier, which the installer gives its Start menu shortcut. A
-  line `oddboro:update-check` is the owner's Check now. Every other line goes
+  line `oddboro:update-check` is the owner's Check now. A line
+  `oddboro:secret <json>` asks for the Keychain (below). Every other line goes
   to the log.
+- The Keychain, on a Mac (`src-tauri/src/secrets.rs`). The office sends
+  `oddboro:secret {"id":n,"op":"list"|"legacy"|"set"|"remove","account":"...","value":"..."}`
+  and the shell answers on Node's stdin with one line, `{"id":n,"ok":true,...}`
+  or `{"id":n,"ok":false,"error":"..."}`. `list` gives `secrets`, every
+  account and value under the service `com.oddboro.office`; `legacy` gives
+  `accounts`, the names alone under the old service `oddboro`, which macOS
+  shows without a prompt. The shell reads and writes through Apple's Security
+  framework (`security-framework`), in the login keychain, so each item trusts
+  only Oddboro, by its Developer ID team and bundle id: updates keep access,
+  and any other program gets macOS's "allow access" prompt. No line holding
+  `oddboro:secret` ever reaches the log, whole or garbled. The office opts in
+  from `hooks.server.ts` (`useShellSecrets` in the ledger); its child
+  processes never do.
 - Node's stdin is a pipe the shell holds open. It closes when the shell dies
   by any means, Force Quit included, so a force-quit shell never leaves Node
   running on the port.
@@ -191,6 +207,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   the owner's answer, the allow list and the sending.
 - `src-tauri/src/server.rs`. Starting, watching, restarting and stopping Node.
 - `src-tauri/src/env.rs`. Port, home, log path and the login-shell PATH.
+- `src-tauri/src/secrets.rs`. The office's secrets in the Mac's Keychain, and
+  the line protocol it asks with.
 - `src-tauri/src/update.rs`. Checking, downloading and installing updates,
   and asking the server when.
 - `src-tauri/tauri.conf.json`. The app, with no sidecar or resources, so
@@ -214,8 +232,9 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   hardened runtime. No App Sandbox: the server spawns `claude` and reads
   `~/.claude`.
 - `scripts/stage.ts`. Builds the office and the sprites, then lays out
-  `stage/`: the office build, production `node_modules` at the versions
-  installed in the repo, and the ledger, sprites and world as plain
+  `stage/`: the office build, which bundles every third-party package the
+  office itself runs but Sentry's, the production `node_modules` that Sentry,
+  the ledger, sprites and world load, at the versions installed in the repo, and those three as plain
   JavaScript (types stripped, `.ts` imports rewritten) in
   `node_modules/@oddboro/`, with their files beside them. Packages' test
   folders (`__screenshots__`, `__tests__`) and every source map stay out, and a staged path
@@ -261,7 +280,8 @@ lockfile-only update, so run it by hand for one that should ship. Five jobs:
 3. `linux`, once on x86_64 and once on arm64, installs the libraries Tauri
    builds against and runs `release.ts`: the AppImage, its signature, a copy
    under the site's name, and a `latest.json` for `linux-x86_64` or
-   `linux-aarch64`. Only the updater key is needed.
+   `linux-aarch64`. Only the updater key and the Google client's secret are
+   needed.
 4. `windows`, once on x64 (`windows-latest`) and once on arm64
    (`windows-11-arm`), installs Rust where the runner lacks it, on arm64
    names the Windows SDK's `rc.exe` and Visual Studio's clang (the registry
@@ -269,7 +289,7 @@ lockfile-only update, so run it by hand for one that should ship. Five jobs:
    needs clang there), and runs
    `release.ts`: the installer, its signature, a copy under the site's name,
    and a `latest.json` for `windows-x86_64` or `windows-aarch64`. Only the
-   updater key is needed. The installer is not code-signed, so Windows
+   updater key and the Google client's secret are needed. The installer is not code-signed, so Windows
    SmartScreen warns before it runs.
 5. `draft` merges the five `latest.json` files into one, deletes any draft
    of the same version, and creates a DRAFT release `vX.Y.Z` on the merge
@@ -313,6 +333,7 @@ release`. Never commit a value.
 | `TAURI_SIGNING_PRIVATE_KEY`          | The updater signing key, for every build                                                                                       | `pbcopy < ~/.tauri/oddboro-updater.key`                                                                                                                |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password                                                                                                                   | `security find-generic-password -s oddboro-updater-key -a password -w \| pbcopy`                                                                       |
 | `KEYCHAIN_PASSWORD`                  | Any random string, for the runner's temporary keychain                                                                         | `openssl rand -hex 24 \| pbcopy`                                                                                                                       |
+| `GOOGLE_OAUTH_CLIENT_SECRET`         | The Desktop OAuth client's secret for Google sign-in. Google treats it as not confidential, but it stays out of the repo       | New Altitude's password manager, "Oddboro Google OAuth client"                                                                                         |
 | `SENTRY_AUTH_TOKEN`                  | A Sentry auth token for the project the release uploads to, which uploads the shell's debug files and the office's source maps | An organization auth token from the organization's settings in Sentry                                                                                  |
 
 Three variables too, none of them secret: `ODDBORO_DIAGNOSTICS_DSN`, the
@@ -334,10 +355,11 @@ ODDBORO_RELEASE_URL=http://127.0.0.1:4598 \
   node apps/desktop/scripts/release.ts --version 0.0.91 --test --out /tmp/oddboro-0.0.91
 ```
 
-## Placeholders
+## Icons and signing
 
-- The icons. A night rounded square with an ember ring, drawn as a stand-in
-  until Oddboro has a mark. Regenerate with
+- The icons are Oddboro's mark: a night rounded square with an ember ring.
+  `logo.png` in the site and the office is the same ring on night to the
+  edges. Regenerate with
   `npm run tauri -w @oddboro/desktop -- icon <1024px png> -o src-tauri/icons`,
   then delete the `android/`, `ios/`, `Square*`, `StoreLogo.png` and
   `64x64.png` files it also writes. `icon.ico` stays: Windows builds embed
@@ -400,6 +422,7 @@ ODDBORO_PORT=4510 ODDBORO_DB_PORT=54510 ODDBORO_HOME=/tmp/oddboro-test-home \
 - `sentry` 0.49.5, and `rustls` 0.23.46 with `ring`, for error reports
 - `libc` 0.2.191 (Mac and Linux)
 - `mac-notification-sys` 0.6.15 (Mac only)
+- `security-framework` 3.7.0 (Mac only), for the Keychain
 - `tauri-plugin-single-instance` 2.5.3 (Linux and Windows)
 - `zbus` 5.19.0 (Linux only; the plugin brings the same zbus)
 - `windows-sys` 0.61.2, `tauri-winrt-notification` 0.8.1 (Windows only)

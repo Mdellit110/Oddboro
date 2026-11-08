@@ -27,10 +27,28 @@ and `preview`, fixed.
   the `oddboro` secret store service, `local.oddboro.com`). Keep them in step
   with the app.
 
+## Connector guides
+
+`/connectors/<name>/` walks the owner through giving an Odd one outside
+service whose setup is not obvious, such as Open Brain's key in the
+`x-brain-key` header. It is the one place the site names tabs and buttons,
+so its steps quote the office's labels exactly (`AccessTab.svelte`,
+`DeskDrawer.svelte`, `connectSteps` in the ledger) and change with them.
+Building the service itself stays in its own docs, which the page links to.
+
+Every guide renders through `Guide.svelte`: wide, with each step's box
+beside its words on a laptop. A step has at most one box: text to copy
+(`CopyBox`, its Copy button on the right), a page to open (`LinkBox`, the
+address as a link and a Go to button, both opening a new tab), or an example
+to read. AWS has four guides, `aws-sign-in` (shared) and one per AWS tool
+(`aws-secrets`, `aws-read`, `aws-build`), from `src/lib/guides/aws.ts`; the
+office links each tool's connect step to its guide (`AWS_GUIDES` in the
+office's `lib/site.ts`).
+
 ## Least access, never a yes for everything
 
 The site never promises that nothing leaves without the owner's yes, because an
-Odd with a write grant acts without asking. It says each Odd gets the least
+Odd with a write grant at act acts without asking. It says each Odd gets the least
 access its job needs, and every claim rests on the office's real rules:
 
 | Claim on the site                                                     | Where it is true                                                          |
@@ -38,16 +56,18 @@ access its job needs, and every claim rests on the office's real rules:
 | One level per Odd (read, draft, act), only the owner raises it        | `setPermission` in `packages/ledger/src/office.ts`; the 2026-10-29 ruling |
 | A new Odd starts at read with no outside tools                        | `staff.permission` defaults to read in `schema.ts`; grants start empty    |
 | An Odd asks, the owner approves and connects it                       | `grantAccess` and the 2026-10-30 access ruling                            |
-| A tool connects read only, or with write only while the Odd is act    | `grantAccess` refuses a grant above the level; `access()` in `staff.ts`   |
+| A tool connects read only, or with write from draft                   | `grantAccess` and `grantWorks`; `access()` in `staff.ts`                  |
+| At draft, each change through a write grant waits for the owner's yes | `writesWait`; the gateway's `raiseCall`, and `makeCall` on the yes        |
 | A lowered level makes a grant above it wait                           | `access()` skips it; `setPermission`'s comment                            |
-| A write grant uses that one tool without asking; the owner revokes it | `revoke` in `office.ts`; the Access tab in `apps/office`                  |
+| At act, a write grant uses that one tool without asking; revocable    | `revoke` in `office.ts`; the Access tab in `apps/office`                  |
 | An Odd pokes the owner in chat at a time it sets                      | `poke_owner` in `packages/ledger/src/mcp.ts`                              |
 | Every Odd reads the people list, which stays on the owner's computer  | `readable` in `staff.ts`; hard rule 9                                     |
 
-An Odd has no web search of its own: Claude Code runs with Read, Glob, Grep,
-Write and Edit only. Copy that searches the web says it uses a search tool the
-owner connects from the MCP Registry. When any of these rules changes in the
-office, change the site in the same change.
+An Odd has web search only when the owner turns on Browse the web for it,
+through its tool's own search and fetch; otherwise it has file tools only.
+Copy that searches the web says it uses a search tool the owner connects from
+the MCP Registry. When any of these rules changes in the office, change the
+site in the same change.
 
 ## The promise
 
@@ -101,6 +121,7 @@ npm run dev -w @oddboro/site        # http://localhost:4501
 npm run build -w @oddboro/site      # prerender to apps/site/build/
 npm run preview -w @oddboro/site    # serve the build on 4501
 npm run art -w @oddboro/site        # regenerate static/art/, src/lib/hero/scene.json and src/lib/vignettes.json
+npm run office-gif -w @oddboro/site # the README's office, docs/office.gif; add -- --night for docs/office-night.gif
 npm run check-types -w @oddboro/site
 npm run lint -w @oddboro/site       # prettier; the root guards run too
 ```
@@ -224,7 +245,7 @@ its own composition; none is a row of identical cards.
 The job card in `Hire` names, for each job, what the Odd does with the tools
 the office really gives it, the least level that takes, and the owner's part.
 The `Access` mock plays the office's rules: the level buttons, a grant per tool
-that never sits above the level, a grant that waits when the level drops,
+that works only from its level (write from draft, asking first there), a grant that waits when the level drops,
 Revoke, and what the Odd can do now. The job picker, the Access mock and the
 copy buttons keep their state on the page. Nothing is sent anywhere, and the
 clipboard write is the only browser API they touch.
@@ -267,12 +288,15 @@ owner picks both: when making a release's art, show the owner the frames in
 both lights and ask which one. `releases.ts` describes that
 frame as `shareAlt`.
 `scripts/gif.ts` writes the GIFs, with no dependency: median cut to 256
-colours, then LZW.
+colours, then LZW. A long one, like the README's office, stores only what
+changed since the frame before (`encodeGifChanges`).
 
 ## Layout
 
 ```
 scripts/art.ts               The art generator. hero-office.json, vignette-office.json and manager-looks.json are its specs.
+scripts/paint.ts             Paints and lights the office's sprites for an hour of the day, for art.ts and office-gif.ts.
+scripts/office-gif.ts        The README's office: Main Street by day with eight Odds at work, as docs/office.gif.
 scripts/release-art.ts       The releases page's GIFs, on the desk vignette. gif.ts encodes them.
 src/app.css                  The tokens (night, and the day overrides), the --art-* variables, the fonts, the motion classes.
 src/lib/theme.svelte.ts      The theme: the pick, localStorage, data-theme on <html>, following the system on Auto.
@@ -282,12 +306,13 @@ src/lib/releases.ts          Every published release, for /releases/.
 src/lib/managers.ts          The four managers as the cards show them.
 src/lib/vignettes.json       Where each vignette's Odd stands, written by art.ts.
 src/lib/job-icons.ts         The 12 by 12 pixel icon for each job in Hire, compiled to one path each.
-src/lib/components/          Header (with the theme control), Footer, Meta (head tags), SectionHeader, LegalDoc, GitHubMark, DownloadButton.
+src/lib/components/          Header (with the theme control), Footer, Meta (head tags), SectionHeader, LegalDoc, GitHubMark, DownloadButton, and the guides: Guide, CopyBox, LinkBox, UvSteps.
+src/lib/guides/              The connector guides' parts and fixes as data (types.ts, aws.ts).
 src/lib/sections/            One component per homepage section, and the Cta band.
 src/lib/motion/              The motion helpers above.
 src/lib/hero/                Hero.svelte, HeadlineOdd.svelte, choreo.ts, scene.json.
 src/lib/server/legal.ts      Renders src/content/legal/*.md with markdown-it at prerender.
 src/content/legal/           privacy.md and terms.md. The legal writer owns these.
-src/routes/                  /, /releases/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
-static/                      favicon.svg (a placeholder O roundel until Oddboro has a mark), robots.txt, art/ (night) and art/day/.
+src/routes/                  /, /releases/, /connectors/open-brain/, /connectors/aws-*/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
+static/                      logo.png (the mark: favicon, header, footer; Google's sign-in screen shows the same), robots.txt, art/ (night) and art/day/.
 ```

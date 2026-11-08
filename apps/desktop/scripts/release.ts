@@ -199,6 +199,19 @@ function notarize(file: string, staple: string): void {
   run('xcrun', ['stapler', 'staple', staple]);
 }
 
+/**
+ * The one file in `folder` that `tauri build` made for `version`, ending in
+ * `ending`. Anything but exactly one stops the release. GitHub's cache keeps
+ * target/ from earlier builds, and 0.0.6 for Windows once shipped the 0.0.5
+ * installer left there, which sorted first.
+ */
+function builtFile(folder: string, version: string, ending: string): string {
+  const found = readdirSync(folder).filter((f) => f.includes(`_${version}_`) && f.endsWith(ending));
+  if (found.length !== 1)
+    throw new Error(`Want one ${version} ${ending} in ${folder}, found ${found.length}`);
+  return found[0];
+}
+
 /** Set this build's version in tauri.conf.json and Cargo.toml. Returns what puts them back. */
 function setVersion(version: string): () => void {
   const saved = [CONF, CARGO, LOCK].map((f) => [f, readFileSync(f, 'utf8')] as const);
@@ -264,8 +277,7 @@ function buildLinux(version: string): void {
   checkNoHome(join(RELEASE, 'oddboro'));
   uploadDebugFiles([join(RELEASE, 'oddboro')]);
   const built = join(RELEASE, 'bundle', 'appimage');
-  const appimage = readdirSync(built).find((f) => f.endsWith('.AppImage'));
-  if (!appimage) throw new Error(`No AppImage in ${built}`);
+  const appimage = builtFile(built, version, '.AppImage');
 
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
@@ -298,8 +310,7 @@ function buildWindows(version: string): void {
   checkNoHome(join(RELEASE, 'oddboro.exe'));
   uploadDebugFiles([join(RELEASE, 'oddboro.exe'), join(RELEASE, 'oddboro.pdb')]);
   const built = join(RELEASE, 'bundle', 'nsis');
-  const setup = readdirSync(built).find((f) => f.endsWith('-setup.exe'));
-  if (!setup) throw new Error(`No installer in ${built}`);
+  const setup = builtFile(built, version, '-setup.exe');
 
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
@@ -411,6 +422,8 @@ function buildMac(version: string): void {
 const restore = wanted ? setVersion(wanted) : () => {};
 try {
   const version = wanted ?? (JSON.parse(readFileSync(CONF, 'utf8')) as { version: string }).version;
+  // Every release starts with no bundles, so only this build's files are there to pick.
+  rmSync(join(RELEASE, 'bundle'), { recursive: true, force: true });
   if (process.platform === 'darwin') buildMac(version);
   else if (process.platform === 'win32') buildWindows(version);
   else buildLinux(version);

@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOOKS_ROOT, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
 import { db } from './db.ts';
+import { firstAsk } from './first-questions.ts';
 import { hire, ownerName, type StaffRow } from './office.ts';
 import { jobs } from './schema.ts';
 import { STARTER_TOOLS } from './tools.ts';
@@ -30,7 +31,12 @@ export type ManagerPreset = {
   says: string;
   /** A generated look. Marshall has none and keeps the hand-drawn art. */
   look?: LookSpec;
-  /** Their first chat message to the owner, in their own voice: it asks for goals, and lets the owner skip them. */
+  /**
+   * Their first chat message to the owner: a greeting in their own voice,
+   * then the first of three short questions (`firstAsk`). The owner taps or
+   * types each answer, and the office asks the next (`FIRST_QUESTIONS`). Each
+   * answer about how the office works becomes a lesson for every Odd.
+   */
   hello: (owner: string) => string;
 };
 
@@ -40,16 +46,14 @@ export const MANAGERS: ManagerPreset[] = [
     name: 'Marshall',
     trait: 'Savvy',
     says: "Calm and organized. I spot talent, and I'll tell you who to hire next.",
-    hello: (owner) =>
-      `Hi ${owner}, I'm Marshall. Glad to be here.\n\nBefore I bring anyone else on, I'd like to know what you're hoping this office does for you. A calmer inbox? A project that keeps sliding to next month? Tell me one or two things you want more of, and I'll work out who we need.\n\nIf you'd rather not think that big today, that's fine. Tell me what's taking too much of your week, and I'll start there. Your first report will be ready at 7 tomorrow morning.`
+    hello: (owner) => `Hi ${owner}, I'm Marshall. Glad to be here.\n\n${firstAsk}`
   },
   {
     id: 'ziva',
     name: 'Ziva',
     trait: 'Sharp',
     says: 'I read the room before you walk into it. Short answers, no surprises, nothing slips past me.',
-    hello: (owner) =>
-      `${owner}. Ziva. I run the floor from today.\n\nOne question before I hire anyone: what do you want more of? Fewer late nights, a launch, an hour back in your evening. Name one or two and I'll come back with a plan.\n\nNot today? Fine. Tell me what's eating your week instead. Your first report is on your desk at 7 tomorrow.`,
+    hello: (owner) => `${owner}. Ziva. I run the floor from today.\n\n${firstAsk}`,
     look: {
       hair: 'long-straight',
       top: 'blazer',
@@ -70,7 +74,7 @@ export const MANAGERS: ManagerPreset[] = [
     trait: 'Executive presence',
     says: 'I run the floor like a boardroom. You set the direction, and I bring you decisions.',
     hello: (owner) =>
-      `Good to meet you, ${owner}. I'm Jamal.\n\nYou set the direction, so let's start there. What do you want more of? Maybe it's more time outdoors, maybe it's the side project you keep meaning to finish. Give me one or two, and I'll come back with a plan and the people to carry it.\n\nIf you'd rather start small, tell me what's eating your week. You'll have my first report at 7 tomorrow morning.`,
+      `Good to meet you, ${owner}. I'm Jamal. You set the direction.\n\n${firstAsk}`,
     look: {
       hair: 'short-crop',
       top: 'blazer',
@@ -92,7 +96,7 @@ export const MANAGERS: ManagerPreset[] = [
     trait: 'Intense',
     says: "I don't do half done. I chase every loose end until it closes, and I'll tell you the minute something is off.",
     hello: (owner) =>
-      `${owner}, hi. Cindy. Fair warning: I don't sit still, so point me somewhere.\n\nWhat do you want more of? More sleep, that project finally out the door, whatever keeps nagging at you. Give me one or two and I'll come back with a plan and the people for it.\n\nNot ready to go that big? Then tell me what's driving you nuts this week, and I'll start there. First report's on your desk at 7 tomorrow.`,
+      `${owner}, hi. Cindy. Fair warning: I don't sit still, so point me somewhere.\n\n${firstAsk}`,
     look: {
       hair: 'bob',
       top: 'sweater',
@@ -103,9 +107,9 @@ export const MANAGERS: ManagerPreset[] = [
   }
 ];
 
-/** The first chat message from a manager the owner described, who has no voice written for them yet. */
+/** The first chat message from a manager the owner described, who has no voice written for them yet. It ends as `hello` does. */
 export const customHello = (name: string, owner: string) =>
-  `Hi ${owner}, I'm ${name}.\n\nBefore I bring anyone else on, tell me what you want this office to give you more of. A tidier inbox, a project out the door, a quieter week. One or two is plenty, and I'll work out who we need.\n\nOr skip that for now and tell me what's taking too much of your time. Your first report comes at 7 tomorrow morning.`;
+  `Hi ${owner}, I'm ${name}.\n\n${firstAsk}`;
 
 /** A ready-made manager's portrait, as .px in the looks palette. */
 export function managerPortrait(id: string): string | undefined {
@@ -162,11 +166,16 @@ Goals are what ${owner} wants more of: "answer every client email within a day",
    tools, and what only ${owner} can do. Give the work to Odds already here
    when one fits, with a new job or a change to one. Hire only for work nobody
    here fits. Bring the whole plan in one ask with propose_goal_plan.
-3. If you need answers first, run an intake: a file of questions in your
+3. Once ${owner} approves a plan, you lead the goal's work: you hand each
+   piece to the Odd who does it with hand_off, check what comes back, and
+   hand on the next. The office brings you back to the goal as each new
+   hire joins. So a plan's steps for ${owner} hold only what truly
+   needs them, such as signing in to a tool, never passing work to an Odd.
+4. If you need answers first, run an intake: a file of questions in your
    folder, attached to a task with give_owner_a_task. Name it for the goal,
    like \`notes/intake-reading.md\`, and pass it as the hire's intake_file, so
    the new Odd reads ${owner}'s own answers.
-4. list_goals shows every goal, who serves it and how it is going. An Odd
+5. list_goals shows every goal, who serves it and how it is going. An Odd
    sees only the goals it serves.
 `;
 

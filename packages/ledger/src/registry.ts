@@ -1,7 +1,15 @@
 // Finding MCP servers a staffer could use, in the office catalog first and
 // then the public MCP Registry. Only the search words leave the Mac.
-import { addConnector, connector, type ConnectorRow } from './office.ts';
-import type { ConnectorConfig, ConnectorKind } from './schema.ts';
+import {
+  addConnector,
+  AWS_BUILD_ID,
+  AWS_READ_ID,
+  AWS_SECRETS_ID,
+  connector,
+  reconfigureConnector,
+  type ConnectorRow
+} from './office.ts';
+import type { ConnectorConfig, ConnectorKind, connectors } from './schema.ts';
 
 const REGISTRY = 'https://registry.modelcontextprotocol.io/v0/servers';
 
@@ -110,6 +118,39 @@ export async function fromRegistry(name: string): Promise<Candidate | undefined>
   return undefined;
 }
 
+/**
+ * Tools the office connects in its own way, offered by `find_connectors`
+ * before the registry and added to the catalog the first time one is asked for.
+ * AWS starts once the owner signs in, which fills in its proxy's arguments.
+ */
+const AWS_PICK =
+  'If it is not clear what the owner wants in AWS, ask them before asking for any: use their secrets (AWS Secrets Manager), read their data (AWS, read only), or build in their account (AWS, builder).';
+
+export const BUILT_IN: (typeof connectors.$inferInsert)[] = [
+  {
+    id: AWS_SECRETS_ID,
+    name: 'AWS Secrets Manager',
+    description: `The names and descriptions of the owner's secrets in AWS Secrets Manager, never their values. Ask for read when the owner wants their AWS secrets used: once it is connected, the owner can also have other tools take their keys from AWS. ${AWS_PICK}`,
+    // The office answers it itself (the office's aws.ts), so nothing starts.
+    kind: 'stdio',
+    config: {}
+  },
+  {
+    id: AWS_READ_ID,
+    name: 'AWS, read only',
+    description: `Read the owner's Amazon Web Services (AWS) account through AWS's MCP Server: S3, CloudWatch logs, EC2, Lambda and the rest, as a role that cannot change anything or read a secret value. Ask for read when the owner wants you to read data in AWS. ${AWS_PICK}`,
+    kind: 'stdio',
+    config: { command: 'uvx', args: [], readsByRole: true }
+  },
+  {
+    id: AWS_BUILD_ID,
+    name: 'AWS, builder',
+    description: `Build in the owner's Amazon Web Services (AWS) account through AWS's MCP Server: create and change S3, Lambda, EC2 and the rest, as a role that cannot change IAM or read a secret value. Ask for write when the owner wants you to build in AWS. ${AWS_PICK}`,
+    kind: 'stdio',
+    config: { command: 'uvx', args: [] }
+  }
+];
+
 /** A catalog id for a registry name: io.github.acme/notes becomes acme-notes. */
 export const connectorId = (registry: string) =>
   registry
@@ -118,25 +159,61 @@ export const connectorId = (registry: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-/** A catalog connector by id, or a registry server added to the catalog by its name. */
+/** A name an HTTP header can have, like Authorization or x-brain-key. */
+export const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/;
+
+/**
+ * How a hosted server named by its address lets the office in: a sign-in, or
+ * a key the owner pastes, sent in the header named here.
+ */
+export type WayIn = { keyHeader?: string };
+
+/** The config for a hosted server named by its address. */
+const byAddress = (url: string, way: WayIn): ConnectorConfig =>
+  way.keyHeader ? { url, headers: [way.keyHeader], oauth: false } : { url, oauth: true };
+
+/**
+ * A catalog connector by id, or a registry server added to the catalog by its
+ * name, or a hosted server by its https address. `way` says how a server named
+ * by its address lets the office in. Without it, a new one signs in and one
+ * already in the catalog stays as it is.
+ */
 export async function ensureConnector(
-  wanted: string
+  wanted: string,
+  way?: WayIn
 ): Promise<{ connector?: ConnectorRow; problem?: string }> {
-  const own = await connector(wanted);
-  if (own) return { connector: own };
-  if (/^https:\/\/\S+$/.test(wanted)) {
+  if (way?.keyHeader !== undefined && !HEADER_NAME.test(way.keyHeader))
+    return {
+      problem: `"${way.keyHeader}" is not a header name. Use letters, digits and dashes, like x-api-key.`
+    };
+  const isUrl = /^https:\/\/\S+$/.test(wanted);
+  const url = isUrl ? new URL(wanted) : undefined;
+  const id = url ? connectorId(`${url.hostname}${url.pathname}`) : wanted;
+  const own = await connector(id);
+  if (own) {
+    // One named by its address and not connected yet takes the way in asked for now.
+    if (way && own.kind === 'http' && !own.registry && !own.readyAt) {
+      const config = byAddress(own.config.url!, way);
+      if (JSON.stringify(config) !== JSON.stringify(own.config)) {
+        await reconfigureConnector(own.id, config);
+        return { connector: { ...own, config } };
+      }
+    }
+    return { connector: own };
+  }
+  const built = BUILT_IN.find((b) => b.id === id);
+  if (built) return { connector: await addConnector(built) };
+  if (url)
     // A hosted server the owner named by its address, not in the registry.
-    const url = new URL(wanted);
     return {
       connector: await addConnector({
-        id: connectorId(`${url.hostname}${url.pathname}`),
+        id,
         name: url.hostname.replace(/^(www|mcp|api)\./, ''),
-        description: `Hosted MCP server at ${url.href}`,
+        description: `Hosted MCP server at ${url.origin}${url.pathname}`,
         kind: 'http',
-        config: { url: url.href, oauth: true }
+        config: byAddress(url.href, way ?? {})
       })
     };
-  }
   const c = await fromRegistry(wanted);
   if (!c) return { problem: `No catalog id or registry server is named "${wanted}".` };
   if (c.unsupported || !c.kind || !c.config)

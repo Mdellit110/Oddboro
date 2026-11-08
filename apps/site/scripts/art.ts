@@ -17,16 +17,25 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as prettier from 'prettier';
 import { join } from 'node:path';
-import { loadSprites } from '@oddboro/sprites/load';
-import {
-  hexToRgba,
-  renderFrame,
-  spriteMeta,
-  type Palette,
-  type SpriteDef
-} from '@oddboro/sprites/px';
+import { hexToRgba, renderFrame } from '@oddboro/sprites/px';
 import { createImage, drawImage, encodePng, scaleImage, type Image } from '@oddboro/sprites/png';
-import { writeReleaseArt, type DeskLayers, type HallLayers } from './release-art.ts';
+import {
+  writeReleaseArt,
+  type DeskLayers,
+  type GymLayers,
+  type HallLayers
+} from './release-art.ts';
+import {
+  catalog,
+  cropTo,
+  DAY,
+  frameImage,
+  lighting,
+  NIGHT,
+  palette,
+  sprites,
+  type Rect
+} from './paint.ts';
 import {
   loadLibrary,
   lookFrame,
@@ -35,40 +44,21 @@ import {
   type LookSpec
 } from '@oddboro/sprites/look';
 import {
-  BLOOM_REACH,
-  bloomAlpha,
   composeWorld,
   findPath,
   generateOffice,
-  glowAlpha,
-  glowFalloff,
-  INDOOR_GLOW,
   lotOf,
-  nightTint,
-  skyAt,
   TILE,
   type DrawCmd,
   type OfficeSpec,
   type PlacedSpot,
-  type SpriteCatalog,
+  type RoomTemplate,
   type World
 } from '@oddboro/world';
+import { loadSpaces } from '@oddboro/world/load';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ART = join(ROOT, 'static', 'art');
-const NIGHT = 21;
-const DAY = 13;
-
-type Rect = { x: number; y: number; w: number; h: number };
-
-const { palette, sprites, errors } = loadSprites();
-if (errors.length) {
-  console.error(errors.join('\n'));
-  process.exit(1);
-}
-const catalog: SpriteCatalog = Object.fromEntries(
-  [...sprites.values()].map((d) => [d.name, spriteMeta(d, palette)])
-);
 const spec = JSON.parse(
   readFileSync(join(ROOT, 'scripts', 'hero-office.json'), 'utf8')
 ) as OfficeSpec;
@@ -138,128 +128,6 @@ const crop: Rect = {
 };
 const local = (r: Rect): Rect => ({ x: r.x - crop.x, y: r.y - crop.y, w: r.w, h: r.h });
 
-// Rendering, the way scripts/render.ts in the world package does it.
-const frameImage = (() => {
-  const cache = new Map<string, Image>();
-  return (def: SpriteDef, frame: string, variant?: string, emissiveOnly = false): Image => {
-    const key = `${def.name}@${variant ?? ''}/${frame}${emissiveOnly ? '~e' : ''}`;
-    let img = cache.get(key);
-    if (!img) {
-      const f = def.frames.find((x) => x.name === frame) ?? def.frames[0];
-      const v = variant ? def.variants.find((x) => x.name === variant)?.map : undefined;
-      img = renderFrame(def, f, palette, v, emissiveOnly);
-      cache.set(key, img);
-    }
-    return img;
-  };
-})();
-
-function cropTo(img: Image, r: Rect): Image {
-  const out = createImage(r.w, r.h);
-  for (let y = 0; y < r.h; y++) {
-    const sy = r.y + y;
-    if (sy < 0 || sy >= img.height) continue;
-    const x0 = Math.max(0, r.x);
-    const x1 = Math.min(img.width, r.x + r.w);
-    if (x1 <= x0) continue;
-    out.data.set(
-      img.data.subarray((sy * img.width + x0) * 4, (sy * img.width + x1) * 4),
-      (y * r.w + (x0 - r.x)) * 4
-    );
-  }
-  return out;
-}
-
-/** Painting and lighting at one hour of the day. */
-function lighting(hour: number) {
-  const tint = nightTint(hour);
-  const mean = (t: number[]) => (t[0] + t[1] + t[2]) / 3;
-  // How much of a lamp's warmth a thing above the lit layer should catch:
-  // all of it at night, none at midday, when the lamps are off.
-  const warmth = Math.max(0, 1 - mean(tint)) / (1 - mean(nightTint(NIGHT)));
-
-  /** Paint a list of draws on a transparent canvas, with the sky behind each window. */
-  function paint(draws: DrawCmd[], opaque: boolean, width = W, height = H): Image {
-    const canvas = createImage(width, height);
-    if (opaque)
-      for (let i = 0; i < width * height; i++) canvas.data.set(hexToRgba('#0d0f1a'), i * 4);
-    const [skyTop, skyBottom] = skyAt(hour);
-    for (const d of draws) {
-      const def = sprites.get(d.sprite)!;
-      if (def.tags.includes('window'))
-        for (let y = 0; y < def.height; y++) {
-          const t = y / def.height;
-          const c = skyTop.map((v, i) => Math.round(v + (skyBottom[i] - v) * t));
-          for (let x = 0; x < def.width; x++)
-            canvas.data.set([c[0], c[1], c[2], 255], ((d.y + y) * width + d.x + x) * 4);
-        }
-      drawImage(canvas, frameImage(def, d.frame, d.variant), d.x, d.y, d.flip);
-    }
-    return canvas;
-  }
-
-  /**
-   * Every pixel wears the hour's tint. Alpha stays as it was. `lamp` adds the
-   * warm light a thing standing under a lamp would catch, since the Odds and
-   * the bus sit above the lit layer and get none of its glow.
-   */
-  function shade(img: Image, lamp = 0): Image {
-    const warm = [0.2, 0.17, 0.1];
-    for (let i = 0; i < img.width * img.height; i++)
-      for (let ch = 0; ch < 3; ch++)
-        img.data[i * 4 + ch] = Math.round(
-          Math.min(255, img.data[i * 4 + ch] * (tint[ch] + lamp * warmth * warm[ch]))
-        );
-    return img;
-  }
-
-  /** The tint, then each lamp's glow and bloom cut to its room, then the emissive pixels. */
-  function light(img: Image, w: World, draws: DrawCmd[]): Image {
-    const { width: iw, height: ih } = img;
-    const add = new Float32Array(iw * ih * 3);
-    const bloom = bloomAlpha(hour);
-    for (const l of w.lights) {
-      const [lr, lg, lb] = hexToRgba(l.color);
-      const glow = glowAlpha(l.intensity, hour, l.outdoor);
-      const lampBloom = bloom * (l.outdoor ? 1 : INDOOR_GLOW);
-      const r = l.radius;
-      const c = l.clip ?? { x: 0, y: 0, w: iw, h: ih };
-      const y0 = Math.max(c.y, Math.floor(l.y - r));
-      const y1 = Math.min(c.y + c.h, ih, l.y + r);
-      const x0 = Math.max(c.x, Math.floor(l.x - r));
-      const x1 = Math.min(c.x + c.w, iw, l.x + r);
-      for (let y = y0; y < y1; y++)
-        for (let x = x0; x < x1; x++) {
-          const d = Math.hypot(x + 0.5 - l.x, y + 0.5 - l.y);
-          const f = glow * glowFalloff(d / r) + lampBloom * glowFalloff(d / (r * BLOOM_REACH));
-          if (f <= 0) continue;
-          const i = (y * iw + x) * 3;
-          add[i] += (lr / 255) * f;
-          add[i + 1] += (lg / 255) * f;
-          add[i + 2] += (lb / 255) * f;
-        }
-    }
-    for (let i = 0; i < iw * ih; i++)
-      for (let ch = 0; ch < 3; ch++) {
-        const base = img.data[i * 4 + ch] / 255;
-        img.data[i * 4 + ch] = Math.round(Math.min(1, base * tint[ch] + add[i * 3 + ch]) * 255);
-      }
-    for (const d of draws) {
-      if (!catalog[d.sprite].emissive) continue;
-      drawImage(
-        img,
-        frameImage(sprites.get(d.sprite)!, d.frame, d.variant, true),
-        d.x,
-        d.y,
-        d.flip
-      );
-    }
-    return img;
-  }
-
-  return { paint, shade, light };
-}
-
 mkdirSync(join(ART, 'day'), { recursive: true });
 const write = (name: string, img: Image, dir = '') => {
   writeFileSync(join(ART, dir, name), encodePng(img));
@@ -320,6 +188,95 @@ for (let t = 0; t < HALL.w / TILE; t++) {
     for (const l of catalog['gym-wall-light'].lights)
       hallLights.push({ ...l, x: x + l.x, y: y + l.y, clip: { x: 0, y: 0, w: HALL.w, h: HALL.h } });
   }
+}
+
+/**
+ * The gym in 0.0.8's release art: the office's gym stamp, its walls, floor and
+ * equipment, packed into a room that fits the eight by six tiles every release
+ * art shows. Along the back wall stand the treadmill, the dumbbells and the
+ * rack; on the floor, the bike and the bench, with room to jog between them.
+ * The view cuts off the side walls, the top of the back wall and the front
+ * wall.
+ */
+const GYM_STAMP = loadSpaces().rooms.gym;
+const GYM_ROOM: RoomTemplate = {
+  ...GYM_STAMP,
+  map: [
+    'WWWWWWWWWW',
+    'WWWWWNWWWW',
+    'WWWWWNWWWW',
+    'W........W',
+    'W........W',
+    'W........W',
+    'W........W',
+    'W........W',
+    'WWWWWWWWWW'
+  ],
+  props: [
+    { sprite: 'gym-mirror', at: [2, 2] },
+    { sprite: 'gym-wall-light', at: [1, 2] },
+    { sprite: 'gym-wall-light', at: [7, 2] },
+    { sprite: 'gym-treadmill', at: [1, 3] },
+    { sprite: 'gym-dumbbells', at: [3, 3] },
+    { sprite: 'gym-rack', at: [6, 3] },
+    { sprite: 'gym-bottle', at: [2, 3] },
+    { sprite: 'gym-bike', at: [2, 5] },
+    { sprite: 'gym-bench', at: [6, 5] },
+    { sprite: 'gym-kettlebells', at: [8, 6] }
+  ]
+};
+const gymWorld = composeWorld(
+  { id: 'release-gym', name: GYM_STAMP.name, rooms: [{ room: 'gym', at: [0, 0] }] },
+  { gym: GYM_ROOM },
+  catalog
+);
+if (gymWorld.missing.length) {
+  console.error(`Missing sprites in the gym: ${gymWorld.missing.join(', ')}`);
+  process.exit(1);
+}
+const GYM_VIEW: Rect = { x: TILE, y: TILE + 4, w: 8 * TILE, h: 6 * TILE };
+// The bench has no seat of its own. Theo sits this many pixels up from its
+// near tile, on the middle of the pad.
+const BENCH_SEAT = 6;
+
+// The rack with its bar lifted off, and the bar alone, both from the rack's
+// own pixels. UNRACK covers the rack's rows 14 to 21, which hold the bar and
+// its plates: x marks a pixel unracking takes away (the plates, and the bar
+// between the J-hooks) and k one it inks, to close the stub of bar left on
+// each upright. The bar is every x pixel, and the whole bar where it crosses
+// the uprights.
+const RACK = sprites.get('gym-rack')!;
+const RACK_BAR = { top: 14, mid: 17 };
+const UNRACK = [
+  'xxxxx........................................xxx',
+  'xxxxxx......................................xxxx',
+  'xxxx.........xxxxxxxxxxxxxxxxxxxxxx..........xxx',
+  'xxxx........kxxxxxxxxxxxxxxxxxxxxxxk.........xxx',
+  'xxxx.........xxxxxxxxxxxxxxxxxxxxxx..........xxx',
+  'xxxxxx....................................xxxxxx',
+  'xxxxxx....................................xxxxxx',
+  'xxxxxx....................................xxxxxx'
+];
+{
+  const f = RACK.frames[0];
+  const mark = (r: number, c: number) => UNRACK[r - RACK_BAR.top]?.[c] ?? '.';
+  const unracked = f.rows.map((row, r) =>
+    [...row].map((ch, c) => (mark(r, c) === 'x' ? '.' : mark(r, c) === 'k' ? 'k' : ch)).join('')
+  );
+  const bar = f.rows.map((row, r) =>
+    [...row]
+      .map((ch, c) => (Math.abs(r - RACK_BAR.mid) <= 1 || mark(r, c) === 'x' ? ch : '.'))
+      .join('')
+  );
+  // The rack's sprite gains the two as frames, for this script only.
+  sprites.set('gym-rack', {
+    ...RACK,
+    frames: [
+      ...RACK.frames,
+      { ...f, name: 'unracked', rows: unracked },
+      { ...f, name: 'bar', rows: bar }
+    ]
+  });
 }
 
 // The floor states, as vignettes cut from a second office that has a mail
@@ -487,7 +444,7 @@ const vignettes = VIGNETTES.map((v) => {
 
 /** Every image the hour changes: one set per theme. Returns the lit scene. */
 function renderSet(hour: number, dir: string): Image {
-  const { paint, shade, light } = lighting(hour);
+  const { paint, shade, light } = lighting(hour, W, H);
   const lit = light(paint(world.draws, true), world, world.draws);
 
   write('lot.png', cropTo(light(paint(lotWorld.draws, true), lotWorld, lotWorld.draws), crop), dir);
@@ -680,13 +637,14 @@ function renderSet(hour: number, dir: string): Image {
     w: 128,
     h: 96
   };
-  const ada = STAFF[1];
-  const adaFrame = (frame: string) => {
-    const src = frameImage(sprites.get(ada.sprite)!, frame, ada.variant);
+  /** One sprite frame of an Odd from STAFF, lit for the hour. */
+  const oddFrame = (who: (typeof STAFF)[number]) => (frame: string) => {
+    const src = frameImage(sprites.get(who.sprite)!, frame, who.variant);
     const img = createImage(src.width, src.height);
     drawImage(img, src, 0, 0);
     return shade(img, 1);
   };
+  const adaFrame = oddFrame(STAFF[1]);
   const hall: HallLayers = {
     room: light(
       paint(hallDraws, true, HALL.w, HALL.h),
@@ -695,12 +653,64 @@ function renderSet(hour: number, dir: string): Image {
     ),
     period: HALL.period,
     view: HALL.view,
-    odd: adaFrame
+    odd: adaFrame,
+    mate: oddFrame(STAFF[2]),
+    shade: (img) => shade(img, 1)
+  };
+  // The gym, lit once per frame of the treadmill's belt, and once with the
+  // bar off the rack. Theo's places are the office's own spots on its
+  // equipment; the bench has none, so he sits on its pad.
+  const gymLit = (frames: Record<string, string>) => {
+    const draws = gymWorld.draws.map((d) =>
+      frames[d.sprite] ? { ...d, frame: frames[d.sprite] } : d
+    );
+    const w = gymWorld.width * TILE;
+    const h = gymWorld.height * TILE;
+    return cropTo(light(paint(draws, true, w, h), gymWorld, draws), GYM_VIEW);
+  };
+  const belts = catalog['gym-treadmill'].frames;
+  const place = (tx: number, ty: number) => ({
+    x: tx * TILE - GYM_VIEW.x,
+    y: ty * TILE - TILE - GYM_VIEW.y
+  });
+  const spotAt = (prop: string) => {
+    const s = gymWorld.spots.find((x) => x.prop === prop);
+    if (!s) throw new Error(`the gym art needs a spot on ${prop}`);
+    return place(...s.tile);
+  };
+  const [bx, by] = GYM_ROOM.props.find((p) => p.sprite === 'gym-bench')!.at;
+  const seat = place(bx, by + 1);
+  const rack = gymWorld.draws.find((d) => d.sprite === 'gym-rack')!;
+  const barImage = cropTo(frameImage(sprites.get('gym-rack')!, 'bar'), {
+    x: 0,
+    y: RACK_BAR.top,
+    w: RACK.width,
+    h: 8
+  });
+  const gym: GymLayers = {
+    room: belts.map((b) => gymLit({ 'gym-treadmill': b })),
+    unracked: gymLit({ 'gym-rack': 'unracked' }),
+    view: { w: GYM_VIEW.w, h: GYM_VIEW.h },
+    at: {
+      run: spotAt('gym-treadmill'),
+      cycle: spotAt('gym-bike'),
+      curl: spotAt('gym-dumbbells'),
+      rack: spotAt('gym-rack'),
+      bench: { x: seat.x, y: seat.y - BENCH_SEAT }
+    },
+    bar: {
+      img: shade(barImage, 1),
+      x: rack.x - GYM_VIEW.x,
+      y: rack.y + RACK_BAR.top - GYM_VIEW.y,
+      mid: RACK_BAR.mid - RACK_BAR.top
+    },
+    odd: oddFrame(STAFF[2])
   };
   writeReleaseArt(
     {
       desk,
       hall,
+      gym,
       door: {
         room: cropTo(lit, doorAt),
         door: { ...doorRect, x: doorRect.x - doorAt.x, y: doorRect.y - doorAt.y },

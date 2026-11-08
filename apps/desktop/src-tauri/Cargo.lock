@@ -2628,6 +2628,7 @@ dependencies = [
  "libc",
  "mac-notification-sys",
  "rustls",
+ "security-framework",
  "sentry",
  "serde_json",
  "tauri",
