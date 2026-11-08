@@ -2629,6 +2629,7 @@ dependencies = [
  "mac-notification-sys",
  "reqwest",
  "rustls",
+ "security-framework",
  "sentry",
  "serde_json",
  "tauri",

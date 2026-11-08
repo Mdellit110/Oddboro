@@ -28,7 +28,7 @@
     },
     {
       q: 'Can an Odd act without asking me?',
-      a: 'Yes, within the limits you set. At the act level an Odd does housekeeping inside the office on its own, and uses any tool you gave it write access to. Everything else waits on your desk.'
+      a: 'Yes, within the limits you set. At the act level an Odd does housekeeping inside the office on its own, and uses any tool you gave it write access to. At draft, each change it wants to make in a tool waits on your desk for your yes, and so does everything else.'
     },
     {
       q: 'Can I pick the model?',

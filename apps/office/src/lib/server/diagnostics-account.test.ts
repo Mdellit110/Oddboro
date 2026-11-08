@@ -27,8 +27,12 @@ import {
 const SIGN_IN = 'new-altitude-account:oauth';
 const store = new Map<string, string>();
 let signInReads = 0;
+// The real module's other exports too, such as `useShellSecrets`, which the
+// office's server hooks import.
+const realSecrets = await import('@oddboro/ledger/secrets');
 mock.module('@oddboro/ledger/secrets', {
   namedExports: {
+    ...realSecrets,
     getSecret: (connector: string, name: string) => {
       const key = `${connector}:${name}`;
       if (key === SIGN_IN) signInReads++;

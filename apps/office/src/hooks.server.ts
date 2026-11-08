@@ -5,7 +5,8 @@
 // (never in the app, which has no address).
 // In the app (ODDBORO_APP) it also quits when the app does: on SIGTERM, once
 // the HTTP server has closed, and when the app's stdin pipe closes, which
-// happens however the app ends, Force Quit included.
+// happens however the app ends, Force Quit included. On a Mac it keeps its
+// secrets through the app's shell, over those same pipes (`useShellSecrets`).
 // Every route and API request passes `guardOffice` first: the office's own
 // names, and actions only from the owner's page (`#lib/server/owner-page.ts`).
 // Files built into the page (scripts, styles, images) are served before it.
@@ -14,6 +15,7 @@ import { sequence, type ServerInit } from '@sveltejs/kit/hooks';
 import { handleErrorWithSentry, sentryHandle } from '@sentry/sveltekit';
 import { LOCAL } from '@oddboro/ledger';
 import { startLocalDatabase } from '@oddboro/ledger/local-db';
+import { useShellSecrets } from '@oddboro/ledger/secrets';
 import { bringUpToDate } from '@oddboro/ledger/upgrade';
 import { keepAddress } from '#lib/server/address.ts';
 import { startFollowUps } from '#lib/server/follow-ups.ts';
@@ -33,6 +35,8 @@ if (process.env.ODDBORO_APP) {
 }
 
 export const init: ServerInit = async () => {
+  // In the Mac app the shell keeps the secrets; this process alone asks it.
+  await useShellSecrets();
   if (LOCAL) await startLocalDatabase();
   await bringUpToDate();
   // Before the clock: a poke that came due while the app updated still lands.

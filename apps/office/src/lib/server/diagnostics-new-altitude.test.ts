@@ -11,8 +11,12 @@ import type { Transport } from '@sentry/core';
 import { tempOffice } from './diagnostics-harness.ts';
 
 let signInReads = 0;
+// The real module's other exports too, such as `useShellSecrets`, which the
+// office's server hooks import.
+const realSecrets = await import('@oddboro/ledger/secrets');
 mock.module('@oddboro/ledger/secrets', {
   namedExports: {
+    ...realSecrets,
     getSecret: (connector: string, name: string) => {
       if (`${connector}:${name}` === 'new-altitude-account:oauth') signInReads++;
       return undefined;

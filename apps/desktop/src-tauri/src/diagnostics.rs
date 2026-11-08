@@ -35,9 +35,10 @@ const DSN_KEY: &str = "ODDBORO_DIAGNOSTICS_DSN";
 /// and tests. Reports to it need the sign-in too.
 const ACCOUNT_SITE_KEY: &str = "ODDBORO_ACCOUNT_SITE";
 /// Where the office keeps its New Altitude sign-in in the system's secret
-/// store: the service every Oddboro secret sits under and the sign-in's
-/// name, as `packages/ledger/src/secrets.ts` and
-/// `apps/office/src/lib/server/account.ts` write them.
+/// store on Linux: the service every Oddboro secret sits under and the
+/// sign-in's name, as `packages/ledger/src/secrets.ts` and
+/// `apps/office/src/lib/server/account.ts` write them. On a Mac the app's
+/// office keeps it through this shell, under `secrets::SERVICE`.
 const SECRET_SERVICE: &str = "oddboro";
 const SIGN_IN: &str = "new-altitude-account:oauth";
 /// A token with less left than this is not sent. The office refreshes the
@@ -45,20 +46,6 @@ const SIGN_IN: &str = "new-altitude-account:oauth";
 const SIGN_IN_MARGIN: Duration = Duration::from_secs(60);
 /// A program and its arguments.
 type Reader = (&'static str, &'static [&'static str]);
-/// How the office reads a secret on a Mac, by the full path of the
-/// `security` it runs: the Keychain item's access list names that program,
-/// so the read needs no prompt.
-const KEYCHAIN_READ: Reader = (
-    "/usr/bin/security",
-    &[
-        "find-generic-password",
-        "-s",
-        SECRET_SERVICE,
-        "-a",
-        SIGN_IN,
-        "-w",
-    ],
-);
 /// How the office reads a secret on Linux, through the session's keyring.
 const KEYRING_READ: Reader = (
     "secret-tool",
@@ -306,24 +293,37 @@ fn access_token(saved: &str, now_ms: u128) -> Option<String> {
     (expires > now_ms + SIGN_IN_MARGIN.as_millis()).then(|| token.to_string())
 }
 
-/// The command that reads the office's sign-in on this system. None on
+/// The command that reads the office's sign-in on this system. None on a
+/// Mac, where the shell reads its own Keychain (`keychain_sign_in`), and on
 /// Windows, where the office keeps it in the Credential Manager in pieces
 /// the shell does not read, so its reports to New Altitude are dropped.
 fn sign_in_command() -> Option<Reader> {
     // `cfg!`, not `#[cfg]`, so every system's branch compiles everywhere.
-    if cfg!(target_os = "macos") {
-        Some(KEYCHAIN_READ)
-    } else if cfg!(target_os = "linux") {
-        Some(KEYRING_READ)
-    } else {
-        None
-    }
+    cfg!(target_os = "linux").then_some(KEYRING_READ)
 }
 
-/// The office's saved sign-in, read from the secret store as the office
-/// reads it. Never refreshed or written here. None when there is none, the
-/// read fails, or the system has no command for it.
+/// The office's sign-in in the app's own Keychain items, which trust only
+/// this app, so the read needs no prompt (`secrets.rs`).
+#[cfg(target_os = "macos")]
+fn keychain_sign_in() -> Option<String> {
+    let value =
+        security_framework::passwords::get_generic_password(crate::secrets::SERVICE, SIGN_IN)
+            .ok()?;
+    String::from_utf8(value).ok()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn keychain_sign_in() -> Option<String> {
+    None
+}
+
+/// The office's saved sign-in, read from the secret store the office keeps
+/// it in. Never refreshed or written here. None when there is none, the
+/// read fails, or the system has no way to it.
 fn read_sign_in() -> Option<String> {
+    if cfg!(target_os = "macos") {
+        return keychain_sign_in();
+    }
     let (program, args) = sign_in_command()?;
     let read = Command::new(program)
         .args(args)
@@ -334,7 +334,7 @@ fn read_sign_in() -> Option<String> {
     if !read.status.success() {
         return None;
     }
-    // `security` ends the value with a line break, which JSON reads past.
+    // A line break after the value would not matter: JSON reads past it.
     String::from_utf8(read.stdout).ok()
 }
 
@@ -1090,7 +1090,7 @@ mod tests {
         );
         assert_eq!(access_token(&saved(60_000), now), None);
         assert_eq!(access_token(&saved(59_000), now), None);
-        // The line break `security` prints after the value.
+        // A line break after the value, as a command line read may print.
         let with_line_break = format!("{}\n", saved(600_000));
         assert_eq!(
             access_token(&with_line_break, now).as_deref(),
@@ -1211,7 +1211,7 @@ mod tests {
     }
 
     #[test]
-    fn the_shell_reads_the_sign_in_with_the_offices_own_command() {
+    fn the_shell_reads_the_sign_in_where_the_office_keeps_it() {
         let keyring = [
             "lookup",
             "service",
@@ -1220,20 +1220,12 @@ mod tests {
             "new-altitude-account:oauth",
         ];
         assert_eq!(KEYRING_READ, ("secret-tool", &keyring[..]));
-        let keychain = [
-            "find-generic-password",
-            "-s",
-            "oddboro",
-            "-a",
-            "new-altitude-account:oauth",
-            "-w",
-        ];
-        assert_eq!(KEYCHAIN_READ, ("/usr/bin/security", &keychain[..]));
+        // The Mac app's office keeps its secrets through this shell.
+        assert_eq!(crate::secrets::SERVICE, "com.oddboro.office");
+        assert_eq!(SIGN_IN, "new-altitude-account:oauth");
         #[cfg(target_os = "linux")]
         assert_eq!(sign_in_command(), Some(KEYRING_READ));
-        #[cfg(target_os = "macos")]
-        assert_eq!(sign_in_command(), Some(KEYCHAIN_READ));
-        #[cfg(windows)]
+        #[cfg(not(target_os = "linux"))]
         assert_eq!(sign_in_command(), None);
     }
 

@@ -14,6 +14,7 @@ import {
   lookFrame,
   LOOKS_ROOT,
   parsePortrait,
+  partsPortrait,
   PART_KEYS,
   PART_KINDS,
   portraitImage,
@@ -29,7 +30,7 @@ import { createImage, drawImage, encodePng, scaleImage } from '@oddboro/sprites/
 import { drawnParts, lookCatalogue, lookTaken, home } from '@oddboro/ledger';
 import { runAsOffice } from './office-run.ts';
 import { lookVersion } from '../staff/roster.ts';
-import { canDraw, SONNET_CANNOT_DRAW } from './claude.ts';
+import { cannotDrawLook, officeDrawsLooks } from './claude.ts';
 
 export type Drawn = { look: LookSpec; portraitPx: string; newParts: DrawnPart[] };
 export type Preview = Drawn & {
@@ -201,7 +202,7 @@ const ANSWER = `## Your reply
 Fenced blocks, nothing else:
 
 1. One \`\`\`json block: the look.
-   {"hair": "<name>", "top": "<name>", "bottom": "<name>", "colours": {"hair": "<hair>", "skin": "<skin>", "top": "<cloth>", "second": "<cloth, optional>", "accent": "<cloth, optional>", "bottom": "<cloth>", "shoes": "<shoes>", "beard": "<hair colour, only when the beard differs from the hair>"}, "glasses": "<glasses colour, or leave out>", "beard": false}
+   {"face": "<name, or leave out for the plain face>", "hair": "<name>", "top": "<name>", "bottom": "<name>", "colours": {"hair": "<hair>", "skin": "<skin>", "top": "<cloth>", "second": "<cloth, optional>", "accent": "<cloth, optional>", "bottom": "<cloth>", "shoes": "<shoes>", "beard": "<hair colour, only when the beard differs from the hair>"}, "glasses": "<glasses colour, or leave out>", "beard": false}
 2. One \`\`\`px block: the portrait, \`sprite portrait-<first name, lowercase>\`, \`size 48 48\`, \`layer overlay\`, one \`frame default\`.
 3. A \`\`\`px block for each new part, only if you drew one. The look names it.`;
 
@@ -314,6 +315,23 @@ export async function preview(d: Drawn): Promise<Preview> {
   return { ...d, sheet: url(sheet.png), frames: sheet.frames, portrait: url(portrait) };
 }
 
+/**
+ * A look built from library parts as the owner picks them, with a portrait
+ * made from the same parts (`partsPortrait`): rendered at once on any tool,
+ * since nothing is drawn. `problems` says when another staffer already looks
+ * like this. Throws on a part or colour the library does not have.
+ */
+export async function buildLook(
+  look: LookSpec,
+  staffId?: string
+): Promise<Preview & { problems: string[] }> {
+  const lib = await library();
+  const bad = checkSpec(lib, look);
+  if (bad.length) throw new Error(bad.join('; '));
+  const d: Drawn = { look, portraitPx: partsPortrait(lib, look), newParts: [] };
+  return { ...(await preview(d)), problems: await problemsWith(d, staffId) };
+}
+
 const PHOTO = `
 The image above is a headshot of who {owner} wants this Odd to be. Draw that person, as a likeness. Where {owner}'s words and the photo differ, follow the words.
 
@@ -335,7 +353,7 @@ Read the photo before you draw. Start your reply with a \`\`\`read block, one li
 Then build the look from that read, and draw the portrait's face outline from the plan. The example portraits show two faces, not the shape to copy: a long-haired person can have a round face. A library hair that is close but wrong on length, part or hairline is wrong: draw a new hair part instead, like a close crop, a high top, a receding short cut, or long layers parted to one side. The same goes for a top whose collar or neckline does not match.`;
 
 const SYSTEM = `You draw the Odds of Oddboro, a pixel-art office where
-Claude agents, called Odds, work for {owner}. Each Odd is a 16 x 32 sprite built
+AI workers, called Odds, work for {owner}. Each Odd is a 16 x 32 sprite built
 from parts, plus a 48 x 48 portrait you draw by hand in .px text: one
 character per pixel, every row exactly as wide as the size says. Match the
 house style of the examples: chunky, readable, outlined, lit from the upper
@@ -371,12 +389,14 @@ async function lookAndFix(
     staffId?: string;
     photo: { mediaType: string; data: string };
     model?: string;
+    signal?: AbortSignal;
   }
 ): Promise<Drawn> {
   const r = await runAsOffice(`${ask}\n\n${FIX}\n\n## Your reply\n\n${reply}`, {
     system: SYSTEM,
     kind: 'look',
     timeoutMs: 10 * 60_000,
+    signal: req.signal,
     effort: 'medium',
     ...(req.model ? { model: req.model } : {}),
     images: [req.photo, { mediaType: 'image/png', data: await drawingImage(drawn) }]
@@ -405,8 +425,10 @@ export async function drawLook(req: {
   photo?: { mediaType: string; data: string };
   /** A model to draw with other than the default, to compare them. */
   model?: string;
+  /** Stops the drawing: the owner left it for parts, or closed the page. */
+  signal?: AbortSignal;
 }): Promise<Preview> {
-  if (!req.model && !canDraw()) throw new Error(SONNET_CANNOT_DRAW);
+  if (!req.model && !officeDrawsLooks()) throw new Error(cannotDrawLook());
   const lib = await library();
   const others = await lookCatalogue(req.staffId);
   const ask = [
@@ -436,6 +458,7 @@ export async function drawLook(req: {
       // seven minutes in all.
       timeoutMs: (req.photo ? 10 : 5) * 60_000,
       effort: req.photo ? 'medium' : 'low',
+      signal: req.signal,
       ...(req.model ? { model: req.model } : {}),
       ...(req.photo ? { images: [req.photo] } : {})
     });
@@ -455,6 +478,7 @@ export async function drawLook(req: {
     if (!req.photo) writeFileSync(home('office', 'last-look.md'), r.text);
     console.error(`[looks] attempt ${attempt} for ${req.name}: ${problems.join('; ')}`);
     if (attempt >= 2) throw new Error(`The drawing did not come out right: ${problems.join('; ')}`);
+    if (req.signal?.aborted) throw new Error('Stopped.');
     message = `${ask}\n\n## Your last reply\n\n${r.text}\n\n## What was wrong with it\n\n${problems.map((p) => `- ${p}`).join('\n')}\n\nReply again in full, with every problem fixed.`;
   }
 }

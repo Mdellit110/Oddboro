@@ -3,7 +3,7 @@
 // and no workspace links, so the layout is plain:
 //
 //   stage/apps/office/build/        the office, from vite build
-//   stage/node_modules/             production packages, at the versions installed here
+//   stage/node_modules/             what the workspace packages load, at the versions installed here
 //   stage/node_modules/@oddboro/*   ledger, sprites and world, as JavaScript, with their files
 //
 // Packages' test folders and every source map stay out, and no path may run
@@ -78,7 +78,11 @@ function build(): void {
   npm(['run', 'build', '-w', '@oddboro/office']);
 }
 
-/** Every third-party runtime dependency, pinned to the version installed here. */
+/**
+ * Every third-party runtime dependency, pinned to the version installed here.
+ * The office's own are bundled into its build (they sit under its
+ * devDependencies), so in practice these are the workspace packages'.
+ */
 function dependencies(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const dir of ['apps/office', ...PACKAGES.map((p) => `packages/${p}`)]) {

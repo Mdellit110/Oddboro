@@ -1,38 +1,48 @@
 <script lang="ts">
   import { onMount, tick, untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
-  import type { Desk } from '@oddboro/ledger';
+  import type { Desk, GoalThread } from '@oddboro/ledger';
   import { TILE, type World } from '@oddboro/world';
-  import { addArt } from '#lib/floor/art.ts';
-  import { Floor, sharedAtlas } from '#lib/floor/engine.ts';
-  import { loadLook } from '#lib/floor/looks.ts';
-  import { StaffActor } from '#lib/floor/staff.ts';
-  import { bus, hideBuilding, raise, type Beat } from '#lib/floor/reveal.ts';
+  import type { Floor } from '#lib/floor/engine.ts';
+  import type { StaffActor, Pop } from '#lib/floor/staff.ts';
+  import type { Beat } from '#lib/floor/reveal.ts';
   import Onboarding, { type Stage } from '#lib/ui/onboarding/Onboarding.svelte';
   import FloorControls, { type Light } from '#lib/ui/FloorControls.svelte';
   import { music, musicEnded, startMusic } from '#lib/ui/music.svelte.ts';
   import { chatAbout } from '#lib/ui/chat-about.svelte.ts';
   import { ACTIVITY_LABEL, type Activity, type StaffProfile } from '#lib/staff/roster.ts';
+  import { threadTag, type HeldThread } from '#lib/staff/thread-tags.ts';
   import StaffCard from '#lib/ui/StaffCard.svelte';
   import { chatRequest, type Delivered } from '#lib/ui/chat-about.svelte.ts';
-  import AgentsPanel from '#lib/ui/AgentsPanel.svelte';
-  import type { AccountStatus } from '#lib/account.ts';
+  import OddsRail, { ODDS_RAIL } from '#lib/ui/OddsRail.svelte';
   import type { Work } from '#lib/staff/work.ts';
+  import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
   import { account } from '#lib/ui/account.svelte.ts';
   import { diagnostics, shown } from '#lib/ui/diagnostics.svelte.ts';
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
+  import ServicesPanel from '#lib/ui/ServicesPanel.svelte';
+  import { serviceNames } from '#lib/ui/service-names.svelte.ts';
   import GoalsPanel from '#lib/ui/GoalsPanel.svelte';
-  import OfficeDesigner from '#lib/ui/OfficeDesigner.svelte';
+  import LessonsLibrary from '#lib/ui/LessonsLibrary.svelte';
   import Welcome from '#lib/ui/Welcome.svelte';
   import HireDrawer from '#lib/ui/HireDrawer.svelte';
   import FileViewer from '#lib/ui/FileViewer.svelte';
   import ReportView from '#lib/ui/ReportView.svelte';
-  import { close, open, openHire, openReport, wins, type Win } from '#lib/ui/windows.svelte.ts';
+  import {
+    close,
+    deskRequest,
+    open,
+    openHire,
+    openLessons,
+    openReport,
+    wins,
+    type Win
+  } from '#lib/ui/windows.svelte.ts';
   import type { AskRow } from '@oddboro/ledger';
-  import SidePanel, { RAIL } from '#lib/ui/SidePanel.svelte';
+  import SidePanel from '#lib/ui/SidePanel.svelte';
+  import { fly } from 'svelte/transition';
   import { placesFor, type Place } from '#lib/staff/places.ts';
-  import Pixel from '#lib/ui/Pixel.svelte';
   import PixelPencil from '#lib/ui/PixelPencil.svelte';
   import { call } from '#lib/ui/api.ts';
   import { setZone, zone, zoneName, zoneShort } from '@oddboro/ledger/time';
@@ -67,6 +77,8 @@
 
   let host: HTMLDivElement | undefined = $state();
   let floor: Floor | undefined;
+  /** The floor's PixiJS code (floor/index.ts), loaded as the page mounts, before the floor exists. */
+  let F: typeof import('#lib/floor/index.ts') | undefined;
   let atlasCatalog: Record<string, unknown> = {};
   let actors: StaffActor[] = [];
   let tags = $state<Tag[]>([]);
@@ -100,6 +112,9 @@
   /** Pokes that landed and the owner has not read, counted by staffer. */
   // svelte-ignore state_referenced_locally
   let messages = $state<Record<string, number>>(data.messages);
+  /** Threads a colleague holds for the Odd that leads them. */
+  // svelte-ignore state_referenced_locally
+  let threads = $state<HeldThread[]>(data.threads);
   /** False until the owner finishes the welcome, which the office opens on. */
   // svelte-ignore state_referenced_locally
   let welcomed = $state(data.welcomed);
@@ -125,9 +140,9 @@
   let working = $state<Record<string, string>>({});
   /** Each staffer's work in progress. */
   let inProgress = $state<Record<string, Work[]>>({});
-  /** A request for the card to open on a tab, from the agents list. */
+  /** A request for the card to open on a tab, from the Odds rail's list. */
   let cardShow = $state<{ id: string; tab: 'work'; n: number } | undefined>();
-  /** Bumps when jobs, runs or access change, so the card's tabs reload. */
+  /** Bumps when jobs, runs, access, goals, threads or lessons change, so the card's tabs and the Goals and Lessons windows reload. */
   let version = $state(0);
   /** The start panel is open while it holds windows and the owner has not folded it away. */
   const leftOpen = $derived(wins.shown && wins.list.length > 0);
@@ -142,11 +157,13 @@
   /** Below this the panels cover the floor instead of sitting beside it. */
   const wide = $derived(innerWidth > 720);
 
+  // Every Odd is on the rail at the end edge (OddsRail.svelte), not here.
   const SECTIONS = [
-    { id: 'agents', label: 'Odds' },
     { id: 'desk', label: 'Desk' },
     { id: 'goals', label: 'Goals' },
+    { id: 'lessons', label: 'Lessons' },
     { id: 'ledger', label: 'Ledger' },
+    { id: 'services', label: 'Services' },
     { id: 'hire', label: 'Hire' },
     { id: 'office', label: 'Office' }
   ] as const;
@@ -154,6 +171,7 @@
   /** Select a staffer, opening its panel if it was folded away. */
   function select(id: string | undefined) {
     selected = id;
+    railAsked = false;
     letGo = false;
     if (id) rightCollapsed = false;
   }
@@ -170,6 +188,17 @@
     chatRequest.staff = undefined;
     select(id);
   });
+
+  // An item a window put on the desk, such as a service's Change: reload the desk, then open it.
+  $effect(() => {
+    const focus = deskRequest.focus;
+    if (!focus) return;
+    deskRequest.focus = undefined;
+    void refresh().then(() => openDesk(focus));
+  });
+
+  // svelte-ignore state_referenced_locally
+  serviceNames.byId = data.services;
 
   /** The office keeps its own time zone, wherever the screen is. */
   let officeZone = $state(zone());
@@ -207,7 +236,23 @@
   /** Screen space each panel takes from the floor, margin included. */
   // The first run's cards live in the start panel too.
   const leftSpace = $derived((leftOpen || firstRun) && wide ? leftWidth + 16 : 0);
-  const rightSpace = $derived(profile && wide ? (rightCollapsed ? RAIL : rightWidth) + 16 : 0);
+  /** An Odd's panel is open (not folded away). */
+  const cardOpen = $derived(!!profile && !rightCollapsed);
+  /** ⌘K while a card is open brings the rail back over it, until an Odd is picked or the list closes. */
+  let railAsked = $state(false);
+  /**
+   * The Odds rail, beside the floor once the office has an Odd. It slides off
+   * the screen while an Odd's panel is open, and back when it closes or folds.
+   */
+  const showRail = $derived(!firstRun && staff.length > 0 && (!cardOpen || railAsked));
+  const rightSpace = $derived(
+    (showRail && !cardOpen ? ODDS_RAIL + 16 : 0) + (cardOpen && wide ? rightWidth + 8 : 0)
+  );
+  /** The Odd's panel slides in from the screen's edge (the left in a right-to-left page). */
+  const fromEdge = (far = 48) => ({
+    x: (getComputedStyle(document.documentElement).direction === 'rtl' ? -1 : 1) * far,
+    duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 200
+  });
   const selectedActivity = $derived(tags.find((t) => t.id === selected)?.activity ?? 'home');
   const clock = $derived(
     now.toLocaleTimeString('en-US', { ...PT, hour: 'numeric', minute: '2-digit' })
@@ -220,12 +265,26 @@
       ...Object.keys(messages)
     ])
   );
+  /** Each staffer's thread a colleague holds, or holds for its lead, in words. */
+  const threadTags = $derived(
+    Object.fromEntries(
+      staff.map((p) => [
+        p.id,
+        threadTag({
+          id: p.id,
+          threads,
+          working: !!working[p.id],
+          nameOf: (id) => staff.find((s) => s.id === id)?.name ?? id
+        })
+      ])
+    )
+  );
   /** What a staffer is doing, in words: where it is headed, or what it is at. */
   function statusOf(t: Tag): string {
     if (t.heading) return `→ ${t.heading}`;
     if (messages[t.id]) return 'Has a message for you';
     if (waiting.has(t.id)) return 'Waiting on you';
-    return working[t.id] ?? ACTIVITY_LABEL[t.activity];
+    return threadTags[t.id]?.text ?? working[t.id] ?? ACTIVITY_LABEL[t.activity];
   }
   const status = $derived(Object.fromEntries(tags.map((t) => [t.id, statusOf(t)])));
 
@@ -274,8 +333,9 @@
     return (least + Math.random() * (most - least)) * 1000;
   };
 
-  /** Where a walking staffer is headed: the room's name, or home for the way out. */
+  /** Where a walking staffer is headed: a colleague it visits, the room's name, or home for the way out. */
   function headingOf(a: StaffActor): string | undefined {
+    if (a.visiting) return a.visiting.profile.name;
     const to = a.destination;
     if (!to) return undefined;
     if (to.activity === 'home') return 'Home';
@@ -299,6 +359,18 @@
         return a;
     return 'work';
   }
+
+  /**
+   * The mode the office puts a staffer in: outside the owner's door, at its
+   * job, or free. A lead waiting on a colleague stays at its job, so the end
+   * of its run moves nobody.
+   */
+  const wantOf = (p: StaffProfile): Activity | undefined =>
+    waiting.has(p.id)
+      ? 'wait'
+      : working[p.id] || threadTags[p.id]?.waitsOn
+        ? jobActivity(p)
+        : undefined;
 
   const taken = (except?: StaffActor) => {
     const off = new Set(switchedOff);
@@ -354,7 +426,7 @@
   /** Load drawn looks, then put new hires on the floor and take leavers off it. */
   async function syncNow() {
     if (!floor) return;
-    for (const p of staff) wearing[p.id] = await loadLook(floor.atlas, p).catch(() => undefined);
+    for (const p of staff) wearing[p.id] = await F!.loadLook(floor.atlas, p).catch(() => undefined);
     const w = office.world;
     for (const a of actors.filter((a) => !staff.some((p) => p.id === a.profile.id))) a.destroy();
     actors = actors.filter((a) => staff.some((p) => p.id === a.profile.id));
@@ -363,14 +435,14 @@
     for (const p of staff) {
       if (actors.some((a) => a.profile.id === p.id) || !atlasCatalog[p.sprite]) continue;
       if (firstRun && !arrived.has(p.id)) continue;
-      const a = new StaffActor(floor, p, start);
+      const a = new F!.StaffActor(floor, p, start);
       a.wear(wearing[p.id]);
       a.sprite.on('pointertap', () => select(p.id));
       if (opened) a.assign('work', w.spots, taken(a));
       else {
         // The office is opening: everyone is already somewhere, each in a
         // different spot, instead of all walking in from the lobby at once.
-        const want = waiting.has(p.id) ? 'wait' : working[p.id] ? jobActivity(p) : undefined;
+        const want = wantOf(p);
         forced[p.id] = want;
         const free = new Set(w.spots.map((s) => s.activity));
         if (!a.assign(want ?? pickActivity(free, 'home'), w.spots, taken(a)))
@@ -407,6 +479,8 @@
         roomNames: Record<string, string>;
         switchedOff: string[];
         messages: Record<string, number>;
+        threads: HeldThread[];
+        services: Record<string, string>;
       }>('/api/office');
       const fresh = [...keys(next.desk)].filter((k) => !seen.has(k));
       if (
@@ -430,6 +504,8 @@
       roomNames = next.roomNames;
       switchedOff = next.switchedOff;
       messages = next.messages;
+      threads = next.threads;
+      serviceNames.byId = next.services;
     })());
   }
 
@@ -457,8 +533,11 @@
     deskFocus = focus;
   }
 
-  /** Something a staffer delivered, from its chat: on the desk while it waits, else on its own. */
-  function openDelivered(staffId: string, d: Delivered) {
+  /**
+   * Something a staffer delivered, from its chat: on the desk while it waits,
+   * else a report on its own. False when there is nothing to open.
+   */
+  function openDelivered(staffId: string, d: Delivered): boolean {
     const waiting =
       d.kind === 'ask'
         ? desk.asks.some((a) => a.id === d.id)
@@ -467,15 +546,23 @@
           : desk.reports.some((r) => r.id === d.id);
     if (waiting) void openDesk(`${d.kind}-${d.id}`);
     else if (d.kind === 'report') openReport({ id: d.id, staff: staffId, title: d.title });
+    return waiting || d.kind === 'report';
+  }
+
+  /** A thread from the Goals window: the oldest thing it waits on, else its hub's chat, which shows it as a card. */
+  function openThread(t: GoalThread) {
+    const first = t.waiting[0];
+    if (!(first && openDelivered(t.hubId, first))) select(t.hubId);
   }
 
   /** A section's button: brings its window forward, or folds the panel when it already is. */
-  function toggle(id: 'agents' | 'desk' | 'goals' | 'ledger' | 'hire' | 'office') {
+  function toggle(id: (typeof SECTIONS)[number]['id']) {
     if (leftOpen && front?.kind === id) return hide();
-    if (id === 'agents') return open({ id: 'agents', kind: 'agents' });
     if (id === 'desk') return void openDesk();
     if (id === 'ledger') return open({ id: 'ledger', kind: 'ledger' });
+    if (id === 'services') return open({ id: 'services', kind: 'services' });
     if (id === 'goals') return open({ id: 'goals', kind: 'goals' });
+    if (id === 'lessons') return openLessons();
     if (id === 'office') return open({ id: 'office', kind: 'office' });
     const hire = wins.list.findLast((w) => w.kind === 'hire');
     if (hire) open(hire);
@@ -492,10 +579,11 @@
   }
 
   function winTitle(w: Win): string {
-    if (w.kind === 'agents') return 'Odds';
     if (w.kind === 'desk') return 'Desk';
     if (w.kind === 'ledger') return 'Ledger';
+    if (w.kind === 'services') return 'Services';
     if (w.kind === 'goals') return 'Goals';
+    if (w.kind === 'lessons') return 'Lessons';
     if (w.kind === 'office') return wins.titles[w.id] ?? 'Office';
     if (w.kind === 'setup') return welcomed ? 'Setup' : 'Welcome';
     if (w.kind === 'file') return w.file.path.split('/').pop() ?? w.file.path;
@@ -503,12 +591,12 @@
     return wins.titles[w.id] ?? (w.from ? `Hire ${w.from.proposal.name}` : 'New hire');
   }
 
+  /** The icon over an Odd that keeps a lesson, or uses one. */
+  const LESSON_POP: Record<LessonEvent['kind'], Pop> = { kept: 'notebook', used: 'note' };
+
   onMount(() => {
     let disposed = false;
     seen = keys(desk);
-    // The agents list is where the office opens, when there is room beside the floor.
-    if (!wins.list.length && window.innerWidth > 720 && !firstRun)
-      open({ id: 'agents', kind: 'agents' });
     // A new owner's first visit opens on its own song; later visits play if the owner left the music on.
     startMusic(firstRun);
     try {
@@ -523,10 +611,7 @@
     // One live line from the server. Changes arrive as they happen.
     const events = new EventSource('/api/events');
     events.onmessage = (m) => {
-      const e = JSON.parse(m.data) as
-        | { type: 'change'; table: string }
-        | { type: 'working'; working: Record<string, string>; inProgress: Record<string, Work[]> }
-        | { type: 'account'; status: AccountStatus };
+      const e = JSON.parse(m.data) as OfficeEvent;
       if (e.type === 'account') {
         account.status = e.status;
         return;
@@ -540,14 +625,33 @@
         if (started) version++;
         return;
       }
+      // Whoever handed work on, or did it, walks over to the other and back.
+      if (e.type === 'hand-off') {
+        const to = actors.find((a) => a.profile.id === e.to);
+        if (to) actors.find((a) => a.profile.id === e.from)?.visit(to);
+        return;
+      }
+      if (e.type === 'lesson') {
+        actors.find((a) => a.profile.id === e.staff)?.pop(LESSON_POP[e.kind]);
+        return;
+      }
       // A move into another layout rebuilds the whole floor.
       // During the first run, and until its last drawn pieces land, the floor
       // already shows the office being moved into.
       if (e.table === 'offices') return firstRun || landing ? void refresh() : location.reload();
       if (
-        ['staff', 'asks', 'tasks', 'reports', 'room_names', 'switched_off', 'pokes'].includes(
-          e.table
-        )
+        [
+          'staff',
+          'asks',
+          'tasks',
+          'reports',
+          'room_names',
+          'switched_off',
+          'pokes',
+          'lessons',
+          'threads',
+          'connectors'
+        ].includes(e.table)
       )
         refresh();
       if (
@@ -564,7 +668,10 @@
           'pokes',
           'goals',
           'staff_goals',
-          'goal_progress'
+          'goal_progress',
+          'lessons',
+          'lesson_uses',
+          'threads'
         ].includes(e.table)
       )
         version++;
@@ -572,16 +679,17 @@
 
     (async () => {
       try {
-        const atlas = await sharedAtlas(office.catalog);
-        await addArt(atlas, office.art);
+        F = await import('#lib/floor/index.ts');
+        const atlas = await F.sharedAtlas(office.catalog);
+        await F.addArt(atlas, office.art);
         if (disposed || !host) return;
         atlasCatalog = atlas.catalog;
-        floor = await Floor.create(host, office.world, atlas);
+        floor = await F.Floor.create(host, office.world, atlas);
         floor.setHour(shownHour);
         // Dev only: lets a browser console poke at the floor.
         if (import.meta.env.DEV) (window as unknown as { floor: Floor }).floor = floor;
         start = arrival(office.world);
-        if (firstRun) hideBuilding(floor);
+        if (firstRun) F.hideBuilding(floor);
         // Land on the whole office, centred on the floor the panels leave showing.
         floor.viewOffsetX = centreOffset();
         floor.viewCover = leftSpace + rightSpace;
@@ -601,7 +709,8 @@
           tags = actors
             .filter((a) => a.sprite.visible)
             .map((a) => {
-              const p = floor!.toScreen(a.head.x, a.head.y);
+              // A tag rises over an icon playing on the head, and settles once it ends.
+              const p = floor!.toScreen(a.head.x, a.head.y - a.tagLift);
               return {
                 id: a.profile.id,
                 name: a.profile.name,
@@ -623,6 +732,7 @@
 
         floor.onRelease = () => (letGo = true);
         floor.onTap = flip;
+        floor.onShelf = () => openLessons('all');
 
         // Each free staffer's own clock: it starts when the staffer gets
         // somewhere, so nobody gets up at the same moment as everyone else.
@@ -635,14 +745,11 @@
           for (const a of actors) a.update(dt);
           // Real state first: an open ask or task puts a staffer outside
           // the owner's door, and a running job puts it to work in its room.
+          // A staffer visiting a colleague finishes the trip first.
           for (const a of actors) {
             const id = a.profile.id;
-            if (manual[id]) continue;
-            const want: Activity | undefined = waiting.has(id)
-              ? 'wait'
-              : working[id]
-                ? jobActivity(a.profile)
-                : undefined;
+            if (manual[id] || a.onTrip) continue;
+            const want = wantOf(a.profile);
             if (want !== forced[id]) {
               forced[id] = want;
               a.assign(want ?? 'work', w.spots, taken(a));
@@ -651,7 +758,7 @@
           const now = performance.now();
           for (const a of actors) {
             const id = a.profile.id;
-            if (manual[id] || forced[id] || a.moving) {
+            if (manual[id] || forced[id] || a.moving || a.onTrip) {
               delete leaveAt[id];
               continue;
             }
@@ -721,18 +828,18 @@
 
   /** What the first run asks of the floor, while the cards and captions run the story. */
   const stage: Stage = {
-    bus: () => (floor ? bus(floor) : undefined),
+    bus: () => (floor && F ? F.bus(floor) : undefined),
     async build(next: World, name: string, onBeat: (b: Beat) => void, art) {
-      if (!floor) return;
+      if (!floor || !F) return;
       // Art drawn for this office goes in the atlas before the floor asks for it.
-      if (art?.sheet) await addArt(floor.atlas, art.sheet, art.catalog);
+      if (art?.sheet) await F.addArt(floor.atlas, art.sheet, art.catalog);
       signs = false;
       floor.swap(next, { fit: true });
       liveWorld = next;
       start = arrival(next);
       // The swap keeps the owner's view, gliding out only if the building would not fit.
-      hideBuilding(floor);
-      await raise(floor, onBeat);
+      F.hideBuilding(floor);
+      await F.raise(floor, onBeat);
       signs = true;
       raisedName = name;
       floor.invalidate();
@@ -868,14 +975,14 @@
     renaming = undefined;
   }
 
-  /** Bumps to put the cursor in the agents search. */
+  /** Bumps to open the Odds list on the rail with the cursor in its search. */
   let findAgent = $state(0);
 
   function onkey(e: KeyboardEvent) {
-    // Cmd+K finds a staffer from anywhere, the box included.
+    // Cmd+K finds an Odd from anywhere, the box included.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !firstRun) {
       e.preventDefault();
-      open({ id: 'agents', kind: 'agents' });
+      railAsked = true;
       findAgent++;
       return;
     }
@@ -912,7 +1019,7 @@
   >
 </svelte:head>
 
-<main class="fixed inset-0 overflow-hidden">
+<main class="fixed inset-0 overflow-clip">
   <div
     bind:this={host}
     class="absolute inset-0 transition-opacity duration-700"
@@ -963,6 +1070,7 @@
     {/each}
     {#each tags as t (t.id)}
       {@const isWaiting = waiting.has(t.id)}
+      {@const words = statusOf(t)}
       <button
         class="tag pointer-events-auto absolute flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] whitespace-nowrap"
         class:active={selected === t.id}
@@ -971,7 +1079,9 @@
         onclick={() => tagClick(t.id)}
       >
         <span class="font-medium text-ink">{t.name}</span>
-        <span class={isWaiting ? 'text-ember' : 'text-muted'}>{statusOf(t)}</span>
+        <span class="max-w-64 truncate {isWaiting ? 'text-ember' : 'text-muted'}" title={words}
+          >{words}</span
+        >
       </button>
     {/each}
   </div>
@@ -1116,37 +1226,24 @@
         <div class="min-h-0 flex-1 border-t border-hairline">
           {#each wins.list as w (w.id)}
             <div class="h-full min-h-0" class:hidden={wins.active !== w.id} role="tabpanel">
-              {#if w.kind === 'agents'}
-                <AgentsPanel
-                  {staff}
-                  {status}
-                  {waiting}
-                  {inProgress}
-                  {selected}
-                  find={findAgent}
-                  onselect={select}
-                  onchat={(id) => chatAbout(id, '')}
-                  onwork={(id) => {
-                    select(id);
-                    cardShow = { id, tab: 'work', n: (cardShow?.n ?? 0) + 1 };
-                  }}
-                />
-              {:else if w.kind === 'desk'}
+              {#if w.kind === 'desk'}
                 <DeskDrawer
                   {desk}
                   {askDiagnostics}
                   {staff}
                   focus={deskFocus}
-                  {notify}
-                  onnotify={setNotify}
                   onhire={hireProposal}
                   onplan={planHires}
                   onstaff={select}
                 />
               {:else if w.kind === 'goals'}
-                <GoalsPanel {staff} {version} />
+                <GoalsPanel {staff} {version} onthread={openThread} />
+              {:else if w.kind === 'lessons'}
+                <LessonsLibrary {staff} {version} bind:filter={w.filter} />
               {:else if w.kind === 'ledger'}
                 <LedgerPanel {staff} />
+              {:else if w.kind === 'services'}
+                <ServicesPanel {staff} {version} onstaff={select} />
               {:else if w.kind === 'setup'}
                 <Welcome
                   office={office.name}
@@ -1158,14 +1255,19 @@
                     welcomed = true;
                     close(w.id, true);
                   }}
+                  {notify}
+                  onnotify={setNotify}
                 />
               {:else if w.kind === 'office'}
-                <OfficeDesigner
-                  id={w.id}
-                  catalog={office.catalog}
-                  staffCount={staff.length}
-                  current={office.name}
-                />
+                <!-- Loaded when opened: it draws with PixiJS, which the first page leaves out. -->
+                {#await import('#lib/ui/OfficeDesigner.svelte') then { default: OfficeDesigner }}
+                  <OfficeDesigner
+                    id={w.id}
+                    catalog={office.catalog}
+                    staffCount={staff.length}
+                    current={office.name}
+                  />
+                {/await}
               {:else if w.kind === 'hire'}
                 <HireDrawer
                   id={w.id}
@@ -1183,7 +1285,7 @@
                 <FileViewer
                   id={w.id}
                   file={w.file}
-                  staffName={staff.find((p) => p.id === w.file.staff)?.name ?? w.file.staff}
+                  nameOf={(id) => staff.find((p) => p.id === id)?.name ?? id}
                 />
               {/if}
             </div>
@@ -1229,66 +1331,57 @@
     </button>
   </div>
 
-  <!-- The end side: the selected staffer, resizable, and collapsible to a rail -->
-  {#if profile}
+  <!-- The end side: every Odd on the rail, and the picked one's panel beside it.
+       Folding the panel (») leaves the rail, where the Odd's avatar opens it again. -->
+  {#if showRail}
+    <!-- Fills the screen so the rail keeps its place while it slides toward the edge. -->
+    <div class="pointer-events-none absolute inset-0 z-20" transition:fly={fromEdge(80)}>
+      <OddsRail
+        {staff}
+        {status}
+        {waiting}
+        {inProgress}
+        selected={profile && !rightCollapsed ? selected : undefined}
+        find={findAgent}
+        searching={railAsked}
+        onleave={() => (railAsked = false)}
+        onselect={select}
+        onchat={(id) => chatAbout(id, '')}
+      />
+    </div>
+  {/if}
+  {#if profile && !rightCollapsed}
     <SidePanel
       side="end"
       label="Selected Odd"
       bind:width={rightWidth}
-      bind:collapsed={rightCollapsed}
+      inset={0}
       min={360}
       max={1000}
       storageKey="oddboro.panel.end"
     >
-      {#snippet rail()}
-        <div class="flex w-full flex-col items-center gap-3 py-3">
-          <button
-            class="rounded-xl p-1 hover:bg-raise"
-            aria-label={`Open ${profile.name}'s panel`}
-            title="Expand"
-            onclick={() => (rightCollapsed = false)}
-          >
-            <Pixel
-              src={profile.look?.portrait}
-              frame={`${profile.portrait}/default`}
-              fallback={`${profile.sprite}@${profile.variant}/idle-down-0`}
-              scale={1}
-              label={profile.name}
-              class="flex size-10 items-center justify-center overflow-hidden rounded-lg bg-sea-deep"
-            />
-          </button>
-          <button
-            class="rounded-full px-2 py-1 text-muted hover:text-ink"
-            aria-label="Expand the panel"
-            onclick={() => (rightCollapsed = false)}>«</button
-          >
-          <button
-            class="rounded-full px-2 py-1 text-muted hover:text-ink"
-            aria-label="Close"
-            onclick={() => select(undefined)}>✕</button
-          >
-        </div>
-      {/snippet}
       {#key profile.id}
-        <StaffCard
-          {profile}
-          activity={selectedActivity}
-          {version}
-          working={working[profile.id]}
-          work={inProgress[profile.id] ?? []}
-          show={cardShow?.id === profile.id ? cardShow : undefined}
-          {places}
-          manual={!!manual[profile.id]}
-          sentTo={manual[profile.id]}
-          {held}
-          onsend={(place) => send(profile.id, place)}
-          onschedule={() => backToSchedule(profile.id)}
-          onchatstart={() => chatStart(profile.id)}
-          onchatend={() => chatEnd(profile.id)}
-          oncollapse={() => (rightCollapsed = true)}
-          onclose={() => select(undefined)}
-          onitem={(d) => openDelivered(profile.id, d)}
-        />
+        <div class="h-full" in:fly={fromEdge()}>
+          <StaffCard
+            {profile}
+            activity={selectedActivity}
+            {version}
+            working={working[profile.id]}
+            work={inProgress[profile.id] ?? []}
+            show={cardShow?.id === profile.id ? cardShow : undefined}
+            {places}
+            manual={!!manual[profile.id]}
+            sentTo={manual[profile.id]}
+            {held}
+            onsend={(place) => send(profile.id, place)}
+            onschedule={() => backToSchedule(profile.id)}
+            onchatstart={() => chatStart(profile.id)}
+            onchatend={() => chatEnd(profile.id)}
+            oncollapse={() => (rightCollapsed = true)}
+            onclose={() => select(undefined)}
+            onitem={(d) => openDelivered(profile.id, d)}
+          />
+        </div>
       {/key}
     </SidePanel>
   {/if}

@@ -14,8 +14,10 @@ const FRAME_W = 16;
 const FRAME_H = 32;
 export const PORTRAIT = 48;
 
-export type PartKind = 'hair' | 'top' | 'bottom';
-export const PART_KINDS: PartKind[] = ['hair', 'top', 'bottom'];
+export type PartKind = 'hair' | 'top' | 'bottom' | 'face';
+export const PART_KINDS: PartKind[] = ['hair', 'top', 'bottom', 'face'];
+/** Kinds a look may leave out: with no face, the body's own face shows. */
+const OPTIONAL: PartKind[] = ['face'];
 type Dir = 'down' | 'up' | 'side';
 const DIRS: Dir[] = ['down', 'up', 'side'];
 
@@ -33,14 +35,18 @@ export const RULES: Record<PartKind, Record<string, string>> = {
   bottom: {
     'body-skirt': 'a skirt over bare legs instead of trousers',
     'legs-shorts': 'the lower leg is bare'
-  }
+  },
+  face: {}
 };
 
 /** Keys a part of each kind may draw with, besides `.` (keep what is under it). */
 export const PART_KEYS: Record<PartKind, string> = {
   hair: 'nNik K[',
   top: 'zZ+oO0aAkKfFE^&%-',
-  bottom: '^&%zZoOaAkK3W-'
+  bottom: '^&%zZoOaAkK3W-',
+  // The face's shape and features: outline, skin, the beard's region, blush,
+  // lips, eyes and brows in the hair's shade.
+  face: 'kfFEGxbcpP=!i'
 };
 
 export type Swatch = {
@@ -60,6 +66,8 @@ export type LookSpec = {
   hair: string;
   top: string;
   bottom: string;
+  /** A face shape from the library, or none for the body's own face. */
+  face?: string;
   colours: {
     hair: string;
     skin: string;
@@ -98,7 +106,7 @@ export function parsePart(px: string, palette: Palette, file = 'drawn part'): Pa
   const def = parsePx(px, file, palette);
   const [kind, ...rules] = def.tags as [PartKind, ...string[]];
   if (!PART_KINDS.includes(kind))
-    throw new PxError(`${file}: the first tag is the kind: hair, top or bottom`);
+    throw new PxError(`${file}: the first tag is the kind: ${PART_KINDS.join(', ')}`);
   const prefix = `${kind}-`;
   if (!def.name.startsWith(prefix)) throw new PxError(`${file}: name it ${prefix}<name>`);
   if (def.width !== FRAME_W || def.height !== FRAME_H)
@@ -134,7 +142,7 @@ export function loadLibrary(drawn: DrawnPart[] = []): Library {
     parsePx(readFileSync(join(LOOKS_ROOT, 'bodies', `${name}.px`), 'utf8'), `${name}.px`, palette);
   const bodies = { trousers: body('trousers'), skirt: body('skirt') };
   const parts = new Map<string, Part>();
-  for (const dir of ['hair', 'tops', 'bottoms']) {
+  for (const dir of ['hair', 'tops', 'bottoms', 'faces']) {
     let files: string[] = [];
     try {
       files = readdirSync(join(LOOKS_ROOT, dir)).filter((f) => f.endsWith('.px'));
@@ -188,7 +196,8 @@ const swatch = (lib: Library, group: keyof Colours, name: string | undefined) =>
 export function checkSpec(lib: Library, spec: LookSpec): string[] {
   const problems: string[] = [];
   for (const kind of PART_KINDS)
-    if (!lib.parts.has(key(kind, spec[kind])))
+    if (spec[kind] === undefined && OPTIONAL.includes(kind)) continue;
+    else if (!lib.parts.has(key(kind, spec[kind] ?? '')))
       problems.push(
         `no ${kind} named "${spec[kind]}". Pick from: ${partNames(lib, kind).join(', ')}`
       );
@@ -222,6 +231,7 @@ export function lookSignature(spec: LookSpec): string {
     spec.hair,
     spec.top,
     spec.bottom,
+    spec.face ?? '',
     c.hair,
     c.skin,
     c.top,
@@ -267,8 +277,9 @@ export function lookPalette(lib: Library, spec: LookSpec): Palette {
     h: skin.body,
     H: skin.light,
     X: glasses ? glasses.body : skin.body,
-    x: spec.beard ? beard.shade : skin.shade,
-    b: spec.beard ? beard.body : skin.shade,
+    // Without a beard its region is plain skin: in shade it read as stubble.
+    x: spec.beard ? beard.shade : skin.body,
+    b: spec.beard ? beard.body : skin.body,
     p: skin.lip ?? skin.shade,
     P: skin.lipShade ?? skin.deep ?? skin.shade,
     c: skin.blush ?? skin.body,
@@ -328,6 +339,7 @@ export function composeFrame(lib: Library, spec: LookSpec, frame: string): strin
   const bottom = lib.parts.get(key('bottom', spec.bottom))!;
   const top = lib.parts.get(key('top', spec.top))!;
   const hair = lib.parts.get(key('hair', spec.hair))!;
+  const face = spec.face === undefined ? undefined : lib.parts.get(key('face', spec.face));
   const skirt = bottom.rules.includes('body-skirt') || top.rules.includes('bottom-top');
   const body = skirt ? lib.bodies.skirt : lib.bodies.trousers;
   const src = body.frames.find((f) => f.name === frame);
@@ -355,6 +367,8 @@ export function composeFrame(lib: Library, spec: LookSpec, frame: string): strin
     (base === '.' && y >= torsoTop - 3);
   overlay(rows, bottom, a.dir, a.torso, clothes);
   overlay(rows, top, a.dir, a.torso, clothes);
+  // A face reshapes the head above the neck, under the hair.
+  if (face) overlay(rows, face, a.dir, a.head, (_base, _x, y) => y < torsoTop - 1);
   // Hair paints over the skull and empty space, and over the clothes and
   // outlines below the shoulders (long hair), never a face or a raised hand.
   // Seen from behind there is no face to keep clear: long hair covers the
@@ -435,6 +449,33 @@ export function portraitImage(lib: Library, spec: LookSpec, px: string): Image {
 
 export function renderPortrait(lib: Library, spec: LookSpec, px: string): Uint8Array {
   return encodePng(portraitImage(lib, spec, px));
+}
+
+/**
+ * A portrait made from the look's own parts, for an Odd built without a
+ * drawing: the head and shoulders facing front, three times larger, on the
+ * portrait teal. The same .px as a drawn portrait, so it is kept and shown
+ * the same way.
+ */
+export function partsPortrait(lib: Library, spec: LookSpec): string {
+  const rows = composeFrame(lib, spec, 'idle-down-0');
+  const side = PORTRAIT / FRAME_W;
+  // From just above the hair, so a tall bun or afro keeps its top.
+  const first = rows.findIndex((r) => /[^.]/.test(r));
+  const top = Math.max(0, Math.min(first - 1, rows.length - FRAME_W));
+  const grid = rows.slice(top, top + FRAME_W).flatMap((r) => {
+    const line = [...r].map((c) => (c === '.' || c === '-' ? '6' : c).repeat(side)).join('');
+    return Array<string>(side).fill(line);
+  });
+  return [
+    '# Made from parts.',
+    'sprite portrait-parts',
+    `size ${PORTRAIT} ${PORTRAIT}`,
+    'layer overlay',
+    '',
+    'frame default',
+    ...grid
+  ].join('\n');
 }
 
 /** Check a drawn part composes on both bodies in every frame. Throws if not. */
