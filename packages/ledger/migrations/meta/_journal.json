@@ -15,6 +15,90 @@
       "when": 1793668237307,
       "tag": "0001_app-update",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793757899600,
+      "tag": "0002_hand-offs",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793787546585,
+      "tag": "0003_simplify-cuts",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793791632248,
+      "tag": "0004_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793838260935,
+      "tag": "0005_own-tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793925219793,
+      "tag": "0006_effort",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793927000295,
+      "tag": "0007_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793929776239,
+      "tag": "0008_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794049305472,
+      "tag": "0009_google",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794055386709,
+      "tag": "0010_replies",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794058382412,
+      "tag": "0011_filters",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794065164179,
+      "tag": "0012_folder_asks",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794072899007,
+      "tag": "0013_calls",
+      "breakpoints": true
     }
   ]
 }

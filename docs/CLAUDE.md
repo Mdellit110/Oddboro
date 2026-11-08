@@ -6,4 +6,5 @@ backlog. Read a doc's status before acting on it: **proposed** (not agreed),
 (kept for reference).
 
 - [decisions/CLAUDE.md](decisions/CLAUDE.md). The ledger, one file per decision. How to find, record and supersede one.
+- `office.gif`. The animation at the top of the README. `npm run office-gif -w @oddboro/site` makes it.
 - `hard-rules.md`. **Ratified.** The reason behind each hard rule in the root `CLAUDE.md`, one section per rule, same order.

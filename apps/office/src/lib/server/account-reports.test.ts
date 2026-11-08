@@ -21,8 +21,12 @@ import {
 } from './diagnostics-harness.ts';
 
 const store = new Map<string, string>();
+// The real module's other exports too, such as `useShellSecrets`, which the
+// office's server hooks import.
+const realSecrets = await import('@oddboro/ledger/secrets');
 mock.module('@oddboro/ledger/secrets', {
   namedExports: {
+    ...realSecrets,
     getSecret: (connector: string, name: string) => store.get(`${connector}:${name}`),
     setSecret: (connector: string, name: string, value: string) =>
       void store.set(`${connector}:${name}`, value),

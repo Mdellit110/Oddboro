@@ -1,14 +1,19 @@
 <script lang="ts">
+  import { modelSection } from '@oddboro/ledger/access';
   import type { Check } from '@oddboro/ledger/checks';
   import AccountSection from './AccountSection.svelte';
+  import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
   import DiagnosticsSection from './DiagnosticsSection.svelte';
+  import OfficeTools from './OfficeTools.svelte';
+  import { selectOnFocus } from './select-on-focus.ts';
   import UpdatesSection from './UpdatesSection.svelte';
   import { diagnostics } from './diagnostics.svelte.ts';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
-  // and the same checks `npm run setup` runs.
+  // what the office runs on (the same list as setup's Your AI card), and the
+  // same checks `npm run setup` runs.
   type Props = {
     office: string;
     welcomed: boolean;
@@ -16,8 +21,11 @@
     onhire: () => void;
     onmeet: (id: string) => void;
     ondone: () => void;
+    /** A notification when something new lands on the desk, per viewer. */
+    notify: boolean;
+    onnotify: (on: boolean) => void;
   };
-  let { office, welcomed, ondesign, onhire, onmeet, ondone }: Props = $props();
+  let { office, welcomed, ondesign, onhire, onmeet, ondone, notify, onnotify }: Props = $props();
 
   type Setup = {
     checks: Check[];
@@ -31,6 +39,7 @@
   let checking = $state(false);
   let saving = $state(false);
   let problem = $state('');
+  const agentTools = new AgentTools();
 
   async function load() {
     checking = true;
@@ -88,13 +97,34 @@
       <h3 class="text-xs tracking-[0.16em] text-sea uppercase">1 · You</h3>
       <label class="flex flex-col gap-1">
         <span class="text-xs text-muted">What should your Odds call you?</span>
-        <input class={field} placeholder="Your first name" maxlength="30" bind:value={name} />
+        <input
+          class={field}
+          placeholder="Your first name"
+          maxlength="30"
+          bind:value={name}
+          {@attach selectOnFocus}
+        />
       </label>
       {#if setup}
         <p class="text-xs text-muted">
           The office keeps {setup.zoneName}. Run {@render words('`npm run setup`')} to change it.
         </p>
       {/if}
+      <label class="flex items-start gap-2">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={notify}
+          onchange={(e) => onnotify(e.currentTarget.checked)}
+        />
+        <span class="flex flex-col">
+          <span class="text-xs text-ink">Notify me when something lands on my desk</span>
+          <span class="text-xs text-muted"
+            >A notification on this computer for each new ask, task or report, so you need not keep
+            the office open in front of you.</span
+          >
+        </span>
+      </label>
     </section>
 
     <section class="flex flex-col gap-2">
@@ -144,6 +174,15 @@
           >
         </div>
       {/if}
+    </section>
+
+    <section class="flex flex-col gap-2">
+      <h3 class="text-xs tracking-[0.16em] text-sea uppercase">4 · Your AI</h3>
+      <p class="text-xs text-muted">
+        What your office runs on: its Office Manager and every new Odd. Each Odd can move to another
+        tool on {modelSection('its')}.
+      </p>
+      <OfficeTools tools={agentTools} />
     </section>
 
     {#if welcomed}

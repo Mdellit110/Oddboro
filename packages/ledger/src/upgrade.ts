@@ -3,6 +3,7 @@
 import { fileURLToPath } from 'node:url';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { moveToolHomes } from './accounts.ts';
 import { db, sql } from './db.ts';
 import { fixedError } from './errors.ts';
 
@@ -11,6 +12,8 @@ const MIGRATIONS = fileURLToPath(new URL('../migrations', import.meta.url));
 export async function bringUpToDate(): Promise<void> {
   await sql`create extension if not exists vector`;
   await migrate(db, { migrationsFolder: MIGRATIONS });
+  // The tools' one home each becomes their Office account (accounts.ts).
+  await moveToolHomes();
 }
 
 // The last migration before the baseline, 0034_main-street, as drizzle

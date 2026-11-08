@@ -1,16 +1,20 @@
 // Talking to the office server from the page. A failed call throws with the
 // server's own message, so the page can show it as written.
+//
+// Every action goes as JSON, even one with no body, like a DELETE. SvelteKit
+// refuses an action with no content type unless its Origin matches the
+// office's, and in a release the office takes its origin to be https while
+// the page is http (apps/office/CLAUDE.md, "Who the office answers").
 export async function call<T = { ok: true }>(
   url: string,
   body?: unknown,
-  method = body === undefined ? 'GET' : 'POST'
+  method = body === undefined ? 'GET' : 'POST',
+  /** Drops the call; the office stops work it was doing for it, such as a drawing. */
+  signal?: AbortSignal
 ): Promise<T> {
   const res = await fetch(url, {
     method,
-    // Every request that changes something says JSON, with a body or without.
-    // The built server takes its own origin as https while the page is http,
-    // so SvelteKit refuses a POST or DELETE with no content type as a
-    // cross-site form. `vite dev` skips that check, so only the app shows it.
+    signal,
     headers: method === 'GET' ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body)
   });

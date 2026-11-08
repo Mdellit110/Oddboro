@@ -10,12 +10,13 @@ colour from `src/palette.json`. `scripts/compile.ts` turns the `.px` files into
 - `ART.md` is the style guide: palette roles, outlines, shading, and how to add
   an Odd or a prop that matches.
 - `src/tiles/` holds walls and floors, `src/props/` furniture and objects,
-  `src/characters/` the Odds' bodies and portraits.
+  `src/characters/` the Odds' bodies and portraits, `src/fx/` the icons that
+  play once over an Odd (`fx-pop`, one animation per icon).
 - `out/` holds enlarged previews after a compile. Open them to check work.
   Gitignored.
 
 - `looks/` holds generated looks: bald bodies keyed by region, per-frame
-  anchors, hairstyles, tops, bottoms, colour swatches and example portraits,
+  anchors, hairstyles, tops, bottoms, face shapes, colour swatches and example portraits,
   with its own palette. `src/look.ts` builds a person's 57 frames from them
   on the server. `out/looks.png` shows every part after a build.
   `looks/managers/` holds the portraits of the ready-made Office Managers

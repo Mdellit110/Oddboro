@@ -71,6 +71,12 @@
       "light": "#f4a6c0",
       "body": "#e46f80",
       "shade": "#a8475a"
+    },
+    {
+      "name": "lime dye",
+      "light": "#e6ff7a",
+      "body": "#ceff00",
+      "shade": "#94b800"
     }
   ],
   "skin": [
@@ -257,6 +263,12 @@
       "light": "#c8c0e8",
       "body": "#a094cc",
       "shade": "#706aa0"
+    },
+    {
+      "name": "lime",
+      "light": "#e6ff7a",
+      "body": "#ceff00",
+      "shade": "#94b800"
     }
   ],
   "shoes": [
@@ -289,6 +301,12 @@
       "light": "#e46f80",
       "body": "#b04050",
       "shade": "#782838"
+    },
+    {
+      "name": "lime",
+      "light": "#e6ff7a",
+      "body": "#ceff00",
+      "shade": "#94b800"
     }
   ],
   "glasses": [

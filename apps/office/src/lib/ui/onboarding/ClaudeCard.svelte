@@ -1,26 +1,32 @@
 <script lang="ts">
   import { call, stream } from '../api.ts';
 
-  // How the staff think. Two tabs: the owner's Claude plan, which says the
-  // account Claude Code is signed in to and can switch it, or an API key kept
-  // in the keychain. Either way, a model: Opus or Sonnet. Sonnet cannot draw
-  // looks or design offices, and the card says so.
+  // How Odds on Claude Code think, under the tool list on setup's Your AI
+  // card (AiCard.svelte). Two tabs: a Claude plan, which says the account the
+  // office's own Claude Code folder (its Office account) is signed in to and
+  // signs it in, again or out, or an API key kept in the keychain. An office
+  // made before it had its own folder runs on the owner's own login until
+  // then, and the card says so. Either way, a model: Opus or Sonnet. Sonnet
+  // cannot draw looks or design offices, and the card says so.
   type Model = 'opus' | 'sonnet';
   type Settings = {
     auth: 'plan' | 'key';
     model: Model;
     account?: { email?: string; org?: string; plan?: string };
+    /** The owner's own login, which Odds use until the office's own folder is signed in. */
+    ownLogin?: { email?: string };
     /** A sign-in is waiting on its page, maybe from before this page loaded. */
     signingIn?: boolean;
   };
   type Props = {
-    onnext: () => void;
-    onback: () => void;
-    wantKey: boolean;
+    /** Open on the API key tab. */
+    wantKey?: boolean;
     /** The model staff run on, for the cards after this one. */
     onmodel: (m: Model) => void;
+    /** Whether Odds can run: signed in on the plan, or a key in use. */
+    onready: (ready: boolean) => void;
   };
-  let { onnext, onback, wantKey, onmodel }: Props = $props();
+  let { wantKey = false, onmodel, onready }: Props = $props();
 
   let settings = $state<Settings | undefined>();
   let tab = $state<'plan' | 'key'>('plan');
@@ -32,9 +38,13 @@
   let problem = $state('');
   const waiting = $derived(switching || !!settings?.signingIn);
 
+  const tell = (s: Settings) => {
+    onmodel(s.model);
+    onready(s.auth === 'key' || !!s.account);
+  };
   const load = async () => {
     settings = await call<Settings>('/api/setup/claude');
-    onmodel(settings.model);
+    tell(settings);
   };
   $effect(() => {
     void load().then(() => (tab = wantKey || settings?.auth === 'key' ? 'key' : 'plan'));
@@ -45,7 +55,7 @@
     saving = true;
     try {
       settings = await call<Settings>('/api/setup/claude', change, 'PUT');
-      onmodel(settings.model);
+      tell(settings);
       if ('key' in change) key = '';
     } catch (e) {
       problem = e instanceof Error ? e.message : String(e);
@@ -58,6 +68,20 @@
    * Sign Claude Code in to another account; the page that opens finishes it.
    * Pressed again while one waits, it starts over with a fresh page.
    */
+  /** Sign the office's own folder out. The owner's own Claude login is never touched. */
+  async function signOut() {
+    saving = true;
+    problem = '';
+    try {
+      await call('/api/agents/claude', { action: 'sign-out' });
+      await load();
+    } catch (e) {
+      problem = e instanceof Error ? e.message : String(e);
+    } finally {
+      saving = false;
+    }
+  }
+
   async function switchAccount() {
     problem = '';
     const mine = ++attempt;
@@ -142,13 +166,7 @@
 <!-- A sign-in finished on its own page shows here when the owner comes back. -->
 <svelte:window onfocus={() => waiting && !switching && void load()} />
 
-<p class="text-lg font-semibold">How your Odds think.</p>
-
-<div
-  class="mt-3 flex gap-1 border-b border-hairline"
-  role="tablist"
-  aria-label="How Odds reach Claude"
->
+<div class="flex gap-1 border-b border-hairline" role="tablist" aria-label="How Odds reach Claude">
   {#each TABS as t (t.id)}
     <button
       class="tab"
@@ -174,8 +192,14 @@
         {#if plan}
           <p class="text-xs text-muted">{plan}</p>
         {/if}
+      {:else if settings?.ownLogin}
+        <p class="mt-1 text-sm text-muted">
+          Your office does not have its own Claude sign-in yet. Your Odds use your own login, {settings
+            .ownLogin.email ?? 'on this computer'}, until you sign the office in. It takes one
+          click.
+        </p>
       {:else if settings}
-        <p class="mt-1 text-sm text-muted">Claude Code is not signed in.</p>
+        <p class="mt-1 text-sm text-muted">Claude Code is not signed in for this office.</p>
       {:else}
         <p class="mt-1 text-sm text-muted">Checking which account Claude Code uses.</p>
       {/if}
@@ -189,7 +213,12 @@
       <button class="wide" onclick={switchAccount}>Open the sign-in page again</button>
       <button class="wide" onclick={cancelSignIn}>Cancel signing in</button>
     {:else}
-      <button class="wide" onclick={switchAccount}>Switch account</button>
+      <button class="wide" onclick={switchAccount}
+        >{settings?.account ? 'Sign in again' : 'Sign in with Claude'}</button
+      >
+      {#if settings?.account}
+        <button class="wide" disabled={saving} onclick={signOut}>Sign out</button>
+      {/if}
     {/if}
   {:else}
     <form
@@ -232,12 +261,6 @@
 {#if problem}
   <p class="mt-3 rounded-lg bg-coral/15 px-3 py-2 text-sm text-coral">{problem}</p>
 {/if}
-
-<div class="mt-4 flex items-center gap-3">
-  <button class="btn ghost" onclick={onback}>Back</button>
-  <span class="flex-1"></span>
-  <button class="btn primary" disabled={saving || switching} onclick={onnext}>Next</button>
-</div>
 
 <style>
   .tab {

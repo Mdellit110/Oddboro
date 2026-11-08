@@ -1,9 +1,12 @@
 <script lang="ts">
   import Pixel from '../Pixel.svelte';
+  import OddParts, { type Built } from '../OddParts.svelte';
 
   // Every office has an Office Manager. Four come ready, looks and all, so
   // picking one costs nothing. "Describe your own" takes a name and a line or
-  // two, and the office draws them while the owner carries on.
+  // two, and the office draws them while the owner carries on. "Build your
+  // own" takes a name and parts the owner picks, ready at once on any tool
+  // (pick 'built', the look in `built`).
   export type Preset = {
     id: string;
     name: string;
@@ -20,8 +23,10 @@
     /** The described manager's portrait, once drawn. */
     drawn?: string;
     drawing: boolean;
-    /** False on Sonnet, which cannot draw a look: only the ready-made managers. */
+    /** Whether the office draws looks (`drawsLooks`). Otherwise Describe is off, and Build is the way to your own. */
     canDraw: boolean;
+    /** The manager built from parts, as it stands. */
+    built?: Built;
     onnext: () => void;
     onback: () => void;
   };
@@ -32,11 +37,21 @@
     drawn,
     drawing,
     canDraw,
+    built = $bindable(),
     onnext,
     onback
   }: Props = $props();
 
-  const ready = $derived(pick !== 'custom' || !!custom.name.trim());
+  const ready = $derived(
+    pick === 'custom'
+      ? !!custom.name.trim()
+      : pick === 'built'
+        ? !!custom.name.trim() && !!built && !built.problems.length
+        : true
+  );
+  const ownName = $derived(
+    (pick === 'custom' || pick === 'built') && custom.name.trim() ? custom.name : ''
+  );
 </script>
 
 <p class="text-sm text-muted">
@@ -95,21 +110,63 @@
       {/if}
       <span class="min-w-0">
         <span class="block font-pixel text-base leading-none">
-          {custom.name.trim() && pick === 'custom' ? custom.name : 'Describe your own'}
+          {pick === 'custom' && ownName ? ownName : 'Describe your own'}
         </span>
         <span class="mt-1 block text-xs text-muted">
           {!canDraw
-            ? 'Needs Opus. Change it on Your Claude.'
+            ? 'Needs Claude Code on Opus, or Codex. Build your own instead.'
             : drawing
               ? 'Drawing them now.'
               : 'A name and a line. The office draws them.'}
         </span>
       </span>
     </button>
+    <button
+      class="manager mt-1.5 w-full border-dashed"
+      role="radio"
+      aria-checked={pick === 'built'}
+      class:on={pick === 'built'}
+      onclick={() => (pick = 'built')}
+    >
+      {#if built && pick === 'built'}
+        <img
+          src={built.portrait}
+          alt=""
+          class="size-12 shrink-0 rounded-md [image-rendering:pixelated]"
+        />
+      {:else}
+        <span
+          class="grid size-12 shrink-0 place-items-center rounded-md bg-night/40 font-pixel text-2xl text-sea"
+          aria-hidden="true">+</span
+        >
+      {/if}
+      <span class="min-w-0">
+        <span class="block font-pixel text-base leading-none">
+          {pick === 'built' && ownName ? ownName : 'Build your own'}
+        </span>
+        <span class="mt-1 block text-xs text-muted"
+          >A name, then hair, clothes and colours. Ready at once.</span
+        >
+      </span>
+    </button>
   </div>
 </div>
 
-{#if pick === 'custom'}
+{#if pick === 'built'}
+  <div class="mt-3 grid gap-2">
+    <label class="sr-only" for="onboarding-manager-built-name">Their name</label>
+    <input
+      id="onboarding-manager-built-name"
+      class="field"
+      placeholder="Their name"
+      maxlength="40"
+      autocomplete="off"
+      bind:value={custom.name}
+    />
+    <!-- Back to a build already made, it starts where the owner left it. -->
+    <OddParts name={custom.name} start={built?.look} onlook={(b) => b && (built = b)} />
+  </div>
+{:else if pick === 'custom'}
   <div class="mt-3 grid gap-2">
     <label class="sr-only" for="onboarding-manager-name">Their name</label>
     <input

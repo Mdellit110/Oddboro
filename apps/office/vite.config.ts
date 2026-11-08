@@ -44,6 +44,18 @@ export function noEditorLaunch(): Plugin {
   };
 }
 
+/**
+ * Where the office links to the public site's guides (`lib/site.ts`). A
+ * developer's `npm run dev` starts the site beside the office, so it links to
+ * the site's dev server on 4501. Everything else links to oddboro.com: a
+ * build, and the office `npm run setup` keeps running from source, which
+ * starts Vite itself rather than through npm. ODDBORO_SITE_URL overrides both.
+ */
+export function siteUrl(env: Record<string, string | undefined> = process.env): string {
+  if (env.ODDBORO_SITE_URL) return env.ODDBORO_SITE_URL.replace(/\/+$/, '');
+  return env.npm_lifecycle_event === 'dev' ? 'http://localhost:4501' : 'https://oddboro.com';
+}
+
 // Port 4500 unless ODDBORO_PORT says otherwise, to run a second office beside
 // the owner's. A build leaves the workspace packages out: they find their own
 // files (migrations, sprites, rooms) beside their code, so a release ships them
@@ -58,6 +70,7 @@ export default defineConfig(({ command }) => ({
     sentrySvelteKit(buildOptions(process.env)),
     sveltekit({ adapter: adapter() })
   ],
+  define: { __SITE_URL__: JSON.stringify(siteUrl()) },
   // The office's addresses through Caddy (lib/server/address.ts).
   server: {
     port,
@@ -65,8 +78,12 @@ export default defineConfig(({ command }) => ({
     host: '127.0.0.1',
     allowedHosts: ['local.oddboro.com', 'oddboro.localhost']
   },
-  // Rolldown, not ssr.external: the adapter bundles every dependency, and only
-  // this keeps a workspace package and its subpaths out.
+  // Rolldown, not ssr.external: this keeps a workspace package and its subpaths
+  // out of the server build. The adapter also leaves out whatever package.json
+  // lists under dependencies, so the office lists only the workspace packages
+  // there, and every third-party package under devDependencies, which bundles
+  // it: the app then ships none of them (issue #13). Sentry is the exception:
+  // it stays under dependencies, since its tracing hooks modules as they load.
   environments:
     command === 'build'
       ? { ssr: { build: { rolldownOptions: { external: [/^@oddboro\//] } } } }

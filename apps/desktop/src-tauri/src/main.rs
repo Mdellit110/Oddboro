@@ -7,6 +7,7 @@
 
 mod diagnostics;
 mod env;
+mod secrets;
 mod server;
 mod update;
 

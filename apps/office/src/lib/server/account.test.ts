@@ -19,8 +19,12 @@ const reads = { count: 0 };
 let storeAnswer: { ok: true } | { ok: false; problem: string } = { ok: true };
 /** When set, every write throws it, as a locked keyring's does. */
 let writeFails: Error | undefined;
+// The real module's other exports too, such as `useShellSecrets`, which the
+// office's server hooks import.
+const realSecrets = await import('@oddboro/ledger/secrets');
 mock.module('@oddboro/ledger/secrets', {
   namedExports: {
+    ...realSecrets,
     getSecret: (connector: string, name: string) => {
       reads.count++;
       return store.get(`${connector}:${name}`);

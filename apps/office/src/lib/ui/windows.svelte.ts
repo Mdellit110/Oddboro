@@ -1,6 +1,7 @@
-// The windows open on the start side: the agents, the desk, the goals, the ledger, hires,
-// the office designer, the welcome and setup, files, and reports opened from a
-// staffer's chat once they have left the desk.
+// The windows open on the start side: the desk, the goals, the
+// lessons (what the office knows about the owner), the ledger, hires, the office
+// designer, the welcome and setup, files, and reports opened from a staffer's
+// chat once they have left the desk.
 // Every open window stays mounted, so a drawing keeps going and a half-read
 // ask keeps its place while the owner works in another. Closing one with unsaved
 // edits, or one still drawing, waits for the owner to say so.
@@ -9,11 +10,14 @@ import type { HireProposal } from '@oddboro/ledger';
 export type FileRef = { staff: string; path: string };
 export type ReportRef = { id: number; staff: string; title: string };
 export type HireFrom = { askId: number; staff: string; proposal: HireProposal };
+/** Which lessons the Lessons window shows: those for every Odd, those one Odd follows, or all. */
+export type LessonsFilter = 'about' | 'all' | { staff: string };
 export type Win =
-  | { id: 'agents'; kind: 'agents' }
   | { id: 'desk'; kind: 'desk' }
   | { id: 'goals'; kind: 'goals' }
+  | { id: 'lessons'; kind: 'lessons'; filter: LessonsFilter }
   | { id: 'ledger'; kind: 'ledger' }
+  | { id: 'services'; kind: 'services' }
   | { id: 'office'; kind: 'office' }
   | { id: 'setup'; kind: 'setup' }
   | { id: string; kind: 'hire'; from?: HireFrom }
@@ -33,6 +37,12 @@ export const wins = $state<{
   confirm?: { id: string; go: () => void };
 }>({ list: [], shown: false, titles: {}, dirty: {}, busy: {} });
 
+/**
+ * An item a window wants opened on the desk, such as the task a service's
+ * Change put there. The page takes it, reloads the desk and opens it.
+ */
+export const deskRequest = $state<{ focus?: string }>({});
+
 /** The window each one was opened from, so closing it goes back there. */
 const opener: Record<string, string | undefined> = {};
 let hires = 0;
@@ -44,6 +54,13 @@ export function open(w: Win): void {
   }
   wins.active = w.id;
   wins.shown = true;
+}
+
+/** The one Lessons window, on that filter. Already open, it switches to it. */
+export function openLessons(filter: LessonsFilter = 'about'): void {
+  const w = wins.list.find((x) => x.kind === 'lessons');
+  if (w) w.filter = filter;
+  open(w ?? { id: 'lessons', kind: 'lessons', filter });
 }
 
 export const openReport = (report: ReportRef) =>
