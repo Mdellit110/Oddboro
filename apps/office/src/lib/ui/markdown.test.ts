@@ -18,7 +18,7 @@ async function shown(text: string, staff?: string): Promise<string> {
   return renderMarkdown(text, staff).html.trim();
 }
 /** What the owner reads of `html`. */
-const visible = (html: string): string => html.replace(/<[^>]*>/g, '');
+const visible = (html: string): string => html.split(/<[^>]*>/).join('');
 
 const FULL_PAGE = '/Users/Shared/.oddboro/threads/1/vera/m/index.html';
 const PAGE_NAME = 'vera:threads/1/vera/m/index.html';
