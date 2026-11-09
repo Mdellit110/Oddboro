@@ -498,7 +498,13 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    goals' folders, in the Odd's own profile), the owner's data folder, the
    folders the owner gave it and the tool server's code, writes the given
    folders it may change (`readWrite`), and
-   shuts `~/Library`, `/Library`, `/tmp` and `/var`; Windows has none. Read
+   shuts `~/Library`, `/Library`, `/tmp` and `/var`; Windows has none. Grok
+   refuses every sandbox when `/var/run/docker.sock` is a link to a path off
+   its own list (OrbStack, Colima, Rancher Desktop), so then the run gets a
+   home of its own in Grok's home, whose `.docker/run` leads to the socket's
+   folder (`runHome`), and its tool servers keep the owner's HOME. Any
+   other socket link Grok refuses gets the office's own words, with the way to
+   another tool (`stoppedWhy` in `cli.ts`). Read
    deny rules (`UNREADABLE`) cover what the kernel still lets it read, Grok's
    home among them, and Edit and Write deny rules cover Grok's home, whose
    sessions folder the kernel lets it write, both further walls should Grok
