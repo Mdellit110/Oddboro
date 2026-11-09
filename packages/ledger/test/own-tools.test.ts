@@ -3,7 +3,15 @@
 // records, and which folders are refused at the door. Run with
 // `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, beforeEach, test } from 'node:test';
@@ -682,17 +690,25 @@ test(
   }
 );
 
-test("broadFolder goes by the office's system: /boot is system files on Linux and nothing on a Mac", async () => {
-  await onPlatform('linux', async () => assert.equal(O.broadFolder('/boot/grub'), true));
-  await onPlatform('darwin', async () => assert.equal(O.broadFolder('/boot/grub'), false));
-});
+// node:path follows the real system, so onPlatform cannot make Windows read these paths.
+const MAC_AND_LINUX_PATHS = process.platform === 'win32' && 'the paths here are a Mac and Linux';
+
+test(
+  "broadFolder goes by the office's system: /boot is system files on Linux and nothing on a Mac",
+  { skip: MAC_AND_LINUX_PATHS },
+  async () => {
+    await onPlatform('linux', async () => assert.equal(O.broadFolder('/boot/grub'), true));
+    await onPlatform('darwin', async () => assert.equal(O.broadFolder('/boot/grub'), false));
+  }
+);
 
 test(
   'broadFolder is a whole drive or volume, or system files, and never a folder in the home',
-  { skip: process.platform === 'win32' && 'the paths here are a Mac and Linux' },
+  { skip: MAC_AND_LINUX_PATHS },
   () => {
+    // broadFolder takes a real path, as checkFolder gives it: /bin is a link on Ubuntu.
     for (const p of ['/', '/usr', '/usr/local/share', '/bin'])
-      assert.equal(O.broadFolder(p), true, p);
+      assert.equal(O.broadFolder(existsSync(p) ? realpathSync.native(p) : p), true, p);
     assert.equal(O.broadFolder('/Volumes/Data'), true);
     assert.equal(O.broadFolder('/mnt/d'), true);
     assert.equal(O.broadFolder('/media/ada/disk'), true);
