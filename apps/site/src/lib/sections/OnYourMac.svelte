@@ -21,7 +21,7 @@
     },
     {
       title: 'Nothing comes to us unless you say so.',
-      text: 'New Altitude runs no server for your office. If you turn on error reports in Setup, they go to our relay so we can fix what broke. Nothing else ever does.',
+      text: 'New Altitude runs no server for your office. If you turn on error reports, they go to our relay so we can fix what broke. Nothing else ever does.',
       shows:
         "Highlights New Altitude, off the map, and the two dashed lines, the only paths your office's data takes. Error reports reach us only if you turn them on."
     },
