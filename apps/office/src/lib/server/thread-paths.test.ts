@@ -87,3 +87,34 @@ test('a thread that is closed or done still opens, since workFile has no status 
   assert.equal(dataFile(html), `vera:threads/${id}/vera/report.md`);
   assert.equal((await readStaffFile('vera', `threads/${id}/vera/report.md`)).content, 'All done.');
 });
+
+for (const name of ['my page.html', 'page (1).html', 'a&b.html', 'a#b.html', 'caf\u00e9.html'])
+  test(`a file: link naming ${name} opens that file through the office's own route`, async () => {
+    const id = await thread('vera');
+    put(id, 'vera', name, `<p>${name}</p>`);
+    const url = fullPath(id, 'vera', name).split('/').map(encodeURIComponent).join('/');
+    const html = await rendered(`[a](file://${url})`, 'vera');
+    const opens = dataFile(html).replaceAll('&amp;', '&');
+    assert.equal(opens, `vera:threads/${id}/vera/${name}`);
+    const opened = await readStaffFile('vera', opens.slice('vera:'.length));
+    assert.equal(opened.content, `<p>${name}</p>`);
+  });
+
+test("an address that climbs out with an encoded step opens nothing, in a thread or in an Odd's own folder", async () => {
+  const id = await thread('vera');
+  put(id, 'vera', 'kept.md', 'Kept.');
+  mkdirSync(L.home('staff', 'jax'), { recursive: true });
+  writeFileSync(L.home('staff', 'jax', 'secret.md'), 'Not for Vera.');
+  const home = '/Users/Shared/.oddboro';
+  for (const [path, html] of [
+    [`${home}/threads/${id}/vera/%2e%2e/%2e%2e/%2e%2e/staff/jax/secret.md`, undefined],
+    [`${home}/threads/${id}/vera/..%2Fsecret.md`, undefined],
+    [`${home}/staff/vera/%2e%2e/jax/secret.md`, '<p>a</p>'],
+    [`${home}/staff/vera/..%2Fjax/secret.md`, undefined]
+  ] as const)
+    assert.equal(
+      await rendered(`[a](file://${path})`, 'vera'),
+      html ?? `<p>[a](file://${path})</p>`,
+      path
+    );
+});

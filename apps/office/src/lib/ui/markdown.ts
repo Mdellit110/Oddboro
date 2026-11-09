@@ -33,12 +33,22 @@ md.renderer.rules.link_open = (tokens, i, options, env, self) => {
 // to the file it opens; until then, and when it opens nothing, it stays text.
 // A page (`PAGE`) links whenever the browser can open it, even when too big or
 // not text for the viewer, and gets an "Open in browser" button beside it.
-const FULL =
-  /(?:file:\/\/)?(?:~|\/(?:Users|home)\/[^/\s]+)\/\.oddboro[^/\s]*\/(?:staff\/([a-z0-9-]+)|threads\/([1-9]\d*)\/([a-z0-9-]+))\/([^\s`'"<>()[\]]+?\.[A-Za-z0-9]+)(?=[\s`'"<>()[\],;:]|\.(?:\s|$)|$)/g;
+// Where a full path starts, in both uses below.
+const FULL_START = String.raw`(?:file:\/\/)?(?:~|\/(?:Users|home)\/[^/\s]+)\/\.oddboro[^/\s]*\/(?:staff\/([a-z0-9-]+)|threads\/([1-9]\d*)\/([a-z0-9-]+))\/`;
+// In running text a name has no space, or it would swallow the prose after it,
+// and sentence punctuation after it is not part of it: closing marks, or a run
+// of `.?!*` that ends the word. `index.html?x=1` is neither, so it matches nothing.
+const FULL = new RegExp(
+  String.raw`${FULL_START}([^\s\`'"<>()[\]]+?\.[A-Za-z0-9]+)(?=[.?!*\u2026]*(?:[\s\`'"<>()[\],;:\u201d\u2019\u2013\u2014]|$))`,
+  'g'
+);
+// Where the whole of a target is the path (an address, a code span, a label),
+// nothing follows the name, so a name may hold any character.
+const WHOLE = new RegExp(String.raw`^${FULL_START}(.+\.[A-Za-z0-9]+)$`);
 const INSIDE = /^(?:\.\/)?(?:[\w.-]+\/)*[\w-][\w.-]*\.(?:md|txt|json|csv|ya?ml|html?)$/;
 
 /**
- * The file a match of `FULL` names. One in a thread's folder goes by its name
+ * The file a match of `WHOLE` names. One in a thread's folder goes by its name
  * in the office (`workName`), for the Odd whose part holds it. A path
  * `workPath` refuses names nothing: passed on, the viewer would read it as a
  * path in that Odd's own folder.
@@ -53,12 +63,31 @@ function fullName(m: RegExpExecArray): FileRef | undefined {
 /** Who wrote the text, and the names in it the office has not been asked about. */
 type Env = { staff?: string; unknown: FileRef[] };
 function fileOf(target: string, env: Env): FileRef | undefined {
-  const t = plainName(target);
-  FULL.lastIndex = 0;
-  const m = FULL.exec(t);
-  if (m && m.index === 0 && m[0].length === t.length) return fullName(m);
+  const t = pathOf(target);
+  if (t === undefined) return undefined;
+  const m = WHOLE.exec(t);
+  if (m) return fullName(m);
   if (env.staff && INSIDE.test(t)) return { staff: env.staff, path: t.replace(/^\.\//, '') };
   return undefined;
+}
+
+/**
+ * A name as a path. A `file:` address is a URL, so each step is decoded whole,
+ * `%23` included, which `plainName` leaves alone. A step that decodes to a
+ * folder separator names nothing: no file's name holds one, and `..%2F` would
+ * step out of the folder. So does an address that is not valid escaping.
+ */
+function pathOf(target: string): string | undefined {
+  const t = target.trim();
+  if (!t.startsWith('file:')) return plainName(t);
+  try {
+    const steps = t.split('/').map(decodeURIComponent);
+    return steps.some((step) => /[/\\]/.test(step) || step.includes('\0'))
+      ? undefined
+      : steps.join('/');
+  } catch {
+    return undefined;
+  }
 }
 
 /** Whether the whole of `text` is a full path to an office file, whoever wrote it. */
@@ -67,8 +96,8 @@ const namesFile = (text: string): boolean => !!fileOf(text, { unknown: [] });
 // markdown-it refuses every file: target, so an Odd's link to its own work
 // stayed as raw brackets. One the office can name passes, and `staff_files`
 // rewrites it, so no file: address reaches the page.
-const refusesLink = md.validateLink;
-md.validateLink = (url) => refusesLink(url) || namesFile(url);
+const allowedByDefault = md.validateLink;
+md.validateLink = (url) => allowedByDefault(url) || namesFile(url);
 
 /** The file a name opens, or undefined while it opens nothing known. */
 function opened(f: FileRef, env: Env): FileRef | undefined {
@@ -167,7 +196,7 @@ md.core.ruler.push('staff_files', (state) => {
       let at = 0;
       FULL.lastIndex = 0;
       for (let m = FULL.exec(t.content); m; m = FULL.exec(t.content)) {
-        const name = fullName(m);
+        const name = fileOf(m[0], env);
         const f = name && opened(name, env);
         if (!name || !f) continue;
         const { open, close } = linkTokens(state, f);
