@@ -234,14 +234,20 @@ hand-off or number, which ledger tests and the office's format test share.
   tells every run's tool server so (`OFFICE_NETWORK_HELD`), whatever the run's
   own tool, so `my_access` and `office_report` say it for each Odd they speak
   of (`ownToolsSaid`), and a change that would open the network while held
-  records the hold's words (`NETWORK_NOTE.held`). `checkFolder()` refuses the home itself, a folder outside it,
+  records the hold's words (`NETWORK_NOTE.held`). `checkFolder()` takes a folder anywhere on the computer. It refuses the home itself
   and one that holds or sits in a secret store (`SECRET_STORES`, which the
-  office's `unreadable` also reads), the office's home or its code, and one
+  office's `unreadable` also reads; outside the home, `STORE_MARKS` by name
+  and by a coding tool's sign-in or history, in the folder, above it and one
+  level down), the office's home or its code, and one
   whose real path holds `*`, `?`, `[` or `]`, which Codex cannot take
   (`GLOB`), with one line each (`FOLDER_REFUSED`; the glob line names the
   character). It compares real paths as the disk spells
   them (`realpathSync.native`), so on a Mac `~/.SSH` is `~/.ssh`, and a link
-  is where it leads. `setFolder()` finds a folder the Odd has by that real
+  is where it leads. A whole drive or volume, or a folder in or holding the system's own folders
+  (`broadFolder`; never one in the home), comes back as `{ warning:
+FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
+  takes too), and `ask_for_folder` refuses it (`FOLDER_REFUSED.broad`).
+  `setFolder()` finds a folder the Odd has by that real
   path, so a level change replaces it, and refuses a new one inside or
   holding another the Odd has (`FOLDER_REFUSED.nested`); taking one back is
   never refused. `test/own-tools.test.ts` holds `checkFolder`.

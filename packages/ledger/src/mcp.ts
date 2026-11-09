@@ -17,6 +17,7 @@ import {
   catalog,
   checkFolder,
   folderAskRefused,
+  FOLDER_REFUSED,
   shownFolder,
   editOwnJob,
   giveTask,
@@ -1009,7 +1010,9 @@ tool(
         .trim()
         .min(1)
         .max(1000)
-        .describe('The folder\'s full path, starting with / or ~, e.g. "~/Documents/Taxes".'),
+        .describe(
+          'The folder\'s full path, starting with /, ~ or a drive letter, e.g. "~/Documents/Taxes".'
+        ),
       level: z.enum(['read', 'write']).describe('read to look, write to change files there.'),
       why: z.string().max(1000).describe('What work needs it, in one or two plain sentences.'),
       revises: revisesArg
@@ -1018,10 +1021,11 @@ tool(
   async ({ path, level, why, revises }) => {
     const on = await placed({});
     if ('problem' in on) return refused(on.problem);
-    if (!isAbsolute(path) && !/^~(?=$|\/)/.test(path))
-      return refused("Give the folder's full path, starting with / or ~.");
+    if (!isAbsolute(path) && !/^~(?=$|[\\/])/.test(path))
+      return refused("Give the folder's full path, starting with /, ~ or a drive letter.");
     const checked = checkFolder(path);
     if ('refused' in checked) return refused(checked.refused);
+    if ('warning' in checked) return refused(FOLDER_REFUSED.broad);
     const held = folderAskRefused((await staffer(ME)) ?? me, checked.real, level);
     if (held) return refused(held);
     const shown = shownFolder(checked.real);
