@@ -466,9 +466,10 @@ test('every tool the server registers is a listed office tool or rides with one'
     );
 });
 
-test("an Odd's registered tools are exactly the always tools, the ones it holds and the ones that ride with them", async () => {
-  for (const [id, holds] of Object.entries(HOLDERS))
-    for (const run of ['chat', 'thread'] as const) {
+// One test per tool server: each takes seconds to start, and a test has 15.
+for (const [id, holds] of Object.entries(HOLDERS))
+  for (const run of ['chat', 'thread'] as const)
+    test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them`, async () => {
       const offered = new Set<string>(
         OFFICE_TOOLS.filter(
           (t) => (t.always || holds.includes(t.id)) && (!t.withGmail || id === 'tot')
@@ -479,8 +480,7 @@ test("an Odd's registered tools are exactly the always tools, the ones it holds 
         .filter((name) => (ONLY_IN[name] ?? run) === run)
         .sort();
       assert.deepEqual(await registered(id, run), want, `${id} in a ${run}`);
-    }
-});
+    });
 
 test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {
   const c = await toolServer('tot', { RUN_KEY: 'k-tot-hint' });
