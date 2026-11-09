@@ -13,11 +13,14 @@
 // its own per-tool allow list too, so either one alone holds.
 import { randomBytes } from 'node:crypto';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPError } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import {
   CallToolRequestSchema,
+  ErrorCode,
   ListToolsRequestSchema,
+  McpError,
   type CallToolResult,
   type Tool
 } from '@modelcontextprotocol/sdk/types.js';
@@ -29,6 +32,7 @@ import {
   ownerName,
   raiseCall,
   readsOnly,
+  record,
   type CallPlace,
   type ConnectorRow,
   type HeldCall,
@@ -42,8 +46,15 @@ export const GATEWAY_PATH = '/api/gateway';
 /**
  * One outside tool a run holds, its connection made on first use and kept for
  * the run. `waits`: a write grant at Draft, whose changes wait for the owner.
+ * `toldNoStart`: the Ledger already says it could not start in this run.
  */
-type Held = { level: Level; waits: boolean; client?: Promise<Client>; tools?: Promise<Tool[]> };
+type Held = {
+  level: Level;
+  waits: boolean;
+  client?: Promise<Client>;
+  tools?: Promise<Tool[]>;
+  toldNoStart?: boolean;
+};
 /** `place` is where a held call lands; a run with none (a lesson run) changes nothing. */
 type GatewayRun = { held: Map<string, Held>; until: number; place?: CallPlace };
 
@@ -108,9 +119,51 @@ function runOf(request: Request): GatewayRun | undefined {
 /** Whether a request carries a going run's token: the office's guard lets it through to the gateway. */
 export const fromRun = (request: Request): boolean => !!runOf(request);
 
+/**
+ * Why a connector did not start, in the office's own words. Only the kind of
+ * failure is read, never its text: a server's refusal is its response body,
+ * which can repeat the key it was sent, so nothing it said reaches the Ledger.
+ */
+function whyNoStart(e: unknown): string {
+  if (e instanceof StreamableHTTPError)
+    return e.code === 401 || e.code === 403
+      ? "It turned down the office's key or sign-in."
+      : 'It answered the office with an error.';
+  if (e instanceof McpError && e.code === ErrorCode.ConnectionClosed)
+    return 'It stopped before it answered the office.';
+  if (e instanceof Error) {
+    const { code, syscall } = e as NodeJS.ErrnoException;
+    if (syscall?.startsWith('spawn')) return 'The office could not start the program it runs.';
+    if (code === 'ERR_INVALID_URL' || e.message === 'fetch failed')
+      return 'The office could not reach the address saved for it.';
+  }
+  return 'The office could not tell why.';
+}
+
+/**
+ * One Ledger line, the first time this run finds a connector will not start.
+ * A line that cannot be written is logged and dropped: the run still gets the
+ * connector's own error, as it does with no line at all.
+ */
+async function tellNoStart(c: ConnectorRow, h: Held, e: unknown): Promise<void> {
+  if (h.toldNoStart) return;
+  h.toldNoStart = true;
+  try {
+    await record({
+      kind: 'access',
+      actor: 'office',
+      title: `${c.name} could not start during a run`,
+      body: whyNoStart(e)
+    });
+  } catch (failed) {
+    console.error(`No Ledger line for ${c.id} not starting:`, failed);
+  }
+}
+
 function clientOf(c: ConnectorRow, h: Held): Promise<Client> {
-  h.client ??= upstream(c).catch((e: unknown) => {
+  h.client ??= upstream(c).catch(async (e: unknown) => {
     h.client = undefined;
+    await tellNoStart(c, h, e);
     throw e;
   });
   return h.client;

@@ -775,7 +775,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    may have, `outsideToolEnv` in `run-env-allow.ts`, and its own secrets),
    lists only the tools the grant reaches, refuses any other
    call, and takes a tool that no longer passes `readsOnly` off the
-   connector's stored list with a Ledger line (`narrowReadTools`). A write
+   connector's stored list with a Ledger line (`narrowReadTools`). A connector
+   that cannot start during a run gets one Ledger line naming it, per run, in
+   the office's own words for why and never the error's text, which can repeat
+   a key (`whyNoStart`); the run still gets the error itself. A write
    grant at Draft (`writesWait`, either the Odd's own level or a run capped
    there) lists every tool, passes reads on, and holds each call that does
    not pass `readsOnly` (or `readsByRole`) as a `call` ask on the desk

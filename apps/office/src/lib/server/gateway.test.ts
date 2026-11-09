@@ -7,9 +7,10 @@
 // (issue #35). Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
+import { createServer, type Server as HttpServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -54,13 +55,13 @@ await L.connectorReady(
 );
 const notes = async () => (await L.connector('notes'))!;
 
-/** An MCP client on `token`'s gateway to Notes, as a run's tool connects to it. */
-async function connect(token: string): Promise<Client> {
+/** An MCP client on `token`'s gateway to the tool `id`, as a run's tool connects to it. */
+async function connect(token: string, id = 'notes'): Promise<Client> {
   const client = new Client({ name: 'a-run', version: '1.0.0' });
   await client.connect(
-    new StreamableHTTPClientTransport(new URL(`${L.OFFICE_URL}/api/gateway/notes`), {
+    new StreamableHTTPClientTransport(new URL(`${L.OFFICE_URL}/api/gateway/${id}`), {
       requestInit: { headers: { Authorization: `Bearer ${token}` } },
-      fetch: (url, init) => gateway(new Request(url, init), 'notes')
+      fetch: (url, init) => gateway(new Request(url, init), id)
     })
   );
   return client;
@@ -285,4 +286,169 @@ test('a run with nowhere to put a change, such as a lesson run, cannot ask for o
     await client.close();
     await closeGateway(token);
   }
+});
+
+let brokenId = 0;
+/** A connector made to fail, under a name of its own so each test counts only its own lines. */
+async function broken(
+  config: Parameters<typeof L.addConnector>[0]['config'],
+  kind: 'stdio' | 'http'
+) {
+  const id = `broken-${++brokenId}`;
+  const name = `Broken ${brokenId}`;
+  await L.addConnector({ id, name, description: 'A stand-in that fails.', kind, config });
+  await L.connectorReady(id, ['search'], ['search']);
+  /** Each Ledger line saying this connector could not start. */
+  const lines = async () => [
+    ...(await L.pg<{ kind: string; actor: string; title: string; body: string }[]>`
+      select kind, actor, title, body from ledger
+      where title = ${`${name} could not start during a run`}`)
+  ];
+  return { id, name, lines };
+}
+const missingProgram = { command: join(folder, 'no-such-program'), args: [] };
+
+/** One run holding the tool `id`, at Read and write, for what `fn` does with it. */
+async function inRun(id: string, fn: (client: Client) => Promise<void>): Promise<void> {
+  const { token } = openGateway([{ connector: (await L.connector(id))!, level: 'act' }], 60_000);
+  const client = await connect(token, id);
+  try {
+    await fn(client);
+  } finally {
+    await client.close();
+    await closeGateway(token);
+  }
+}
+
+test('a connector whose program is missing gets one Ledger line per run, however often that run tries', async () => {
+  const { id, name, lines } = await broken(missingProgram, 'stdio');
+  await inRun(id, async (client) => {
+    // The run still gets the connector's own error, every time.
+    await assert.rejects(client.listTools(), /ENOENT/);
+    await assert.rejects(client.listTools(), /ENOENT/);
+    await assert.rejects(client.callTool({ name: 'search' }), /ENOENT/);
+  });
+  assert.deepEqual(await lines(), [
+    {
+      kind: 'access',
+      actor: 'office',
+      title: `${name} could not start during a run`,
+      body: 'The office could not start the program it runs.'
+    }
+  ]);
+  // The next run finds it out for itself, so it says so again.
+  await inRun(id, (client) => assert.rejects(client.listTools(), /ENOENT/));
+  assert.equal((await lines()).length, 2);
+});
+
+test('a connector that starts after failing in the same run adds no second line', async () => {
+  const { id, lines } = await broken(missingProgram, 'stdio');
+  await inRun(id, async (client) => {
+    await assert.rejects(client.listTools(), /ENOENT/);
+    await L.setConnectorConfig(id, { command: process.execPath, args: [fixture] });
+    assert.equal((await client.listTools()).tools.length, 4);
+  });
+  assert.equal((await lines()).length, 1);
+});
+
+test('a run whose connectors start writes no such line', async () => {
+  const before = await L.pg`select title from ledger where title like '%could not start%'`;
+  await inRun('notes', async (client) => {
+    assert.equal((await client.listTools()).tools.length, 4);
+  });
+  assert.deepEqual(
+    await L.pg`select title from ledger where title like '%could not start%'`,
+    before
+  );
+});
+
+/** A hosted stand-in that answers every request with `status` and `body`, on a free port. */
+async function hosted(status: number, body: string): Promise<{ url: string; server: HttpServer }> {
+  const server = createServer((_, res) => {
+    res.statusCode = status;
+    res.end(body);
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const { port } = server.address() as { port: number };
+  return { url: `http://127.0.0.1:${port}/mcp`, server };
+}
+
+for (const [status, words] of [
+  [401, "It turned down the office's key or sign-in."],
+  [403, "It turned down the office's key or sign-in."],
+  [500, 'It answered the office with an error.']
+] as const)
+  test(`a hosted connector answering ${status} gets the office's words, and never what it said, which can repeat its key`, async () => {
+    const said = `no such key ${KEY}`;
+    const { url, server } = await hosted(status, said);
+    try {
+      const { id, lines } = await broken({ url, headers: ['X-Api-Key'] }, 'http');
+      secrets.set(`${id}:X-Api-Key`, KEY);
+      await inRun(id, (client) => assert.rejects(client.listTools()));
+      const [line, ...more] = await lines();
+      assert.deepEqual(more, []);
+      assert.equal(line.body, words);
+      assert.ok(!JSON.stringify(line).includes(KEY), 'the line holds no key');
+      assert.ok(!JSON.stringify(line).includes('no such key'), 'the line holds none of its words');
+    } finally {
+      server.close();
+    }
+  });
+
+for (const [about, url] of [
+  ['with an address that is not one', 'not an address'],
+  ['with nothing at its address', 'http://127.0.0.1:9/mcp']
+] as const)
+  test(`a hosted connector ${about} gets one line saying the address could not be reached`, async () => {
+    const { id, lines } = await broken({ url }, 'http');
+    await inRun(id, async (client) => {
+      await assert.rejects(client.listTools());
+      await assert.rejects(client.listTools());
+    });
+    assert.deepEqual(
+      (await lines()).map((l) => l.body),
+      ['The office could not reach the address saved for it.']
+    );
+  });
+
+test('a program that quits before answering gets a line saying it stopped', async () => {
+  const { id, lines } = await broken(
+    { command: process.execPath, args: ['-e', 'process.exit(1)'] },
+    'stdio'
+  );
+  await inRun(id, (client) => assert.rejects(client.listTools()));
+  assert.deepEqual(
+    (await lines()).map((l) => l.body),
+    ['It stopped before it answered the office.']
+  );
+});
+
+test('a failure the office has no words for gets the fixed sentence and none of its text', async () => {
+  // Reading its key from AWS fails here: this office never connected AWS Secrets Manager.
+  const { id, lines } = await broken(
+    { ...missingProgram, secrets: ['A_KEY'], fromAws: { A_KEY: { secret: 'a-secret' } } },
+    'stdio'
+  );
+  await inRun(id, (client) => assert.rejects(client.listTools()));
+  assert.deepEqual(
+    (await lines()).map((l) => l.body),
+    ['The office could not tell why.']
+  );
+});
+
+test("a line that cannot be written is logged, and the run still gets the connector's own error", async () => {
+  const { id, lines } = await broken(missingProgram, 'stdio');
+  const logged = mock.method(console, 'error', () => {});
+  await L.pg`alter table ledger rename to ledger_away`;
+  try {
+    await inRun(id, (client) => assert.rejects(client.listTools(), /ENOENT/));
+  } finally {
+    await L.pg`alter table ledger_away rename to ledger`;
+    logged.mock.restore();
+  }
+  assert.deepEqual(await lines(), []);
+  assert.deepEqual(
+    logged.mock.calls.map((c) => c.arguments[0]),
+    [`No Ledger line for ${id} not starting:`]
+  );
 });
