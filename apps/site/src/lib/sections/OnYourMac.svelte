@@ -21,7 +21,7 @@
     },
     {
       title: 'Nothing comes to us unless you say so.',
-      text: 'New Altitude runs no server for your office. If you turn on error reports, they go to our relay so we can fix what broke. If you sign in to a New Altitude account, your sign-in comes to us too. Nothing else does.',
+      text: 'New Altitude runs no server for your office. If you sign in to a New Altitude account, your sign-in comes to us. If you also turn on error reports, they go to our relay so we can fix what broke. Nothing else does.',
       shows:
         "Highlights New Altitude, off the map, and the two dashed lines, the only paths your office's data takes. Error reports and a New Altitude sign-in reach us only if you choose them."
     },
@@ -32,7 +32,7 @@
     },
     {
       title: 'No account needed.',
-      text: 'Nothing to sign up for and no key to request. If New Altitude already gave you an account, you can sign in, and nothing else changes.',
+      text: 'Nothing to sign up for and no key to request. If you have a New Altitude account, you can sign in and choose to send error reports; nothing else changes.',
       shows: 'Highlights the two accounts in the diagram, both of them yours.'
     }
   ];

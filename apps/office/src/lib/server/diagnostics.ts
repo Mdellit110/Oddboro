@@ -11,19 +11,28 @@ import {
   onUnhandledRejectionIntegration,
   type NodeOptions
 } from '@sentry/sveltekit';
-import { serializeEnvelope, type Envelope, type Transport } from '@sentry/core';
+import {
+  makePromiseBuffer,
+  serializeEnvelope,
+  type Envelope,
+  type Transport,
+  type TransportMakeRequestResponse
+} from '@sentry/core';
 import { readEnv } from '@oddboro/ledger/env';
 import { CODE } from '@oddboro/ledger/home';
 import {
   answerFrom,
   DATA_COLLECTION,
+  needsSignIn,
   sampleTrace,
   scrubEnvelopeHeader,
   scrubEvent,
   scrubSpan,
   type Answer,
+  type ReportsState,
   type Scrub
 } from '#lib/diagnostics.ts';
+import type { AccountStatus } from '#lib/account.ts';
 import { HOSTS } from './hosts.ts';
 
 /** What the server's reports and the relay's are scrubbed against. */
@@ -35,11 +44,51 @@ export const answer = (): Answer => answerFrom(process.env.OFFICE_DIAGNOSTICS);
 /** The one consent check for everything the office sends. */
 export const diagnosticsOn = (): boolean => answer() === 'yes';
 
-/** For the page: whether reports can go at all (an address was found and the SDK started), and the answer. */
-export const diagnosticsState = (): { possible: boolean; answer: Answer } => ({
+/**
+ * The New Altitude site set for development and tests, read as the address
+ * is: the transport is made before the settings file reaches `process.env`.
+ */
+const accountSite = () => process.env.ODDBORO_ACCOUNT_SITE || readEnv().ODDBORO_ACCOUNT_SITE;
+
+/**
+ * For the page: whether reports can go at all (an address was found and the
+ * SDK started), whether they need a New Altitude sign-in, and the answer.
+ */
+export const diagnosticsState = (): ReportsState => ({
   possible: !!getClient(),
+  account: needsSignIn({ address: getClient()?.getOptions().dsn, accountSite: accountSite() }),
   answer: answer()
 });
+
+/**
+ * How long reports reuse the account's token before asking the secret store
+ * again. Under the refresh margin in `oauth.ts`, so a reused token still has
+ * at least a minute left.
+ */
+export const TOKEN_REUSE_MS = 4 * 60_000;
+
+let reused: { token: string; signIn: AccountStatus; at: number } | undefined;
+
+/**
+ * The account's token for a report, or undefined while signed out. Loaded at
+ * send time, never at the top: `account.ts` brings in Postgres, which this
+ * module must not (see the top of this file). Reused only within one sign-in:
+ * `accountStatus()` gives a new status at each sign-in and sign-out, so after
+ * signing out and in again, or Switch account, no report goes with the old
+ * token, even for the same account.
+ */
+async function reportToken(): Promise<string | undefined> {
+  const account = await import('./account.ts');
+  const signIn = account.accountStatus();
+  if (signIn.state !== 'in') {
+    reused = undefined;
+    return undefined;
+  }
+  if (reused?.signIn === signIn && Date.now() - reused.at < TOKEN_REUSE_MS) return reused.token;
+  const token = await account.accountToken();
+  reused = token ? { token, signIn, at: Date.now() } : undefined;
+  return token;
+}
 
 /**
  * The door refuses bodies over 1 MiB, counted after gunzip. This leaves room
@@ -131,27 +180,50 @@ type MakeTransport = typeof makeNodeTransport;
 
 /**
  * The stock transport behind the owner's answer. Nothing leaves without yes,
- * asked on every send, so an answer takes effect with no restart. What does
- * leave gets a header from the allow list, span containers that infer no
- * address, and is cut to the door's size.
+ * asked on every send, so an answer takes effect with no restart. Reports to
+ * an address that needs a New Altitude sign-in go only while signed in, each
+ * with the account's token. What does leave gets a header from the allow
+ * list, span containers that infer no address, and is cut to the door's size.
  */
 export function gated(make: MakeTransport): MakeTransport {
   return (options) => {
-    const inner = make(options);
+    // `options.url` is the envelope address, with the DSN's scheme and host.
+    const signIn = needsSignIn({ address: options.url, accountSite: accountSite() });
+    const plain = signIn ? undefined : make(options);
+    // The stock transport takes its headers when it is made, so one is made per token.
+    let signed: { token: string; transport: Transport } | undefined;
+    const innerFor = async (): Promise<Transport | undefined> => {
+      if (plain) return plain;
+      const token = await reportToken();
+      if (!token) return undefined;
+      if (signed?.token !== token) {
+        const headers = { ...options.headers, authorization: `Bearer ${token}` };
+        signed = { token, transport: make({ ...options, headers }) };
+      }
+      return signed.transport;
+    };
     // The office's own key, which the door forwards under. The page's
     // envelopes carry a placeholder.
     const publicKey = new URL(options.url).searchParams.get('sentry_key') ?? '';
+    const deliver = async (envelope: Envelope): Promise<TransportMakeRequestResponse> => {
+      if (!diagnosticsOn()) return {};
+      const inner = await innerFor();
+      if (!inner) return {};
+      const header = scrubEnvelopeHeader(envelope[0], publicKey);
+      let last = {};
+      // Each part keeps its own type: `scrubEnvelopeHeader` and `neverInferIp` return the ones they get.
+      for (const piece of fitDoor([header, neverInferIp(envelope[1])] as Envelope))
+        last = await inner.send(piece);
+      return last;
+    };
+    // Every send from its start: one waiting on the token is not yet in the
+    // stock transport, whose own flush would miss it, and the SDK flushes
+    // before a crash ends the office. Each send waits for its requests, so
+    // this is all `flush` has to wait for.
+    const sending = makePromiseBuffer<TransportMakeRequestResponse>();
     const transport: Transport = {
-      async send(envelope) {
-        if (!diagnosticsOn()) return {};
-        const header = scrubEnvelopeHeader(envelope[0], publicKey);
-        let last = {};
-        // Each part keeps its own type: `scrubEnvelopeHeader` and `neverInferIp` return the ones they get.
-        for (const piece of fitDoor([header, neverInferIp(envelope[1])] as Envelope))
-          last = await inner.send(piece);
-        return last;
-      },
-      flush: (timeout) => inner.flush(timeout)
+      send: (envelope) => sending.add(() => deliver(envelope)),
+      flush: (timeout) => sending.drain(timeout)
     };
     return transport;
   };

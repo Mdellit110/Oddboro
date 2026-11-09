@@ -51,8 +51,8 @@
   // Every time on the page is in the office's zone, which only the server knows.
   // It is fixed for the life of the page: a new zone takes a restart.
   setZone(untrack(() => data.zone));
-  // Whether the office can send reports, and the owner's answer. Answering
-  // updates it from then on.
+  // Whether the office can send reports, whether they need a New Altitude
+  // sign-in, and the owner's answer. Answering updates it from then on.
   Object.assign(
     diagnostics,
     untrack(() => data.diagnostics)

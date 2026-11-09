@@ -18,10 +18,29 @@ writeFileSync(
 await import('../../instrumentation.server.ts');
 const Sentry = await import('@sentry/sveltekit');
 const hooks = await import('../../hooks.server.ts');
+const { diagnosticsState } = await import('./diagnostics.ts');
 
 after(() => {
   door.close();
   rmSync(folder, { recursive: true, force: true });
+});
+
+test('the page is told whether reports need a sign-in', () => {
+  assert.equal(diagnosticsState().account, false);
+});
+
+test("a report to the owner's own Sentry needs no sign-in and carries no token", async () => {
+  // No account site is set and nothing here signs in.
+  assert.equal(process.env.ODDBORO_ACCOUNT_SITE, undefined);
+  const from = door.got.length;
+  await sender(hooks.handle)({
+    route: '/api/goals',
+    resolve: throwing(() => new Error('own address, signed out'))
+  });
+  await Sentry.flush(5000);
+  await until(() => door.got.length > from);
+  assert.ok(door.got.length > from);
+  for (const g of door.got.slice(from)) assert.equal(g.headers.authorization, undefined);
 });
 
 test('with its own address in the settings file, a source build sends straight there', async () => {

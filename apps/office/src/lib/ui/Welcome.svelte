@@ -8,7 +8,7 @@
   import OfficeTools from './OfficeTools.svelte';
   import { selectOnFocus } from './select-on-focus.ts';
   import UpdatesSection from './UpdatesSection.svelte';
-  import { diagnostics } from './diagnostics.svelte.ts';
+  import { shown } from './diagnostics.svelte.ts';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
@@ -187,7 +187,7 @@
 
     {#if welcomed}
       <UpdatesSection />
-      {#if diagnostics.possible}
+      {#if shown()}
         <DiagnosticsSection />
       {/if}
       <AccountSection />

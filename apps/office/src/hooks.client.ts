@@ -3,8 +3,8 @@
 // relay drops what it gets when it has none.
 import * as Sentry from '@sentry/sveltekit';
 import { pageOptions } from '#lib/diagnostics.ts';
-import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
+import { pageAnswer } from '#lib/ui/diagnostics.svelte.ts';
 
-Sentry.init(pageOptions(() => diagnostics.answer));
+Sentry.init(pageOptions(pageAnswer));
 
 export const handleError = Sentry.handleErrorWithSentry();

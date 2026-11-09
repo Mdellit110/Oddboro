@@ -92,7 +92,19 @@ an update (`update.rs`).
     device only the chip's architecture is kept. Each report sends on its
     own thread and holds up the dialog or the panic 2 seconds at most; a run
     sends one panic report. With no address the shell sets no panic hook and
-    runs no thread for reports.
+    runs no thread for reports. A report to New Altitude's address (or to the
+    account site `ODDBORO_ACCOUNT_SITE` names, from the environment or the
+    office's `.env`) needs the office's New Altitude sign-in, by the office's
+    rule (`needs_sign_in`, tested against the office's
+    `needs-sign-in.cases.json`). On its thread the shell reads the sign-in
+    the office saved: on Linux with the office's own command (`secret-tool`),
+    and on a Mac from its own Keychain items (`secrets.rs`), where the app's
+    office keeps it. It sends with its access token in the
+    `authorization` header. It never refreshes or writes the sign-in, so a
+    token with under a minute left is not sent. The report is dropped while
+    signed out, when the token has run out, and on Windows, whose
+    Credential Manager the shell does not read. The read counts in the same
+    2 seconds.
 
 The page gets no Tauri IPC: there are no capability files, and remote pages
 never get IPC without one.
@@ -204,7 +216,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
 - `src-tauri/build.rs`. Tauri's build, and the target triple as
   `ODDBORO_TARGET`. It rebuilds when `ODDBORO_DIAGNOSTICS_DSN` changes.
 - `src-tauri/src/diagnostics.rs`. The shell's error reports: the address,
-  the owner's answer, the allow list and the sending.
+  the owner's answer, the New Altitude sign-in, the allow list and the
+  sending.
 - `src-tauri/src/server.rs`. Starting, watching, restarting and stopping Node.
 - `src-tauri/src/env.rs`. Port, home, log path and the login-shell PATH.
 - `src-tauri/src/secrets.rs`. The office's secrets in the Mac's Keychain, and
@@ -419,6 +432,8 @@ ODDBORO_PORT=4510 ODDBORO_DB_PORT=54510 ODDBORO_HOME=/tmp/oddboro-test-home \
 - `tauri-plugin-updater` 2.14.1, `serde_json` 1.0.154
 - `getrandom` 0.3.4, for the update token
 - `sentry` 0.49.5, and `rustls` 0.23.46 with `ring`, for error reports
+- `reqwest` 0.13.5, the client sentry sends with, named so a report can
+  carry the sign-in's token
 - `libc` 0.2.191 (Mac and Linux)
 - `mac-notification-sys` 0.6.15 (Mac only)
 - `security-framework` 3.7.0 (Mac only), for the Keychain

@@ -1,6 +1,7 @@
 // The New Altitude sign-in with reports on: a whole sign-in, traced, against
 // a fake New Altitude (`fake-new-altitude.ts`), and a fake door that records every
-// report. The door must get the sign-in's spans, and none of its secrets. The
+// report. The door must get the sign-in's spans, and none of its secrets but
+// the access token, which goes only in the `authorization` header. The
 // secret store is a Map; the settings file and home are temp. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
@@ -121,7 +122,11 @@ test('a sign-in leaves no token, code, state or email in any error or trace repo
   // The positive control: the door got the callback's span.
   assert.ok(names().includes('GET /account/callback'), names().join(', '));
 
-  const sent = door.got.map((g) => `${g.url} ${JSON.stringify(g.headers)} ${g.body}`).join('\n');
+  // The reports need the sign-in, so each carries its access token in the one header for it.
+  for (const g of door.got) assert.match(g.headers.authorization ?? '', /^Bearer access-\d+$/);
+  const sent = door.got
+    .map((g) => `${g.url} ${JSON.stringify({ ...g.headers, authorization: undefined })} ${g.body}`)
+    .join('\n');
   for (const secret of [code, state, verifier, MEMBER.email, MEMBER.name])
     assert.ok(!sent.includes(secret), `the door got ${secret}`);
   assert.doesNotMatch(sent, /\b(access|refresh)-\d/);

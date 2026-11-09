@@ -35,8 +35,8 @@ import type { Account } from '#lib/account.ts';
 import { deleteSecret, getSecret, setSecret } from './keychain.ts';
 
 export const REDIRECT = `${OFFICE_URL}/connect/callback`;
-/** Refresh a token this long before it runs out. */
-const MARGIN_MS = 5 * 60_000;
+/** Refresh a token this long before it runs out. Reports reuse a token for less (`TOKEN_REUSE_MS`). */
+export const MARGIN_MS = 5 * 60_000;
 
 const GOOGLE_ISSUER = 'https://accounts.google.com';
 const GOOGLE_CLIENT_ID = '143017077978-dd33kak7rf2m1praobmbc0olv7kjf5gp.apps.googleusercontent.com';

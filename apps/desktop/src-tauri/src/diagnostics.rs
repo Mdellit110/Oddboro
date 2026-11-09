@@ -1,17 +1,21 @@
 //! The shell's error reports: a panic, the office given up on, or a broken
 //! install. They leave only after the owner's yes in the office's settings.
 //! Nothing is built until there is something to send, so an idle shell runs
-//! no thread or timer for reports.
+//! no thread or timer for reports. Reports to New Altitude go only while the
+//! office is signed in to a New Altitude account, each with its access token.
 
 use std::borrow::Cow;
 use std::fs;
 use std::panic;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{mpsc, Arc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use reqwest::Url;
 use sentry::integrations::backtrace::ProcessStacktraceIntegration;
 use sentry::integrations::contexts::ContextIntegration;
 use sentry::integrations::debug_images::DebugImagesIntegration;
@@ -19,14 +23,34 @@ use sentry::integrations::panic::PanicIntegration;
 use sentry::protocol::{
     Context, DebugImage, DeviceContext, Event, Exception, Level, Map, Mechanism, Stacktrace,
 };
-use sentry::transports::DefaultTransportFactory;
+use sentry::transports::{DefaultTransportFactory, ReqwestHttpTransportOptions};
 use sentry::types::Dsn;
-use sentry::{ClientOptions, Integration};
+use sentry::{ClientOptions, Integration, Transport, TransportFactory, TransportOptions};
 
 use crate::env;
 use crate::server::GaveUp;
 
 const DSN_KEY: &str = "ODDBORO_DIAGNOSTICS_DSN";
+/// The New Altitude site the office signs in to, set only in development
+/// and tests. Reports to it need the sign-in too.
+const ACCOUNT_SITE_KEY: &str = "ODDBORO_ACCOUNT_SITE";
+/// Where the office keeps its New Altitude sign-in in the system's secret
+/// store on Linux: the service every Oddboro secret sits under and the
+/// sign-in's name, as `packages/ledger/src/secrets.ts` and
+/// `apps/office/src/lib/server/account.ts` write them. On a Mac the app's
+/// office keeps it through this shell, under `secrets::SERVICE`.
+const SECRET_SERVICE: &str = "oddboro";
+const SIGN_IN: &str = "new-altitude-account:oauth";
+/// A token with less left than this is not sent. The office refreshes the
+/// sign-in; the shell only reads it, so a report waits for the office.
+const SIGN_IN_MARGIN: Duration = Duration::from_secs(60);
+/// A program and its arguments.
+type Reader = (&'static str, &'static [&'static str]);
+/// How the office reads a secret on Linux, through the session's keyring.
+const KEYRING_READ: Reader = (
+    "secret-tool",
+    &["lookup", "service", SECRET_SERVICE, "account", SIGN_IN],
+);
 /// The owner's answer, which the office's Setup writes.
 const ANSWER_KEY: &str = "OFFICE_DIAGNOSTICS";
 /// The most a report may hold up the dialog or the panic that sent it.
@@ -53,6 +77,10 @@ pub struct Diagnostics {
     settings: PathBuf,
     /// Paths under it leave as their file name alone (`report_path`).
     home: PathBuf,
+    /// Whether reports to `dsn` need the office's New Altitude sign-in.
+    needs_sign_in: bool,
+    /// Reads the office's saved sign-in: `read_sign_in`, or a test's own.
+    sign_in: fn() -> Option<String>,
 }
 
 impl Diagnostics {
@@ -63,16 +91,36 @@ impl Diagnostics {
         // the app, where the office's settings live in its home.
         let settings = std::env::var_os("ODDBORO_ENV")
             .map_or_else(|| env::office_home().join(".env"), PathBuf::from);
-        let dsn = find_dsn(
-            std::env::var(DSN_KEY).ok(),
+        Self::from_settings(
+            |key| std::env::var(key).ok(),
             option_env!("ODDBORO_DIAGNOSTICS_DSN"),
-            &settings,
-        )?;
+            settings,
+        )
+    }
+
+    /// `find` with the shell's environment, the address built into the
+    /// release and the settings file given, so a test can give its own. The
+    /// account site comes from the environment or the settings file only: a
+    /// release builds in no site.
+    fn from_settings(
+        environment: impl Fn(&str) -> Option<String>,
+        built_dsn: Option<&str>,
+        settings: PathBuf,
+    ) -> Option<Self> {
+        let dsn = find_setting(DSN_KEY, environment(DSN_KEY), built_dsn, &settings)?;
         dsn.parse::<Dsn>().ok()?;
+        let account_site = find_setting(
+            ACCOUNT_SITE_KEY,
+            environment(ACCOUNT_SITE_KEY),
+            None,
+            &settings,
+        );
         Some(Self {
+            needs_sign_in: needs_sign_in(&dsn, account_site.as_deref()),
             dsn,
             settings,
             home: env::home(),
+            sign_in: read_sign_in,
         })
     }
 
@@ -145,23 +193,41 @@ impl Diagnostics {
             .server_name(SERVER_NAME)
             .default_integrations(false)
             .integrations(integrations)
-            .before_send(move |event| Some(scrub(event, &home, fixed)))
-            .transport(DefaultTransportFactory);
+            .before_send(move |event| Some(scrub(event, &home, fixed)));
         // Not `ClientOptions::dsn`, which panics on a bad value, and this may
         // run inside the panic hook. `find` already checked it.
         options.dsn = self.dsn.parse().ok();
+        let sign_in = self.needs_sign_in.then_some(self.sign_in);
 
         let (sent, done) = mpsc::channel();
         // On its own thread, so a door that never answers holds up the caller
         // for `SEND_TIMEOUT` at most: `close` waits that long for the queue,
         // then joins the transport's thread however long its request takes.
+        // Reading the sign-in, which may wait on a locked keyring, counts in
+        // the same wait.
         let sender = thread::Builder::new()
             .name("oddboro-report".into())
             .spawn(move || {
                 // `rustls-no-provider` leaves the crypto provider to the
                 // process. The updater installs ring only when it checks, so
-                // it may be there already, which is fine.
+                // it may be there already, which is fine. A client is built
+                // only with one installed.
                 let _ = rustls::crypto::ring::default_provider().install_default();
+                options.transport = match sign_in {
+                    None => Some(Arc::new(DefaultTransportFactory)),
+                    Some(read) => {
+                        // Signed out, an expired token, or a client that
+                        // could not be built: the report is dropped, and
+                        // dropping `sent` lets the caller go at once.
+                        let Some(client) = read()
+                            .and_then(|saved| access_token(&saved, now_ms()))
+                            .and_then(|token| signed_client(&token))
+                        else {
+                            return;
+                        };
+                        Some(Arc::new(SignedIn(client)))
+                    }
+                };
                 let client = sentry::Client::from(options);
                 client.capture_event(event, None);
                 client.close(Some(SEND_TIMEOUT));
@@ -175,15 +241,125 @@ impl Diagnostics {
     }
 }
 
-/// The report address, first found wins: the shell's environment, the value
-/// built into the release, then the settings file. An empty value counts as
-/// unset at every step: a release built with the variable unset gets
-/// `Some("")`.
-fn find_dsn(environment: Option<String>, built: Option<&str>, settings: &Path) -> Option<String> {
+/// A setting such as the report address, first found wins: the shell's
+/// environment, the value built into the release, then the settings file. An
+/// empty value counts as unset at every step: a release built with the
+/// variable unset gets `Some("")`.
+fn find_setting(
+    key: &str,
+    environment: Option<String>,
+    built: Option<&str>,
+    settings: &Path,
+) -> Option<String> {
     environment
         .filter(|v| !v.is_empty())
         .or_else(|| built.filter(|v| !v.is_empty()).map(str::to_string))
-        .or_else(|| setting(settings, DSN_KEY).filter(|v| !v.is_empty()))
+        .or_else(|| setting(settings, key).filter(|v| !v.is_empty()))
+}
+
+/// Whether reports sent to this address need a New Altitude sign-in: New
+/// Altitude's own address over https, or the account site itself when one is
+/// set (a stand-in in development and tests, whose port may differ). The
+/// office's `needsSignIn` in `apps/office/src/lib/diagnostics.ts` is the
+/// same rule, and both are tested against `needs-sign-in.cases.json`.
+fn needs_sign_in(dsn: &str, account_site: Option<&str>) -> bool {
+    let Ok(to) = Url::parse(dsn) else {
+        return false;
+    };
+    let Some(host) = to.host_str() else {
+        return false;
+    };
+    let own = host == "newaltitude.ai" || host.ends_with(".newaltitude.ai");
+    let site = account_site.and_then(|site| Url::parse(site).ok());
+    (to.scheme() == "https" && own) || site.is_some_and(|site| site.host_str() == Some(host))
+}
+
+/// Milliseconds since 1970, as the office's `Date.now()` saves them.
+fn now_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_millis())
+}
+
+/// The access token in the office's saved sign-in, when it has at least
+/// `SIGN_IN_MARGIN` left. The office saves `{ tokens, savedAt }`, with the
+/// token's lifetime in seconds and the time saved in milliseconds.
+fn access_token(saved: &str, now_ms: u128) -> Option<String> {
+    let saved: serde_json::Value = serde_json::from_str(saved).ok()?;
+    let token = saved["tokens"]["access_token"].as_str()?;
+    let lasts_s = saved["tokens"]["expires_in"].as_u64()?;
+    let saved_at = saved["savedAt"].as_u64()?;
+    let expires = u128::from(saved_at) + u128::from(lasts_s) * 1000;
+    (expires > now_ms + SIGN_IN_MARGIN.as_millis()).then(|| token.to_string())
+}
+
+/// The command that reads the office's sign-in on this system. None on a
+/// Mac, where the shell reads its own Keychain (`keychain_sign_in`), and on
+/// Windows, where the office keeps it in the Credential Manager in pieces
+/// the shell does not read, so its reports to New Altitude are dropped.
+fn sign_in_command() -> Option<Reader> {
+    // `cfg!`, not `#[cfg]`, so every system's branch compiles everywhere.
+    cfg!(target_os = "linux").then_some(KEYRING_READ)
+}
+
+/// The office's sign-in in the app's own Keychain items, which trust only
+/// this app, so the read needs no prompt (`secrets.rs`).
+#[cfg(target_os = "macos")]
+fn keychain_sign_in() -> Option<String> {
+    let value =
+        security_framework::passwords::get_generic_password(crate::secrets::SERVICE, SIGN_IN)
+            .ok()?;
+    String::from_utf8(value).ok()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn keychain_sign_in() -> Option<String> {
+    None
+}
+
+/// The office's saved sign-in, read from the secret store the office keeps
+/// it in. Never refreshed or written here. None when there is none, the
+/// read fails, or the system has no way to it.
+fn read_sign_in() -> Option<String> {
+    if cfg!(target_os = "macos") {
+        return keychain_sign_in();
+    }
+    let (program, args) = sign_in_command()?;
+    let read = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !read.status.success() {
+        return None;
+    }
+    // A line break after the value would not matter: JSON reads past it.
+    String::from_utf8(read.stdout).ok()
+}
+
+/// A client that sends the account's token with every request, marked
+/// sensitive so no debug output prints it.
+fn signed_client(token: &str) -> Option<reqwest::Client> {
+    let mut bearer = HeaderValue::from_str(&format!("Bearer {token}")).ok()?;
+    bearer.set_sensitive(true);
+    reqwest::Client::builder()
+        .default_headers(HeaderMap::from_iter([(AUTHORIZATION, bearer)]))
+        .build()
+        .ok()
+}
+
+/// Sentry's own transport, on a client that carries the sign-in.
+struct SignedIn(reqwest::Client);
+
+impl TransportFactory for SignedIn {
+    fn create_transport_with_options(&self, options: TransportOptions) -> Arc<dyn Transport> {
+        Arc::new(
+            ReqwestHttpTransportOptions::from(options)
+                .with_client(self.0.clone())
+                .build(),
+        )
+    }
 }
 
 /// A key's value in a settings file, read as `readEnv` in
@@ -369,7 +545,6 @@ mod tests {
     use crate::server::Server;
     use std::io::{BufRead, BufReader, Read, Write};
     use std::net::TcpListener;
-    use std::process::Command;
     use std::sync::mpsc::Receiver;
 
     /// Words from an owner's office that must never reach a report.
@@ -380,9 +555,16 @@ mod tests {
         "ada.quill@example.com",
     ];
 
+    /// What the fake door saw of one request.
+    struct Request {
+        path: String,
+        body: String,
+        authorization: Option<String>,
+    }
+
     /// A fake door on a free port. It answers every request with `{}` and
-    /// hands over each request's path and body.
-    fn door() -> (String, Receiver<(String, String)>) {
+    /// hands over each request's path, body and `authorization` header.
+    fn door() -> (String, Receiver<Request>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let (got, requests) = mpsc::channel();
@@ -393,6 +575,7 @@ mod tests {
                 reader.read_line(&mut first).unwrap();
                 let path = first.split_whitespace().nth(1).unwrap_or("").to_string();
                 let mut length = 0;
+                let mut authorization = None;
                 loop {
                     let mut line = String::new();
                     reader.read_line(&mut line).unwrap();
@@ -403,6 +586,9 @@ mod tests {
                         if name.eq_ignore_ascii_case("content-length") {
                             length = value.trim().parse().unwrap();
                         }
+                        if name.eq_ignore_ascii_case("authorization") {
+                            authorization = Some(value.trim().to_string());
+                        }
                     }
                 }
                 let mut body = vec![0; length];
@@ -410,13 +596,44 @@ mod tests {
                 let _ = reader.get_mut().write_all(
                     b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}",
                 );
-                let _ = got.send((path, String::from_utf8_lossy(&body).into_owned()));
+                let _ = got.send(Request {
+                    path,
+                    body: String::from_utf8_lossy(&body).into_owned(),
+                    authorization,
+                });
             }
         });
         (
             format!("http://oddboro@127.0.0.1:{port}/oddboro/0"),
             requests,
         )
+    }
+
+    fn no_sign_in() -> Option<String> {
+        None
+    }
+
+    /// A sign-in as the office saves it, with an hour-long token, saved
+    /// `ago`. The time is read here, not through `now_ms`, so a wrong unit
+    /// there shows at the door.
+    fn sign_in_saved(ago: Duration) -> Option<String> {
+        let tokens = serde_json::json!({ "access_token": "access-1", "expires_in": 3600 });
+        let saved_at = (SystemTime::now() - ago)
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let saved_at = u64::try_from(saved_at).unwrap();
+        Some(serde_json::json!({ "tokens": tokens, "savedAt": saved_at }).to_string())
+    }
+
+    /// Saved just now, with most of an hour left.
+    fn saved_sign_in() -> Option<String> {
+        sign_in_saved(Duration::ZERO)
+    }
+
+    /// Saved an hour ago, so its token has run out.
+    fn run_out_sign_in() -> Option<String> {
+        sign_in_saved(Duration::from_secs(3600))
     }
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -426,7 +643,7 @@ mod tests {
         dir
     }
 
-    fn the_one_request(door: &Receiver<(String, String)>) -> (String, String) {
+    fn the_one_request(door: &Receiver<Request>) -> Request {
         let request = door
             .recv_timeout(Duration::from_secs(10))
             .expect("nothing reached the door");
@@ -457,9 +674,11 @@ mod tests {
         fs::write(&settings, "OFFICE_DIAGNOSTICS=no\n").unwrap();
         let home = env::home();
         Arc::new(Diagnostics {
+            needs_sign_in: needs_sign_in(&dsn, None),
             dsn,
             settings: settings.clone(),
             home: home.clone(),
+            sign_in: no_sign_in,
         })
         .watch_panics();
         let planted = home.join("plant-folder");
@@ -474,11 +693,19 @@ mod tests {
 
         fs::write(&settings, "OFFICE_DIAGNOSTICS=yes\n").unwrap();
         panic_with_plants();
-        let (path, body) = the_one_request(&door);
+        let Request {
+            path,
+            body,
+            authorization,
+        } = the_one_request(&door);
         drop(panic::take_hook());
         fs::remove_dir_all(&dir).unwrap();
 
         assert_eq!(path.split('?').next(), Some("/oddboro/api/0/envelope/"));
+        assert_eq!(
+            authorization, None,
+            "a report to the owner's own door got a token"
+        );
         assert!(body.contains(WITHHELD), "{body}");
         assert!(body.contains(SERVER_NAME), "{body}");
         let home = home.to_string_lossy();
@@ -530,12 +757,14 @@ mod tests {
         assert!(why.message(&server.log_tail()).contains("LOGMARK"));
 
         Diagnostics {
+            needs_sign_in: needs_sign_in(&dsn, None),
             dsn,
             settings,
             home: env::home(),
+            sign_in: no_sign_in,
         }
         .gave_up(&why);
-        let (_, body) = the_one_request(&door);
+        let body = the_one_request(&door).body;
         fs::remove_dir_all(&dir).unwrap();
 
         assert!(
@@ -563,9 +792,11 @@ mod tests {
                 fs::write(&settings, text).unwrap();
             }
             let diagnostics = Diagnostics {
+                needs_sign_in: needs_sign_in(&dsn, None),
                 dsn,
                 settings,
                 home: env::home(),
+                sign_in: no_sign_in,
             };
             diagnostics.gave_up(&GaveUp::KeptStopping { code: Some(3) });
             diagnostics.failed(crate::NO_NODE);
@@ -592,6 +823,8 @@ mod tests {
                 dsn: String::new(),
                 settings,
                 home: PathBuf::new(),
+                needs_sign_in: false,
+                sign_in: no_sign_in,
             }
             .allowed()
         };
@@ -617,7 +850,9 @@ mod tests {
         let missing = dir.join("missing.env");
         let environment = || Some("http://env@127.0.0.1/1".to_string());
         let built = Some("http://built@127.0.0.1/2");
-        let found = |environment, built, settings: &Path| find_dsn(environment, built, settings);
+        let found = |environment, built, settings: &Path| {
+            find_setting(DSN_KEY, environment, built, settings)
+        };
 
         assert_eq!(
             found(environment(), built, &file).as_deref(),
@@ -830,6 +1065,178 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&sent.contexts["device"]).unwrap(),
             serde_json::json!({ "type": "device", "arch": "aarch64" })
+        );
+    }
+
+    #[test]
+    fn a_saved_sign_in_gives_its_token_only_with_a_minute_left() {
+        let now: u128 = 1_800_000_000_000;
+        let hour_ms = 3_600_000;
+        let saved = |left_ms: u128| {
+            let saved_at = u64::try_from(now + left_ms - hour_ms).unwrap();
+            serde_json::json!({
+                "tokens": { "access_token": "access-1", "expires_in": 3600 },
+                "savedAt": saved_at
+            })
+            .to_string()
+        };
+        assert_eq!(
+            access_token(&saved(600_000), now).as_deref(),
+            Some("access-1")
+        );
+        assert_eq!(
+            access_token(&saved(61_000), now).as_deref(),
+            Some("access-1")
+        );
+        assert_eq!(access_token(&saved(60_000), now), None);
+        assert_eq!(access_token(&saved(59_000), now), None);
+        // A line break after the value, as a command line read may print.
+        let with_line_break = format!("{}\n", saved(600_000));
+        assert_eq!(
+            access_token(&with_line_break, now).as_deref(),
+            Some("access-1")
+        );
+
+        let missing = [
+            serde_json::json!({ "tokens": { "expires_in": 3600 }, "savedAt": 1 }),
+            serde_json::json!({ "tokens": { "access_token": "access-1" }, "savedAt": 1 }),
+            serde_json::json!({ "tokens": { "access_token": "access-1", "expires_in": 3600 } }),
+        ];
+        for saved in missing {
+            assert_eq!(access_token(&saved.to_string(), 0), None, "{saved}");
+        }
+        assert_eq!(access_token("not json", 0), None);
+        assert_eq!(access_token("", 0), None);
+    }
+
+    #[test]
+    fn only_new_altitudes_https_address_or_the_account_site_needs_a_sign_in() {
+        let cases: Vec<serde_json::Value> = serde_json::from_str(include_str!(
+            "../../../office/src/lib/needs-sign-in.cases.json"
+        ))
+        .unwrap();
+        assert!(!cases.is_empty(), "no cases to check");
+        for case in cases {
+            let dsn = case["dsn"].as_str().unwrap();
+            let want = case["needs"].as_bool().unwrap();
+            assert_eq!(needs_sign_in(dsn, case["site"].as_str()), want, "{case}");
+        }
+    }
+
+    #[test]
+    fn a_report_that_needs_a_sign_in_goes_with_its_token_or_not_at_all() {
+        let dir = temp_dir("sign-in");
+        let settings = dir.join("settings");
+        fs::write(&settings, "OFFICE_DIAGNOSTICS=yes\n").unwrap();
+        let report = |sign_in: fn() -> Option<String>| {
+            let (dsn, door) = door();
+            // The account site on the door's host, as in development.
+            let needs_sign_in = needs_sign_in(&dsn, Some("http://127.0.0.1:4598"));
+            assert!(needs_sign_in);
+            Diagnostics {
+                dsn,
+                settings: settings.clone(),
+                home: env::home(),
+                needs_sign_in,
+                sign_in,
+            }
+            .failed(crate::NO_NODE);
+            door
+        };
+
+        let signed_in = the_one_request(&report(saved_sign_in));
+        let signed_out = report(no_sign_in).recv_timeout(Duration::from_millis(500));
+        let run_out = report(run_out_sign_in).recv_timeout(Duration::from_millis(500));
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(signed_in.authorization.as_deref(), Some("Bearer access-1"));
+        assert!(!signed_in.body.contains("access-1"), "{}", signed_in.body);
+        assert!(signed_out.is_err(), "a report left while signed out");
+        assert!(run_out.is_err(), "a report left with a run-out token");
+    }
+
+    #[test]
+    fn only_an_address_that_needs_a_sign_in_is_given_the_token() {
+        let dir = temp_dir("needs-sign-in");
+        let door = "ODDBORO_DIAGNOSTICS_DSN=http://k@127.0.0.1:4599/oddboro/0\n";
+        let site = "ODDBORO_ACCOUNT_SITE=http://127.0.0.1:4598\n";
+        let own = dir.join("own.env");
+        fs::write(
+            &own,
+            "ODDBORO_DIAGNOSTICS_DSN=https://own@o1.ingest.sentry.io/2\n",
+        )
+        .unwrap();
+        let local = dir.join("local.env");
+        fs::write(&local, door).unwrap();
+        let site_in_file = dir.join("site.env");
+        fs::write(&site_in_file, format!("{door}{site}")).unwrap();
+        let missing = dir.join("missing.env");
+        let nothing = |_: &str| None;
+        let site_in_environment =
+            |key: &str| (key == ACCOUNT_SITE_KEY).then(|| "http://127.0.0.1:4598".to_string());
+        let needs = |environment: &dyn Fn(&str) -> Option<String>, built, settings: &Path| {
+            Diagnostics::from_settings(environment, built, settings.to_path_buf())
+                .expect("no address found")
+                .needs_sign_in
+        };
+
+        let own_sentry = needs(&nothing, None, &own);
+        let no_site = needs(&nothing, None, &local);
+        let from_file = needs(&nothing, None, &site_in_file);
+        let from_environment = needs(&site_in_environment, None, &local);
+        let release = needs(
+            &nothing,
+            Some("https://oddboro@relay.newaltitude.ai/oddboro/0"),
+            &missing,
+        );
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert!(
+            !own_sentry,
+            "a source build's own Sentry would get the token"
+        );
+        assert!(
+            !no_site,
+            "a local address with no account site needs a sign-in"
+        );
+        assert!(
+            from_file,
+            "the account site in the settings file was missed"
+        );
+        assert!(
+            from_environment,
+            "the account site in the environment was missed"
+        );
+        assert!(release, "a release's New Altitude address needs no sign-in");
+    }
+
+    #[test]
+    fn the_shell_reads_the_sign_in_where_the_office_keeps_it() {
+        let keyring = [
+            "lookup",
+            "service",
+            "oddboro",
+            "account",
+            "new-altitude-account:oauth",
+        ];
+        assert_eq!(KEYRING_READ, ("secret-tool", &keyring[..]));
+        // The Mac app's office keeps its secrets through this shell.
+        assert_eq!(crate::secrets::SERVICE, "com.oddboro.office");
+        assert_eq!(SIGN_IN, "new-altitude-account:oauth");
+        #[cfg(target_os = "linux")]
+        assert_eq!(sign_in_command(), Some(KEYRING_READ));
+        #[cfg(not(target_os = "linux"))]
+        assert_eq!(sign_in_command(), None);
+    }
+
+    /// Run by hand inside a keyring where an office has signed in.
+    #[test]
+    #[ignore = "reads the real secret store"]
+    fn the_real_secret_store_gives_the_offices_sign_in() {
+        let saved = read_sign_in().expect("no sign-in in the secret store");
+        assert!(
+            access_token(&saved, now_ms()).is_some(),
+            "the saved sign-in has no token with a minute left"
         );
     }
 }

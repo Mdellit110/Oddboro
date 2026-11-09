@@ -25,6 +25,51 @@ export type Answer = 'yes' | 'no' | 'unasked';
 export const answerFrom = (value: unknown): Answer =>
   value === 'yes' || value === 'no' ? value : 'unasked';
 
+const parsed = (text: string | undefined): URL | undefined => {
+  try {
+    return text ? new URL(text) : undefined;
+  } catch {
+    // Not an address: nothing to match.
+    return undefined;
+  }
+};
+
+/**
+ * Whether reports sent to this address need a New Altitude sign-in: New
+ * Altitude's own address over https, or the account site itself when one is
+ * set (a stand-in in development and tests, whose port may differ). Any other
+ * address, such as a source build's own Sentry, needs none and never gets the
+ * token. `address` is a DSN or the envelope URL made from one: both have its
+ * scheme and host. The two are named, not in order, because swapped they still
+ * type-check and turn the sign-in off for New Altitude's own address. The
+ * shell's `needs_sign_in` is the same rule, and both are tested against
+ * `needs-sign-in.cases.json`.
+ */
+export function needsSignIn({
+  address,
+  accountSite
+}: {
+  address: string | undefined;
+  accountSite: string | undefined;
+}): boolean {
+  const to = parsed(address);
+  if (!to) return false;
+  const own = to.hostname === 'newaltitude.ai' || to.hostname.endsWith('.newaltitude.ai');
+  return (to.protocol === 'https:' && own) || parsed(accountSite)?.hostname === to.hostname;
+}
+
+/**
+ * What the page is told about reports: whether they can go at all, whether
+ * they need a New Altitude sign-in, and the owner's answer.
+ */
+export type ReportsState = { possible: boolean; account: boolean; answer: Answer };
+
+/** Whether the office offers reports: they can go, and need no sign-in or have one. */
+export const reportsOffered = (
+  state: Pick<ReportsState, 'possible' | 'account'>,
+  signedIn: boolean
+): boolean => state.possible && (!state.account || signedIn);
+
 /** About one trace in ten, as the privacy policy says. */
 export const TRACE_SAMPLE_RATE = 0.1;
 

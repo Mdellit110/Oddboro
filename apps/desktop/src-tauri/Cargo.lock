@@ -2627,6 +2627,7 @@ dependencies = [
  "getrandom 0.3.4",
  "libc",
  "mac-notification-sys",
+ "reqwest",
  "rustls",
  "security-framework",
  "sentry",

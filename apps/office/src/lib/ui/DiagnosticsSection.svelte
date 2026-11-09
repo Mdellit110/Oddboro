@@ -4,7 +4,8 @@
   // The Setup window's Diagnostics section: the one place the owner turns
   // error and trace reports on or off. With no answer the switch is off and
   // nothing is sent. Each flip keeps the answer at once; the office follows it
-  // from the next report, with no restart.
+  // from the next report, with no restart. Setup shows it only when reports
+  // can go (`shown()`): to New Altitude, that means while signed in.
   let busy = $state(false);
   let problem = $state('');
   const on = $derived(diagnostics.answer === 'yes');
@@ -44,9 +45,13 @@
   </button>
   <p id="diagnostics-sent" class="text-xs leading-relaxed text-muted">
     When something breaks, Oddboro can send New Altitude a report: what failed, where in the code,
-    and how long it took. Never your chats, files, Odds' work, family details or name. Error text
-    only in fixed forms, never your words. Sentry stores reports with your city and country, never
-    your IP address.
+    and how long it took.
+    {#if diagnostics.account}
+      Reports go with your New Altitude sign-in: New Altitude checks it, then passes the report on
+      without it, so Sentry never learns your account.
+    {/if}
+    Never your chats, files, Odds' work, family details or name. Error text only in fixed forms, never
+    your words. Sentry stores reports with your city and country, never your IP address.
     <a
       class="text-sea underline underline-offset-2"
       href="https://oddboro.com/privacy"
