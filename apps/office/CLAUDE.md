@@ -1109,7 +1109,7 @@ sample stay in the window to move back to.
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
 welcomed, the page loads the sample's empty lot (`currentOffice({ lot: true })`,
-`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs seven cards (`steps.ts`), the same on a Mac, Linux and Windows (hard rule 14), in
+`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs six cards (`steps.ts`), the same on a Mac, Linux and Windows (hard rule 14), in
 the start panel, titled "{name}'s Lot" until the office stands on it. The
 command center's buttons and tabs appear there once the first run is over, so
 the owner meets the panel first. The cards: Your computer (`MacCard`, the checks
@@ -1118,11 +1118,10 @@ or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
 every run. Next waits until the picked tool is signed in), the Office Manager (`ManagerCard`: four ready-made ones from
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
 owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
-a description or a chip, and starts the design job), New Altitude
-(`AccountCard`, an optional sign-in to the owner's account, with Skip; see "A
-New Altitude account"), and Open the office.
-No card asks about error reports: the owner turns them on in Setup (see
-"Diagnostics"), so a new owner gets to work sooner. `POST /api/onboarding` keeps the time zone, finishes the
+a description or a chip, and starts the design job), and Open the office.
+No card asks about error reports or a New Altitude sign-in: the owner finds
+both in Setup (see "Diagnostics" and "A New Altitude account"), so a new owner
+gets to work sooner. `POST /api/onboarding` keeps the time zone, finishes the
 welcome, hires the manager (`hireManager`), writes their hello into their chat
 (each ready-made manager's `hello` in `managers.ts`, in their own voice; a
 described one gets `customHello`),
@@ -1264,9 +1263,9 @@ Error and trace reports go to Sentry only after the owner's yes.
 
 ## A New Altitude account
 
-An owner who already has a New Altitude account can sign in to it, on the
-first visit (`AccountCard`) or in Setup (`AccountSection`); both show
-`AccountSignIn.svelte`. Nothing in the office needs it.
+An owner who already has a New Altitude account can sign in to it in Setup
+(`AccountSection`, which shows `AccountSignIn.svelte`). The first visit does
+not offer it. Nothing in the office needs it.
 
 1. The site is `ODDBORO_ACCOUNT_SITE`, `https://members.newaltitude.ai` when
    unset. The issuer comes from that site's protected resource document; the

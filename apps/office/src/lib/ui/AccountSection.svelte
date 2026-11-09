@@ -3,9 +3,9 @@
   import { signOut } from './account-actions.ts';
   import { account } from './account.svelte.ts';
 
-  // The Setup window's Account section: the same sign-in as the first-visit
-  // card (with its Switch account), and Sign out while a sign-in is kept, ran
-  // out or not.
+  // The Setup window's Account section, the one place the owner signs in to
+  // New Altitude: the sign-in block (with its Switch account), and Sign out
+  // while a sign-in is kept, ran out or not.
   let busy = $state(false);
   let problem = $state('');
 

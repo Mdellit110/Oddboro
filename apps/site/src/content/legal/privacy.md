@@ -124,7 +124,7 @@ Anthropic processes all of this under your agreement with Anthropic: its [Consum
 
 ### Your New Altitude account (only if you sign in)
 
-If New Altitude gave you an account, you can sign in to it from the office: on your first visit, or later in Setup under Account. Nothing in the office needs it.
+If New Altitude gave you an account, you can sign in to it from the office, in Setup under Account. Nothing in the office needs it.
 
 - Signing in opens New Altitude's own sign-in page in your browser. You sign in there, and you may be asked to accept New Altitude's Beta Terms.
 - The office then asks New Altitude who you are. It keeps only your account's id, name and email, with the sign-in, in your system's secret store.

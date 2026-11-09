@@ -1,7 +1,7 @@
-// The first visit's cards, in order, and each card's title. Error reports are
-// not among them: the owner turns those on in Setup, so a new owner reaches a
-// working office sooner.
-export const STEPS = ['mac', 'you', 'ai', 'manager', 'space', 'account', 'go'] as const;
+// The first visit's cards, in order, and each card's title. Error reports and
+// the New Altitude sign-in are not among them: the owner finds both in Setup,
+// so a new owner reaches a working office sooner.
+export const STEPS = ['mac', 'you', 'ai', 'manager', 'space', 'go'] as const;
 export type Step = (typeof STEPS)[number];
 export const TITLE: Record<Step, string> = {
   mac: 'Your computer',
@@ -9,6 +9,5 @@ export const TITLE: Record<Step, string> = {
   ai: 'Your AI',
   manager: 'Your office manager',
   space: 'Your space',
-  account: 'New Altitude',
   go: 'Open the office'
 };

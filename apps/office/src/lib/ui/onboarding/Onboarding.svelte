@@ -33,7 +33,6 @@
   import { AgentTools } from '../agent-tools.svelte.ts';
   import { call, follow } from '../api.ts';
   import AiCard from './AiCard.svelte';
-  import AccountCard from './AccountCard.svelte';
   import MacCard, { type Setup } from './MacCard.svelte';
   import ManagerCard, { type Custom, type Preset } from './ManagerCard.svelte';
   import type { Built } from '../OddParts.svelte';
@@ -41,10 +40,9 @@
   import { STEPS, TITLE, type Step } from './steps.ts';
   import { selectOnFocus } from '../select-on-focus.ts';
 
-  // A new owner's first visit, over the live floor: seven cards, one of them
-  // an optional sign-in to New Altitude, the same on a Mac, Linux and Windows
-  // (hard rule 14), then the office going up on their lot and their manager
-  // arriving by bus. The slow parts
+  // A new owner's first visit, over the live floor: six cards, the same on a
+  // Mac, Linux and Windows (hard rule 14), then the office going up on their
+  // lot and their manager arriving by bus. The slow parts
   // start the moment their inputs exist: the office draws from when the owner
   // leaves "Your space", and a described manager from when they leave theirs.
   // So Open the office starts the show at once instead of a wait.
@@ -477,8 +475,6 @@
                 next();
               }}
             />
-          {:else if step === 'account'}
-            <AccountCard onnext={next} onback={back} />
           {:else}
             <dl class="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt class="text-muted">You</dt>
