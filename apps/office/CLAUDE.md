@@ -328,7 +328,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    shows at the chat's foot, one line each with how long it has run in whole
    minutes and the tool it is using, and a click opens In progress. Its clock
    moves once a minute only while a time still counts minutes or work is in
-   progress. Its input grows with the text
+   progress. The owner can type while the Odd replies; a message sent then
+   shows as waiting under the reply, with Cancel to take it back to the box,
+   and goes when the reply ends. A second Send while one waits joins it, so
+   the Odd answers both in one turn (`waiting` in `ChatPanel.svelte`). Its input grows with the text
    up to 60% of the chat, and the bar above it drags it taller; that height is
    remembered per viewer. Every run's system prompt opens with "Who you work
    for" (`whoFor` in `staff.ts`): the owner, `data/people.json` when it
