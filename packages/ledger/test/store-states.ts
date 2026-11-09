@@ -81,6 +81,9 @@ export const STORE_STATES: StoreState[] = [
     '.ssh',
     ['config']
   ),
+  holds('a project with a .ssh holding only id_rsa.pub is given', false, 'code/x-ssh-pub', '.ssh', [
+    'id_rsa.pub'
+  ]),
   holds(
     'a project with a .aws holding only a config is given',
     false,
@@ -209,7 +212,13 @@ const STORE_FILES: Record<string, string[]> = {
   '.gnupg': ['private-keys-v1.d/', 'secring.gpg', 'pubring.kbx'],
   '.docker': ['config.json'],
   '.kube': ['config'],
-  '.config': ['gcloud/', 'gh/hosts.yml']
+  '.config': ['gcloud/', 'gh/hosts.yml'],
+  Library: ['Keychains/login.keychain-db', 'Cookies/'],
+  AppData: ['Roaming/', 'Local/'],
+  '.claude': ['.credentials.json', 'history.jsonl', 'projects/'],
+  '.codex': ['auth.json', 'sessions/'],
+  '.grok': ['auth.json', 'sessions/'],
+  '.gemini': ['oauth_creds.json', 'google_accounts.json']
 };
 
 /** Every file that makes a folder the real store: the folder, and one directly holding it. */
