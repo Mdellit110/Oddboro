@@ -143,6 +143,13 @@ Local only. See section 4.
 
 You clone the software from GitHub. If you choose the `https://local.oddboro.com` address during setup and your computer has no [Caddy](https://caddyserver.com), the office downloads the official Caddy release from GitHub (`api.github.com` and GitHub's release files) and checks it against the published checksum. GitHub sees those download requests.
 
+An Odd may also ask for your GitHub, through GitHub's own MCP server. You approve or deny it, and you sign in to GitHub yourself, in your browser. GitHub shows you what Oddboro asks for: `repo` (the repositories you can reach, public and private), `read:org` (your organizations) and `read:user` (your profile). GitHub has no narrower way to read private repositories, so the access you give each Odd sets what it may do, as for any other tool: at Read it gets only GitHub's tools that read.
+
+- **The sign-in is the only part New Altitude provides.** Oddboro signs in with New Altitude's own GitHub app, so you do not have to make a token. GitHub sends the sign-in back to the office on your computer. New Altitude never receives, stores or sees your sign-in or your code.
+- **Your sign-in stays on your computer.** The office keeps it in your system's secret store, renews it every 8 hours, and uses it to talk to GitHub directly from your computer. It never goes to the Odd's coding tool.
+- **What an Odd reads goes to the AI service it runs on**, as with Google below.
+- **Disconnecting.** Revoking the last grant removes the sign-in from your computer. GitHub keeps Oddboro authorized until you revoke it at [github.com/settings/applications](https://github.com/settings/applications), under Authorized OAuth Apps. An organization that restricts apps may need its admin to approve Oddboro once.
+
 ### npm and PyPI
 
 Setup installs the software's dependencies from the npm registry. When an Odd asks for a new tool and you approve it, the office runs that tool from npm (`npx`) or PyPI (`uvx`). Each registry sees the download request.
@@ -199,7 +206,7 @@ To delete everything the software stores:
 2. Delete the `~/.oddboro` folder. This removes the database, Odd folders, working copies and backups.
 3. Delete the folders in `~/.claude/projects/` whose names contain `oddboro-staff`. These are the Odds' Claude Code transcripts.
 4. Delete the `data/` folder and the `.env` file in your copy of the repository, or delete the whole repository folder.
-5. On a Mac, open Keychain Access, search for `oddboro`, and delete the items you find (newer items are under `com.oddboro.office`). On Windows, open Credential Manager, select Windows Credentials, and remove each entry whose name contains `oddboro`. On Linux, run `secret-tool clear service oddboro`. These are your Anthropic API key (if you gave one), your Google sign-ins, your New Altitude sign-in (if you signed in) and sign-ins for hosted tools. If you connected Google, also remove Oddboro at [myaccount.google.com/permissions](https://myaccount.google.com/permissions). Deleting a New Altitude sign-in this way leaves it open at New Altitude until it runs out. Sign out in Setup ends it there too.
+5. On a Mac, open Keychain Access, search for `oddboro`, and delete the items you find (newer items are under `com.oddboro.office`). On Windows, open Credential Manager, select Windows Credentials, and remove each entry whose name contains `oddboro`. On Linux, run `secret-tool clear service oddboro`. These are your Anthropic API key (if you gave one), your Google sign-ins, your New Altitude sign-in (if you signed in) and sign-ins for hosted tools. If you connected Google, also remove Oddboro at [myaccount.google.com/permissions](https://myaccount.google.com/permissions). If you connected GitHub, also revoke Oddboro at [github.com/settings/applications](https://github.com/settings/applications). Deleting a New Altitude sign-in this way leaves it open at New Altitude until it runs out. Sign out in Setup ends it there too.
 6. If you named your own `DATABASE_URL`, delete that database yourself. The reset command leaves it alone.
 
 Anything an Odd sent to Anthropic or another service during a run is held by that service under its own retention rules. Delete it there.

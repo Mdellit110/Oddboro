@@ -26,9 +26,9 @@
         "Highlights New Altitude, off the map, and the two dashed lines, the only paths your office's data takes. Error reports and a New Altitude sign-in reach us only if you choose them."
     },
     {
-      title: 'Claude works under your own account.',
-      text: 'Odds think with Claude, through your Claude plan or your Anthropic API key. We are not in that loop.',
-      shows: 'Highlights Anthropic, your Claude account and the line to it.'
+      title: 'Your AI works under your own account.',
+      text: 'Odds think with Claude Code, Codex or Grok, signed in to your own account. We are not in that loop.',
+      shows: 'Highlights your AI, your own account and the line to it.'
     },
     {
       title: 'No account needed.',
@@ -133,8 +133,8 @@
         )}"
         class:pop={active === 2 || active === 3}
       >
-        <p class="who text-ink text-sm font-semibold">Anthropic</p>
-        <p class="text-muted mt-0.5 text-xs">Your Claude account.</p>
+        <p class="who text-ink text-sm font-semibold">Your AI</p>
+        <p class="text-muted mt-0.5 text-xs">Claude, Codex or Grok, on your account.</p>
       </div>
       <div class="part link link-a {level('la')}" aria-hidden="true"></div>
 
