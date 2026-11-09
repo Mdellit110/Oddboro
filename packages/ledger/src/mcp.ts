@@ -18,6 +18,8 @@ import {
   checkFolder,
   folderAskRefused,
   shownFolder,
+  switchAskRefused,
+  switchesOff,
   editOwnJob,
   giveTask,
   GOOGLE,
@@ -58,15 +60,17 @@ import {
   outsideLines,
   ownToolsSaid
 } from './capabilities.ts';
-import { AGENT_NAMES } from './agents.ts';
+import { AGENT_NAMES, commandsOnline } from './agents.ts';
 import {
   FOLDER_SAID,
   grantWorks,
   levelAtMost,
   LEVELS,
   NOT_OWN_TOOLS,
+  OWN_SWITCHES,
   SETTINGS_TAB,
-  SWITCH_NAMES
+  SWITCH_NAMES,
+  switchesSaid
 } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
 import {
@@ -101,6 +105,7 @@ import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
 import { BUILT_IN, ensureConnector, searchRegistry } from './registry.ts';
 import type { GoalPlanItem, HireProposal } from './schema.ts';
+import type { OwnSwitch as OwnSwitchName } from './access-words.ts';
 import {
   clockTime,
   describe as describeSchedule,
@@ -1037,6 +1042,50 @@ tool(
     });
     return text(
       `Ask ${ask.id} is on ${OWNER}'s desk. When they give the folder, a new run of yours picks up the work with it. Check my_asks later for their decision.`
+    );
+  }
+);
+
+// Run commands or Browse the web: only the owner turns one on, from this ask's
+// card or the Settings tab. Checked here as the Settings tab checks it, so a
+// switch they could not turn on never reaches the desk.
+tool(
+  'ask_for_switch',
+  {
+    description: `Ask ${OWNER} to turn on ${SWITCH_NAMES.commands} (a shell, to run commands like git, npm or a script) or ${SWITCH_NAMES.web} (search and read web pages) for you, or both. Ask with this instead of giving ${OWNER} steps for your ${SETTINGS_TAB} tab: they turn it on with one click. Ask only for what the work needs; work that downloads, such as git clone or npm install, needs both. You have it from your next run, which starts when they say yes. my_access says which you have.${raisedNote}`,
+    inputSchema: {
+      switches: z
+        .array(z.enum(OWN_SWITCHES as [OwnSwitchName, ...OwnSwitchName[]]))
+        .min(1)
+        .max(2)
+        .describe(`commands for ${SWITCH_NAMES.commands}, web for ${SWITCH_NAMES.web}.`),
+      why: z.string().max(1000).describe('What work needs it, in one or two plain sentences.'),
+      revises: revisesArg
+    }
+  },
+  async ({ switches, why, revises }) => {
+    const on = await placed({});
+    if ('problem' in on) return refused(on.problem);
+    const now = (await staffer(ME)) ?? me;
+    const held = switchAskRefused(now, switches);
+    if (held) return refused(held);
+    const off = switchesOff(now, switches);
+    const online = commandsOnline(now.agent, process.platform, {
+      commands: now.commands || off.includes('commands'),
+      web: now.web || off.includes('web')
+    });
+    const { ask } = await raiseAsk(ME, {
+      ...on,
+      kind: 'switch',
+      title: `Turn on ${switchesSaid(off)}`,
+      why,
+      ifApproved: `The office turns on ${switchesSaid(off)} for ${me.name}, as the ${SETTINGS_TAB} tab does, and ${me.name} picks up the work with it.${online ? ` With both on, ${me.name}'s commands can reach the internet.` : ''}`,
+      switches: off,
+      revises,
+      via: VIA
+    });
+    return text(
+      `Ask ${ask.id} is on ${OWNER}'s desk. When they turn it on, a new run of yours picks up the work with it. Check my_asks later for their decision.`
     );
   }
 );

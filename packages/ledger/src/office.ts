@@ -89,6 +89,7 @@ import {
 } from './schema.ts';
 import {
   AGENT_NAMES,
+  commandsHow,
   commandsOnline,
   EFFORT_NAMES,
   EFFORT_ORDER,
@@ -102,7 +103,15 @@ import {
 } from './agents.ts';
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
-import { grantWorks, levelAtMost, type FolderAccess, type Level } from './access-words.ts';
+import {
+  grantWorks,
+  levelAtMost,
+  SWITCH_NAMES,
+  switchesSaid,
+  type FolderAccess,
+  type Level,
+  type OwnSwitch
+} from './access-words.ts';
 import { filterWords, sameCriteria, type GmailFilter } from './filter-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
@@ -422,6 +431,32 @@ export function folderAskRefused(
   if (who.folders.some((f) => other(f) && (within(at, real(f.path)) || within(real(f.path), at))))
     return FOLDER_REFUSED.nested;
 }
+
+/**
+ * Why an Odd may not ask for `wanted`, or nothing when it may: each is on
+ * already, or its tool on this system never runs commands (`commandsHow`), in
+ * the Settings tab's words. One already on is left out of the ask
+ * (`switchesOff`), so only all of them on refuses.
+ */
+export function switchAskRefused(
+  who: Pick<StaffRow, 'agent' | 'commands' | 'web'>,
+  wanted: readonly OwnSwitch[]
+): string | undefined {
+  const how = commandsHow(who.agent, process.platform);
+  if (wanted.includes('commands') && how.state === 'never')
+    return `${SWITCH_NAMES.commands} is not open to an Odd on ${AGENT_NAMES[who.agent]} here: ${how.why}`;
+  if (!switchesOff(who, wanted).length) return `You already have ${switchesSaid(wanted)} on.`;
+}
+
+/** The switches in `wanted` that are off for this Odd. */
+export const switchesOff = (
+  who: Pick<StaffRow, 'commands' | 'web'>,
+  wanted: readonly OwnSwitch[]
+): OwnSwitch[] => wanted.filter((s) => !who[s]);
+
+/** The ledger's words for turning switches on: "Let Theo run commands and browse the web". */
+const turnedOn = (name: string, on: readonly OwnSwitch[]) =>
+  `Let ${name} ${switchesSaid(on).toLowerCase()}`;
 
 /**
  * Secret stores in the home folder, by name: keys, sign-ins and settings,
@@ -880,6 +915,28 @@ async function refuseSecondFolder(
     );
 }
 
+/** A switch ask from the same place as an open one that covers it: the open one is the ask. */
+async function refuseSecondSwitch(
+  tx: Tx,
+  staffId: string,
+  ask: { switches: OwnSwitch[]; handOffId?: number; threadId?: number; revises?: number }
+): Promise<void> {
+  const open = await tx
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, staffId), eq(asks.kind, 'switch'), eq(asks.status, 'open')));
+  const same = open.find(
+    (r) =>
+      r.id !== ask.revises &&
+      ask.switches.every((s) => r.switches?.includes(s)) &&
+      samePlace(r, ask)
+  );
+  if (same)
+    throw new AlreadyOnDesk(
+      `Your ask #${same.id} for ${switchesSaid(same.switches ?? [])} is already there. To change it, call ask_for_switch again with revises: ${same.id}.`
+    );
+}
+
 /** The asks an Odd raises in its own words, which may not repeat one already open. Access asks have twins instead (`asksNoMore`). */
 const ONCE_ONLY: AskKind[] = ['approval', 'goal'];
 
@@ -899,10 +956,12 @@ export async function raiseAsk(
     filter?: GmailFilter;
     /** A folder ask's folder (`ask_for_folder`). */
     folder?: FolderRequest;
+    /** A switch ask's switches (`ask_for_switch`). */
+    switches?: OwnSwitch[];
     /** A call ask's held call, from the gateway (`holdCall` in the office's gateway.ts). */
     call?: HeldCall;
-    /** `goal`, `plan`, `reply`, `filter`, `folder` and `call` say so; the rest follow from access or hire. */
-    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'call';
+    /** `goal`, `plan`, `reply`, `filter`, `folder`, `switch` and `call` say so; the rest follow from access or hire. */
+    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'switch' | 'call';
     revises?: number;
     /** The colleague whose handed-back work the lead raised this from (`VIA`). */
     via?: string;
@@ -925,13 +984,14 @@ export async function raiseAsk(
   const ask = await db.transaction(async (tx) => {
     // An Odd's own ask may not repeat one on the desk, a reply may not
     // answer an email twice, and a filter may not file the same mail twice.
-    // A folder ask may not repeat one from the same place. Office-raised
-    // kinds and access twins are left alone.
-    if (ONCE_ONLY.includes(kind) || a.reply || a.filter || a.folder) {
+    // A folder or switch ask may not repeat one from the same place.
+    // Office-raised kinds and access twins are left alone.
+    if (ONCE_ONLY.includes(kind) || a.reply || a.filter || a.folder || a.switches) {
       await lockDesk(tx, staffId);
       if (a.reply) await refuseSecondReply(tx, staffId, a.reply, a.revises);
       else if (a.filter) await refuseSecondFilter(tx, staffId, a.filter, a.revises);
       else if (a.folder) await refuseSecondFolder(tx, staffId, { ...a, folder: a.folder });
+      else if (a.switches) await refuseSecondSwitch(tx, staffId, { ...a, switches: a.switches });
       else await refuseRepeat(tx, staffId, a.title, a.revises);
     }
     // A plan goes on its goal's one thread, whatever run raised it: a chat,
@@ -989,8 +1049,8 @@ export async function asksFor(staffId: string): Promise<AskRow[]> {
 
 export type Decision = 'approve' | 'deny' | 'iterate';
 
-/** The kinds of ask that have twins (`asksNoMore`): an outside tool, and a folder. */
-const TWINNED: AskKind[] = ['access', 'folder'];
+/** The kinds of ask that have twins (`asksNoMore`): an outside tool, a folder, and switches. */
+const TWINNED: AskKind[] = ['access', 'folder', 'switch'];
 
 /**
  * Whether `later` asks for nothing `first` does not: the same Odd, the same
@@ -1014,6 +1074,8 @@ function asksNoMore(first: AskRow, later: AskRow): boolean {
       first.folder.path === later.folder.path &&
       (first.folder.level === 'write' || later.folder.level === 'read')
     );
+  if (first.kind === 'switch' && later.kind === 'switch')
+    return (later.switches ?? []).every((s) => first.switches?.includes(s));
   return false;
 }
 
@@ -1021,7 +1083,9 @@ function asksNoMore(first: AskRow, later: AskRow): boolean {
 const sameWanted = (a: AskRow, b: AskRow) =>
   a.kind === 'folder'
     ? a.folder?.path === b.folder?.path
-    : a.access?.connector === b.access?.connector;
+    : a.kind === 'switch'
+      ? (b.switches ?? []).every((s) => a.switches?.includes(s))
+      : a.access?.connector === b.access?.connector;
 
 /**
  * The other access or folder asks the owner's one answer settled with `a`:
@@ -1209,6 +1273,32 @@ export type FolderNotGiven = { refused: string; status: 400 | 404 | 409 };
 class FolderRefused extends Error {}
 
 /**
+ * Turn on the switches a switch ask asked for, in `tx`, with the yes, or
+ * neither happens. Ones already on stay as they are. Refused when the Odd's
+ * tool on this system never runs commands, as the staff PATCH refuses it,
+ * since the Odd may have moved tools since it asked.
+ */
+async function turnOnSwitches(
+  tx: Tx,
+  a: AskRow
+): Promise<{ before: StaffRow; after: StaffRow; on: OwnSwitch[] } | undefined> {
+  const [before] = await tx.select().from(staff).where(eq(staff.id, a.staffId));
+  if (!before) return;
+  const on = switchesOff(before, a.switches ?? []);
+  if (on.includes('commands') && commandsHow(before.agent, process.platform).state === 'never')
+    throw fixedError(
+      "This Odd's tool cannot run commands here. Move it to another tool on its Settings tab first"
+    );
+  if (!on.length) return { before, after: before, on };
+  const [after] = await tx
+    .update(staff)
+    .set(Object.fromEntries(on.map((s) => [s, true])))
+    .where(eq(staff.id, a.staffId))
+    .returning();
+  return { before, after, on };
+}
+
+/**
  * The owner gives the folder a folder ask asked for, or a narrower one, at
  * the level they pick: `path` as typed or picked, checked as the Settings tab
  * checks it (`checkFolder`). The folder is given (`changeFolder`, as
@@ -1281,7 +1371,7 @@ async function decide(
   }
   const status = decision === 'approve' ? 'approved' : decision === 'deny' ? 'denied' : 'revise';
   const at = new Date();
-  const { ask, twins } = await db.transaction(async (tx) => {
+  const { ask, twins, turned } = await db.transaction(async (tx) => {
     const [claimed] = await tx
       .update(asks)
       .set({
@@ -1303,6 +1393,11 @@ async function decide(
       const changed = await changeFolder(tx, claimed.staffId, given.path, given.level);
       if (changed && 'refused' in changed) throw new FolderRefused(changed.refused);
     }
+    // The switches turn on with the yes, or neither happens.
+    const turned =
+      claimed?.kind === 'switch' && decision === 'approve'
+        ? await turnOnSwitches(tx, claimed)
+        : undefined;
     // A yes or a no answers the twins too, at the same moment (`answeredWith`).
     // Sending one back leaves them waiting for the new version's answer.
     const open =
@@ -1326,7 +1421,7 @@ async function decide(
           .where(and(inArray(asks.id, ids), eq(asks.status, 'open')))
           .returning()
       : [];
-    return { ask: claimed, twins: answered };
+    return { ask: claimed, twins: answered, turned };
   });
   if (!ask) return false;
   const sent = decision === 'approve' && ask.reply?.sent ? ask.reply : undefined;
@@ -1339,15 +1434,17 @@ async function decide(
   await record({
     kind: 'decision',
     actor: 'owner',
-    // A folder given from its ask reads as the Settings tab's change does.
+    // A folder given or a switch turned on from its ask reads as the Settings tab's change does.
     title: made
       ? `Created a Gmail filter: ${filterDone(made)}`
       : gave
         ? gaveFolder((await staffer(ask.staffId))?.name ?? ask.staffId, gave.path, gave.level)
-        : called
-          ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
-          : `${verb}: ${ask.title}`,
-    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}${called ? `It returned: ${callResultText(called, 600)} ` : ''}Asked by ${ask.staffId}. ${ask.why}${
+        : turned?.on.length
+          ? turnedOn(turned.before.name, turned.on)
+          : called
+            ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
+            : `${verb}: ${ask.title}`,
+    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}${called ? `It returned: ${callResultText(called, 600)} ` : ''}${turned ? (networkNote(turned.before, turned.after).body ?? '') + ' ' : ''}Asked by ${ask.staffId}. ${ask.why}${
       twins.length
         ? ` This also answers ${twins.map((t) => `#${t.id}`).join(', ')}, the same ask from another of ${ask.staffId}'s runs.`
         : ''
@@ -1373,8 +1470,8 @@ async function decide(
     // Connected already: the work that waited picks up now. Otherwise finishing
     // the connect task starts it (`finishTask`).
     if (!task) await carryOutTogether([ask, ...twins]);
-  } else if (gave)
-    // The folder is the Odd's now: the work that waited on it picks up.
+  } else if (gave || turned)
+    // The folder or the switches are the Odd's now: the work that waited on them picks up.
     await carryOutTogether([ask, ...twins]);
   else if (decision === 'approve' && (ask.kind === 'approval' || ask.kind === 'call'))
     await followUp(ask.staffId, 'carry_out', {

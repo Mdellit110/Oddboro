@@ -132,6 +132,7 @@ import {
   shownFolder,
   settingsTab,
   SWITCH_NAMES,
+  switchesSaid,
   type OwnTools,
   chatSession,
   home,
@@ -1442,7 +1443,7 @@ function followUpBrief(
       '',
       '1. Read your job description, notes/intake.md if you have one, my_goals and my_jobs.',
       '2. If you cannot do good work without answers from {owner}, write only the questions your intake did not answer to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop.',
-      `3. If a tool you need is not in my_access, ask for it with ask_for_access. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, follow what my_access says instead.`,
+      `3. If a tool you need is not in my_access, ask for it with ask_for_access. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, ask with ask_for_switch when my_access says {owner} can switch it on.`,
       '4. Otherwise do the first piece of real work your job calls for, now: the first run of your job, or the first thing your job description says to do, so {owner} sees it today. Work for a goal you serve is not yours to start: the Odd who leads it hands you each piece.',
       '5. Your reply goes on their desk. Write it to {owner}: what you did, and what comes next.'
     ];
@@ -1456,7 +1457,7 @@ function followUpBrief(
       ...(g.doneWhen ? [`- Done when: ${g.doneWhen}`] : []),
       '',
       '1. Read the office: office_report for each Odd, what it does, its level and the tools it holds or is waiting on, and list_goals for the goals they already serve.',
-      `2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it. For a tool an Odd lacks, put any level raise in owner_steps, as a step on ${modelSection("that Odd's")}. Have the Odd ask for the tool itself with ask_for_access when its officeTools include it, or put connecting it in owner_steps when they do not. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, put switching it on in ${officeSection("that Odd's")}, in owner_steps only when office_report says {owner} can switch it on for that Odd. Keep every other step only {owner} can do in owner_steps too. Hire only for work nobody here fits.`,
+      `2. Work out who does what, how often, and with which tools (find_connectors). Give the work to Odds already here when one fits, with a new job or a change to one. Give a part to an Odd whose level and tools cover it. For a tool an Odd lacks, put any level raise in owner_steps, as a step on ${modelSection("that Odd's")}. Have the Odd ask for the tool itself with ask_for_access when its officeTools include it, or put connecting it in owner_steps when they do not. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, never put switching it on in owner_steps: the Odd asks for it itself with ask_for_switch when its part needs it, and office_report says whether {owner} can switch it on for that Odd. Keep every other step only {owner} can do in owner_steps too. Hire only for work nobody here fits.`,
       '3. If you need answers from {owner} before you can plan it, write the questions to a file in your folder, put it on their desk with give_owner_a_task, attached, then stop. You pick up when they finish it.',
       "4. Otherwise bring the whole plan in one ask with propose_goal_plan. Write each hire's job description to a file first, and pass any intake as its intake_file.",
       '5. Once {owner} approves the plan, you pick up here on the goal and lead the work: you hand each piece to the Odd who does it. So its owner steps hold only what truly needs {owner}, such as signing in to a tool, never passing work or a request to an Odd.',
@@ -1508,6 +1509,7 @@ function followUpBrief(
               `- The folder you asked for: ${shownFolder(a.folder.path)} (${FOLDER_SAID[a.folder.level]})`
             ]
           : []),
+        ...(a.switches?.length ? [`- What you asked to turn on: ${switchesSaid(a.switches)}`] : []),
         ...(a.call
           ? [
               `- The call: ${a.call.tool} on ${a.call.connector}, with ${JSON.stringify(a.call.arguments)}`,
@@ -1533,6 +1535,21 @@ function followUpBrief(
       '1. Check you can reach it: list the folder.',
       '2. If work was waiting on it, do it now, within what they gave you. If they gave less than you asked and the work needs more, say so in your reply.',
       '3. If nothing was waiting, stop there.'
+    ];
+  if (f.kind === 'carry_out' && a?.kind === 'switch')
+    return [
+      `{owner} approved your ask #${a.id} and turned on ${switchesSaid(a.switches ?? [])} for you. This run has it.`,
+      ...(also.length
+        ? [
+            `This also answers your ${also.length > 1 ? 'asks' : 'ask'} ${also.map((x) => `#${x.id}`).join(', ')}, which another of your runs raised for the same: do that work once, here.`
+          ]
+        : []),
+      '',
+      ...askLines,
+      `- Their reason: ${a.reason ?? 'none given'}`,
+      '',
+      '1. If work was waiting on it, do it now.',
+      '2. If nothing was waiting, stop there.'
     ];
   if (f.kind === 'carry_out' && a?.access)
     return [
@@ -1728,7 +1745,7 @@ export async function followThrough(
   const task = t ? { row: t, files: await taskFiles(t.id) } : undefined;
   // One carry-out may stand for twin asks that start no run of their own.
   const also =
-    f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder')
+    f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder' || a?.kind === 'switch')
       ? await standsFor(a)
       : [];
   const details: Record<FollowUpKind, string> = {

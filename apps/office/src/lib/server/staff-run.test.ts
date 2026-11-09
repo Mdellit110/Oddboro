@@ -1436,7 +1436,7 @@ test("a new hire's first day and the manager's planning say how an Odd gets Run 
   const firstText = `${first.system}\n${first.message}`;
   assert.ok(
     firstText.includes(
-      '3. If a tool you need is not in my_access, ask for it with ask_for_access. For Run commands or Browse the web, follow what my_access says instead.'
+      `3. If a tool you need is not in my_access, ask for it with ask_for_access. For Run commands or Browse the web, ask with ask_for_switch when my_access says ${await L.ownerName()} can switch it on.`
     ),
     firstText
   );
@@ -1464,10 +1464,10 @@ test("a new hire's first day and the manager's planning say how an Odd gets Run 
     ),
     planText
   );
-  // Only office_report knows whether that Odd's tool follows the switch, so the step waits on it.
+  // The Odd asks for a switch itself, so the plan never hands the owner steps for one.
   assert.ok(
     planText.includes(
-      `For Run commands or Browse the web, put switching it on in that Odd's Settings tab, under Office, in owner_steps only when office_report says ${owner} can switch it on for that Odd.`
+      `For Run commands or Browse the web, never put switching it on in owner_steps: the Odd asks for it itself with ask_for_switch when its part needs it, and office_report says whether ${owner} can switch it on for that Odd.`
     ),
     planText
   );
