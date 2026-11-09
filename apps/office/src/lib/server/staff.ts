@@ -170,7 +170,7 @@ import { changedSince, replay, replayed, replayedAt, replaySince } from './repla
 import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
-import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
+import { endedEarly, LAUNCHES, stoppedWhy, streamTools, type Launch } from './cli.ts';
 import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups } from './launch.ts';
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
@@ -1270,7 +1270,7 @@ async function run(
       if (launch.ownGroup) stop();
       finish({
         ok: false,
-        text: `${tool} stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
+        text: stoppedWhy(who.agent, code, stderr)
       });
     });
     child.stdin.end(launch.stdin);
