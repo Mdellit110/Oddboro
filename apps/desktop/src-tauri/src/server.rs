@@ -193,6 +193,12 @@ impl Server {
             .envs(
                 option_env!("ODDBORO_GOOGLE_CLIENT_SECRET")
                     .map(|secret| ("ODDBORO_GOOGLE_CLIENT_SECRET", secret)),
+            )
+            // New Altitude's GitHub OAuth App's secret, for servers that sign
+            // in through GitHub, built in the same way.
+            .envs(
+                option_env!("ODDBORO_GITHUB_CLIENT_SECRET")
+                    .map(|secret| ("ODDBORO_GITHUB_CLIENT_SECRET", secret)),
             );
         // The office keeps its secrets through this shell (`secrets.rs`), over
         // the two pipes above. Mac only.

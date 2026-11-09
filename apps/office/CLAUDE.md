@@ -781,7 +781,12 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Gmail's `gmail.modify` and `gmail.settings.basic`, for filters; a stored
    sign-in that lacks one signs in afresh, `covers`; the
    secret from `ODDBORO_GOOGLE_CLIENT_SECRET`, which the shell passes from the
-   build, or `.env` in development). Each Google call asks `bearer` for a live
+   build, or `.env` in development). A hosted server that signs in through
+   GitHub, which lets no app register itself, signs in the same way with New
+   Altitude's GitHub OAuth App and `GITHUB_SCOPES` (`ODDBORO_GITHUB_CLIENT_SECRET`):
+   `knowServer` finds its sign-in server first, since the SDK picks scopes
+   before the app. A build without either secret says so on Sign in
+   (`BuiltWithout`). Each Google call asks `bearer` for a live
    token, so it never leaves the office process. One connector is one Google
    account of one product, found by `config.google` (`gmail` or `drive`),
    never by its id: scopes, the server `builtin` makes, and the reply and
