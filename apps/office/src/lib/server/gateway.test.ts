@@ -11,6 +11,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { mock, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -304,7 +305,18 @@ async function broken(
       select kind, actor, title, body from ledger
       where title = ${`${name} could not start during a run`}`)
   ];
-  return { id, name, lines };
+  /**
+   * The lines, once `want` are in and a moment more has passed for an extra
+   * one to show. A run never waits for its line (`tellNoStart`), so neither
+   * does the error a test has just seen.
+   */
+  const landed = async (want: number) => {
+    const until = Date.now() + 30_000;
+    while ((await lines()).length < want && Date.now() < until) await delay(20);
+    await delay(100);
+    return lines();
+  };
+  return { id, name, lines, landed };
 }
 const missingProgram = { command: join(folder, 'no-such-program'), args: [] };
 
@@ -321,14 +333,14 @@ async function inRun(id: string, fn: (client: Client) => Promise<void>): Promise
 }
 
 test('a connector whose program is missing gets one Ledger line per run, however often that run tries', async () => {
-  const { id, name, lines } = await broken(missingProgram, 'stdio');
+  const { id, name, landed } = await broken(missingProgram, 'stdio');
   await inRun(id, async (client) => {
     // The run still gets the connector's own error, every time.
     await assert.rejects(client.listTools(), /ENOENT/);
     await assert.rejects(client.listTools(), /ENOENT/);
     await assert.rejects(client.callTool({ name: 'search' }), /ENOENT/);
   });
-  assert.deepEqual(await lines(), [
+  assert.deepEqual(await landed(1), [
     {
       kind: 'access',
       actor: 'office',
@@ -338,17 +350,17 @@ test('a connector whose program is missing gets one Ledger line per run, however
   ]);
   // The next run finds it out for itself, so it says so again.
   await inRun(id, (client) => assert.rejects(client.listTools(), /ENOENT/));
-  assert.equal((await lines()).length, 2);
+  assert.equal((await landed(2)).length, 2);
 });
 
 test('a connector that starts after failing in the same run adds no second line', async () => {
-  const { id, lines } = await broken(missingProgram, 'stdio');
+  const { id, landed } = await broken(missingProgram, 'stdio');
   await inRun(id, async (client) => {
     await assert.rejects(client.listTools(), /ENOENT/);
     await L.setConnectorConfig(id, { command: process.execPath, args: [fixture] });
     assert.equal((await client.listTools()).tools.length, 4);
   });
-  assert.equal((await lines()).length, 1);
+  assert.equal((await landed(1)).length, 1);
 });
 
 test('a run whose connectors start writes no such line', async () => {
@@ -382,10 +394,10 @@ for (const [status, words] of [
     const said = `no such key ${KEY}`;
     const { url, server } = await hosted(status, said);
     try {
-      const { id, lines } = await broken({ url, headers: ['X-Api-Key'] }, 'http');
+      const { id, landed } = await broken({ url, headers: ['X-Api-Key'] }, 'http');
       secrets.set(`${id}:X-Api-Key`, KEY);
       await inRun(id, (client) => assert.rejects(client.listTools()));
-      const [line, ...more] = await lines();
+      const [line, ...more] = await landed(1);
       assert.deepEqual(more, []);
       assert.equal(line.body, words);
       assert.ok(!JSON.stringify(line).includes(KEY), 'the line holds no key');
@@ -400,52 +412,136 @@ for (const [about, url] of [
   ['with nothing at its address', 'http://127.0.0.1:9/mcp']
 ] as const)
   test(`a hosted connector ${about} gets one line saying the address could not be reached`, async () => {
-    const { id, lines } = await broken({ url }, 'http');
+    const { id, landed } = await broken({ url }, 'http');
     await inRun(id, async (client) => {
       await assert.rejects(client.listTools());
       await assert.rejects(client.listTools());
     });
     assert.deepEqual(
-      (await lines()).map((l) => l.body),
+      (await landed(1)).map((l) => l.body),
       ['The office could not reach the address saved for it.']
     );
   });
 
 test('a program that quits before answering gets a line saying it stopped', async () => {
-  const { id, lines } = await broken(
+  const { id, landed } = await broken(
     { command: process.execPath, args: ['-e', 'process.exit(1)'] },
     'stdio'
   );
   await inRun(id, (client) => assert.rejects(client.listTools()));
   assert.deepEqual(
-    (await lines()).map((l) => l.body),
+    (await landed(1)).map((l) => l.body),
     ['It stopped before it answered the office.']
   );
 });
 
 test('a failure the office has no words for gets the fixed sentence and none of its text', async () => {
   // Reading its key from AWS fails here: this office never connected AWS Secrets Manager.
-  const { id, lines } = await broken(
+  const { id, landed } = await broken(
     { ...missingProgram, secrets: ['A_KEY'], fromAws: { A_KEY: { secret: 'a-secret' } } },
     'stdio'
   );
   await inRun(id, (client) => assert.rejects(client.listTools()));
   assert.deepEqual(
-    (await lines()).map((l) => l.body),
+    (await landed(1)).map((l) => l.body),
     ['The office could not tell why.']
   );
 });
 
-test("a line that cannot be written is logged, and the run still gets the connector's own error", async () => {
+/**
+ * Ollama taking each embedding and never answering until `done()`, as one that
+ * has stuck does. `record` asks as a line starts, so `asked` counts the lines
+ * begun while none can land.
+ */
+function stuckOllama() {
+  const asked: string[] = [];
+  let answer = () => {};
+  const answered = new Promise<void>((done) => (answer = done));
+  const real = globalThis.fetch;
+  const fetched = mock.method(globalThis, 'fetch', (async (url, init) => {
+    if (!String(url).endsWith('/api/embed')) return real(url, init);
+    asked.push(String(init?.body));
+    await answered;
+    return new Response('', { status: 500 });
+  }) as typeof fetch);
+  return {
+    asked,
+    answer,
+    done: () => {
+      answer();
+      fetched.mock.restore();
+    }
+  };
+}
+
+/** `p`, or a failure once it has waited longer than any error should. */
+const atOnce = <T>(p: Promise<T>): Promise<T> =>
+  Promise.race([
+    p,
+    delay(20_000, undefined, { ref: false }).then(() => {
+      throw new Error('the run was still waiting after 20 s');
+    })
+  ]);
+
+test("a stuck Ollama never holds back the run's error, and the line lands once it answers", async () => {
+  const { id, lines, landed } = await broken(missingProgram, 'stdio');
+  const ollama = stuckOllama();
+  try {
+    await inRun(id, (client) => atOnce(assert.rejects(client.listTools(), /ENOENT/)));
+    assert.equal(ollama.asked.length, 1, 'the line has started');
+    assert.deepEqual(await lines(), [], 'and cannot land yet');
+    ollama.answer();
+    assert.equal((await landed(1)).length, 1);
+  } finally {
+    ollama.done();
+  }
+});
+
+test('six listings at once, and one after, begin one line while Ollama is stuck', async () => {
+  const { id, landed } = await broken(missingProgram, 'stdio');
+  const ollama = stuckOllama();
+  try {
+    await inRun(id, async (client) => {
+      const six = await atOnce(
+        Promise.allSettled(Array.from({ length: 6 }, () => client.listTools()))
+      );
+      assert.deepEqual(
+        six.map((r) => r.status),
+        Array(6).fill('rejected')
+      );
+      await atOnce(assert.rejects(client.listTools(), /ENOENT/));
+    });
+    assert.equal(ollama.asked.length, 1);
+    ollama.answer();
+    assert.equal((await landed(1)).length, 1);
+  } finally {
+    ollama.done();
+  }
+});
+
+test("a line that cannot be written is logged and never left unhandled, and the run still gets the connector's own error", async () => {
   const { id, lines } = await broken(missingProgram, 'stdio');
-  const logged = mock.method(console, 'error', () => {});
+  let settle = () => {};
+  const settled = new Promise<void>((done) => (settle = done));
+  const logged = mock.method(console, 'error', () => settle());
+  const unhandled: unknown[] = [];
+  const noteUnhandled = (why: unknown) => {
+    unhandled.push(why);
+    settle();
+  };
+  process.on('unhandledRejection', noteUnhandled);
   await L.pg`alter table ledger rename to ledger_away`;
   try {
     await inRun(id, (client) => assert.rejects(client.listTools(), /ENOENT/));
+    // The table comes back only once the write has failed, or it would succeed.
+    await settled;
+    await delay(20);
   } finally {
     await L.pg`alter table ledger_away rename to ledger`;
     logged.mock.restore();
+    process.off('unhandledRejection', noteUnhandled);
   }
+  assert.deepEqual(unhandled, []);
   assert.deepEqual(await lines(), []);
   assert.deepEqual(
     logged.mock.calls.map((c) => c.arguments[0]),
