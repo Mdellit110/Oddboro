@@ -1,6 +1,7 @@
 <script lang="ts">
   import { modelSection } from '@oddboro/ledger/access';
   import type { Check } from '@oddboro/ledger/checks';
+  import AccountSection from './AccountSection.svelte';
   import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
   import DiagnosticsSection from './DiagnosticsSection.svelte';
@@ -189,6 +190,7 @@
       {#if diagnostics.possible}
         <DiagnosticsSection />
       {/if}
+      <AccountSection />
     {/if}
 
     <section class="flex flex-col gap-2">

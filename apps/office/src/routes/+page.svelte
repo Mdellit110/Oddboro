@@ -18,6 +18,7 @@
   import type { Work } from '#lib/staff/work.ts';
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
+  import { account } from '#lib/ui/account.svelte.ts';
   import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
   import ServicesPanel from '#lib/ui/ServicesPanel.svelte';
@@ -56,6 +57,8 @@
     diagnostics,
     untrack(() => data.diagnostics)
   );
+  // The New Altitude sign-in. The live line keeps it current from then on.
+  account.status = untrack(() => data.account);
 
   /** `heading` is the room a walking staffer is on its way to. */
   type Tag = {
@@ -605,6 +608,10 @@
     const events = new EventSource('/api/events');
     events.onmessage = (m) => {
       const e = JSON.parse(m.data) as OfficeEvent;
+      if (e.type === 'account') {
+        account.status = e.status;
+        return;
+      }
       if (e.type === 'working') {
         // Every tool call a staffer makes updates its work in progress; only
         // work starting or ending reloads the card's tabs.

@@ -762,7 +762,12 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (`capped`, `accessInRun`). Hosted servers sign in with
    OAuth (`src/lib/server/oauth.ts`): the task's Sign in opens the service, it
    returns to `/connect/callback`, the tokens go in the keychain, and each run's
-   gateway connects with a fresh access token as a header. Gmail and Google
+   gateway connects with a fresh access token as a header. A token is refreshed
+   one at a time per sign-in (`once`), since a service may end a sign-in whose
+   refresh token arrives twice. For the same reason `steadyFetch` retries only
+   a request that never left this computer; one whose answer was lost is not
+   retried within one request. The same provider signs the owner in to New
+   Altitude (see "A New Altitude account"). Gmail and Google
    Drive are `builtin` connectors (migration `0009_google`): the office serves
    their tools itself (`src/lib/server/google/`, connected in-process by
    `builtin` in `access.ts`), and signs each in on its own with New Altitude's
@@ -1114,8 +1119,9 @@ every run. Next waits until the picked tool is signed in), the Office Manager (`
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
 owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
 a description or a chip, and starts the design job), and Open the office.
-No card asks about error reports: the owner turns them on in Setup (see
-"Diagnostics"), so a new owner gets to work sooner. `POST /api/onboarding` keeps the time zone, finishes the
+No card asks about error reports or a New Altitude sign-in: the owner finds
+both in Setup (see "Diagnostics" and "A New Altitude account"), so a new owner
+gets to work sooner. `POST /api/onboarding` keeps the time zone, finishes the
 welcome, hires the manager (`hireManager`), writes their hello into their chat
 (each ready-made manager's `hello` in `managers.ts`, in their own voice; a
 described one gets `customHello`),
@@ -1196,7 +1202,10 @@ https, so that check refuses the owner's own http page. So the page's `call()`
 3. The one other client is the app's shell, which reports updates to
    `/api/update` with the token it passed the server (`fromShell` in
    `src/lib/server/update.ts`).
-4. Vite's dev server has its own route, `/__open-in-editor`, that opens a file
+4. `/account/callback` and `/connect/callback` arrive as GETs from the
+   owner's browser, sent back by the service's sign-in page, so they pass
+   rule 2 with no Origin.
+5. Vite's dev server has its own route, `/__open-in-editor`, that opens a file
    in an editor and runs before the handle. `noEditorLaunch` in
    `vite.config.ts` refuses it with 403, always: nothing in the office uses it.
 
@@ -1252,6 +1261,41 @@ Error and trace reports go to Sentry only after the owner's yes.
    `src/lib/server/diagnostics.ts` and `src/lib/server/hosts.ts` import
    nothing that brings in Postgres.
 
+## A New Altitude account
+
+An owner who already has a New Altitude account can sign in to it in Setup
+(`AccountSection`, which shows `AccountSignIn.svelte`). The first visit does
+not offer it. Nothing in the office needs it.
+
+1. The site is `ODDBORO_ACCOUNT_SITE`, `https://members.newaltitude.ai` when
+   unset. The issuer comes from that site's protected resource document; the
+   resource sent is always the configured site.
+2. `src/lib/server/account.ts` signs in through the connectors' provider
+   (`oauth.ts`) as its own public client, asks for `profile` alone, and
+   returns to `/account/callback`. It asks `/api/me` once and keeps only the
+   id, name and email. Everything lives in one secret,
+   `new-altitude-account:oauth`, in the system's secret store, never in the
+   settings file. With no store, Sign in refuses before any request, and a
+   store that cannot write gets the same words. Only the newest Sign in's
+   page can finish, and none while a sign-in holds tokens. Any failure after
+   the tokens are kept signs out, so no tokens stay without an account. If
+   the store cannot keep them, nothing is kept here, and the grant lapses at
+   New Altitude on its own.
+3. The states (`AccountStatus` in `src/lib/account.ts`): `in` while the
+   sign-in holds tokens, `expired` once New Altitude refused a refresh (the
+   account is kept, so the page can say whose it was), `out` with none.
+4. Every change goes to every open page on the live line as
+   `{ type: 'account', status }`; the page keeps it in `account.svelte.ts`.
+   `GET /api/account` checks it live, refreshing only a token close to
+   running out. `POST` starts a sign-in. `DELETE` signs out: it revokes the
+   refresh token at New Altitude, then removes the secret even when New
+   Altitude cannot be reached. The page makes these requests only through
+   `src/lib/ui/account-actions.ts`. Its Switch account, shown with the
+   signed-in line, signs out and then starts a new sign-in, so a Cancel or a
+   refused start leaves the office signed out.
+5. `accountToken()` is the one way to get the account's token.
+   `npm run reset` leaves the sign-in, as it leaves connector sign-ins.
+
 ## Running it always
 
 1. `npm run service:install -w apps/office` installs a login service
@@ -1291,6 +1335,8 @@ Error and trace reports go to Sentry only after the owner's yes.
 | `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                                                                                        |
 | `src/lib/diagnostics.ts`          | What a report may carry, and when a trace is taken: the server's, the relay's and the page's one rule                                |
 | `src/lib/server/diagnostics.ts`   | The SDK's options and the gate every report passes, with the owner's answer                                                          |
+| `src/lib/server/account.ts`       | The New Altitude sign-in: start, callback, refresh, sign out                                                                         |
+| `src/lib/account.ts`              | The account and its states, shared by the server and the page                                                                        |
 | `src/lib/server/hosts.ts`         | The office's names through Caddy (`HOSTS`), alone so reporting loads before Postgres                                                 |
 | `scripts/office-service.ts`       | The login service                                                                                                                    |
 | `src/app.css`                     | Tokens. Every colour in the chrome reads these.                                                                                      |

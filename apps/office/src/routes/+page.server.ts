@@ -11,6 +11,7 @@ import {
   welcomed,
   zone
 } from '@oddboro/ledger';
+import { accountStatus } from '#lib/server/account.ts';
 import { keepAddress } from '#lib/server/address.ts';
 import { diagnosticsState } from '#lib/server/diagnostics.ts';
 import { currentOffice } from '#lib/server/space.ts';
@@ -43,6 +44,7 @@ export const load: PageServerLoad = async () => {
     /** What the header calls this computer. */
     computer: MAC ? 'Your Mac' : 'Your computer',
     welcomed: !first,
-    diagnostics: diagnosticsState()
+    diagnostics: diagnosticsState(),
+    account: accountStatus()
   };
 };
