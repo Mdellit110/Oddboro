@@ -87,11 +87,15 @@ const RUSTFLAGS = [
   .join(' ')
   .trim();
 // The C code the shell links (ring) names its paths too once it keeps line
-// tables. clang and gcc take this flag; MSVC builds it on Windows, where
-// checkNoHome still catches a path left in.
+// tables. clang and gcc take these flags; MSVC builds it on Windows, where
+// checkNoHome still catches a path left in. gcc 11 (Ubuntu 22.04) hands the
+// assembler only -fdebug-prefix-map, so ring's .S files need it too.
 const CFLAGS = [
   process.env.CFLAGS ?? '',
-  ...PATH_MAPS.map(([from, to]) => `-ffile-prefix-map=${from}=${to}`)
+  ...PATH_MAPS.flatMap(([from, to]) => [
+    `-ffile-prefix-map=${from}=${to}`,
+    `-fdebug-prefix-map=${from}=${to}`
+  ])
 ]
   .join(' ')
   .trim();
@@ -100,13 +104,17 @@ const SENTRY_TOKEN = process.env.SENTRY_AUTH_TOKEN || '';
 /**
  * With a Sentry token, line tables for the shell, so a crash names its line:
  * inside the binary on Linux, beside it as a .dSYM or .pdb on the Mac and
- * Windows. The env overrides Cargo.toml's stripped release profile for this
- * build only; without a token it is empty and the profile is as it was.
+ * Windows. The env overrides Cargo.toml's release profile for this build
+ * only; without a token it is empty and the profile is as it was. The Mac
+ * keeps the profile's strip: rustc writes the .dSYM first, then strips the
+ * binary of the linker's map of object files, whose paths name the home
+ * folder. On Linux the line tables live in the binary, and on Windows a
+ * strip means no .pdb, so there nothing is stripped.
  */
 const SYMBOLS: Record<string, string> = SENTRY_TOKEN
   ? {
       CARGO_PROFILE_RELEASE_DEBUG: 'line-tables-only',
-      CARGO_PROFILE_RELEASE_STRIP: 'none',
+      ...(process.platform === 'darwin' ? {} : { CARGO_PROFILE_RELEASE_STRIP: 'none' }),
       ...(process.platform === 'linux' ? {} : { CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO: 'packed' }),
       ...(process.platform === 'win32' ? {} : { CFLAGS })
     }
