@@ -11,6 +11,7 @@
   import { call } from './api.ts';
   import { openFile } from './windows.svelte.ts';
   import {
+    beforeName,
     countFiles,
     matching,
     nameOf,
@@ -83,16 +84,15 @@
   <span class="min-w-0 flex-1 truncate text-sm">{nameOf(r.path)}</span>
 {/snippet}
 
-<!-- A long title gives way, so the file's own name stays on the row. -->
+<!-- A long title gives way first, then the folders, so the file's own name stays on the row. -->
 {#snippet foundLabel(r: Row)}
-  {#if r.work === undefined}
-    <span class="min-w-0 flex-1 truncate text-sm">{r.below}</span>
-  {:else}
-    <span class="flex min-w-0 flex-1 text-sm">
-      <span class="min-w-0 truncate">{r.work}</span>
-      <span class="max-w-full shrink-0 truncate">/{r.below}</span>
+  <span class="flex min-w-0 flex-1 text-sm">
+    {#if r.work !== undefined}<span class="min-w-0 truncate">{r.work}</span>{/if}
+    <span class="flex max-w-full shrink-0">
+      <span class="min-w-0 truncate">{beforeName(r)}</span>
+      <span class="max-w-full shrink-0 truncate">{nameOf(r.below)}</span>
     </span>
-  {/if}
+  </span>
 {/snippet}
 
 {#snippet fileRow(r: Row, depth: number, label: Snippet<[Row]>)}

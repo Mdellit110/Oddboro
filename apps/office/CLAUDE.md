@@ -73,7 +73,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (`tagLift`, read in `onRender`) and settles after. Nothing polls.
 6. Two full-height panels flank the floor (`src/lib/ui/SidePanel.svelte`).
    Each resizes by dragging its inner edge (or the arrow keys on it), and
-   remembers its width per viewer. The start side is the office plate (name,
+   remembers its width per viewer. Where the two overlap, the end one paints
+   over the start one, except while the start one's front window is a file
+   or a report (`onTop`). The start side is the office plate (name,
    the clock, Setup, and the Desk, Goals, Lessons, Ledger, Services, Hire and Office
    buttons), which opens into a bar of windows
    (`src/lib/ui/windows.svelte.ts`): the Desk, the Goals, the Lessons, the
@@ -274,7 +276,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    **Settings** (its own four tabs, below). A group opens on the tab it was
    last on; the Lessons tab counts its guesses, and the Data group itself
    shows no count. It opens on Chat. Storage
-   (`StorageTab.svelte`) is a tree of everything the Odd kept in its own
+   (`StorageTab.svelte`, what a row lists and says in `storage-list.ts`) is a tree of everything the Odd kept in its own
    folder, then, under Shared work, its part of each thread it is on (by the
    test `workFile` uses, `workTitles` in the ledger), one folder per piece of
    work by its title, newest first. Search covers both, and a shared file

@@ -24,6 +24,12 @@ export const parentOf = (path: string): string => path.slice(0, Math.max(0, path
 
 export const nameOf = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
+/** What a search row shows between a shared row's title and the file's bare name. */
+export const beforeName = (r: Row): string => {
+  const folders = parentOf(r.below);
+  return `${r.work === undefined ? '' : '/'}${folders && `${folders}/`}`;
+};
+
 export function treeOf(rows: Row[]): Tree {
   const by: Tree = {};
   for (const r of rows) (by[parentOf(r.path)] ??= []).push(r);

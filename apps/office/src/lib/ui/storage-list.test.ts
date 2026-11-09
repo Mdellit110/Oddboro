@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  beforeName,
   countFiles,
   matching,
   nameOf,
@@ -57,6 +58,32 @@ describe('a shared row', () => {
 
   it('never holds a thread folder in the words the owner reads', () => {
     for (const row of shared) assert.doesNotMatch(shownAs(row), /threads\/\d/);
+  });
+});
+
+describe('a search row', () => {
+  const pieces = (r: (typeof own)[number]) => [r.work, beforeName(r), nameOf(r.below)];
+
+  it('splits a shared file into its title, its folders and its bare name', () => {
+    assert.deepEqual(pieces(shared[1]), ['Build the Site', '/m/', 'index.html']);
+  });
+
+  it('has only a slash before the name of a shared file at the top of its work', () => {
+    assert.deepEqual(pieces(shared[2]), ['Build the Site', '/', 'notes.md']);
+  });
+
+  it('splits an own file into its folders and its bare name', () => {
+    assert.deepEqual(pieces(own[1]), [undefined, 'sims/', 'draft.md']);
+  });
+
+  it('has nothing before the name of an own file at the top', () => {
+    const [top] = ownRows([file('plan.md')]);
+    assert.deepEqual(pieces(top), [undefined, '', 'plan.md']);
+  });
+
+  it('reads, piece by piece, the same as the row tooltip', () => {
+    for (const r of [...own, ...shared].filter((row) => !row.dir))
+      assert.equal(pieces(r).join(''), shownAs(r));
   });
 });
 
