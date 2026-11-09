@@ -162,6 +162,14 @@ for (const [row, text, html] of [
     '[a](file:///Users/Shared/.oddboro/staff/vera/..%2Fx.md)'
   ],
   [
+    'a file: link to an Odd folder whose step decodes to a backslash stays text',
+    '[a](file:///Users/Shared/.oddboro/staff/vera/a%5Cb.md)'
+  ],
+  [
+    'a file: link in a thread part whose step decodes to a backslash stays text',
+    '[a](file:///Users/Shared/.oddboro/threads/1/vera/a%5Cb.md)'
+  ],
+  [
     'a file: link that is not valid escaping stays text',
     '[a](file:///Users/Shared/.oddboro/threads/1/vera/%FF.md)'
   ],
@@ -174,6 +182,29 @@ for (const [row, text, html] of [
     assert.equal(before.html.trim(), html ?? `<p>${text}</p>`);
     assert.doesNotMatch(before.html, /<a |<button/);
   });
+
+test('a file: link with a NUL in its name reads as its words once the office refuses it', async () => {
+  refused.add('threads/1/vera/a\0.md');
+  assert.equal(
+    await shown('[a](file:///Users/Shared/.oddboro/threads/1/vera/a%00.md)'),
+    '<p>a</p>'
+  );
+  refused.clear();
+});
+
+test('a path that is not a file: address keeps an escape that a name may hold', async () => {
+  const name = 'vera:threads/1/vera/a%23b.md';
+  assert.ok(
+    (await shown('`/Users/Shared/.oddboro/threads/1/vera/a%23b.md`')).includes(
+      `data-file="${name}"`
+    )
+  );
+  assert.ok(
+    (await shown('[a](/Users/Shared/.oddboro/threads/1/vera/a%23b.md)')).includes(
+      `data-file="${name}"`
+    )
+  );
+});
 
 test("a .. path in backticks asks the office nothing, so it never falls through to the Odd's own folder", () => {
   const { html, unknown } = renderMarkdown('`~/.oddboro/threads/1/vera/../../x.md`', 'vera');

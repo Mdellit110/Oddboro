@@ -38,6 +38,16 @@ export function treeOf(rows: Row[]): Tree {
 
 export const countFiles = (rows: Row[]): number => rows.filter((r) => !r.dir).length;
 
+/** The line that says how many files `rows` holds and where they are. */
+export const countLine = (rows: Row[], where: string): string => {
+  const n = countFiles(rows);
+  return `${n} ${n === 1 ? 'file' : 'files'} in ${where}.`;
+};
+
+/** Whether the Odd has nothing to list: no entry of its own and no piece of work. */
+export const nothingKept = (entries: Entry[], work: Work[]): boolean =>
+  !entries.length && !work.length;
+
 /** The files whose words for the owner hold `find`, the Odd's own first. */
 export function matching(own: Row[], shared: Row[], find: string): Row[] {
   const f = find.trim().toLowerCase();

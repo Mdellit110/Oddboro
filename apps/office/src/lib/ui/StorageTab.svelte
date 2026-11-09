@@ -12,9 +12,10 @@
   import { openFile } from './windows.svelte.ts';
   import {
     beforeName,
-    countFiles,
+    countLine,
     matching,
     nameOf,
+    nothingKept,
     ownRows,
     sharedRows,
     shownAs,
@@ -66,8 +67,6 @@
   // Two trees, since an Odd's own folder can hold a path that reads like a shared one.
   const ownTree = $derived(treeOf(own));
   const sharedTree = $derived(treeOf(shared));
-  const files = $derived(countFiles(own));
-  const sharedFiles = $derived(countFiles(shared));
   const matches = $derived(matching(own, shared, find));
 
   function size(bytes: number): string {
@@ -175,14 +174,13 @@
     {:else if capped}
       Showing the first {cap.toLocaleString()} entries.
     {:else}
-      {files}
-      {files === 1 ? 'file' : 'files'} in {profile.name}'s folder.
+      {countLine(own, `${profile.name}'s folder`)}
     {/if}
   </p>
   <div class="min-h-0 flex-1 overflow-y-auto">
     {#if problem}
       <p class="rounded-lg bg-coral/15 px-3 py-2 text-xs text-coral">{problem}</p>
-    {:else if loaded && !entries.length && !work.length}
+    {:else if loaded && nothingKept(entries, work)}
       <p class="py-4 text-center text-sm text-muted">Nothing kept yet.</p>
     {:else if find.trim()}
       {#if matches.length}
@@ -198,10 +196,7 @@
       <ul>{@render folder(ownTree, '', 0)}</ul>
       {#if work.length}
         <h3 class="mt-3 text-xs font-semibold text-ink">Shared work</h3>
-        <p class="mb-1.5 text-[11px] text-muted">
-          {sharedFiles}
-          {sharedFiles === 1 ? 'file' : 'files'} in shared work.
-        </p>
+        <p class="mb-1.5 text-[11px] text-muted">{countLine(shared, 'shared work')}</p>
         <ul>
           {#each work as w (w.root)}
             {@render folderRow(sharedTree, w.root, w.title, 0, w.title)}

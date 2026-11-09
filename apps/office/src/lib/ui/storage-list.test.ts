@@ -3,8 +3,10 @@ import { describe, it } from 'node:test';
 import {
   beforeName,
   countFiles,
+  countLine,
   matching,
   nameOf,
+  nothingKept,
   ownRows,
   parentOf,
   sharedRows,
@@ -158,6 +160,24 @@ describe('search', () => {
   it('finds nothing for an empty or blank box', () => {
     assert.deepEqual(found(own, shared, ''), []);
     assert.deepEqual(found(own, shared, '   '), []);
+  });
+});
+
+describe('the lines above the lists', () => {
+  it('counts one file in the singular, and any other number in the plural', () => {
+    assert.equal(countLine(own, "Vera's folder"), "1 file in Vera's folder.");
+    assert.equal(countLine(shared, 'shared work'), '3 files in shared work.');
+    assert.equal(countLine([], 'shared work'), '0 files in shared work.');
+  });
+
+  it('counts files and not the folders among the rows', () => {
+    assert.equal(countLine(ownRows([dir('sims')]), "Vera's folder"), "0 files in Vera's folder.");
+  });
+
+  it('says nothing is kept only with no entry of its own and no work', () => {
+    assert.equal(nothingKept([], []), true);
+    assert.equal(nothingKept([file('plan.md')], []), false);
+    assert.equal(nothingKept([], [site]), false);
   });
 });
 

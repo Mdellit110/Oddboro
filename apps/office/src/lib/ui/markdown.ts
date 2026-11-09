@@ -82,9 +82,7 @@ function pathOf(target: string): string | undefined {
   if (!t.startsWith('file:')) return plainName(t);
   try {
     const steps = t.split('/').map(decodeURIComponent);
-    return steps.some((step) => /[/\\]/.test(step) || step.includes('\0'))
-      ? undefined
-      : steps.join('/');
+    return steps.some((step) => /[/\\]/.test(step)) ? undefined : steps.join('/');
   } catch {
     return undefined;
   }
