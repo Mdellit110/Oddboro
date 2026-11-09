@@ -489,7 +489,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `house.ts` says so. The
    list reads the profile's folders, each with the home folder written `~`
    (`shown`), so it loads nothing of its own and the staff route has no GET;
-   a level change or Remove sends the path as stored. `run()` takes the
+   a level change or Remove sends the path as stored. A folder that holds or
+   sits in a secret store (`touchesStore` on the profile, `touchesSecretStore`
+   on the server) reaches no run, so it says "Holds keys or sign-ins, so this
+   Odd no longer gets it." and can still be removed. One gone from the disk
+   reaches no run either, and gets that line only if its stored path is in a store. `run()` takes the
    switches and folders as its tool takes them from `capabilities()`
    (`caps.own`), less a held network, and passes the given folders still on
    the disk and in no secret store (`touchesSecretStore` in the ledger); the prompt lists them under "Where things are", and "What you

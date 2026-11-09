@@ -1,6 +1,7 @@
 // An Odd as the page gets it, worked out on the server: what its runs reach
 // reads the disk (folders still there) and this office's held network, and
-// each folder's `~` form reads the home folder, none of which the page can do.
+// each folder's `~` form and whether it touches a secret store read the home
+// folder, none of which the page can do.
 import {
   currentPlatform,
   effortFor,
@@ -12,6 +13,7 @@ import {
   networkHeld,
   ownTools,
   shownFolder,
+  touchesSecretStore,
   webLine,
   type StaffRow
 } from '@oddboro/ledger';
@@ -45,7 +47,11 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     commands: r.commands,
     web: r.web,
     webLine: webLine(r.agent, currentPlatform(), reach.held),
-    folders: r.folders.map((f) => ({ ...f, shown: shownFolder(f.path) })),
+    folders: r.folders.map((f) => ({
+      ...f,
+      shown: shownFolder(f.path),
+      touchesStore: touchesSecretStore(f.path)
+    })),
     reach,
     remit: r.remit,
     room: r.room,
