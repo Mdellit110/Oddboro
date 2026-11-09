@@ -22,7 +22,7 @@ import {
 } from 'drizzle-orm';
 import { existsSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, sep } from 'node:path';
 import { alias } from 'drizzle-orm/pg-core';
 import { db, sql as pg } from './db.ts';
 import { deleteSecret, getSecret } from './secrets.ts';
@@ -452,8 +452,86 @@ export const FOLDER_REFUSED = {
   secrets: 'That folder holds your keys or sign-ins.',
   code: "That folder holds Oddboro's own code.",
   nested: 'That folder is inside one this Odd already has, or holds one.',
+  /** What an Odd reads when it asks for a whole drive or system files: only the owner may give one. */
+  broad: 'That folder is a whole drive or holds system files. Ask for a narrower one.',
   glob: (char: string) => `That folder's path has a character an Odd's tool can't take: ${char}`
 } as const;
+
+/**
+ * What the owner reads before giving a whole drive or system files
+ * (`broadFolder`), with Accept and Cancel. Only their Accept gives it.
+ */
+export const FOLDER_WARNING =
+  "This folder is a whole drive or holds system files, so an Odd could reach everything inside it. We don't recommend giving it.";
+
+/**
+ * Secret stores found by what they hold, for a folder outside the home, where
+ * no store sits at a known place: by name, and for a coding tool's home, a
+ * file only its sign-in or history leaves, since a project keeps its own
+ * `.claude` or `.codex` of settings. An empty list means the name alone.
+ */
+const STORE_MARKS: Record<string, string[]> = {
+  '.ssh': [],
+  '.aws': [],
+  '.gnupg': [],
+  '.google_workspace_mcp': [],
+  '.claude': ['.credentials.json', 'history.jsonl', 'projects'],
+  '.codex': ['auth.json', 'sessions'],
+  '.grok': ['auth.json', 'sessions'],
+  '.gemini': ['oauth_creds.json', 'google_accounts.json']
+};
+
+/** Whether `p` is a secret store by `STORE_MARKS`. */
+function marksStore(p: string): boolean {
+  const marks = STORE_MARKS[basename(p).toLowerCase()];
+  return !!marks && existsSync(p) && (!marks.length || marks.some((m) => existsSync(join(p, m))));
+}
+
+/**
+ * Whether `p`, outside the home, is in a secret store or holds one at its
+ * top (`STORE_MARKS`). Deeper folders are not looked at, so giving one is
+ * never a walk of a whole drive.
+ */
+function holdsStoreOutside(p: string): boolean {
+  for (let at = p; dirname(at) !== at; at = dirname(at)) if (marksStore(at)) return true;
+  return Object.keys(STORE_MARKS).some((name) => marksStore(join(p, name)));
+}
+
+/** The system's own folders on each system, by real path where one exists. */
+function systemFolders(): string[] {
+  const env = process.env;
+  const list =
+    process.platform === 'win32'
+      ? [
+          env.SystemRoot ?? 'C:\\Windows',
+          env.ProgramFiles ?? 'C:\\Program Files',
+          env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)',
+          env.ProgramData ?? 'C:\\ProgramData'
+        ]
+      : process.platform === 'darwin'
+        ? ['/System', '/Library', '/Applications', '/usr', '/bin', '/sbin', '/private', '/dev']
+        : [
+            ...['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/boot'],
+            ...['/var', '/proc', '/sys', '/dev', '/run', '/root', '/tmp']
+          ];
+  return list.map(real);
+}
+
+/**
+ * Whether `p` (a real path) is a whole drive or volume, or is in or holds the
+ * system's own folders: what the owner is warned about before giving
+ * (`FOLDER_WARNING`), and an Odd may not ask for. A folder in the home is
+ * never one, wherever the home sits.
+ */
+export function broadFolder(p: string): boolean {
+  if (within(p, real(homedir()))) return false;
+  const up = dirname(p);
+  const root =
+    up === p ||
+    ['/Volumes', '/mnt', '/media'].includes(up) ||
+    ['/media', '/run/media'].includes(dirname(up));
+  return root || systemFolders().some((s) => within(p, s) || within(s, p));
+}
 
 /**
  * The characters Codex 0.166 refuses in a folder's path, since it reads them
@@ -488,28 +566,36 @@ export function shownFolder(path: string): string {
 
 /**
  * Whether `path`, as the owner typed it, may be given to an Odd, and its real
- * path when it may. A folder inside the home that holds or sits in none of
- * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
- * code: a deny inside a folder a run reads is not held by every tool, so a
- * folder that holds one is refused at the door. A real path with a character
- * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
- * what a run is given. Only the folder route calls this, so a folder given
- * before that rule is not checked again.
+ * path when it may. Any folder on the computer but the home itself, and one
+ * that holds or sits in a secret store (`SECRET_STORES` in the home, and
+ * outside it `holdsStoreOutside`), the office's own home or Oddboro's code:
+ * those would let an Odd past the office's walls, so no Accept gives them. A
+ * deny inside a folder a run reads is not held by every tool, so a folder
+ * that holds one is refused at the door. A real path with a character Codex
+ * cannot take (`GLOB`) is refused too, by the real path, since that is what a
+ * run is given. A whole drive or system files (`broadFolder`) comes back as
+ * a `warning` until the owner accepts it (`accept`). Only the folder routes
+ * call this, so a folder given before a rule is not checked again.
  */
-export function checkFolder(path: string): { real: string } | { refused: string } {
+export function checkFolder(
+  path: string,
+  accept = false
+): { real: string } | { refused: string } | { warning: string } {
   const typed = path.trim();
   const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
   if (!isAbsolute(expanded) || !existsSync(expanded)) return { refused: FOLDER_REFUSED.missing };
   const p = real(expanded);
   if (!statSync(p).isDirectory()) return { refused: FOLDER_REFUSED.missing };
   const h = real(homedir());
-  if (p === h || !within(p, h)) return { refused: FOLDER_REFUSED.home };
+  if (p === h) return { refused: FOLDER_REFUSED.home };
   const either = (q: string) => within(p, q) || within(q, p);
   if ([...SECRET_STORES.map((s) => real(join(h, s))), real(home())].some(either))
     return { refused: FOLDER_REFUSED.secrets };
+  if (!within(p, h) && holdsStoreOutside(p)) return { refused: FOLDER_REFUSED.secrets };
   if (either(real(CODE))) return { refused: FOLDER_REFUSED.code };
   const glob = GLOB.exec(p)?.[0];
   if (glob) return { refused: FOLDER_REFUSED.glob(glob) };
+  if (!accept && broadFolder(p)) return { warning: FOLDER_WARNING };
   return { real: p };
 }
 
@@ -1216,20 +1302,25 @@ class FolderRefused extends Error {}
  * leaves the ask open and the folder as it was. One ledger line, in the
  * Settings tab's words, and the approval starts the run that carries the ask
  * out, which finds the folder in its reach. A plain approve is refused
- * (`decide`).
+ * (`decide`). A whole drive or system files, which the owner can type there,
+ * comes back as a `warning` and changes nothing until they accept it.
  */
 export async function giveFolder(
   id: number,
   path: string,
   level: FolderAccess,
-  reason: string | null = null
-): Promise<{ given: { path: string; level: FolderAccess } } | FolderNotGiven> {
+  reason: string | null = null,
+  accept = false
+): Promise<
+  { given: { path: string; level: FolderAccess } } | { warning: string } | FolderNotGiven
+> {
   const a = await ask(id);
   if (!a || a.kind !== 'folder' || !a.folder)
     return { refused: 'No such folder ask.', status: 404 };
   if (a.status !== 'open') return { refused: 'You already answered this ask.', status: 409 };
-  const checked = checkFolder(path);
+  const checked = checkFolder(path, accept);
   if ('refused' in checked) return { refused: checked.refused, status: 400 };
+  if ('warning' in checked) return checked;
   const given = { path: checked.real, level };
   try {
     const done = await decide(id, 'approve', reason, { folder: { ...a.folder, given } });

@@ -456,13 +456,19 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    commands do with it (`webLine` in the ledger's `agents.ts`), such as
    "Search and read web pages. With Run commands on, its commands can reach
    the internet too." A folder is typed as a path and set to Can
-   read or Can read and change; `checkFolder` refuses the home folder,
-   anything outside it, and one that holds or sits in a secret store, the
-   office's home or Oddboro's code, comparing real paths as the disk spells
+   read or Can read and change, anywhere on the computer; `checkFolder`
+   refuses the home folder and one that holds or sits in a secret store (outside
+   the home, found by what it holds, one level down at most), the office's
+   home or Oddboro's code, comparing real paths as the disk spells
    them (`realpathSync.native`), and one whose real path holds `*`, `?`, `[`
    or `]`, which Codex cannot take ("That folder's path has a character an
    Odd's tool can't take: [", `FOLDER_REFUSED.glob`; a folder given before
-   that rule is not checked again), and `setFolder` refuses one inside or holding
+   that rule is not checked again). A whole drive or system files
+   (`broadFolder`) comes back as `{ warning }`, given nothing, and
+   `FolderWarning.svelte` shows it with a warning icon, a More info link to
+   the site's `/info/folder-sharing/`, and Accept and Cancel; Accept sends the
+   same change again with `accept`, on this tab and on a folder ask's Give
+   access. `setFolder` refuses one inside or holding
    a folder the Odd already has ("That folder is inside one this Odd already
    has, or holds one."); the line shows under the field. An Odd asks for a
    folder with `ask_for_folder` (item 7), never with steps for this tab: a
