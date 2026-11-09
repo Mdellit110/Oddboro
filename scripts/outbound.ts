@@ -107,9 +107,26 @@ export const OUTBOUND: readonly Outbound[] = [
   {
     file: 'apps/office/src/lib/server/oauth.ts',
     calls: 2,
-    to: "A connector's sign-in server, and Google to read which account a Gmail or Drive sign-in is.",
-    sends: "The office's sign-in requests and tokens for that connector.",
-    yes: 'The owner signing a connector in.'
+    to: "A connector's sign-in server, GitHub for a server that signs in through New Altitude's GitHub app, Google to read which account a Gmail or Drive sign-in is, and New Altitude's site for the owner's account (account.ts's calls go through this file's `steadyFetch`).",
+    sends:
+      "The office's sign-in requests and tokens for that connector or account, the token asking New Altitude who is signed in, and the sign-out's token to revoke.",
+    yes: 'The owner signing a connector in, or signing in to their New Altitude account.'
+  },
+  {
+    file: 'apps/office/src/instrumentation.server.ts',
+    calls: 1,
+    to: "New Altitude's relay for reports, or the owner's own Sentry when a build from source names one.",
+    sends:
+      'Error and trace reports from the server, carrying only what `diagnostics.ts` lets through (no chats, no work and no family data), with the New Altitude sign-in on those to the relay.',
+    yes: "The owner's Diagnostics switch in Setup. With no answer, nothing is sent."
+  },
+  {
+    file: 'apps/office/src/hooks.client.ts',
+    calls: 1,
+    to: 'The office itself: the page sends through it and never to the relay.',
+    sends:
+      'Error and trace reports from the page, each through the same filter, which the office then forwards as `instrumentation.server.ts` says.',
+    yes: "The owner's Diagnostics switch in Setup. With no answer, the office drops what it gets."
   },
   {
     file: 'apps/office/src/lib/server/versions.ts',
@@ -159,5 +176,13 @@ export const OUTBOUND: readonly Outbound[] = [
     to: "The desktop app's update feed on GitHub (tauri.conf.json's updater endpoints).",
     sends: "The app's version and system, as the updater asks for its feed.",
     yes: 'The owner installing the desktop app, which checks for updates.'
+  },
+  {
+    file: 'apps/desktop/src-tauri/src/diagnostics.rs',
+    calls: 5,
+    to: "New Altitude's relay for reports, or the owner's own Sentry when the settings name one.",
+    sends:
+      "The shell's error reports, carrying only what this file lets through, with the New Altitude sign-in as a bearer token on those to the relay.",
+    yes: "The owner's Diagnostics switch in Setup. With no answer, nothing is sent."
   }
 ];

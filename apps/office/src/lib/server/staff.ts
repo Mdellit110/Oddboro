@@ -141,6 +141,7 @@ import {
   type CallPlace,
   type ConnectorRow
 } from '@oddboro/ledger';
+import { fixedError } from '@oddboro/ledger/errors';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
 import { floorTool, type Work } from '../staff/work.ts';
@@ -157,7 +158,7 @@ import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { runEnv, toolServerEnv } from './run-env-allow.ts';
 import { firstDayOf } from './first-day.ts';
-import { endedEarly, LAUNCHES, streamTools, type Launch } from './cli.ts';
+import { endedEarly, LAUNCHES, stoppedWhy, streamTools, type Launch } from './cli.ts';
 import {
   configServers,
   NOT_SIGNED_IN,
@@ -335,7 +336,7 @@ async function replyBrief(
   switch (re.kind) {
     case 'ask': {
       const a = await askById(re.id);
-      if (a?.staffId !== id) throw new Error('No such ask from this Odd');
+      if (a?.staffId !== id) throw fixedError('No such ask from this Odd');
       return {
         ref: { kind: 'ask', id: a.id, title: a.title },
         brief: [
@@ -349,7 +350,7 @@ async function replyBrief(
     }
     case 'task': {
       const t = await taskById(re.id);
-      if (t?.staffId !== id) throw new Error('No such task from this Odd');
+      if (t?.staffId !== id) throw fixedError('No such task from this Odd');
       return {
         ref: { kind: 'task', id: t.id, title: t.title },
         brief: [
@@ -366,7 +367,7 @@ async function replyBrief(
     }
     case 'report': {
       const r = await reportById(re.id);
-      if (r?.staffId !== id) throw new Error('No such report from this Odd');
+      if (r?.staffId !== id) throw fixedError('No such report from this Odd');
       return {
         ref: { kind: 'report', id: r.id, title: r.title },
         brief: [
@@ -1232,7 +1233,7 @@ async function run(
       if (launch.ownGroup) stop();
       finish({
         ok: false,
-        text: `${tool} stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
+        text: stoppedWhy(who.agent, code, stderr)
       });
     });
     child.stdin.end(launch.stdin);

@@ -99,7 +99,13 @@ import {
 } from './filter-words.ts';
 import { goalWork, goalWorkRefused } from './goal-work.ts';
 import { FOLDER, heldTools, lacking, toolNames, WEB, type Tool } from './sharing.ts';
-import { BUILT_IN, ensureConnector, searchRegistry } from './registry.ts';
+import {
+  BUILT_IN,
+  ensureConnector,
+  GITHUB_ADDRESS,
+  GITHUB_ID,
+  searchRegistry
+} from './registry.ts';
 import { GOAL_STATUSES, type GoalPlanItem, type HireProposal } from './schema.ts';
 import {
   clockTime,
@@ -927,7 +933,7 @@ if (has('ask_for_access'))
           .max(64)
           .optional()
           .describe(
-            `Only for an https address that takes a key instead of a sign-in: the name of the header the key goes in, as the server's docs or ${OWNER} give it, e.g. x-api-key or Authorization. ${OWNER} pastes the key on their desk. Never ask for the key itself.`
+            `Only for an https address that takes a key instead of a sign-in: the name of the header the key goes in, as the server's docs or ${OWNER} give it, e.g. x-api-key or Authorization. ${OWNER} pastes the key on their desk. Never ask for the key itself. Never for GitHub, which signs in (catalog id ${GITHUB_ID}).`
           ),
         another_account: z
           .boolean()
@@ -944,9 +950,12 @@ if (has('ask_for_access'))
       const level = asked === 'write' ? 'act' : 'read';
       if (!grantWorks(level, me.permission))
         return text(askAboveLevel(me.permission, asked, OWNER));
+      // Any address on GitHub's server is the catalog's GitHub, which signs in:
+      // an Odd's key header there would have the owner make a token.
+      const github = GITHUB_ADDRESS.test(wanted.trim());
       const found = await ensureConnector(
-        wanted,
-        key_header ? { keyHeader: key_header.trim() } : undefined
+        github ? GITHUB_ID : wanted,
+        key_header && !github ? { keyHeader: key_header.trim() } : undefined
       );
       if (!found.connector) return text(`${found.problem} Use find_connectors.`);
       const conn = found.connector;

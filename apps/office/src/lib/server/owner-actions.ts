@@ -22,6 +22,15 @@ export type OwnerAction =
   | { notAnAction: string };
 
 export const OWNER_ACTIONS = {
+  // The owner's New Altitude account lives in the system's secret store, and
+  // the reports switch in the settings file; none of them is a record.
+  'POST /api/account': { notAnAction: SETUP },
+  'DELETE /api/account': { notAnAction: SETUP },
+  'PUT /api/diagnostics': { notAnAction: SETUP },
+  'POST /api/diagnostics/envelope': {
+    notAnAction: "Passes the page's error report through the office's filter; nothing is kept."
+  },
+  'GET /account/callback': { notAnAction: SETUP },
   'POST /api/accounts': { records: 'access' },
   'PATCH /api/accounts': { records: 'access' },
   'DELETE /api/accounts': { records: 'access' },

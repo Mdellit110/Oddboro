@@ -331,7 +331,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    shows at the chat's foot, one line each with how long it has run in whole
    minutes and the tool it is using, and a click opens In progress. Its clock
    moves once a minute only while a time still counts minutes or work is in
-   progress. A chat whose run fails, or throws on the way to a reply, keeps
+   progress. The owner can type while the Odd replies; a message sent then
+   shows as waiting under the reply, with Cancel to take it back to the box,
+   and goes when the reply ends. A second Send while one waits joins it, so
+   the Odd answers both in one turn (`waiting` in `ChatPanel.svelte`). A chat
+   whose run fails, or throws on the way to a reply, keeps
    the owner's line, and the error in place of the reply, marked `failed`
    (`ChatEntry`), so a reload shows both as the chat showed them live; the
    next message tells the session what the owner wrote that it never had, and
@@ -507,7 +511,13 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    goals' folders, in the Odd's own profile), the owner's data folder, the
    folders the owner gave it and the tool server's code, writes the given
    folders it may change (`readWrite`), and
-   shuts `~/Library`, `/Library`, `/tmp` and `/var`; Windows has none. Read
+   shuts `~/Library`, `/Library`, `/tmp` and `/var`; Windows has none. Grok
+   refuses every sandbox when `/var/run/docker.sock` is a link to a path off
+   its own list (OrbStack, Colima, Rancher Desktop), so then the run gets a
+   home of its own in Grok's home, whose `.docker/run` leads to the socket's
+   folder (`runHome`), and its tool servers keep the owner's HOME. Any
+   other socket link Grok refuses gets the office's own words, with the way to
+   another tool (`stoppedWhy` in `cli.ts`). Read
    deny rules (`UNREADABLE`) cover what the kernel still lets it read, Grok's
    home among them, and Edit and Write deny rules cover Grok's home, whose
    sessions folder the kernel lets it write, both further walls should Grok
@@ -775,7 +785,12 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (`capped`, `accessInRun`). Hosted servers sign in with
    OAuth (`src/lib/server/oauth.ts`): the task's Sign in opens the service, it
    returns to `/connect/callback`, the tokens go in the keychain, and each run's
-   gateway connects with a fresh access token as a header. Gmail and Google
+   gateway connects with a fresh access token as a header. A token is refreshed
+   one at a time per sign-in (`once`), since a service may end a sign-in whose
+   refresh token arrives twice. For the same reason `steadyFetch` retries only
+   a request that never left this computer; one whose answer was lost is not
+   retried within one request. The same provider signs the owner in to New
+   Altitude (see "A New Altitude account"). Gmail and Google
    Drive are `builtin` connectors (migration `0009_google`): the office serves
    their tools itself (`src/lib/server/google/`, connected in-process by
    `builtin` in `access.ts`), and signs each in on its own with New Altitude's
@@ -783,7 +798,12 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Gmail's `gmail.modify` and `gmail.settings.basic`, for filters; a stored
    sign-in that lacks one signs in afresh, `covers`; the
    secret from `ODDBORO_GOOGLE_CLIENT_SECRET`, which the shell passes from the
-   build, or `.env` in development). Each Google call asks `bearer` for a live
+   build, or `.env` in development). A hosted server that signs in through
+   GitHub, which lets no app register itself, signs in the same way with New
+   Altitude's GitHub OAuth App and `GITHUB_SCOPES` (`ODDBORO_GITHUB_CLIENT_SECRET`):
+   `knowServer` finds its sign-in server first, since the SDK picks scopes
+   before the app. A build without either secret says so on Sign in
+   (`BuiltWithout`). Each Google call asks `bearer` for a live
    token, so it never leaves the office process. One connector is one Google
    account of one product, found by `config.google` (`gmail` or `drive`),
    never by its id: scopes, the server `builtin` makes, and the reply and
@@ -1107,7 +1127,7 @@ sample stay in the window to move back to.
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
 welcomed, the page loads the sample's empty lot (`currentOffice({ lot: true })`,
-`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs six cards, the same on a Mac, Linux and Windows (hard rule 14), in
+`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs six cards (`steps.ts`), the same on a Mac, Linux and Windows (hard rule 14), in
 the start panel, titled "{name}'s Lot" until the office stands on it. The
 command center's buttons and tabs appear there once the first run is over, so
 the owner meets the panel first. The cards: Your computer (`MacCard`, the checks
@@ -1116,8 +1136,10 @@ or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
 every run. Next waits until the picked tool is signed in), the Office Manager (`ManagerCard`: four ready-made ones from
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
 owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
-a description or a chip, and starts the design job), and
-Open the office. `POST /api/onboarding` keeps the time zone, finishes the
+a description or a chip, and starts the design job), and Open the office.
+No card asks about error reports or a New Altitude sign-in: the owner finds
+both in Setup (see "Diagnostics" and "A New Altitude account"), so a new owner
+gets to work sooner. `POST /api/onboarding` keeps the time zone, finishes the
 welcome, hires the manager (`hireManager`), writes their hello into their chat
 (each ready-made manager's `hello` in `managers.ts`, in their own voice; a
 described one gets `customHello`),
@@ -1177,18 +1199,18 @@ address when it answers and is trusted.
 ## Who the office answers
 
 Other pages open in the owner's browser can send requests to the office too,
-so `guardOffice` (`src/lib/server/owner-page.ts`, the server's `handle` in
-`hooks.server.ts`) checks every route and API request before the route sees
-it, in every mode. Files built into the page (scripts, styles, images) are
-served before the check. SvelteKit's own check stays on as well, for form
-posts and any action with no content type. In a release, whose port moves,
-the adapter takes the office's origin to be https, so that check refuses
-the owner's own http page. So the page's `call()` (`src/lib/ui/api.ts`)
-sends every action as JSON, body or not.
+so `guardOffice` (`src/lib/server/owner-page.ts`, the first step of the
+server's `handle` in `hooks.server.ts`, before Sentry's) checks every route
+and API request before the route sees it, in every mode. Files built into the
+page (scripts, styles, images) are served before the check. SvelteKit's own
+check stays on as well, for form posts and any action with no content type.
+In a release, whose port moves, the adapter takes the office's origin to be
+https, so that check refuses the owner's own http page. So the page's `call()`
+(`src/lib/ui/api.ts`) sends every action as JSON, body or not.
 
 1. The Host must be one of the office's names, whatever the port: 127.0.0.1,
    [::1], localhost, the addresses through Caddy (`HOSTS` in
-   `src/lib/server/address.ts`) and the app's `ORIGIN`. A site that points its
+   `src/lib/server/hosts.ts`) and the app's `ORIGIN`. A site that points its
    own name at 127.0.0.1 looks same-origin to the browser, so only the name
    gives it away. A route asked by any other name gets 403.
 2. Anything but GET, HEAD and OPTIONS must come from the owner's page
@@ -1198,9 +1220,117 @@ sends every action as JSON, body or not.
 3. The one other client is the app's shell, which reports updates to
    `/api/update` with the token it passed the server (`fromShell` in
    `src/lib/server/update.ts`).
-4. Vite's dev server has its own route, `/__open-in-editor`, that opens a file
+4. `/account/callback` and `/connect/callback` arrive as GETs from the
+   owner's browser, sent back by the service's sign-in page, so they pass
+   rule 2 with no Origin.
+5. Vite's dev server has its own route, `/__open-in-editor`, that opens a file
    in an editor and runs before the handle. `noEditorLaunch` in
    `vite.config.ts` refuses it with 403, always: nothing in the office uses it.
+
+## Diagnostics
+
+Error and trace reports go to Sentry only after the owner's yes, and those
+through New Altitude only while the office is signed in to a New Altitude
+account.
+
+1. The address is `ODDBORO_DIAGNOSTICS_DSN`, from the environment or `.env`.
+   The app's shell passes its own (`apps/desktop/CLAUDE.md`). With none,
+   `serverOptions` (`src/lib/server/diagnostics.ts`) returns nothing: the SDK
+   never starts, Setup shows no switch, and the relay drops what it gets.
+2. The answer is `OFFICE_DIAGNOSTICS` in `.env`: `yes`, `no`, or unasked for
+   anything else, which sends nothing. `PUT /api/diagnostics` writes it, from
+   the Setup switch (`DiagnosticsSection`), the one place the owner turns
+   reports on; neither the first visit nor the Desk asks. It holds from the
+   next report, with no restart. `npm run reset` clears it.
+3. The gate: `gated` wraps the SDK's transport and asks `diagnosticsOn()` on
+   every send. What leaves has passed the one allow list in
+   `src/lib/diagnostics.ts` (`scrubEvent`, `scrubSpan`):
+   - An error's message only in a shape code writes (`keptMessage`): an
+     engine template with any property key as `[key]`, a system error's code
+     and call (`ENOENT open`), a Postgres error's SQLSTATE with its table,
+     column and constraint names, or a message Oddboro's code wrote
+     (`fixedError` in `@oddboro/ledger/errors`). Every other text leaves as
+     `[withheld]`.
+   - No address the office reaches. Every outgoing request, to the office
+     itself or another service, is named by its method alone, and no span
+     keeps `server.address`. A page frame from the office (the host and port
+     the page reached the relay on, whatever the scheme, or `HOSTS` on its
+     default port) keeps its origin, and its path under `/_app/`; any other
+     URL (another loopback port, a host, a browser extension, `file:`,
+     `blob:`) keeps its file name alone. Not the scheme: the built office
+     sees its own URL as https, since adapter-node reads no `ORIGIN`, while
+     the desktop window loads it over http.
+   - File paths by `reportPath`: relative to Oddboro's own code, from
+     `node_modules/` on inside a package, the file name alone anywhere else
+     under the home folder, and whole outside it. The shell's `report_path`
+     is the same rule.
+   - None of what the SDK collects by default (`DATA_COLLECTION`).
+
+   Every span container tells Sentry never to infer an address
+   (`infer_ip: 'never'`), and `fitDoor` cuts an envelope to the door's size
+   limit.
+
+4. The sign-in: reports to New Altitude's own address over https, or to the
+   account site when `ODDBORO_ACCOUNT_SITE` names one (`needsSignIn` in
+   `src/lib/diagnostics.ts`; the shell's `needs_sign_in` is the same rule,
+   and both are tested against `src/lib/needs-sign-in.cases.json`), go only
+   while the office is signed in, each with the account's access token in
+   its `authorization` header. Signed out, the gate drops them, Setup shows
+   no switch (`shown()`) and the page's traces follow a no (`pageAnswer()`).
+   Any other address never gets the token. The gate gets it from
+   `accountToken()` and reuses it for `TOKEN_REUSE_MS`, under the refresh
+   margin, within one sign-in: a burst of reports reads the secret store
+   once, and a new sign-in never sends the old token. It imports
+   `account.ts` when a report goes, never at the top, because that brings
+   in Postgres (step 7). `flush` waits for every send from its start,
+   including one still waiting on a token refresh, up to the flush's
+   timeout: a refresh slower than that loses its report when a crash ends
+   the office.
+5. The relay: the page's SDK (`hooks.client.ts`) posts to
+   `/api/diagnostics/envelope`, never to Sentry. The route scrubs each event
+   and span again and sends them through the office's own transport, so the
+   gate applies to them too.
+6. Traces: about one in ten (`TRACE_SAMPLE_RATE`). `QUIET_ROUTES` are never
+   traced: `/api/events` stays open as long as the page, `/api/update` is the
+   shell's poll, and the relay would trace itself.
+7. `instrumentation.server.ts` loads before the server, so
+   `src/lib/server/diagnostics.ts` and `src/lib/server/hosts.ts` import
+   nothing that brings in Postgres.
+
+## A New Altitude account
+
+An owner who already has a New Altitude account can sign in to it in Setup
+(`AccountSection`, which shows `AccountSignIn.svelte`). The first visit does
+not offer it. Error reports to New Altitude need it; nothing else does.
+
+1. The site is `ODDBORO_ACCOUNT_SITE`, `https://members.newaltitude.ai` when
+   unset. The issuer comes from that site's protected resource document; the
+   resource sent is always the configured site.
+2. `src/lib/server/account.ts` signs in through the connectors' provider
+   (`oauth.ts`) as its own public client, asks for `profile` alone, and
+   returns to `/account/callback`. It asks `/api/me` once and keeps only the
+   id, name and email. Everything lives in one secret,
+   `new-altitude-account:oauth`, in the system's secret store, never in the
+   settings file. With no store, Sign in refuses before any request, and a
+   store that cannot write gets the same words. Only the newest Sign in's
+   page can finish, and none while a sign-in holds tokens. Any failure after
+   the tokens are kept signs out, so no tokens stay without an account. If
+   the store cannot keep them, nothing is kept here, and the grant lapses at
+   New Altitude on its own.
+3. The states (`AccountStatus` in `src/lib/account.ts`): `in` while the
+   sign-in holds tokens, `expired` once New Altitude refused a refresh (the
+   account is kept, so the page can say whose it was), `out` with none.
+4. Every change goes to every open page on the live line as
+   `{ type: 'account', status }`; the page keeps it in `account.svelte.ts`.
+   `GET /api/account` checks it live, refreshing only a token close to
+   running out. `POST` starts a sign-in. `DELETE` signs out: it revokes the
+   refresh token at New Altitude, then removes the secret even when New
+   Altitude cannot be reached. The page makes these requests only through
+   `src/lib/ui/account-actions.ts`. Its Switch account, shown with the
+   signed-in line, signs out and then starts a new sign-in, so a Cancel or a
+   refused start leaves the office signed out.
+5. `accountToken()` is the one way to get the account's token.
+   `npm run reset` leaves the sign-in, as it leaves connector sign-ins.
 
 ## Running it always
 
@@ -1239,6 +1369,11 @@ sends every action as JSON, body or not.
 | `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow                                                                                |
 | `src/lib/ui/onboarding/`          | A new owner's first visit: the cards, the reveal's story, the music                                                                   |
 | `src/lib/floor/reveal.ts`         | The office going up beat by beat, and the bus                                                                                         |
+| `src/lib/diagnostics.ts`          | What a report may carry, and when a trace is taken: the server's, the relay's and the page's one rule                                 |
+| `src/lib/server/diagnostics.ts`   | The SDK's options and the gate every report passes, with the owner's answer                                                           |
+| `src/lib/server/account.ts`       | The New Altitude sign-in: start, callback, refresh, sign out                                                                          |
+| `src/lib/account.ts`              | The account and its states, shared by the server and the page                                                                         |
+| `src/lib/server/hosts.ts`         | The office's names through Caddy (`HOSTS`), alone so reporting loads before Postgres                                                  |
 | `scripts/office-service.ts`       | The login service                                                                                                                     |
 | `src/app.css`                     | Tokens. Every colour in the chrome reads these.                                                                                       |
 
@@ -1261,7 +1396,10 @@ sends every action as JSON, body or not.
 - Third-party packages go under `devDependencies` in `package.json`, even
   the ones the office runs: the build bundles those, and the app ships only
   what the workspace packages load (`apps/desktop/scripts/stage.ts`).
-  `dependencies` holds the workspace packages alone.
+  `dependencies` holds the workspace packages, and Sentry's two
+  (`@sentry/sveltekit`, `@sentry/core`) alone: its tracing hooks modules as
+  they load (`instrumentation.server.ts`), so the build leaves it out and the
+  app ships it.
 - The floor draws only when something on screen changed. Pixi's own
   every-frame draw is off. Anything that changes the picture outside the
   camera calls `floor.invalidate()`. Name tags and room signs move in

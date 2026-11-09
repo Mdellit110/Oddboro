@@ -122,8 +122,10 @@ are: daylight, and night.
 ```sh
 npm run dev -w @oddboro/site        # http://localhost:4501
 npm run build -w @oddboro/site      # prerender to apps/site/build/
+npm run deploy -w @oddboro/site     # build, then put it live at oddboro.com (Cloudflare)
 npm run preview -w @oddboro/site    # serve the build on 4501
 npm run art -w @oddboro/site        # regenerate static/art/, src/lib/hero/scene.json and src/lib/vignettes.json
+npm run office-gif -w @oddboro/site # the README's office, docs/office.gif; add -- --night for docs/office-night.gif
 npm run check-types -w @oddboro/site
 npm run lint -w @oddboro/site       # prettier; the root guards run too
 ```
@@ -290,12 +292,15 @@ owner picks both: when making a release's art, show the owner the frames in
 both lights and ask which one. `releases.ts` describes that
 frame as `shareAlt`.
 `scripts/gif.ts` writes the GIFs, with no dependency: median cut to 256
-colours, then LZW.
+colours, then LZW. A long one, like the README's office, stores only what
+changed since the frame before (`encodeGifChanges`).
 
 ## Layout
 
 ```
 scripts/art.ts               The art generator. hero-office.json, vignette-office.json and manager-looks.json are its specs.
+scripts/paint.ts             Paints and lights the office's sprites for an hour of the day, for art.ts and office-gif.ts.
+scripts/office-gif.ts        The README's office: Main Street by day with eight Odds at work, as docs/office.gif.
 scripts/release-art.ts       The releases page's GIFs, on the desk vignette. gif.ts encodes them.
 src/app.css                  The tokens (night, and the day overrides), the --art-* variables, the fonts, the motion classes.
 src/lib/theme.svelte.ts      The theme: the pick, localStorage, data-theme on <html>, following the system on Auto.
@@ -313,5 +318,15 @@ src/lib/hero/                Hero.svelte, HeadlineOdd.svelte, choreo.ts, scene.j
 src/lib/server/legal.ts      Renders src/content/legal/*.md with markdown-it at prerender.
 src/content/legal/           privacy.md and terms.md. The legal writer owns these.
 src/routes/                  /, /releases/, /connectors/open-brain/, /connectors/aws-*/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
-static/                      favicon.svg (a placeholder O roundel until Oddboro has a mark), robots.txt, art/ (night) and art/day/.
+static/                      logo.png (the mark, drawn by `npm run mark -w @oddboro/sprites`: favicon, header, footer), robots.txt, art/ (night) and art/day/.
 ```
+
+## Hosting
+
+Cloudflare serves the site at oddboro.com: a Worker with static assets, named
+`oddboro-site`, set up in `wrangler.jsonc`. `npm run deploy -w @oddboro/site`
+builds and uploads it; it needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` in the environment. The other domains (oddboro.ai,
+oddborough.com, oddborro.com, oddsboro.com, and every `www`) redirect to
+https://oddboro.com with a 301 that keeps the path, from a redirect rule on each
+zone. Every zone sends HTTP to HTTPS and needs TLS 1.2 or later.

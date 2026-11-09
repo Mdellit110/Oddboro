@@ -14,9 +14,26 @@ const rgbAt = (img: Image, p: number) =>
   (img.data[p * 4] << 16) | (img.data[p * 4 + 1] << 8) | img.data[p * 4 + 2];
 
 export function encodeGif(frames: GifFrame[]): Uint8Array {
-  const { width, height } = frames[0].image;
+  return writeGif(frames.length, (i) => frames[i], false);
+}
+
+/**
+ * The same for a long animation of a big picture, made one frame at a time:
+ * `frame(i)` is called twice for each frame, once to count its colours and
+ * once to write it, so only one frame is held at once. Each frame after the
+ * first stores only what changed since the one before: the rectangle round
+ * every changed pixel, with the unchanged ones in it see-through, so the
+ * frame before shows through. One colour of the 256 is the see-through one.
+ */
+export function encodeGifChanges(count: number, frame: (i: number) => GifFrame): Uint8Array {
+  return writeGif(count, frame, true);
+}
+
+function writeGif(count: number, frame: (i: number) => GifFrame, changes: boolean): Uint8Array {
+  const { width, height } = frame(0).image;
   const counts = new Map<number, number>();
-  for (const { image } of frames) {
+  for (let f = 0; f < count; f++) {
+    const { image } = frame(f);
     if (image.width !== width || image.height !== height)
       throw new Error('Every GIF frame must be the same size');
     for (let p = 0; p < width * height; p++) {
@@ -24,15 +41,12 @@ export function encodeGif(frames: GifFrame[]): Uint8Array {
       counts.set(rgb, (counts.get(rgb) ?? 0) + 1);
     }
   }
-  const { table: colours, index } = quantize(counts);
-  const indexed = frames.map(({ image }) => {
-    const out = new Uint8Array(width * height);
-    for (let p = 0; p < out.length; p++) out[p] = index.get(rgbAt(image, p))!;
-    return out;
-  });
+  const { table: colours, index } = quantize(counts, changes ? 255 : 256);
+  // The see-through colour comes after the table's own.
+  const clear = colours.length;
   // The colour table holds a power of two entries, at least 4.
   let bits = 2;
-  while (1 << bits < colours.length) bits++;
+  while (1 << bits < colours.length + (changes ? 1 : 0)) bits++;
 
   const bytes: number[] = [];
   const word = (n: number) => bytes.push(n & 0xff, (n >> 8) & 0xff);
@@ -46,24 +60,55 @@ export function encodeGif(frames: GifFrame[]): Uint8Array {
   // Loop forever.
   bytes.push(0x21, 0xff, 0x0b, ...Buffer.from('NETSCAPE2.0'), 0x03, 0x01, 0, 0, 0);
 
-  frames.forEach(({ delay }, f) => {
-    bytes.push(0x21, 0xf9, 0x04, 0x04);
+  let before: Uint8Array | undefined;
+  for (let f = 0; f < count; f++) {
+    const { image, delay } = frame(f);
+    const now = new Uint8Array(width * height);
+    for (let p = 0; p < now.length; p++) now[p] = index.get(rgbAt(image, p))!;
+    // The part of the picture this frame stores: all of it, or what changed.
+    let [x0, y0, x1, y1] = [0, 0, width - 1, height - 1];
+    if (changes && before) {
+      [x0, y0, x1, y1] = [width, height, -1, -1];
+      for (let p = 0; p < now.length; p++)
+        if (now[p] !== before[p]) {
+          const x = p % width;
+          const y = (p - x) / width;
+          x0 = Math.min(x0, x);
+          x1 = Math.max(x1, x);
+          y0 = Math.min(y0, y);
+          y1 = Math.max(y1, y);
+        }
+      // Nothing changed: one see-through pixel.
+      if (x1 < 0) [x0, y0, x1, y1] = [0, 0, 0, 0];
+    }
+    const w = x1 - x0 + 1;
+    const h = y1 - y0 + 1;
+    const pixels = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const p = (y0 + y) * width + x0 + x;
+        pixels[y * w + x] = changes && before && now[p] === before[p] ? clear : now[p];
+      }
+    before = now;
+
+    // Leave the frame in place under the next, with the see-through colour when there is one.
+    bytes.push(0x21, 0xf9, 0x04, changes ? 0x05 : 0x04);
     word(delay);
-    bytes.push(0, 0);
+    bytes.push(changes ? clear : 0, 0);
     bytes.push(0x2c);
-    word(0);
-    word(0);
-    word(width);
-    word(height);
+    word(x0);
+    word(y0);
+    word(w);
+    word(h);
     bytes.push(0);
-    const data = lzw(indexed[f], bits);
+    const data = lzw(pixels, bits);
     bytes.push(bits);
     for (let at = 0; at < data.length; at += 255) {
       const block = data.subarray(at, at + 255);
       bytes.push(block.length, ...block);
     }
     bytes.push(0);
-  });
+  }
   bytes.push(0x3b);
   return Uint8Array.from(bytes);
 }
@@ -71,20 +116,23 @@ export function encodeGif(frames: GifFrame[]): Uint8Array {
 const channels = (rgb: number) => [rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff];
 
 /**
- * At most 256 colours for the table, and each colour's place in it. With 256
- * or fewer, every colour keeps itself. Otherwise median cut: split the box
- * with the most pixels along its widest channel at its median, until there
- * are 256, then give each box its pixel-weighted mean.
+ * At most `most` colours for the table, and each colour's place in it. With
+ * that many or fewer, every colour keeps itself. Otherwise median cut: split
+ * the box with the most pixels along its widest channel at its median, until
+ * there are `most`, then give each box its pixel-weighted mean.
  */
-function quantize(counts: Map<number, number>): {
+function quantize(
+  counts: Map<number, number>,
+  most: number
+): {
   table: number[];
   index: Map<number, number>;
 } {
   const all = [...counts.keys()];
-  if (all.length <= 256) return { table: all, index: new Map(all.map((c, i) => [c, i])) };
+  if (all.length <= most) return { table: all, index: new Map(all.map((c, i) => [c, i])) };
   const weight = (box: number[]) => box.reduce((n, c) => n + counts.get(c)!, 0);
   const boxes = [all];
-  while (boxes.length < 256) {
+  while (boxes.length < most) {
     let at = -1;
     for (let i = 0; i < boxes.length; i++)
       if (boxes[i].length > 1 && (at < 0 || weight(boxes[i]) > weight(boxes[at]))) at = i;
