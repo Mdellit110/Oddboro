@@ -163,6 +163,26 @@ export const GEMINI_FILE_TOOLS = {
 } as const satisfies Record<string, FileTool>;
 
 /**
+ * The office's file tools (files-server.ts in the ledger), as each coding tool
+ * names them in its stream, and Claude Code's name for each, which the floor
+ * is told (`floorTool`).
+ */
+export const OFFICE_FILE_TOOLS = {
+  mcp__files__read_file: 'Read',
+  mcp__files__list_files: 'Glob',
+  mcp__files__find_files: 'Glob',
+  mcp__files__search_files: 'Grep',
+  mcp__files__write_file: 'Write',
+  mcp__files__edit_file: 'Edit'
+} as const satisfies Record<string, FileTool>;
+
+/** A tool call as the floor is told it: an office file tool by Claude Code's name for it. */
+export const floorTool = (name: string): string =>
+  Object.hasOwn(OFFICE_FILE_TOOLS, name)
+    ? OFFICE_FILE_TOOLS[name as keyof typeof OFFICE_FILE_TOOLS]
+    : name;
+
+/**
  * A tool's name, as Claude Code names it, in plain words. An outside tool's
  * service shows by the name in `services` (by its id), else by its id.
  */

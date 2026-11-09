@@ -5,6 +5,7 @@
 // an Odd and a reader of its walls. Run with `npm test -w @oddboro/office`.
 import {
   chatOf,
+  filesOf,
   folder,
   L,
   odd,
@@ -104,9 +105,9 @@ const EVERY_RUN = [
 /** The names each tool's launch sets itself, after `runEnv`. */
 const OWN: Record<Agent, readonly (string | RegExp)[]> = {
   claude: ['CLAUDE_CONFIG_DIR'],
-  // Grok's launch sets a family of its own switches (`grokEnv`).
-  grok: [/^GROK_/],
-  codex: ['CODEX_HOME'],
+  // Grok's launch sets a family of its own switches (`grokEnv`), and its temp folder.
+  grok: [/^GROK_/, 'TMPDIR'],
+  codex: ['CODEX_HOME', 'TMPDIR'],
   gemini: [
     'GEMINI_CLI_HOME',
     'GEMINI_CLI_TRUST_WORKSPACE',
@@ -124,6 +125,9 @@ function listAfter(args: string[], flag: string): string[] {
   const end = args.findIndex((a, i) => i >= from && a.startsWith('--'));
   return args.slice(from, end);
 }
+
+/** Where a tool has no kernel profile (Windows), the office's file server is its wall. */
+const carriedReads = (g: Gave) => filesOf(g)?.walls.reads ?? [];
 
 /** Each tool's walls, read from its own shape: the folders a run may read, and whether it reaches the network. */
 const WALLS: Record<Agent, (gave: Gave) => { reads: string[]; network: boolean }> = {
@@ -148,15 +152,19 @@ const WALLS: Record<Agent, (gave: Gave) => { reads: string[]; network: boolean }
     };
   },
   grok: (g) => ({
-    reads: [...(g.profile ?? '').matchAll(/^read_(?:only|write) = (\[.*\])$/gm)].flatMap(
-      (m) => JSON.parse(m[1]) as string[]
-    ),
+    reads: g.args.includes('--sandbox')
+      ? [...(g.profile ?? '').matchAll(/^read_(?:only|write) = (\[.*\])$/gm)].flatMap(
+          (m) => JSON.parse(m[1]) as string[]
+        )
+      : carriedReads(g),
     network: g.grokEnv?.GROK_WEB_FETCH !== '0'
   }),
   codex: (g) => ({
-    reads: Object.entries(g.permissions?.filesystem ?? {})
-      .filter(([, how]) => how === 'read' || how === 'write')
-      .map(([path]) => path),
+    reads: g.permissions
+      ? Object.entries(g.permissions.filesystem)
+          .filter(([, how]) => how === 'read' || how === 'write')
+          .map(([path]) => path)
+      : carriedReads(g),
     network: !!g.permissions?.network.enabled || g.args.includes('web_search="live"')
   }),
   gemini: (g) => ({
@@ -223,8 +231,8 @@ test("every AI tool, on every system it runs on, launches with only the allowed 
       if (process.env[k] || k in SERVER_ONLY)
         assert.ok(k in gave.env, `${at}: the tool server's entry lacks ${k}`);
   });
-  // Claude Code on three systems, Grok and Codex on a Mac: a tool or system
-  // that stopped launching would otherwise pass unseen.
+  // Every tool on every system it runs on: a tool or system that stopped
+  // launching would otherwise pass unseen.
   assert.equal(
     launches,
     L.AGENTS.reduce((n, a) => n + L.AGENT_PLATFORMS[a].runs.length, 0)

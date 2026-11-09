@@ -216,11 +216,11 @@ test('the "Runs on" list says which tools the office is signed in to, with the a
   } finally {
     rmSync(join(GROK_HOME, 'auth.json'), { force: true });
   }
-  // Linux offers Claude Code alone, so only its sign-in shows there.
+  // Linux offers Claude Code, Grok and Codex, so their sign-ins show there.
   const linux = await listed('linux');
   assert.deepEqual(
     linux.filter((t) => t.signIn).map((t) => t.id),
-    ['claude']
+    ['claude', 'grok', 'codex']
   );
 });
 
@@ -495,18 +495,33 @@ test('Your AI lists every tool once on a Mac, Linux and Windows: the ones this s
     const l = await listing(platform);
     assert.deepEqual(
       l.tools.map((t) => t.id),
-      ['claude'],
+      ['claude', 'grok', 'codex'],
       platform
+    );
+    assert.deepEqual(
+      l.later.map((t) => [t.id, t.why]),
+      [['gemini', 'Coming soon. We are still testing it.']],
+      platform
+    );
+  }
+  // A tool offered on a Mac alone is greyed elsewhere with why.
+  const grokRuns = L.AGENT_PLATFORMS.grok.runs;
+  L.AGENT_PLATFORMS.grok.runs = ['darwin'];
+  try {
+    const l = await listing('linux');
+    assert.deepEqual(
+      l.tools.map((t) => t.id),
+      ['claude', 'codex']
     );
     assert.deepEqual(
       l.later.map((t) => [t.id, t.why]),
       [
         ['grok', 'Mac only for now.'],
-        ['codex', 'Mac only for now.'],
         ['gemini', 'Coming soon. We are still testing it.']
-      ],
-      platform
+      ]
     );
+  } finally {
+    L.AGENT_PLATFORMS.grok.runs = grokRuns;
   }
   // Gemini moves from greyed to offered once its list names this system, with no other change.
   const before = L.AGENT_PLATFORMS.gemini.runs;
@@ -524,15 +539,19 @@ test('Your AI lists every tool once on a Mac, Linux and Windows: the ones this s
 });
 
 test('each listed tool says how it takes Run commands on that system, so the hire drawer names that switch only where the owner can move it', async () => {
-  for (const platform of ['darwin', 'linux'] as const) {
+  for (const platform of ['darwin', 'linux', 'win32'] as const) {
     const { tools } = await listing(platform);
     for (const t of tools)
       assert.deepEqual(t.commandsHow, L.commandsHow(t.id, platform), `${t.id} on ${platform}`);
   }
-  const claudeOn = async (platform: NodeJS.Platform) =>
-    (await listed(platform)).find((t) => t.id === 'claude')?.commandsHow.state;
-  assert.equal(await claudeOn('darwin'), 'switch');
-  assert.equal(await claudeOn('linux'), 'never');
+  const stateOn = async (id: string, platform: NodeJS.Platform) =>
+    (await listed(platform)).find((t) => t.id === id)?.commandsHow.state;
+  assert.equal(await stateOn('claude', 'darwin'), 'switch');
+  assert.equal(await stateOn('claude', 'linux'), 'never');
+  // Codex follows the switch on a Mac and Linux, and never on Windows.
+  assert.equal(await stateOn('codex', 'darwin'), 'switch');
+  assert.equal(await stateOn('codex', 'linux'), 'switch');
+  assert.equal(await stateOn('codex', 'win32'), 'never');
 });
 
 test('the office runs on the tool picked at setup, only one this system offers, and a hire with no tool starts on it', async () => {
@@ -556,19 +575,26 @@ test('the office runs on the tool picked at setup, only one this system offers, 
       portrait: 'a'
     } as Parameters<typeof L.hire>[0]);
     assert.equal(hired.agent, 'grok');
-    // Gemini is offered nowhere yet, and Grok is not offered on Linux or Windows.
+    // Gemini is offered nowhere yet.
     for (const [office, platform] of [
       ['gemini', 'darwin'],
-      ['grok', 'linux'],
-      ['codex', 'win32'],
+      ['gemini', 'linux'],
+      ['gemini', 'win32'],
       ['nonsense', 'darwin']
     ] as const)
       await assert.rejects(pickOffice(office, platform), (e: { status?: number }) => {
         assert.equal(e.status, 400, `${office} on ${platform}`);
         return true;
       });
+    assert.equal((await listing('linux')).office, 'grok');
     // An office moved to a system that does not offer its tool runs on Claude Code.
-    assert.equal((await listing('linux')).office, 'claude');
+    const grokRuns = L.AGENT_PLATFORMS.grok.runs;
+    L.AGENT_PLATFORMS.grok.runs = ['darwin'];
+    try {
+      assert.equal((await listing('linux')).office, 'claude');
+    } finally {
+      L.AGENT_PLATFORMS.grok.runs = grokRuns;
+    }
   } finally {
     if (before === undefined) delete process.env.OFFICE_AGENT;
     else process.env.OFFICE_AGENT = before;
@@ -795,7 +821,7 @@ test('no test reached the keychain', () => {
   assertKeychainUntouched();
 });
 
-test("an office run on Codex or Grok goes through the tool's own sandboxed launch with no MCP, sends its pictures, and leaves nothing behind", async () => {
+test("an office run on Codex or Grok goes through the tool's own sandboxed launch with no MCP, no shell and no file tool, sends its pictures, and leaves nothing behind", async () => {
   const { runAsOffice } = await import('./office-run.ts');
   const picture = { mediaType: 'image/png', data: Buffer.from('a picture').toString('base64') };
   const ask = () =>
@@ -823,6 +849,9 @@ test("an office run on Codex or Grok goes through the tool's own sandboxed launc
   assert.deepEqual(c.pictures, [true]);
   assert.ok(c.args.includes('model_reasoning_effort="low"'), c.args.join(' '));
   assert.deepEqual(c.servers, {});
+  // No shell: the pictures come with the message, and there is nothing else to read.
+  assert.ok(c.args.includes('features.shell_tool=false'), c.args.join(' '));
+  assert.ok(c.args.includes('features.unified_exec=false'), c.args.join(' '));
   assert.equal(c.permissions.network.enabled, false);
   assert.ok(!c.message.includes('{owner}') && c.message.startsWith('Draw a desk for '));
   assert.ok(!c.system.includes('{owner}'));
@@ -843,8 +872,9 @@ test("an office run on Codex or Grok goes through the tool's own sandboxed launc
     };
     // With a picture, the message goes as content blocks and never as --single.
     assert.ok(!g.args.some((a) => a.startsWith('--single=')));
-    // read_file alone in an empty folder, never Grok's whole set, so it answers from the message, at the effort asked.
-    assert.equal(g.args[g.args.indexOf('--tools') + 1], 'read_file');
+    // No file tool, never Grok's whole set, so it answers from the message, at the effort asked.
+    // Grok has no "no tools", so todo_write, which touches no file, stands in.
+    assert.equal(g.args[g.args.indexOf('--tools') + 1], 'todo_write');
     assert.ok(g.args.includes('--reasoning-effort=low'), g.args.join(' '));
     assert.deepEqual(g.prompt[0], { type: 'image', data: picture.data, mimeType: 'image/png' });
     assert.match(String(g.prompt[1].text), /^Draw a desk for /);

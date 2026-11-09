@@ -6,8 +6,12 @@
 // Grok home (GROK_HOME), never the owner's ~/.grok. The office never edits that
 // home's config.toml, which belongs to the sign-in: it switches Grok's reading
 // of other tools' setups (Claude's, Cursor's) off through the environment,
-// which beats config.toml. Files are held by a sandbox profile the kernel
-// enforces, built on `strict`: it reads the Odd's folder (the run's cwd),
+// which beats config.toml. The office carries a Grok Odd's files on every
+// system (`FILES_VIA_OFFICE`): Grok's own file tools are never given, and the
+// office's file tools (files-server.ts in the ledger) are its only way to
+// files, so a change to Grok's own tools cannot widen what an Odd reads. Under
+// them, on a Mac and on Linux, a sandbox profile the kernel enforces holds the
+// whole run as a second wall, built on `strict`: it reads the Odd's folder (the run's cwd),
 // node and the tool server's code, Grok's home and the system folders Grok
 // needs to start. It writes the Odd's folder, Grok's own temp folder and
 // Grok's sessions folder, which holds every Grok Odd's sessions. It adds the
@@ -21,6 +25,7 @@
 // unconfined. The profile holds the whole grok process, its own sign-in
 // renewal included, so the office renews the sign-in before a run that could
 // outlast it (`grokSignedOut`).
+// Windows has no Grok sandbox, so there the office's tools are the wall.
 import { execFile, spawn } from 'node:child_process';
 import {
   accessSync,
@@ -42,6 +47,7 @@ import {
   OFFICE_MODEL_VAR,
   runsGoing,
   toolHome,
+  currentPlatform,
   type Effort
 } from '@oddboro/ledger';
 import { andBelow, denyRules, instructionPaths } from './files.ts';
@@ -49,7 +55,6 @@ import { mcpGrant, NOT_SIGNED_IN, replace, sweep, vendorEnv, type RunImage } fro
 import { runEnv } from './run-env-allow.ts';
 import { onPath } from './on-path.ts';
 import { sandboxPaths } from './sandbox-paths.ts';
-import { GROK_FILE_TOOLS } from '../staff/work.ts';
 
 /**
  * One account's Grok home (`toolHome`) and what Grok keeps in it: its
@@ -143,22 +148,11 @@ const strictReads = () => [...sandboxPaths().strictReads, join(homedir(), 'Libra
  * Everything the kernel may let a Grok run read besides the Odd's own
  * folders, which the Odd itself may not: Grok's home (the sign-in, every
  * Odd's sessions, each run's agent file), the tool server's code, and what
- * `strict` reads. Grok's read_file, list_dir and grep need no approval under
- * dontAsk, so these deny rules, on each folder and everything in it, keep the
- * Odd's own reads to its folders.
+ * `strict` reads. A run has no file tool of Grok's own, so these deny rules,
+ * on each folder and everything in it, are a further wall should Grok ever
+ * give it one.
  */
 const UNREADABLE = () => [...GROK_HOMES(), ...SERVER_CODE, ...strictReads()];
-
-/**
- * The folders ripgrep runs from when it is on PATH: the folder PATH names and,
- * for a link, the folder it points into. Grok's grep runs ripgrep inside the
- * sandbox, so the kernel must read them, and Read deny rules keep the Odd's
- * own tools out of them. With none, grep cannot run, so a run does not get it.
- */
-function ripgrep(): string[] {
-  const rg = onPath('rg');
-  return rg ? [...new Set([dirname(rg), dirname(realpathSync(rg))])] : [];
-}
 
 /**
  * Every compatibility cell Grok has an environment variable for, switched
@@ -328,13 +322,16 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
   const h = grokHome(r.account);
   grokHomeReady(h);
   const sandbox = r.part ? `run-${r.key}` : `odd-${r.staffId}`;
-  const rg = ripgrep();
-  setProfile(h, sandbox, {
-    readOnly: [...SERVER_CODE, ...rg, ...r.reads],
-    // `strict` already writes the cwd, the Odd's own folder.
-    readWrite: [h.temp, ...r.writes.filter((w) => w !== r.dir)],
-    deny: [...instructionPaths(r.writes), ...shut()].flatMap(andBelow)
-  });
+  // Grok has no sandbox on Windows: the office's file tools are the wall there.
+  const kernel = currentPlatform() !== 'win32';
+  if (kernel)
+    setProfile(h, sandbox, {
+      // The office's file server runs inside the sandbox, so the kernel reads and writes what it may.
+      readOnly: [...SERVER_CODE, ...r.reads],
+      // `strict` already writes the cwd, the Odd's own folder.
+      readWrite: [h.temp, ...r.writes.filter((w) => w !== r.dir)],
+      deny: [...instructionPaths(r.writes), ...shut()].flatMap(andBelow)
+    });
   const agent = agentFile(h, r.key, r.servers);
   const model = r.model ?? process.env[OFFICE_MODEL_VAR.grok];
   const args = [
@@ -342,42 +339,33 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
     '--output-format',
     'streaming-messages-json',
     '--include-partial-messages',
-    '--sandbox',
-    sandbox,
+    ...(kernel ? ['--sandbox', sandbox] : []),
     '--agent',
     agent,
     '--permission-mode',
     'dontAsk',
     '--no-subagents',
     '--no-auto-update',
-    // The five file tools a Claude Code run gets, grep only where ripgrep is,
-    // and Grok's web tools with Browse the web on. Grok keeps its MCP tools
-    // (search_tool, use_tool) beside them, and no image tool. Never a shell:
-    // its launch refuses a run with commands (`LAUNCHES.grok` in cli.ts), since
-    // Grok's sandbox keeps a command off the network on Linux only.
-    // An office run gets read_file alone, in a folder of its own with nothing
-    // in it. Grok has no "no tools": an empty list gave a 1.0.62 run every
-    // tool, its shell too, which dontAsk refused, and a refused call ended the
-    // turn before the answer (seen 2026-11-05).
+    // No file tool of Grok's own: the office's (its `files` MCP server) are
+    // the way to files. Grok's web tools with Browse the web on, its MCP tools
+    // (search_tool, use_tool), and no image tool. Never a shell: its launch
+    // refuses a run with commands (`LAUNCHES.grok` in cli.ts), since Grok's
+    // sandbox keeps a command off the network on Linux only. Grok has no "no
+    // tools": an empty list gave a 1.0.62 run every tool, its shell too, which
+    // dontAsk refused, and a refused call ended the turn before the answer
+    // (seen 2026-11-05). So every run gets todo_write, which touches no file.
     '--tools',
-    r.bare
-      ? 'read_file'
-      : [
-          ...Object.keys(GROK_FILE_TOOLS).filter((tool) => tool !== 'grep' || rg.length),
-          ...(r.web ? ['web_search', 'web_fetch'] : [])
-        ].join(','),
+    ['todo_write', ...(r.web && !r.bare ? ['web_search', 'web_fetch'] : [])].join(','),
     ...(r.effort ? [`--reasoning-effort=${r.effort}`] : []),
-    ...[...UNREADABLE(), ...rg]
+    ...UNREADABLE()
       .flatMap((p) => denyRules(['Read'], p))
       .flatMap((rule) => ['--deny', rule]),
-    // The kernel lets a run write Grok's sessions folder, every Grok Odd's
-    // sessions, and dontAsk alone would refuse it: these rules hold it too.
+    // Further walls should Grok ever give a run a file tool of its own: dontAsk
+    // refuses every edit no rule allows, and these deny Grok's home, whose
+    // sessions folder the kernel lets a run write, and the instruction files.
     ...[...GROK_HOMES(), ...r.deniedEdits]
       .flatMap((p) => denyRules(EDITS, p))
       .flatMap((rule) => ['--deny', rule]),
-    ...r.writes
-      .flatMap((w) => EDITS.map((tool) => `${tool}(${w}/**)`))
-      .flatMap((rule) => ['--allow', rule]),
     ...r.allowed.map(mcpRule).flatMap((rule) => ['--allow', rule]),
     ...(model ? ['-m', model] : []),
     `--rules=${r.system}`,
@@ -435,7 +423,12 @@ export function grokUpdate(): { args: string[]; env: NodeJS.ProcessEnv } {
 export function grokCommand(): string | undefined {
   const found = onPath('grok');
   if (found) return found;
-  const installed = join(homedir(), '.grok', 'bin', 'grok');
+  const installed = join(
+    homedir(),
+    '.grok',
+    'bin',
+    currentPlatform() === 'win32' ? 'grok.exe' : 'grok'
+  );
   try {
     accessSync(installed, constants.X_OK);
     return installed;

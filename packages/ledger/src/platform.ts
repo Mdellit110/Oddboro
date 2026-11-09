@@ -148,26 +148,43 @@ export function openFile(path: string): Promise<boolean> {
  */
 export function claudeCommand(): [string, string[]] {
   if (currentPlatform() !== 'win32') return ['claude', []];
-  const dirs = [
-    ...(process.env.PATH ?? '').split(delimiter).filter(Boolean),
-    join(homedir(), '.local', 'bin')
-  ];
+  return (
+    npmCommand('claude', ['@anthropic-ai', 'claude-code'], [join(homedir(), '.local', 'bin')]) ?? [
+      'claude',
+      []
+    ]
+  );
+}
+
+/**
+ * How to start an npm-installed tool on Windows, found on the PATH (and in
+ * `extra` folders): its own .exe when there is one, else its .cmd shim's
+ * script run under this Node, since Node will not start a .cmd without a
+ * shell. `pkg` is the package's folder under node_modules. Undefined when
+ * neither is there.
+ */
+export function npmCommand(
+  command: string,
+  pkg: string[],
+  extra: string[] = []
+): [string, string[]] | undefined {
+  const dirs = [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...extra];
   for (const dir of dirs) {
-    const exe = join(dir, 'claude.exe');
+    const exe = join(dir, `${command}.exe`);
     if (existsSync(exe)) return [exe, []];
-    if (!existsSync(join(dir, 'claude.cmd'))) continue;
-    const pkg = join(dir, 'node_modules', '@anthropic-ai', 'claude-code');
+    if (!existsSync(join(dir, `${command}.cmd`))) continue;
+    const folder = join(dir, 'node_modules', ...pkg);
     try {
-      const { bin } = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8')) as {
+      const { bin } = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8')) as {
         bin?: string | Record<string, string>;
       };
-      const entry = join(pkg, typeof bin === 'string' ? bin : (bin?.claude ?? 'cli.js'));
+      const entry = join(folder, typeof bin === 'string' ? bin : (bin?.[command] ?? 'cli.js'));
       return /\.[cm]?js$/.test(entry) ? [process.execPath, [entry]] : [entry, []];
     } catch {
       // A shim with no package beside it: keep looking.
     }
   }
-  return ['claude', []];
+  return undefined;
 }
 
 /**

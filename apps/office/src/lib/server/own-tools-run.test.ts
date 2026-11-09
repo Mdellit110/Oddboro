@@ -13,6 +13,7 @@ import {
   OFFICE_PROCESS_GIT,
   awayFromHome,
   chatOf,
+  filesOf,
   folder,
   gave,
   odd,
@@ -77,43 +78,49 @@ const settingsOf = (run: Gave) =>
   JSON.parse(after(run.args, '--settings')) as { sandbox?: Sandbox; enabledPlugins: unknown };
 
 // In an empty home, so no developer tool folder of this Mac's joins the sandbox's reads.
-test('a Claude run with Run commands gets Bash in its sandbox', onMac, () =>
-  ownerHome(async () => {
-    assert.ok(
-      !existsSync(ownerData),
-      'this office has a data folder, which the sandbox would read'
-    );
-    await setOwn('otto', { commands: true });
-    const run = await chatOf('otto');
-    assert.equal(after(run.args, '--tools'), 'Read,Glob,Grep,Write,Edit,Bash');
-    assert.ok(listAfter(run.args, '--allowedTools').includes('Bash'));
-    const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
-    assert.match(run.tmpdir ?? '', /^\/private\/tmp\/ob-[0-9a-f]{8}$/);
-    assert.equal(run.tmpdir, tmp);
-    assert.equal(run.nodeOptions, null, "the office's node options reached the run");
-    assert.ok(!existsSync(tmp), "the commands' temp folder outlived the run");
-    const dir = staffDir('otto');
-    const sandbox = settingsOf(run).sandbox;
-    // Claude Code names the sessions folder after the Odd's folder, which differs from Mac to Mac.
-    const sessions = sandbox?.filesystem.allowRead.find((p) => p.includes('/.claude/projects/'));
-    assert.equal(dirname(sessions ?? ''), join(homedir(), '.claude', 'projects'));
-    const node = dirname(dirname(process.execPath));
-    // The secrets commands never see depend on the test's own environment: the next test holds them.
-    const { credentials, ...rest } = sandbox ?? ({} as Sandbox);
-    assert.ok(credentials.envVars.length > 0);
-    assert.deepEqual(rest, {
-      enabled: true,
-      failIfUnavailable: true,
-      allowUnsandboxedCommands: false,
-      filesystem: {
-        denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
-        // No data folder: there is none to read.
-        allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
-        denyWrite: deniedEdits({ dir, writes: [dir], granted: [] })
-      },
-      network: { allowedDomains: [] }
-    });
-  })
+test(
+  "a Claude run with Run commands gets Bash in its sandbox, beside the office's file tools",
+  onMac,
+  () =>
+    ownerHome(async () => {
+      assert.ok(
+        !existsSync(ownerData),
+        'this office has a data folder, which the sandbox would read'
+      );
+      await setOwn('otto', { commands: true });
+      const run = await chatOf('otto');
+      // The office carries its files, so Bash is its one tool of its own.
+      assert.equal(after(run.args, '--tools'), 'Bash');
+      assert.ok(listAfter(run.args, '--allowedTools').includes('Bash'));
+      assert.ok(listAfter(run.args, '--allowedTools').includes('mcp__files'));
+      assert.equal(filesOf(run)?.walls.cwd, staffDir('otto'));
+      const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
+      assert.match(run.tmpdir ?? '', /^\/private\/tmp\/ob-[0-9a-f]{8}$/);
+      assert.equal(run.tmpdir, tmp);
+      assert.equal(run.nodeOptions, null, "the office's node options reached the run");
+      assert.ok(!existsSync(tmp), "the commands' temp folder outlived the run");
+      const dir = staffDir('otto');
+      const sandbox = settingsOf(run).sandbox;
+      // Claude Code names the sessions folder after the Odd's folder, which differs from Mac to Mac.
+      const sessions = sandbox?.filesystem.allowRead.find((p) => p.includes('/.claude/projects/'));
+      assert.equal(dirname(sessions ?? ''), join(homedir(), '.claude', 'projects'));
+      const node = dirname(dirname(process.execPath));
+      // The secrets commands never see depend on the test's own environment: the next test holds them.
+      const { credentials, ...rest } = sandbox ?? ({} as Sandbox);
+      assert.ok(credentials.envVars.length > 0);
+      assert.deepEqual(rest, {
+        enabled: true,
+        failIfUnavailable: true,
+        allowUnsandboxedCommands: false,
+        filesystem: {
+          denyRead: ['~/', '/Users', '/Volumes', '/private/tmp', '/tmp', '/private/var/folders'],
+          // No data folder: there is none to read.
+          allowRead: [dir, sessions, tmp, ...(node.startsWith(homedir() + sep) ? [node] : [])],
+          denyWrite: deniedEdits({ dir, writes: [dir], granted: [] })
+        },
+        network: { allowedDomains: [] }
+      });
+    })
 );
 
 test(
@@ -220,10 +227,11 @@ test(
   }
 );
 
-test('a Claude run with Browse the web gets WebSearch and WebFetch', async () => {
+test("a Claude run with Browse the web gets WebSearch and WebFetch, beside the office's file tools", async () => {
   await setOwn('wes', { web: true });
   const run = await chatOf('wes');
-  assert.equal(after(run.args, '--tools'), 'Read,Glob,Grep,Write,Edit,WebSearch,WebFetch');
+  assert.equal(after(run.args, '--tools'), 'WebSearch,WebFetch');
+  assert.equal(filesOf(run)?.walls.cwd, staffDir('wes'));
   const allowed = listAfter(run.args, '--allowedTools');
   assert.ok(allowed.includes('WebSearch') && allowed.includes('WebFetch'), allowed.join(' '));
   assert.ok(!allowed.includes('Bash'));
@@ -235,7 +243,7 @@ test('Grok gets the web but never a shell', async () => {
   // A stored yes, as one moved from Claude Code would keep it.
   await setOwn('gwen', { commands: true });
   const off = await chatOf('gwen');
-  assert.equal(after(off.args, '--tools'), 'read_file,list_dir,grep,write,search_replace');
+  assert.equal(after(off.args, '--tools'), 'todo_write');
   // Off in every grok the office starts (`grokEnv`).
   assert.equal(off.grokEnv?.GROK_WEB_FETCH, '0');
   // Grok never runs commands, so it is never offered the Run commands switch, whatever is stored.
@@ -247,10 +255,7 @@ test('Grok gets the web but never a shell', async () => {
   );
   await setOwn('gwen', { commands: true, web: true });
   const on = await chatOf('gwen');
-  assert.equal(
-    after(on.args, '--tools'),
-    'read_file,list_dir,grep,write,search_replace,web_search,web_fetch'
-  );
+  assert.equal(after(on.args, '--tools'), 'todo_write,web_search,web_fetch');
   assert.equal(on.grokEnv?.GROK_WEB_FETCH, '1');
 });
 
@@ -282,16 +287,28 @@ test('the system prompt says what the Odd reaches', async () => {
   );
 });
 
-test('Run commands refuses a tool that cannot hold it, and survives a tool switch', async () => {
-  for (const id of ['gwen', 'cato'] as const) {
+test('Run commands refuses a tool that cannot hold it on this system, takes Codex on a Mac and Linux, and survives a tool switch', async () => {
+  for (const [id, agent, platform] of [
+    ['gwen', 'grok', 'darwin'],
+    ['gwen', 'grok', 'linux'],
+    ['cato', 'codex', 'win32']
+  ] as const) {
     await setOwn(id, {});
-    const agent = id === 'gwen' ? 'grok' : 'codex';
-    assert.deepEqual(await refusal(patch(id, { commands: true })), {
-      status: 400,
-      message: L.COMMANDS_WHY[agent]
-    });
+    assert.deepEqual(
+      await onPlatform(platform, () => refusal(patch(id, { commands: true }))),
+      { status: 400, message: L.COMMANDS_WHY[agent] },
+      `${agent} on ${platform}`
+    );
     assert.equal((await L.staffer(id))?.commands, false);
   }
+  for (const platform of ['darwin', 'linux'] as const) {
+    await setOwn('cato', {});
+    await onPlatform(platform, async () => {
+      assert.equal((await patch('cato', { commands: true })).status, 200, platform);
+    });
+    assert.equal((await L.staffer('cato'))?.commands, true, platform);
+  }
+  await setOwn('cato', {});
   await setOwn('cal', {});
   await onPlatform('darwin', async () => {
     assert.equal((await patch('cal', { commands: true })).status, 200);
@@ -331,9 +348,11 @@ test('a granted folder reaches every tool at its level', async () => {
   assert.equal(codex[w], 'write');
 
   const grok = await chatOf('gwen');
-  const grokAllows = each(grok.args, '--allow');
-  assert.ok(grokAllows.includes(`Edit(${w}/**)`) && grokAllows.includes(`Write(${w}/**)`));
-  assert.ok(!grokAllows.some((a) => a.includes(r)), 'a read-only folder is writable');
+  // The office's file tools hold Grok to the levels; no tool of Grok's own may edit.
+  const walls = filesOf(grok)?.walls;
+  assert.ok(walls?.reads.includes(r) && walls.writes.includes(w), JSON.stringify(walls));
+  assert.ok(!walls?.writes.includes(r), 'a read-only folder is writable');
+  assert.ok(!each(grok.args, '--allow').some((a) => /^(Edit|Write)\(/.test(a)));
   const line = (key: string) =>
     JSON.parse(
       (grok.profile ?? '')

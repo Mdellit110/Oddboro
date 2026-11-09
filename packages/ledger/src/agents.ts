@@ -15,37 +15,56 @@ export const AGENT_NAMES: Record<Agent, string> = {
   gemini: 'Gemini'
 };
 /**
- * Per tool, the systems it is offered on (`runs`: only where its sandbox was
- * probed on a made-up home and held), the systems where its Run commands
- * switch follows the owner (`commands`: only where its sandbox held commands
- * to the Odd's folders), and the systems where its commands may reach the
- * internet when Browse the web is on (`networkWithWeb`: only where its walls
- * were measured holding with the network open, the office's own ports on this
- * Mac among them). `commands` and `networkWithWeb` lie within `runs`. Grok's
- * and Codex's sandboxes were probed on a Mac only, so a Windows office offers
- * Claude Code alone. Gemini's walls are proved against its own policy engine
- * but not yet in a live run, so it is offered nowhere until that run holds on
- * a Mac; then its `runs` gains 'darwin'. Codex's `commands` is `'always'`: it
- * reads files through its commands, so it always has them where it runs, and
- * has no switch to follow. Claude Code 2.1.318's sandbox refuses the office's
- * own addresses, so its commands may go online on a Mac. Codex 0.166's
- * commands, with its network on, reached the office's own API and database
- * here, and no Codex setting was measured to shut them, so they stay off.
- * Grok and Gemini run no commands.
+ * Per tool, the systems it is offered on (`runs`), the systems where its Run
+ * commands switch follows the owner (`commands`: only where its sandbox held
+ * commands to the Odd's folders, probed on a made-up home full of decoys), and
+ * the systems where its commands may reach the internet when Browse the web is
+ * on (`networkWithWeb`: only where its walls were measured holding with the
+ * network open, the office's own ports on this Mac among them). `commands` and
+ * `networkWithWeb` lie within `runs`. Where the office carries a tool's files
+ * (`FILES_VIA_OFFICE`), the office's own file tools hold its files on every
+ * system, so it runs where it starts. Codex's sandbox held commands on a Mac
+ * and on Linux (Fedora 45, Codex 0.166.0, once it may read its own install);
+ * on Windows it opened every Odd's folder to reads, so its commands stay off
+ * there. Gemini's walls are proved against its own policy engine but not yet
+ * in a live run, so it is offered nowhere until that run holds on a Mac; then
+ * its `runs` gains 'darwin'. Claude Code 2.1.318's sandbox refuses the
+ * office's own addresses, so its commands may go online on a Mac. Codex
+ * 0.166's commands, with its network on, reached the office's own API and
+ * database here, and no Codex setting was measured to shut them, so they stay
+ * off. Grok and Gemini run no commands.
  */
 export const AGENT_PLATFORMS: Record<
   Agent,
   {
     runs: readonly NodeJS.Platform[];
-    commands: readonly NodeJS.Platform[] | 'always';
+    commands: readonly NodeJS.Platform[];
     networkWithWeb: readonly NodeJS.Platform[];
   }
 > = {
   claude: { runs: ['darwin', 'linux', 'win32'], commands: ['darwin'], networkWithWeb: ['darwin'] },
-  grok: { runs: ['darwin'], commands: [], networkWithWeb: [] },
-  codex: { runs: ['darwin'], commands: 'always', networkWithWeb: [] },
+  grok: { runs: ['darwin', 'linux', 'win32'], commands: [], networkWithWeb: [] },
+  codex: { runs: ['darwin', 'linux', 'win32'], commands: ['darwin', 'linux'], networkWithWeb: [] },
   gemini: { runs: [], commands: [], networkWithWeb: [] }
 };
+/**
+ * Per tool, the systems where the office carries its files: its own file
+ * tools are off, and it reads and changes files only through the office's
+ * (files-server.ts in the ledger), which hold its folders the same way on
+ * every system and do not change when a tool's own do. Grok through them
+ * took about 1.8 times as long on the same tasks (48 runs on a Mac,
+ * 2026-11-06), since it reaches an MCP tool only through search_tool and
+ * use_tool; the owner chose the same walls everywhere over that speed.
+ */
+export const FILES_VIA_OFFICE: Record<Agent, readonly NodeJS.Platform[]> = {
+  claude: ['darwin', 'linux', 'win32'],
+  codex: ['darwin', 'linux', 'win32'],
+  grok: ['darwin', 'linux', 'win32'],
+  gemini: []
+};
+/** Whether the office carries the files of a run on `agent` on `platform`. */
+export const filesViaOffice = (agent: Agent, platform: NodeJS.Platform): boolean =>
+  FILES_VIA_OFFICE[agent].includes(platform);
 /**
  * Each tool's own files: the instruction files it loads from a run's folder
  * (`instructions`), and its home folders under the owner's home (`homes`).
@@ -247,43 +266,36 @@ export function notOfferedWhy(agent: Agent, platform: NodeJS.Platform): string |
 
 /**
  * How the Run commands switch reaches each coding tool, on this system:
- * `switch` follows the owner's choice, `always` is on whatever it says, and
- * `never` is off whatever it says. `why` is the line the page shows under a
+ * `switch` follows the owner's choice, and `never` is off whatever it says. `why` is the line the page shows under a
  * switch the owner cannot move. Under a switch locked off, `offer` is the tool
  * on this system that follows it, when there is one.
  */
-export type CommandsHow =
-  | { state: 'switch' }
-  | { state: 'always'; why: string }
-  | { state: 'never'; why: string; offer?: Agent };
+export type CommandsHow = { state: 'switch' } | { state: 'never'; why: string; offer?: Agent };
 
 /** Why each tool's Run commands is fixed, as the owner reads it. */
 export const COMMANDS_WHY: Record<Agent, string> = {
   // Claude Code's sandbox was measured on a Mac only.
   claude: 'Not tested on this system yet.',
-  codex: 'Codex reads files through its commands.',
+  // Codex's Windows sandbox gave every Odd's folder to reads (2026-11-06).
+  codex: 'Not safe on Windows yet: Codex cannot keep commands in this Odd’s folders here.',
   // Grok's sandbox blocks a command's network on Linux only, so its sign-in could leave the Mac.
-  grok: "Grok can't run commands here: on a Mac they can't be kept off the internet.",
+  // Grok's sandbox keeps a command off the network on Linux only, and Windows has none.
+  grok: "Not with Grok yet: its sandbox can't keep commands off the internet on every system.",
   gemini: 'Not tested with Gemini yet.'
 };
 
 /**
- * Whether an Odd on `agent` may run commands on `platform`, as `AGENT_PLATFORMS`
- * says: a tool follows the switch where its commands are listed (Claude Code on
- * a Mac, where its sandbox held commands to the Odd's folders), and one whose
- * commands are `'always'` has them on every system (Codex, whose only file tool
- * is its shell); Grok and Gemini never do. The offer is read from the table,
- * never from this function, so it ends after one pass.
+ * Whether an Odd on `agent` may run commands on `platform`. A tool follows the
+ * switch where `AGENT_PLATFORMS` says its commands do: Claude Code on a Mac,
+ * Codex on a Mac and Linux, where their sandboxes held commands to the Odd's
+ * folders. Grok and Gemini never do. The offer is read from the table, never
+ * from this function, so it ends after one pass.
  */
 export function commandsHow(agent: Agent, platform: NodeJS.Platform): CommandsHow {
-  const follows = (a: Agent) => {
-    const on = AGENT_PLATFORMS[a].commands;
-    return on !== 'always' && on.includes(platform);
-  };
-  if (AGENT_PLATFORMS[agent].commands === 'always')
-    return { state: 'always', why: COMMANDS_WHY[agent] };
-  if (follows(agent)) return { state: 'switch' };
-  const offer = agentsOn(platform).find((a) => a !== agent && follows(a));
+  if (AGENT_PLATFORMS[agent].commands.includes(platform)) return { state: 'switch' };
+  const offer = agentsOn(platform).find(
+    (a) => a !== agent && AGENT_PLATFORMS[a].commands.includes(platform)
+  );
   return { state: 'never', why: COMMANDS_WHY[agent], ...(offer ? { offer } : {}) };
 }
 
@@ -302,7 +314,7 @@ export function hireToolsLine(state?: CommandsHow['state']): string {
 /** Whether a run gets a shell: the owner's stored switch, as its tool takes it. */
 export function runsCommands(agent: Agent, platform: NodeJS.Platform, stored: boolean): boolean {
   const how = commandsHow(agent, platform);
-  return how.state === 'always' || (how.state === 'switch' && stored);
+  return how.state === 'switch' && stored;
 }
 
 /** Whether `agent`'s commands may reach the internet with Browse the web on, on `platform`. */
@@ -341,9 +353,7 @@ export function webLine(agent: Agent, platform: NodeJS.Platform, held: boolean):
   if (held) return `${web} This version of Claude Code keeps its commands off the internet.`;
   if (!reachesWeb(agent, platform))
     return `${web} ${AGENT_NAMES[agent]}'s commands stay off the internet.`;
-  return how === 'always'
-    ? `${web} Its commands can reach the internet too.`
-    : `${web} With ${SWITCH_NAMES.commands} on, its commands can reach the internet too.`;
+  return `${web} With ${SWITCH_NAMES.commands} on, its commands can reach the internet too.`;
 }
 
 /** A folder outside the office the owner lets an Odd read, or read and change (`write`), by its real path. */

@@ -66,7 +66,7 @@ export type CliRun = {
   timeoutMs: number;
   /** Pictures sent with the message: an office run's (`runAsOffice`), never an Odd's. */
   images?: RunImage[];
-  /** An office run: Grok gets no tools (Codex keeps its shell, its only way to read). */
+  /** An office run: no tools to read with, and no MCP. */
   bare?: boolean;
   /** How hard the model thinks: an Odd's level (`effortFor`) or an office run's. */
   effort?: Effort;
@@ -119,8 +119,6 @@ export const LAUNCHES: Record<
     };
   },
   codex: async (r) => {
-    if (!r.commands)
-      return { refused: 'Codex reads files through its commands, so it cannot run without them.' };
     const signedOut = codexSignedOut(r.account);
     if (signedOut) return { refused: signedOut };
     return {
@@ -137,13 +135,15 @@ export const LAUNCHES: Record<
         servers: r.servers,
         allowed: r.allowed,
         web: r.web,
+        commands: r.commands,
         network: r.network,
         images: r.images,
         effort: r.effort,
         model: r.model
       }),
       read: codexReader(r.model ?? process.env[OFFICE_MODEL_VAR.codex] ?? 'codex'),
-      ownGroup: true
+      // Only a shell leaves processes behind.
+      ...(r.commands ? { ownGroup: true as const } : {})
     };
   },
   gemini: async (r) => {

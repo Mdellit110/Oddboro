@@ -19,7 +19,7 @@ import { execFile } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { OFFICE_ACCOUNT, type Agent } from '@oddboro/ledger';
-import { claudeCommand, currentPlatform } from '@oddboro/ledger/platform';
+import { claudeCommand, currentPlatform, npmCommand } from '@oddboro/ledger/platform';
 import { claudeAccountOf, claudeHome, cleanEnv, forgetClaudeAccount } from './claude.ts';
 import { codexAccount, codexHome, codexSignIn } from './codex.ts';
 import { commandSlot, type Slot } from './command-stream.ts';
@@ -57,8 +57,22 @@ type KeySignIn = {
 export const SIGN_INS: Record<SignInTool, BrowserSignIn | KeySignIn> = {
   grok: {
     how: 'browser',
-    // Grok installs only through xAI's own script: its usage line, run as it says.
-    install: ['bash', ['-c', 'curl -fsSL https://x.ai/cli/install.sh | bash']],
+    // Grok installs only through xAI's own script: its usage line, run as it
+    // says, and on Windows its PowerShell one, which puts grok.exe in ~/.grok/bin.
+    get install(): Command {
+      return currentPlatform() === 'win32'
+        ? [
+            'powershell',
+            [
+              '-NoProfile',
+              '-ExecutionPolicy',
+              'Bypass',
+              '-Command',
+              'irm https://x.ai/cli/install.ps1 | iex'
+            ]
+          ]
+        : ['bash', ['-c', 'curl -fsSL https://x.ai/cli/install.sh | bash']];
+    },
     auth: (a) => grokHome(a).auth,
     account: grokAccount,
     command: grokSignIn
@@ -210,6 +224,14 @@ export function agentCommand(tool: Agent): Command | undefined {
     const [cmd, before] = claudeCommand();
     // A path when Windows found it; the bare name everywhere else, which PATH finds.
     if (isAbsolute(cmd)) return [cmd, before];
+  }
+  // npm's Codex and Gemini on Windows are .cmd shims, which Node will not start.
+  if (currentPlatform() === 'win32' && (tool === 'codex' || tool === 'gemini')) {
+    const found = npmCommand(
+      tool,
+      tool === 'codex' ? ['@openai', 'codex'] : ['@google', 'gemini-cli']
+    );
+    if (found) return found;
   }
   const found = onPath(tool);
   return found ? [found, []] : undefined;

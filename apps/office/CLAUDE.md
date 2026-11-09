@@ -384,8 +384,12 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (Grok in xAI's install folder `~/.grok/bin` too, and Claude Code where
    `claudeCommand` finds it on Windows, `agentCommand`),
    with each one's sign-in, which the owner starts beside the picker,
-   only those offered on this system (`AGENT_PLATFORMS` in the ledger: Grok
-   and Codex on a Mac only, Gemini nowhere until a live run proves its walls); a
+   only those offered on this system (`AGENT_PLATFORMS` in the ledger: Claude
+   Code, Codex and Grok on a Mac, Linux and Windows, Gemini nowhere until a
+   live run proves its walls). Where `FILES_VIA_OFFICE` says, the office
+   carries the run's files: the tool's own file tools are off and the
+   ledger's `files-server.ts` is its one way to files, started per run with
+   its folders in `ODDBORO_FILES`; a
    switch on the Settings tab goes through `setAgent` from the staff PATCH, clears the Odd's chat
    session, and gets a 409 while the Odd is replying. A computer without the
    picked tool fails the run naming it; it never falls back to the other.
@@ -490,23 +494,25 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    from saving a renewed sign-in, so a sign-in that could run out before a
    run ends is renewed first with `grok models` outside the sandbox, and a
    run whose sign-in has still run out is refused pointing to the Settings tab
-   (`grokSignedOut` in `grok.ts`). Its files are
-   held by a kernel sandbox profile per Odd (per run on a thread), built on
+   (`grokSignedOut` in `grok.ts`). The office carries its files on every
+   system (`FILES_VIA_OFFICE`): its `--tools` are `todo_write` (Grok has no
+   "no tools") and, with Browse the web, `web_search` and `web_fetch`, with
+   `GROK_WEB_FETCH=1` on that run alone (every other grok gets `0`); never a
+   file tool of its own or a shell, so Run commands shows off, and no edit is
+   allowed, so `dontAsk` refuses any file tool Grok might gain. The office's
+   file tools reach it through `search_tool` and `use_tool`. On a Mac and
+   Linux a kernel sandbox profile per Odd (per run on a thread) holds the
+   whole run, the office's file server included, as a second wall, built on
    Grok's `strict`, which reads the Odd's folders (a lead's chat also its live
    goals' folders, in the Odd's own profile), the owner's data folder, the
    folders the owner gave it and the tool server's code, writes the given
    folders it may change (`readWrite`), and
-   shuts `~/Library`, `/Library`, `/tmp` and `/var`. Its `--tools` are the
-   five file tools and, with Browse the web, `web_search` and `web_fetch`,
-   with `GROK_WEB_FETCH=1` on that run alone (every other grok gets `0`);
-   never a shell, so Run commands shows off. Read deny rules
-   (`UNREADABLE`) cover what the kernel still lets it read, Grok's home among
-   them, and Edit and Write deny rules cover Grok's home, whose sessions folder
-   the kernel lets it write. Every deny rule, for either tool, names the path
-   and everything under it (`denyRules` in `files.ts`). Grok's grep runs
-   ripgrep inside the sandbox, so a run gets grep only when `rg` is on PATH,
-   and the kernel then reads ripgrep's folders, which deny rules keep from the
-   Odd's own tools (`ripgrep` in `grok.ts`).
+   shuts `~/Library`, `/Library`, `/tmp` and `/var`; Windows has none. Read
+   deny rules (`UNREADABLE`) cover what the kernel still lets it read, Grok's
+   home among them, and Edit and Write deny rules cover Grok's home, whose
+   sessions folder the kernel lets it write, both further walls should Grok
+   ever give a run a file tool. Every deny rule, for either tool, names the
+   path and everything under it (`denyRules` in `files.ts`).
    `src/lib/server/codex.ts` starts a Codex run from the office's own Codex
    home, `~/.oddboro/codex` (`CODEX_HOME`), never the owner's `~/.codex`. The
    office writes its `config.toml` only into a home with none, before the

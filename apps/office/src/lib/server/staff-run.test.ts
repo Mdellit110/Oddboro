@@ -31,9 +31,9 @@ import {
   assertKeychainUntouched,
   awayFromHome,
   currentOffice,
+  filesOf,
   gave,
   hireRoute,
-  nodeBin,
   history,
   bin,
   chat,
@@ -44,11 +44,11 @@ import {
   isBusy,
   odd,
   onPlatform,
+  onWindows,
   ownerData,
   plain,
   hide,
   rgBin,
-  rgReal,
   runOf,
   startedBy,
   type Gave
@@ -57,6 +57,7 @@ import {
 const { agentCommand } = await import('./agent-sign-in.ts');
 const { configServers } = await import('./launch.ts');
 const { LAUNCHES } = await import('./cli.ts');
+const { deniedEdits } = await import('./files.ts');
 
 test("a colleague's run on a hand-off works at Draft, and its key is held while it goes and only then", async () => {
   const h = await L.handOff({
@@ -223,8 +224,9 @@ test("a Grok run's agent file gives a command server and a hosted one in the sha
   );
 });
 
-test("a Claude Code Odd's chat gets the arguments it always had, plus the new instruction files' denies", async () => {
-  const { args } = await chatOf('cleo');
+test("a Claude Code Odd's chat gets the arguments it always had, with the office's file tools in place of its own, plus the new instruction files' denies", async () => {
+  const run = await chatOf('cleo');
+  const { args } = run;
   const shown = plain(hide(args, '--mcp-config', '--settings', '--append-system-prompt'))
     // The sessions folder Claude Code names after the Odd's folder, and what the
     // home folder holds, differ from Mac to Mac.
@@ -236,14 +238,16 @@ test("a Claude Code Odd's chat gets the arguments it always had, plus the new in
     'stream-json',
     '--verbose',
     '--include-partial-messages',
+    // The office carries its files, and it has no shell or web: no tool of its own at all.
     '--tools',
-    'Read,Glob,Grep,Write,Edit',
+    '',
     '--allowedTools',
     'Read(/<home>/staff/cleo/**)',
     'Read(/<home>/data/**)',
     '<sessions>',
     'Edit(/<home>/staff/cleo/**)',
     'mcp__office',
+    'mcp__files',
     '--disallowedTools',
     // cb54187's instruction-file denies, plus Grok's, Codex's and Gemini's for an Odd that
     // might move to one, each as the path and everything under it (`denyRules`).
@@ -291,12 +295,36 @@ test("a Claude Code Odd's chat gets the arguments it always had, plus the new in
   // Each read deny, compared above only by its place, holds the folder itself and what is in it.
   const denied = plain(args.slice(args.indexOf('--disallowedTools')));
   assert.ok(denied.includes('Read(/~/.ssh)') && denied.includes('Read(/~/.ssh/**)'));
+  // The office's file server, under this Node, holds the folders the rules above name.
+  const dir = join(folder, 'staff', 'cleo');
+  assert.deepEqual(filesOf(run), {
+    command: process.execPath,
+    args: [L.FILES_SERVER],
+    walls: {
+      cwd: dir,
+      reads: [ownerData],
+      writes: [dir],
+      noWrite: deniedEdits({ dir, writes: [dir], granted: [] })
+    }
+  });
 });
 
-test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the five file tools, no shell, web or image tool, and only the office's MCP tools", async () => {
-  const shown = plain((await chatOf('gus')).args).map((a) =>
-    a.replace(/^(--single|--rules)=[^]*$/, '$1=<$1>')
-  );
+test("a Grok Odd's chat on a Mac starts grok sandboxed in its own folder, with no file, shell, web or image tool of its own, and only the office's MCP tools, its file tools among them", async () => {
+  const run = await onPlatform('darwin', () => chatOf('gus'));
+  // The office carries its files on a Mac too, inside its kernel profile.
+  const dir = join(folder, 'staff', 'gus');
+  assert.deepEqual(filesOf(run), {
+    command: process.execPath,
+    args: [L.FILES_SERVER],
+    walls: {
+      cwd: dir,
+      reads: [ownerData],
+      writes: [dir],
+      noWrite: deniedEdits({ dir, writes: [dir], granted: [] })
+    }
+  });
+  assert.deepEqual(Object.keys(run.servers ?? {}), ['office', 'files']);
+  const shown = plain(run.args).map((a) => a.replace(/^(--single|--rules)=[^]*$/, '$1=<$1>'));
   // The instruction files are pinned below; the rest is compared whole, so a
   // repository's hooks or config in its own folder, which no rule refuses, would show there.
   const own = (a: string) =>
@@ -325,8 +353,9 @@ test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the f
       'dontAsk',
       '--no-subagents',
       '--no-auto-update',
+      // Grok has no "no tools", so todo_write, which touches no file, stands in.
       '--tools',
-      'read_file,list_dir,grep,write,search_replace',
+      'todo_write',
       // No level picked: Medium (`effortFor`).
       '--reasoning-effort=medium',
       ...[
@@ -346,24 +375,67 @@ test("a Grok Odd's chat starts grok sandboxed in its own folder, with only the f
         '/private',
         '/tmp',
         '/var',
-        '~/Library',
-        '<home>/rg-bin',
-        '<home>/rg-real'
+        '~/Library'
       ].flatMap((p) => ['--deny', `Read(${p})`, '--deny', `Read(${p}/**)`]),
       ...['<home>/accounts', '<home>/grok'].flatMap((p) =>
         ['Edit', 'Write'].flatMap((t) => ['--deny', `${t}(${p})`, '--deny', `${t}(${p}/**)`])
       ),
-      '--allow',
-      'Edit(<home>/staff/gus/**)',
-      '--allow',
-      'Write(<home>/staff/gus/**)',
+      // No edit allowed to a tool of Grok's own: dontAsk refuses any it might gain.
       '--allow',
       'MCPTool(office__*)',
+      '--allow',
+      'MCPTool(files__*)',
       '--rules=<--rules>',
       '-s',
       '<id>'
     ]
   );
+});
+
+test("a Grok Odd's chat on Linux or Windows has no file tool of its own and gets the office's, with their walls; on Linux its kernel profile still holds it, and Windows has none", async () => {
+  const dir = join(folder, 'staff', 'gus');
+  for (const platform of ['linux', 'win32'] as const) {
+    const chat = () => chatOf('gus');
+    const run = await (platform === 'win32' ? onWindows(chat) : onPlatform(platform, chat));
+    const args = plain(run.args);
+    // Grok has no "no tools", so todo_write, which touches no file, stands in.
+    assert.equal(args[args.indexOf('--tools') + 1], 'todo_write', platform);
+    assert.ok(args.includes('MCPTool(files__*)'), platform);
+    assert.equal(args[args.indexOf('MCPTool(files__*)') - 1], '--allow', platform);
+    assert.doesNotMatch(run.system, /search_tool/);
+    assert.deepEqual(
+      filesOf(run),
+      {
+        command: process.execPath,
+        args: [L.FILES_SERVER],
+        walls: {
+          cwd: dir,
+          reads: [ownerData],
+          writes: [dir],
+          noWrite: deniedEdits({ dir, writes: [dir], granted: [] })
+        }
+      },
+      platform
+    );
+    if (platform === 'linux') {
+      assert.deepEqual(args.slice(args.indexOf('--sandbox'), args.indexOf('--sandbox') + 2), [
+        '--sandbox',
+        'odd-gus'
+      ]);
+      assert.ok(run.profile?.startsWith('[profiles.odd-gus]'), run.profile);
+    } else {
+      assert.ok(!args.includes('--sandbox'), args.join(' '));
+      assert.equal(run.profile, undefined);
+    }
+  }
+  // With Browse the web, the web tools join todo_write.
+  await L.pg`update staff set web = true where id = 'gus'`;
+  try {
+    const run = await onPlatform('linux', () => chatOf('gus'));
+    assert.equal(run.args[run.args.indexOf('--tools') + 1], 'todo_write,web_search,web_fetch');
+  } finally {
+    await L.pg`update staff set web = false where id = 'gus'`;
+  }
 });
 
 test("a Grok Odd's run reading the owner's edit is denied an edit or write to that file", async () => {
@@ -395,22 +467,10 @@ test('a message or job description that starts with a dash reaches grok whole, n
   }
 });
 
-test('a Grok run gets grep only where ripgrep is on PATH, and then the kernel reads its folder', async () => {
-  const path = process.env.PATH;
-  process.env.PATH = `${bin}:${nodeBin}`;
-  try {
-    const run = await chatOf('gus');
-    assert.equal(
-      run.args[run.args.indexOf('--tools') + 1],
-      'read_file,list_dir,write,search_replace'
-    );
-    assert.ok(!run.profile?.includes(rgBin), run.profile);
-  } finally {
-    process.env.PATH = path;
-  }
+test("a Grok run never gets Grok's grep, with ripgrep on PATH, and the kernel never reads ripgrep's folder", async () => {
   const run = await chatOf('gus');
-  assert.ok(run.args[run.args.indexOf('--tools') + 1].includes('grep'));
-  assert.ok(run.profile?.includes(JSON.stringify(rgBin)), run.profile);
+  assert.equal(run.args[run.args.indexOf('--tools') + 1], 'todo_write');
+  assert.ok(!run.profile?.includes(rgBin), run.profile);
 });
 
 test("a Grok run's environment switches off every other tool's setup, and carries no key or node options from the office's own", async () => {
@@ -517,7 +577,7 @@ test("a Grok Odd's run on a thread reads the thread's folder and writes only its
   assert.deepEqual(run.profile?.trim().split('\n').slice(0, 4), [
     `[profiles.${name}]`,
     'extends = "strict"',
-    `read_only = ${JSON.stringify([dirname(process.execPath), code('packages'), code('node_modules'), rgBin, realpathSync(rgReal), ownerData, thread])}`,
+    `read_only = ${JSON.stringify([dirname(process.execPath), code('packages'), code('node_modules'), ownerData, thread])}`,
     `read_write = ${JSON.stringify([join(folder, 'accounts', 'grok', 'office', 'tmp'), part])}`
   ]);
   // The kernel shuts what `strict` reads that no Odd needs, by its real path.
@@ -768,7 +828,7 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
   }
 });
 
-test('on Windows the "Runs on" picker says computer, and counts claude.exe or an npm claude.cmd with Claude Code beside it as installed, but not a bare claude or a shim alone, whatever PATHEXT says; an Odd on npm\'s Claude Code runs its script under this Node, then the run\'s own arguments', async () => {
+test('on Windows the "Runs on" picker says computer, lists Grok and Codex beside Claude Code, and counts claude.exe or an npm claude.cmd with Claude Code beside it as installed, but not a bare claude or a shim alone, whatever PATHEXT says; an Odd on npm\'s Claude Code runs its script under this Node, then the run\'s own arguments', async () => {
   const shims = join(folder, 'win-shims');
   const npm = join(folder, 'win-npm');
   const native = join(folder, 'win-native');
@@ -806,6 +866,24 @@ require(${JSON.stringify(join(bin, 'claude'))});
   // Its version read through the same command a run starts, npm's script under this Node too.
   const out = { how: 'browser', installing: false, signedIn: false };
   const commandsHow = L.commandsHow('claude', 'win32');
+  // Grok and Codex run on Windows too, with no shell; neither is on PATH here.
+  const others = [
+    {
+      id: 'grok',
+      name: 'Grok',
+      installed: false,
+      signIn: out,
+      commandsHow: L.commandsHow('grok', 'win32')
+    },
+    {
+      id: 'codex',
+      name: 'Codex',
+      installed: false,
+      // The office's Codex home is signed in under test.
+      signIn: { ...out, signedIn: true },
+      commandsHow: L.commandsHow('codex', 'win32')
+    }
+  ];
   const installed = [
     {
       id: 'claude',
@@ -814,7 +892,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
       signIn: out,
       commandsHow,
       version: '2.1.318'
-    }
+    },
+    ...others
   ];
   try {
     // Away from home, so the Mac's own ~/.local/bin, where Windows' installer puts claude.exe, is never read.
@@ -833,13 +912,10 @@ require(${JSON.stringify(join(bin, 'claude'))});
               installed: false,
               signIn: { how: 'browser', installing: false, signedIn: false },
               commandsHow
-            }
+            },
+            ...others
           ],
-          later: [
-            { id: 'grok', name: 'Grok', why: 'Mac only for now.' },
-            { id: 'codex', name: 'Codex', why: 'Mac only for now.' },
-            { id: 'gemini', name: 'Gemini', why: 'Coming soon. We are still testing it.' }
-          ]
+          later: [{ id: 'gemini', name: 'Gemini', why: 'Coming soon. We are still testing it.' }]
         });
         // A shim alone first, then npm's, with Claude Code's script run under this Node.
         process.env.PATH = [shims, npm].join(delimiter);
@@ -855,7 +931,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
         assert.deepEqual(agentCommand('claude'), [join(native, 'claude.exe'), []]);
         // Installed. This Mac cannot run a stand-in claude.exe, so it has no version to say.
         assert.deepEqual((await picker()).tools, [
-          { id: 'claude', name: 'Claude Code', installed: true, signIn: out, commandsHow }
+          { id: 'claude', name: 'Claude Code', installed: true, signIn: out, commandsHow },
+          ...others
         ]);
       })
     );
@@ -879,15 +956,22 @@ test('moving an Odd to another tool clears its chat session; picking the tool it
   await assert.rejects(async () => patch('sam', { agent: 'cursor' }), refused(400));
 });
 
-test('on Linux the "Runs on" picker and a move offer Claude Code only, the one tool whose sandbox was probed there', async () => {
+test('on Linux the "Runs on" picker and a move offer Claude Code, Grok and Codex, and never Gemini', async () => {
   await onPlatform('linux', async () => {
     const res = await agents.GET({} as Parameters<typeof agents.GET>[0]);
     assert.deepEqual(
       ((await res.json()) as { tools: { id: string }[] }).tools.map((t) => t.id),
-      ['claude']
+      ['claude', 'grok', 'codex']
     );
-    for (const agent of ['grok', 'codex'])
-      await assert.rejects(async () => patch('cleo', { agent }), refused(400), agent);
+    try {
+      for (const agent of ['grok', 'codex']) {
+        assert.equal((await patch('cleo', { agent })).status, 200, agent);
+        assert.equal((await L.staffer('cleo'))?.agent, agent);
+      }
+      await assert.rejects(async () => patch('cleo', { agent: 'gemini' }), refused(400));
+    } finally {
+      await patch('cleo', { agent: 'claude' });
+    }
   });
   assert.equal((await L.staffer('cleo'))?.agent, 'claude');
 });
@@ -1087,7 +1171,7 @@ test("a Grok lead's chat may read its goal's folder, as it is told, through the 
   assert.ok(run.args.includes('odd-gus'), "the chat leaves the Odd's own profile");
   assert.ok(
     run.profile?.includes(
-      `read_only = ${JSON.stringify([dirname(process.execPath), code('packages'), code('node_modules'), rgBin, realpathSync(rgReal), ownerData, folder])}`
+      `read_only = ${JSON.stringify([dirname(process.execPath), code('packages'), code('node_modules'), ownerData, folder])}`
     ),
     run.profile
   );

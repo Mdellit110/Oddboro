@@ -46,9 +46,16 @@ beforeEach(async () => {
 test('commandsHow per tool and system', () => {
   const want: Record<Agent, Record<'darwin' | 'linux' | 'win32', string>> = {
     claude: { darwin: 'switch', linux: 'never', win32: 'never' },
-    codex: { darwin: 'always', linux: 'always', win32: 'always' },
+    codex: { darwin: 'switch', linux: 'switch', win32: 'never' },
     grok: { darwin: 'never', linux: 'never', win32: 'never' },
     gemini: { darwin: 'never', linux: 'never', win32: 'never' }
+  };
+  // Under a switch locked off, the tool that follows it on that system: Claude
+  // Code on a Mac, Codex on Linux, and none on Windows.
+  const offers: Record<'darwin' | 'linux' | 'win32', Agent | undefined> = {
+    darwin: 'claude',
+    linux: 'codex',
+    win32: undefined
   };
   for (const agent of AGENTS)
     for (const platform of ['darwin', 'linux', 'win32'] as const) {
@@ -58,14 +65,17 @@ test('commandsHow per tool and system', () => {
         'why' in how ? how.why : undefined,
         how.state === 'switch' ? undefined : COMMANDS_WHY[agent]
       );
-      // Only a switch locked off offers another tool: Claude Code, where it follows the switch.
-      const offered = agent !== 'claude' && agent !== 'codex' && platform === 'darwin';
-      assert.equal('offer' in how ? how.offer : undefined, offered ? 'claude' : undefined);
+      // Only a switch locked off offers another tool.
+      assert.equal(
+        'offer' in how ? how.offer : undefined,
+        how.state === 'never' ? offers[platform] : undefined,
+        `${agent} on ${platform}`
+      );
     }
   assert.deepEqual(COMMANDS_WHY, {
     claude: 'Not tested on this system yet.',
-    codex: 'Codex reads files through its commands.',
-    grok: "Grok can't run commands here: on a Mac they can't be kept off the internet.",
+    codex: 'Not safe on Windows yet: Codex cannot keep commands in this Odd’s folders here.',
+    grok: "Not with Grok yet: its sandbox can't keep commands off the internet on every system.",
     gemini: 'Not tested with Gemini yet.'
   });
 });

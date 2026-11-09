@@ -9,8 +9,8 @@
 // Grok or Codex it goes through the same launch an Odd's run does (`LAUNCHES`
 // in cli.ts), with that tool's sandbox, in a folder of its own that reads
 // nothing else, writes only itself, has no MCP, no web and no network, and is
-// removed when the run ends, pictures and all. Codex reads files through its
-// commands, so its run keeps its shell, held to that folder.
+// removed when the run ends, pictures and all. Neither has a shell or a tool
+// that reads files: the pictures go in with the message.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -72,9 +72,9 @@ export async function runAsOffice(message: string, opts: OfficeRunOpts): Promise
 
 /**
  * Said to an office run on Grok or Codex after its own instructions. Claude
- * Code's office run has no tools at all; Grok's has one and Codex keeps its
- * shell, and either one went looking for files or ran a script before it
- * answered, so the answer comes in this one reply instead.
+ * Code's office run has no tools at all; Grok's has one harmless one, and
+ * either tool went looking for files or ran a script before it answered when
+ * it could, so the answer comes in this one reply instead.
  */
 const ONE_REPLY =
   'You have no tools you need here and no files to read: everything is in this message. Answer in this one reply, in the shape it asks for.';
@@ -117,7 +117,7 @@ async function runOn(
     writes: [dir],
     granted: [],
     web: false,
-    commands: commandsHow(agent, currentPlatform()).state === 'always',
+    commands: false,
     network: false,
     system: `${opts.system}\n\n${ONE_REPLY}`,
     input: message,
@@ -214,6 +214,8 @@ async function runOn(
         text: `${tool} stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
       });
     });
+    // A run stopped before it read its message closes its input: the stop says so, not this.
+    child.stdin.on('error', () => {});
     child.stdin.end(launch.stdin);
   });
 }
@@ -297,6 +299,7 @@ async function run(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
         text: `Claude Code stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
       })
     );
+    child.stdin.on('error', () => {});
     child.stdin.end(
       opts.images?.length
         ? `${JSON.stringify({
