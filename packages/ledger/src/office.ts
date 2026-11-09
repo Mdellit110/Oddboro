@@ -514,15 +514,19 @@ const turnedOn = (name: string, on: readonly OwnSwitch[]) =>
 
 /**
  * Secret stores, by name, each with how it is found anywhere but the top of
- * the home, where the name alone is enough (`inOrHoldsStore`). An empty list
- * means the name alone everywhere. A list names what only the store holds, for
- * a name a project may use for its own files (`.ssh`, `.aws`, `.gnupg`,
- * `.claude`, `.codex`, `.docker`, `.kube`, `.config`) or an ordinary word
- * (`Library`, `AppData`): a key, a sign-in, a tool's history or a cluster's
- * keys, or a Mac user's keychain and cookies, which `/Library` has none of, so
- * that system folder stays a warning. `.ssh` and `.aws` leave out `config`
- * on purpose, since a project may well hold one. So a `.ssh` with only
- * custom-named keys and no `known_hosts` is given, unless it is the home's own.
+ * the home, where the name alone is enough (`touchesSecretStore`). An empty
+ * list means the name alone everywhere. A list names what only the store
+ * holds, for a name a project may use for its own files (`.ssh`, `.aws`,
+ * `.gnupg`, `.claude`, `.codex`, `.docker`, `.kube`, `.config`) or an ordinary
+ * word (`Library`, `AppData`): a key, a sign-in, a tool's history or a
+ * cluster's keys, or a Mac user's keychain and cookies, which `/Library` has
+ * none of, so that system folder stays a warning. `.ssh` and `.aws` leave out
+ * `config` on purpose, since a project may well hold one.
+ *
+ * Where the check stops (`inOrHoldsStore`): the folder, the folders above it
+ * and one level down. A store deeper than that, or under another name, is not
+ * found, and a `.ssh` with only custom-named keys and no `known_hosts` is given
+ * anywhere but the top of the home.
  */
 export const STORE_MARKS: Record<string, string[]> = {
   '.ssh': [

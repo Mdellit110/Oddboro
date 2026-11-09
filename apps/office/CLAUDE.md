@@ -471,8 +471,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    "Search and read web pages. With Run commands on, its commands can reach
    the internet too." A folder is typed as a path and set to Can
    read or Can read and change, anywhere on the computer; `checkFolder`
-   refuses the home folder and one that holds or sits in a secret store (outside
-   the home, found by what it holds, one level down at most), the office's
+   refuses the home folder and one that holds or sits in a secret store (at the
+   home's top by name, anywhere else by what it holds, in the folder, the folders
+   above it and one level down), the office's
    home or Oddboro's code, comparing real paths as the disk spells
    them (`realpathSync.native`), and one whose real path holds `*`, `?`, `[`
    or `]`, which Codex cannot take ("That folder's path has a character an

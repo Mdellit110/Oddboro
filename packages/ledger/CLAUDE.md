@@ -72,8 +72,10 @@ office sets on that server what it needs from `.env` (`DATABASE_URL`,
 the server never depends on reading it.
 
 `npm test -w @oddboro/ledger` runs `test/` with `node --test`, and fails any
-test that runs past 15 seconds (`--test-timeout=15000`), so a hang fails the
-suite instead of stalling it. The slowest test takes under a second alone and
+test that runs past 15 seconds (`--test-timeout=15000`), or 45 seconds for the
+one test that sets its own limit (the three-server `propose_filter` test in
+`test/filters.test.ts`, 15 seconds per server), so a hang fails the suite
+instead of stalling it. Of the others, the slowest takes under a second alone and
 about 5 seconds with three suites running at once, so the cap leaves a busy Mac
 three times that. A hang holds the database, so every later test in its file
 waits out the cap too: keep it no higher than it needs to be. It covers the update
@@ -268,10 +270,13 @@ hand-off or number, which ledger tests and the office's format test share.
   of (`ownToolsSaid`), and a change that would open the network while held
   records the hold's words (`NETWORK_NOTE.held`). `checkFolder()` takes a folder anywhere on the computer. It refuses the home itself
   and one that holds or sits in a secret store (`SECRET_STORES`, which the
-  office's `unreadable` also reads; outside the home, the same list
-  (`STORE_MARKS`), by name, or for a name a project or an ordinary folder may
-  share by what only the store holds, in the folder, above it and one level
-  down), the office's home or its code, and one
+  office's `unreadable` also reads; at the home's top by name, and anywhere
+  else, in the home or outside it, the same list (`STORE_MARKS`), by name, or
+  for a name a project or an ordinary folder may share by what only the store
+  holds, in the folder, the folders above it and one level down, and no
+  deeper; a store under another name is not found, and a `.ssh` with only
+  custom-named keys and no `known_hosts` is given below the home's top), the
+  office's home or its code, and one
   whose real path holds `*`, `?`, `[` or `]`, which Codex cannot take
   (`GLOB`), with one line each (`FOLDER_REFUSED`; the glob line names the
   character). It compares real paths as the disk spells
@@ -283,7 +288,10 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   `setFolder()` finds a folder the Odd has by that real
   path, so a level change replaces it, and refuses a new one inside or
   holding another the Odd has (`FOLDER_REFUSED.nested`); taking one back is
-  never refused. `test/own-tools.test.ts` holds `checkFolder`.
+  never refused. `test/own-tools.test.ts` holds `checkFolder`, and
+  `test/store-states.ts` is the table of a secret store's states that
+  `test/store-states.test.ts`, `test/folder-asks.test.ts` and the office's
+  `profile.test.ts` read.
 - `usage.staff_id` is null for a run as the office (drafting a job
   description, drawing a look). `usage.tokens` is a generated column, the
   row's one token sum, which a staffer's usage (`usageFor`) adds up.

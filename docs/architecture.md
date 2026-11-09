@@ -111,7 +111,8 @@ in `apps/office/CLAUDE.md`.
   fails a `process.platform` read anywhere but `currentPlatform()`.
 - **A secret store.** Start at `STORE_MARKS` in `packages/ledger/src/office.ts`;
   `SECRET_STORES` is its keys, so one list says what a run and a given folder
-  stay out of. Each entry says how the store is found outside the home.
+  stay out of. Each entry says how the store is found anywhere but
+  the top of the home, where its name is enough.
   `own-tools.test.ts` walks every entry.
 - **A variable a run needs.** Start at `RUN_ENV_ALLOW` in
   `apps/office/src/lib/server/run-env-allow.ts`, or `TOOL_SERVER_ENV` beside
