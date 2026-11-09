@@ -111,12 +111,29 @@ function netCalls(text: string): string[] {
   });
 }
 
+/**
+ * A Svelte file's markup comments taken out, kept as blank lines. It reads
+ * again from the start after each one, since taking out the inner comment of
+ * `<!-<!-- x -->- y -->` makes another. An opener with no `-->` loses only
+ * itself: Svelte refuses one in markup, so in a file that builds it is text
+ * in a script, and the calls after it must still count.
+ */
+function withoutMarkupComments(text: string): string {
+  const OPEN = '<!--';
+  const CLOSE = '-->';
+  for (let at = text.indexOf(OPEN); at !== -1; at = text.indexOf(OPEN)) {
+    const close = text.indexOf(CLOSE, at + OPEN.length);
+    const end = close === -1 ? at + OPEN.length : close + CLOSE.length;
+    const newlines = text.slice(at, end).split('\n').length - 1;
+    text = text.slice(0, at) + '\n'.repeat(newlines) + text.slice(end);
+  }
+  return text;
+}
+
 /** Each call site in the file, as `file:line`. */
 function callsIn(file: string): string[] {
   let text = withoutComments(read(file));
-  // A Svelte file's markup comments, kept as blank lines.
-  if (file.endsWith('.svelte'))
-    text = text.replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ''));
+  if (file.endsWith('.svelte')) text = withoutMarkupComments(text);
   const calls = file.endsWith('.rs')
     ? RS_CALLS
     : new RegExp([TS_CALLS, ...netCalls(text)].join('|'), 'g');
