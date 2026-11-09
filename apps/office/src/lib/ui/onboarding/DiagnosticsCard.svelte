@@ -1,7 +1,7 @@
 <script lang="ts">
   import DiagnosticsAsk from '../DiagnosticsAsk.svelte';
 
-  // Help fix Oddboro: whether the office may send error and trace reports.
+  // Help improve Oddboro: whether the office may send error and trace reports.
   // Next works without an answer; the Desk then asks once the office is open.
   type Props = { onnext: () => void; onback: () => void };
   let { onnext, onback }: Props = $props();
