@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective date: November 7, 2026
+Effective date: November 9, 2026
 
 > **The short version.** Oddboro is open source software that runs on your own computer: a Mac, Windows or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that stores your office's data. Signing in to a New Altitude account is optional. If you sign in and turn on error reports in Setup, the software sends reports of what broke through our relay to Sentry, without your account. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. The only personal data we can hold about you is the approximate location in error reports you turned on, and New Altitude's records of your sign-in. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
 
