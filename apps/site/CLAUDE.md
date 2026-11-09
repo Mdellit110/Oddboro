@@ -77,8 +77,7 @@ access its job needs, and every claim rests on the office's real rules:
 
 An Odd has web search only when the owner turns on Browse the web for it,
 through its tool's own search and fetch; otherwise it has file tools only.
-Copy that searches the web says it uses a search tool the owner connects from
-the MCP Registry. When any of these rules changes in the office, change the
+Copy that searches the web says the owner turns on Browse the web for that Odd. When any of these rules changes in the office, change the
 site in the same change.
 
 ## The promise
