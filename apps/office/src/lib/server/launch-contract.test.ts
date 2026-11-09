@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Agent } from '@oddboro/ledger';
 
-const { RUN_ENV_ALLOW, TOOL_SERVER_ENV } = await import('./run-env-allow.ts');
+const { RUN_ENV_ALLOW, TOOL_SERVER_ENV, toolServerEnv } = await import('./run-env-allow.ts');
 
 /** The Odd on each tool. */
 const ODDS: Record<Agent, string> = {
@@ -248,6 +248,17 @@ test("an owner's proxy and certificate settings reach every run", async () => {
       assert.ok(listed(n, gave.envNames, platform), `${agent} on ${platform} lost ${n}`);
   });
 });
+
+test('where the shell keeps the secrets the tool server is told the office has them, and otherwise it is told nothing', () =>
+  withEnv({ ODDBORO_SECRETS: 'shell' }, () => {
+    assert.equal(toolServerEnv().ODDBORO_SECRETS, 'office');
+    for (const other of ['office', 'keychain']) {
+      process.env.ODDBORO_SECRETS = other;
+      assert.ok(!('ODDBORO_SECRETS' in toolServerEnv()), other);
+    }
+    delete process.env.ODDBORO_SECRETS;
+    assert.ok(!('ODDBORO_SECRETS' in toolServerEnv()), 'unset');
+  }));
 
 test('on Windows, PATH and every name its list holds reach each run, whatever their case', async () => {
   let launches = 0;
