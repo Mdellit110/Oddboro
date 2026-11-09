@@ -173,10 +173,8 @@
     selected = id;
     railAsked = false;
     letGo = false;
-    if (id) {
-      rightCollapsed = false;
-      wins.raised = false;
-    }
+    wins.raised = !id;
+    if (id) rightCollapsed = false;
   }
 
   $effect(() => {
@@ -1208,7 +1206,10 @@
                 role="tab"
                 aria-selected={wins.active === w.id}
                 class="flex max-w-44 items-center gap-1.5 truncate py-1.5 ps-2.5 pe-1 text-xs"
-                onclick={() => (wins.active = w.id)}
+                onclick={() => {
+                  wins.active = w.id;
+                  wins.raised = true;
+                }}
                 >{#if wins.busy[w.id]}<span class="busy" aria-label="drawing"></span>{/if}{winTitle(
                   w
                 )}{#if w.kind === 'desk' && deskCount}<span class="text-ember">{deskCount}</span
