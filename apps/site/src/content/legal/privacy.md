@@ -2,7 +2,7 @@
 
 Effective date: November 7, 2026
 
-> **The short version.** Oddboro is open source software that runs on your own computer: a Mac, Windows or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that stores your office's data. If you sign in to a New Altitude account and say yes, the software sends error and tracing reports through New Altitude's relay, which checks your sign-in, to Sentry, which stores them without your account; it sends nothing of the kind until you do, and you can say no again in Setup. If you already have a New Altitude account, you can sign in to it from the office. Signing in is optional. It sends your sign-in to New Altitude, and the office keeps only your account's id, name and email, with the sign-in, in your system's secret store. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. Today the only personal data we can hold about you is the approximate location in error reports you chose to send and, if you sign in to a New Altitude account, the record of that sign-in, and a record if our relay ever turns your account away. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
+> **The short version.** Oddboro is open source software that runs on your own computer: a Mac, Windows or Linux. Its database lives on that computer. New Altitude, Inc. operates no server that stores your office's data. Signing in to a New Altitude account is optional. If you sign in and turn on error reports in Setup, the software sends reports of what broke through our relay to Sentry, without your account. When you connect the software to Anthropic or another service, your data goes to that service under your own account and its own terms, never through us. This website is static files: no cookies, no analytics, no forms, no third-party requests. The only personal data we can hold about you is the approximate location in error reports you turned on, and New Altitude's records of your sign-in. If that ever changes, we will update this policy, say so in the repository and on this site, and change the effective date above.
 
 ## 1. Who we are
 
@@ -68,12 +68,12 @@ You may point the office at a different Postgres database by setting `DATABASE_U
 
 ### What never happens
 
-- **No reports without your yes.** The software sends error and tracing reports only after you turn them on in Setup. Nothing asks you on your first visit, and until you turn them on it sends none. Turning them off stops them at once. Reports also need a New Altitude sign-in: while you are signed out the software sends none, and when you sign in again your earlier answer holds.
-- **No New Altitude server holds your office.** There is no sync and no cloud copy, and you need no account with us to use the office. The software reaches New Altitude only in two ways you choose: the error report relay after your yes, while you are signed in (see "Error and tracing reports" below), and signing in to a New Altitude account you already have (see "Your New Altitude account" in section 5).
+- **No reports unless you turn them on.** The software sends error and tracing reports only after you turn them on in Setup. Nothing asks you on your first visit, and until you turn them on it sends none. Turning them off stops them at once. Reports also need a New Altitude sign-in: while you are signed out the software sends none, and when you sign in again your earlier answer holds.
+- **No New Altitude server holds your office.** There is no sync and no cloud copy, and you need no account with us to use the office. The software reaches New Altitude only in two ways you choose: the error report relay, once you turn reports on while signed in (see "Error and tracing reports" below), and signing in to a New Altitude account you already have (see "Your New Altitude account" in section 5).
 - **No remote access.** The office listens on `127.0.0.1` only, so nothing outside your computer can reach it. Its built-in database does the same. If you choose the `https://local.oddboro.com` address during setup, the Caddy proxy that serves it listens on ports 80 and 443 and answers only for that name, which resolves to `127.0.0.1`.
 - **No sale or sharing.** We never receive your office's data, so we cannot sell it, share it, rent it or use it to train anything. Error reports you choose to send are used only to fix Oddboro.
 
-### Error and tracing reports (only if you say yes)
+### Error and tracing reports (only if you turn them on)
 
 When something in Oddboro breaks, a report helps us fix it. You choose whether the software sends them.
 
@@ -87,7 +87,7 @@ What a report holds:
 
 What a report never holds: your IP address, your computer's name, cookies, request headers or bodies, web address query strings, your chats, your Odds' prompts or work, the tools they use and what they send them, the addresses of other services or computers the office reaches, the names of your folders, what is in your files, your family's details, or your name. An error's message is included only when Oddboro's code wrote it or it follows a fixed pattern: a JavaScript engine error (such as "x is not a function", with any data in it removed), a system error's code (such as "ENOENT open", without the file it names), or a database error's code with the names of the table, column and constraint it touched.
 
-Where it goes: the app sends each report, with your sign-in's access token, to a relay New Altitude runs on Cloudflare. The relay checks that the token belongs to a New Altitude account, removes it, adds our Sentry key and passes the report to Sentry, the service that stores our error reports. Sentry never receives your token or your account. The relay keeps no report, no IP address and no record of which account sent it; if it turns an account away, New Altitude keeps a record of that refusal under the New Altitude Privacy Policy. Sentry does not store your IP address. It keeps the approximate location (city and country) the address points to. Sentry keeps reports for 90 days, then deletes them.
+Where it goes: the app sends each report, with your sign-in's access token, to a relay New Altitude runs on Cloudflare. The relay checks that the token belongs to a New Altitude account, removes it, adds our Sentry key and passes the report to Sentry, the service that stores our error reports. Sentry never receives your token or your account. The relay keeps no report, no IP address and no record of which account sent it; if it turns an account away, New Altitude keeps a record of that refusal under the New Altitude Privacy Policy. Sentry does not store your IP address. It keeps the approximate location (city and country) the address points to. Sentry keeps reports for a limited time, then deletes them.
 
 If you run Oddboro from source, it sends no reports unless you name your own Sentry address in `.env` as `ODDBORO_DIAGNOSTICS_DSN`. Then it sends straight to your Sentry, never to us. It needs no New Altitude sign-in and sends none.
 
@@ -132,7 +132,7 @@ If you have a New Altitude account, you can sign in to it from the office, in Se
 - The office then asks New Altitude who you are. It keeps only your account's id, name and email, with the sign-in, in your system's secret store.
 - New Altitude keeps a record that your account signed in from Oddboro, under the [New Altitude Privacy Policy](https://newaltitude.ai/privacy).
 - Signing in sends nothing from your office to New Altitude: no chats, no Odds, no files.
-- If you also said yes to error reports, each report goes to New Altitude's relay with your sign-in, as "Error and tracing reports" describes.
+- If you also turn on error reports, each report goes to New Altitude's relay with your sign-in, as "Error and tracing reports" describes.
 - To sign out, open Setup and choose Sign out under Account. The office tells New Altitude to end the sign-in, then deletes it from your computer.
 
 ### Ollama
@@ -181,7 +181,7 @@ An Odd may ask for a hosted tool (a service reached over the network). You appro
 
 ### What we keep
 
-New Altitude keeps no personal data about users of the software except error and tracing reports from people who said yes to them, held by Sentry for 90 days as section 4 describes, and, for people who sign in to a New Altitude account, the record of that sign-in, kept with the account under the New Altitude Privacy Policy. The only data that can exist about your visit to this site is the hosting provider's server log described in section 3.
+New Altitude keeps no personal data about users of the software except error and tracing reports from people who turned them on, held by Sentry for a limited time as section 4 describes, and, for people who sign in to a New Altitude account, the record of that sign-in, kept with the account under the New Altitude Privacy Policy. The only data that can exist about your visit to this site is the hosting provider's server log described in section 3.
 
 ### What is on your computer, and how to delete it
 
@@ -224,7 +224,7 @@ Oddboro and this website are not directed to children. We do not knowingly colle
 
 ## 9. International users
 
-New Altitude is a company in the United States. This website is static files served by a hosting provider, which may serve them from locations around the world. The software runs on your computer in whatever country you are in, and we move nothing from it. The one exception is error and tracing reports, if you say yes: they go through our relay on Cloudflare to Sentry, which stores them in the United States. A New Altitude sign-in, if you make one, goes to New Altitude, whose privacy policy says where it is processed. If you connect the software to Anthropic or another service, that service's own policy explains where it processes data and on what legal basis.
+New Altitude is a company in the United States. This website is static files served by a hosting provider, which may serve them from locations around the world. The software runs on your computer in whatever country you are in, and we move nothing from it. The one exception is error and tracing reports, if you turn them on: they go through our relay on Cloudflare to Sentry, which stores them in the United States. A New Altitude sign-in, if you make one, goes to New Altitude, whose privacy policy says where it is processed. If you connect the software to Anthropic or another service, that service's own policy explains where it processes data and on what legal basis.
 
 If you are in the European Economic Area, the United Kingdom or Switzerland: when you run the software, you decide what data goes in and where it goes, so you are the controller of that data (or you use it for purely personal or household purposes, which the GDPR does not cover). New Altitude is neither a controller nor a processor of it. For the website, the only processing is the hosting provider's server log, which rests on legitimate interest in keeping the site secure and running (GDPR Article 6(1)(f)). For error and tracing reports you agreed to send, New Altitude is the controller, the legal basis is your consent (GDPR Article 6(1)(a)), and you can withdraw it in Setup at any time. Sentry and Cloudflare process them for us. For your New Altitude account and its sign-ins, New Altitude is the controller under the New Altitude Privacy Policy.
 
@@ -234,7 +234,7 @@ Laws including the EU and UK GDPR, the California Consumer Privacy Act as amende
 
 We respect all of these. Honestly stated, here is how they apply:
 
-- **We hold almost no personal data about you.** If you said yes to error reports, Sentry holds them for us, each with an approximate location. Reports carry no name, account or IP address, so we cannot tell which ones are yours. Sentry deletes every report after 90 days. If you signed in to a New Altitude account, New Altitude holds the account and its sign-in records under the New Altitude Privacy Policy.
+- **We hold almost no personal data about you.** If you turned on error reports, Sentry holds them for us, each with an approximate location. Reports carry no name, account or IP address, so we cannot tell which ones are yours. Sentry deletes every report after a limited time. If you signed in to a New Altitude account, New Altitude holds the account and its sign-in records under the New Altitude Privacy Policy.
 - **We do not sell personal information, we do not share it for cross-context behavioral advertising, and we do not use it for targeted advertising or profiling.** We have not done so in the preceding twelve months. There is no sale or sharing to opt out of. Error reports are a separate choice, and you can turn them off in Setup at any time.
 - **We do not collect sensitive personal information** as those laws define it.
 - **We do not discriminate** against anyone for exercising a privacy right.
