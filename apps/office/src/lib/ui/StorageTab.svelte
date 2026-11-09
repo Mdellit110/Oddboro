@@ -10,12 +10,22 @@
   // again when the office says something changed.
   import { call } from './api.ts';
   import { openFile } from './windows.svelte.ts';
+  import {
+    countFiles,
+    matching,
+    nameOf,
+    ownRows,
+    sharedRows,
+    shownAs,
+    treeOf,
+    type Entry,
+    type Row,
+    type Tree,
+    type Work
+  } from './storage-list.ts';
+  import type { Snippet } from 'svelte';
   import type { StaffProfile } from '../staff/roster.ts';
 
-  type Entry = { path: string; dir: boolean; size: number; mtime: number };
-  /** Each folder's own entries, by the folder's path ('' is the top). */
-  type Tree = Record<string, Entry[]>;
-  type Work = { title: string; root: string; entries: Entry[] };
   type Props = { profile: StaffProfile; version: number };
   let { profile, version }: Props = $props();
 
@@ -50,34 +60,14 @@
     );
   });
 
-  const parentOf = (path: string) => path.slice(0, Math.max(0, path.lastIndexOf('/')));
-  const nameOf = (path: string) => path.slice(path.lastIndexOf('/') + 1);
-  function treeOf(list: Entry[]): Tree {
-    const by: Tree = {};
-    for (const e of list) (by[parentOf(e.path)] ??= []).push(e);
-    return by;
-  }
-  const countFiles = (list: Entry[]) => list.filter((e) => !e.dir).length;
-  const shared = $derived(work.flatMap((w) => w.entries));
+  const own = $derived(ownRows(entries));
+  const shared = $derived(sharedRows(work));
   // Two trees, since an Odd's own folder can hold a path that reads like a shared one.
-  const ownTree = $derived(treeOf(entries));
+  const ownTree = $derived(treeOf(own));
   const sharedTree = $derived(treeOf(shared));
-  const files = $derived(countFiles(entries));
+  const files = $derived(countFiles(own));
   const sharedFiles = $derived(countFiles(shared));
-  /** Each shared entry's words for the owner, by its path. */
-  const sharedNames = $derived.by(() => {
-    const by: Record<string, string> = {};
-    for (const w of work)
-      for (const e of w.entries) by[e.path] = `${w.title}/${e.path.slice(w.root.length + 1)}`;
-    return by;
-  });
-  const shownAs = (e: Entry) => sharedNames[e.path] ?? e.path;
-  const matches = $derived.by(() => {
-    const f = find.trim().toLowerCase();
-    return f
-      ? [...entries, ...shared].filter((e) => !e.dir && shownAs(e).toLowerCase().includes(f))
-      : [];
-  });
+  const matches = $derived(matching(own, shared, find));
 
   function size(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`;
@@ -89,13 +79,29 @@
   const show = (path: string) => openFile({ staff: profile.id, path });
 </script>
 
-{#snippet fileRow(e: Entry, label: string, depth: number)}
+{#snippet treeLabel(r: Row)}
+  <span class="min-w-0 flex-1 truncate text-sm">{nameOf(r.path)}</span>
+{/snippet}
+
+<!-- A long title gives way, so the file's own name stays on the row. -->
+{#snippet foundLabel(r: Row)}
+  {#if r.work === undefined}
+    <span class="min-w-0 flex-1 truncate text-sm">{r.below}</span>
+  {:else}
+    <span class="flex min-w-0 flex-1 text-sm">
+      <span class="min-w-0 truncate">{r.work}</span>
+      <span class="max-w-full shrink-0 truncate">/{r.below}</span>
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet fileRow(r: Row, depth: number, label: Snippet<[Row]>)}
   <li>
     <button
       class="flex w-full items-center gap-2 rounded-md py-1 pe-2 text-start hover:bg-night/40"
       style="padding-inline-start: {0.5 + depth * 0.9}rem"
-      title={shownAs(e)}
-      onclick={() => show(e.path)}
+      title={shownAs(r)}
+      onclick={() => show(r.path)}
     >
       <svg
         class="size-3.5 shrink-0 text-muted"
@@ -106,8 +112,8 @@
         stroke-linejoin="round"
         aria-hidden="true"><path d="M4 1.75h5l3 3v9.5H4zM9 1.75v3h3" /></svg
       >
-      <span class="min-w-0 flex-1 truncate text-sm">{label}</span>
-      <span class="shrink-0 text-[10px] text-faint">{size(e.size)} · {when(e.mtime)}</span>
+      {@render label(r)}
+      <span class="shrink-0 text-[10px] text-faint">{size(r.size)} · {when(r.mtime)}</span>
     </button>
   </li>
 {/snippet}
@@ -144,11 +150,11 @@
 {/snippet}
 
 {#snippet folder(tree: Tree, path: string, depth: number)}
-  {#each tree[path] ?? [] as e (e.path)}
-    {#if e.dir}
-      {@render folderRow(tree, e.path, nameOf(e.path), depth)}
+  {#each tree[path] ?? [] as r (r.path)}
+    {#if r.dir}
+      {@render folderRow(tree, r.path, nameOf(r.path), depth)}
     {:else}
-      {@render fileRow(e, nameOf(e.path), depth + 1)}
+      {@render fileRow(r, depth + 1, treeLabel)}
     {/if}
   {/each}
 {/snippet}
@@ -181,8 +187,8 @@
     {:else if find.trim()}
       {#if matches.length}
         <ul>
-          {#each matches as e (e)}
-            {@render fileRow(e, shownAs(e), 0)}
+          {#each matches as r (r)}
+            {@render fileRow(r, 0, foundLabel)}
           {/each}
         </ul>
       {:else}
