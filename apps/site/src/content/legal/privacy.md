@@ -68,7 +68,7 @@ You may point the office at a different Postgres database by setting `DATABASE_U
 
 ### What never happens
 
-- **No reports without your yes.** The software sends error and tracing reports only after you say yes, in your first visit, on the Desk, or in Setup. Until then it sends none, and saying no stops them at once. Reports also need a New Altitude sign-in: while you are signed out the software sends none, and when you sign in again your earlier answer holds.
+- **No reports without your yes.** The software sends error and tracing reports only after you turn them on in Setup. Nothing asks you on your first visit, and until you turn them on it sends none. Turning them off stops them at once. Reports also need a New Altitude sign-in: while you are signed out the software sends none, and when you sign in again your earlier answer holds.
 - **No New Altitude server holds your office.** There is no sync and no cloud copy, and you need no account with us to use the office. The software reaches New Altitude only in two ways you choose: the error report relay after your yes, while you are signed in (see "Error and tracing reports" below), and signing in to a New Altitude account you already have (see "Your New Altitude account" in section 5).
 - **No remote access.** The office listens on `127.0.0.1` only, so nothing outside your computer can reach it. Its built-in database does the same. If you choose the `https://local.oddboro.com` address during setup, the Caddy proxy that serves it listens on ports 80 and 443 and answers only for that name, which resolves to `127.0.0.1`.
 - **No sale or sharing.** We never receive your office's data, so we cannot sell it, share it, rent it or use it to train anything. Error reports you choose to send are used only to fix Oddboro.
@@ -126,7 +126,7 @@ Anthropic processes all of this under your agreement with Anthropic: its [Consum
 
 ### Your New Altitude account (only if you sign in)
 
-If you have a New Altitude account, you can sign in to it from the office: on your first visit, or later in Setup under Account. Only error reports need it.
+If you have a New Altitude account, you can sign in to it from the office, in Setup under Account. Only error reports need it.
 
 - Signing in opens New Altitude's own sign-in page in your browser. You sign in there, and you may be asked to accept New Altitude's Beta Terms.
 - The office then asks New Altitude who you are. It keeps only your account's id, name and email, with the sign-in, in your system's secret store.

@@ -51,7 +51,7 @@ const KEYRING_READ: Reader = (
     "secret-tool",
     &["lookup", "service", SECRET_SERVICE, "account", SIGN_IN],
 );
-/// The owner's answer, which the office's Setup and first visit write.
+/// The owner's answer, which the office's Setup writes.
 const ANSWER_KEY: &str = "OFFICE_DIAGNOSTICS";
 /// The most a report may hold up the dialog or the panic that sent it.
 const SEND_TIMEOUT: Duration = Duration::from_secs(2);

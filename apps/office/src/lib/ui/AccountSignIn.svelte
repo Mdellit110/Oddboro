@@ -3,9 +3,8 @@
   import { account } from './account.svelte.ts';
 
   // Signing in to the owner's New Altitude account: the words and the buttons
-  // for each state. The first-visit card and the Setup section both show this
-  // one and add only their own buttons. Text sizes follow the parent's, so
-  // the card can be roomier than Setup.
+  // for each state. Setup's Account section shows it and adds Sign out; a
+  // later offer to sign in can show it too. Text sizes follow the parent's.
   //
   // The state is the server's: the page's `account` object, set from the page
   // data and the live line, so a sign-in finished in another tab shows here

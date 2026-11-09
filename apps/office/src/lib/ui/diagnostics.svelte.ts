@@ -17,13 +17,6 @@ export const shown = (): boolean => reportsOffered(diagnostics, account.status.s
 /** The answer the page's own traces follow: no while the page offers no reports. */
 export const pageAnswer = (): Answer => (shown() ? diagnostics.answer : 'no');
 
-/**
- * What a report never carries, in the words the owner approved. The ask and
- * the Setup switch both say it, so the two cannot drift apart.
- */
-export const NEVER_CARRIED =
-  "Never your chats, files, Odds' work, family details or name. Error text only in fixed forms, never your words.";
-
 /** Keep the owner's answer in the office, then show it here. Throws with the server's message. */
 export async function answerDiagnostics(answer: 'yes' | 'no'): Promise<void> {
   const kept = await call<{ answer: Answer }>('/api/diagnostics', { answer }, 'PUT');

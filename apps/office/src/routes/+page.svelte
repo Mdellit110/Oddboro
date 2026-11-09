@@ -19,7 +19,7 @@
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
   import { account } from '#lib/ui/account.svelte.ts';
-  import { diagnostics, shown } from '#lib/ui/diagnostics.svelte.ts';
+  import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
   import ServicesPanel from '#lib/ui/ServicesPanel.svelte';
   import { serviceNames } from '#lib/ui/service-names.svelte.ts';
@@ -288,11 +288,7 @@
   }
   const status = $derived(Object.fromEntries(tags.map((t) => [t.id, statusOf(t)])));
 
-  /** The Desk asks about reports once the office is open, until the owner answers. */
-  const askDiagnostics = $derived(shown() && diagnostics.answer === 'unasked' && welcomed);
-  const deskCount = $derived(
-    desk.asks.length + desk.tasks.length + desk.reports.length + Number(askDiagnostics)
-  );
+  const deskCount = $derived(desk.asks.length + desk.tasks.length + desk.reports.length);
 
   /** Rooms a new hire can work in: any with a place to work, read or sort mail. */
   const hireRooms = $derived.by(() => {
@@ -1229,7 +1225,6 @@
               {#if w.kind === 'desk'}
                 <DeskDrawer
                   {desk}
-                  {askDiagnostics}
                   {staff}
                   focus={deskFocus}
                   onhire={hireProposal}

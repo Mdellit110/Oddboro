@@ -3,7 +3,6 @@
   import Pixel from './Pixel.svelte';
   import Markdown from './Markdown.svelte';
   import Attachments from './Attachments.svelte';
-  import DiagnosticsAsk from './DiagnosticsAsk.svelte';
   import AwsSignIn from './AwsSignIn.svelte';
   import AwsSecretPick from './AwsSecretPick.svelte';
   import SelectToChat from './SelectToChat.svelte';
@@ -27,8 +26,6 @@
   type Props = {
     desk: Desk;
     staff: StaffProfile[];
-    /** Ask about error and trace reports, first, until the owner answers. */
-    askDiagnostics: boolean;
     /** Open on this item when set, e.g. after clicking a waiting staffer. */
     focus?: string;
     /** Approving a proposed hire opens the hire window with it. */
@@ -38,7 +35,7 @@
     /** Open a staffer's card, from the name on an item. */
     onstaff: (id: string) => void;
   };
-  let { desk, staff, askDiagnostics, focus, onhire, onplan, onstaff }: Props = $props();
+  let { desk, staff, focus, onhire, onplan, onstaff }: Props = $props();
 
   type Item =
     | { key: string; kind: 'ask'; at: string; row: AskRow }
@@ -79,8 +76,6 @@
       }))
     ].sort((a, b) => a.at.localeCompare(b.at))
   );
-
-  const waiting = $derived(items.length + Number(askDiagnostics));
 
   let openKey = $state<string | undefined>();
   /** An attached file with edits the owner has not saved. */
@@ -290,20 +285,12 @@
 
   <div class="flex-1 overflow-y-auto p-3">
     {#if !open}
-      {#if !waiting}
+      {#if !items.length}
         <p class="py-10 text-center text-sm text-muted">
           Desk clear. Your Odds will bring you anything that needs you.
         </p>
       {/if}
       <ul class="flex flex-col gap-1.5">
-        {#if askDiagnostics}
-          <li class="rounded-xl bg-raise px-3 py-2.5" aria-label="From Oddboro">
-            <span class="block text-[10px] tracking-[0.16em] text-ember uppercase"
-              >From Oddboro</span
-            >
-            <div class="mt-1"><DiagnosticsAsk /></div>
-          </li>
-        {/if}
         {#each items as i (i.key)}
           {@const from = who(i.row.staffId)}
           <li>
