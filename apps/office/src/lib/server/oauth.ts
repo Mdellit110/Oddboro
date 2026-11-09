@@ -88,8 +88,12 @@ const GITHUB_CLIENT_ID = 'Ov23liHSAMGGQ2kvqbkS';
  */
 export const GITHUB_SCOPES = 'repo read:org read:user';
 
-/** Whether two sign-in server addresses are one, a trailing slash aside. */
-const sameServer = (a: string | undefined, b: string) => a?.replace(/\/+$/, '') === b;
+/**
+ * Whether a sign-in server's address, as the server gave it, is `b`, with or
+ * without one trailing slash. No pattern, since the address comes from the
+ * server and a pattern on it can be made slow.
+ */
+const sameServer = (a: string | undefined, b: string) => a === b || a === `${b}/`;
 
 /** A build without a sign-in client's secret: that sign-in cannot start, whatever the server offers. */
 export class BuiltWithout extends Error {}
