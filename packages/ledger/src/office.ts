@@ -516,16 +516,17 @@ const turnedOn = (name: string, on: readonly OwnSwitch[]) =>
  * Secret stores, by name, each with how it is found outside the home, where
  * none sits at a known place (`holdsStoreOutside`). In the home a name is
  * enough. Outside it an empty list means the name alone. A list names what
- * only the store holds, for a name that is also a project's own settings
- * (`.claude`, `.codex`) or an ordinary word (`Library`, `AppData`): a coding
- * tool's sign-in or history, or a Mac user's keychain and cookies, which
- * `/Library` has none of, so that system folder stays a warning.
+ * only the store holds, for a name a project may use for its own files
+ * (`.claude`, `.codex`, `.docker`, `.kube`, `.config`) or an ordinary word
+ * (`Library`, `AppData`): a sign-in, a tool's history or a cluster's keys, or
+ * a Mac user's keychain and cookies, which `/Library` has none of, so that
+ * system folder stays a warning.
  */
 export const STORE_MARKS: Record<string, string[]> = {
   '.ssh': [],
   '.aws': [],
   '.gnupg': [],
-  '.config': [],
+  '.config': ['gcloud', 'gh/hosts.yml'],
   Library: ['Keychains/login.keychain-db', 'Cookies'],
   AppData: ['Roaming', 'Local'],
   '.claude': ['.credentials.json', 'history.jsonl', 'projects'],
@@ -534,8 +535,8 @@ export const STORE_MARKS: Record<string, string[]> = {
   '.grok': ['auth.json', 'sessions'],
   '.codex': ['auth.json', 'sessions'],
   '.gemini': ['oauth_creds.json', 'google_accounts.json'],
-  '.docker': [],
-  '.kube': []
+  '.docker': ['config.json'],
+  '.kube': ['config']
 };
 
 /**

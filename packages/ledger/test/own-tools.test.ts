@@ -20,6 +20,7 @@ process.env.ODDBORO_CODE = join(HOME, 'code', 'oddboro');
 process.env.OLLAMA_URL = 'http://127.0.0.1:9';
 after(() => rmSync(HOME, { recursive: true, force: true }));
 const O = await import('../src/office.ts');
+const C = await import('../src/capabilities.ts');
 
 /** Makes a folder under the test's home, and gives back its path. */
 function folder(...parts: string[]): string {
@@ -373,24 +374,136 @@ test("checkFolder refuses Docker's and Kubernetes' folders, which hold sign-ins 
   assert.deepEqual(O.checkFolder('~/.kube'), { refused: O.FOLDER_REFUSED.secrets });
 });
 
+/** Each name a project may share with a store: what a project keeps there, and each file only the real store holds. */
+const SHARED_NAMES = [
+  { store: '.docker', project: 'Dockerfile', marks: ['config.json'] },
+  { store: '.kube', project: 'overlay.yaml', marks: ['config'] },
+  { store: '.config', project: 'dotnet-tools.json', marks: ['gcloud', 'gh/hosts.yml'] }
+];
+
+/** A run's own tools for an Odd that was stored with this one folder. */
+const reachesRuns = (path: string) =>
+  C.ownTools(
+    { agent: 'claude', commands: false, web: false, folders: [{ path, write: false }] },
+    'darwin'
+  ).granted.length === 1;
+
+for (const platform of ['darwin', 'linux'] as const)
+  test(
+    `outside the home on ${platform}, a project's own .docker, .kube or .config is given and reaches runs: the folder, one in it and one holding it`,
+    { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+    () =>
+      onPlatform(platform, async () => {
+        for (const { store, project } of SHARED_NAMES) {
+          const top = outside('app');
+          const at = join(top, store);
+          mkdirSync(join(at, 'inner'), { recursive: true });
+          writeFileSync(join(at, project), '');
+          for (const p of [top, at, join(at, 'inner')]) {
+            assert.deepEqual(O.checkFolder(p, true), { real: p }, `${store} ${p}`);
+            assert.equal(O.touchesSecretStore(p), false, `${store} ${p}`);
+            assert.equal(reachesRuns(p), true, `${store} ${p}`);
+          }
+        }
+      })
+  );
+
+for (const platform of ['darwin', 'linux'] as const)
+  test(
+    `outside the home on ${platform}, a real Docker, Kubernetes or sign-in folder is refused whatever the owner accepts, and one already stored reaches no run`,
+    { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+    () =>
+      onPlatform(platform, async () => {
+        for (const { store, project, marks } of SHARED_NAMES)
+          for (const mark of marks) {
+            const top = outside('drive');
+            const at = join(top, store);
+            mkdirSync(join(at, 'inner'), { recursive: true });
+            writeFileSync(join(at, project), '');
+            mkdirSync(dirname(join(at, mark)), { recursive: true });
+            writeFileSync(join(at, mark), '');
+            for (const p of [top, at, join(at, 'inner')]) {
+              for (const accept of [true, false])
+                assert.deepEqual(
+                  O.checkFolder(p, accept),
+                  { refused: O.FOLDER_REFUSED.secrets },
+                  `${store} ${mark} ${p}`
+                );
+              assert.equal(reachesRuns(p), false, `${store} ${mark} ${p}`);
+            }
+          }
+      })
+  );
+
 test(
-  "outside the home, checkFolder refuses Docker's and Kubernetes' folders by name, whatever the owner accepts",
+  "outside the home, the warning still comes first for a project's own .docker, .kube or .config in system files, and only the Accept gives it",
   { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
-  () => {
-    const R = O.FOLDER_REFUSED;
-    for (const store of ['.docker', '.kube']) {
-      const top = outside('backup');
-      mkdirSync(join(top, store, 'inner'), { recursive: true });
-      assert.deepEqual(O.checkFolder(top, true), { refused: R.secrets }, store);
-      assert.deepEqual(O.checkFolder(join(top, store), true), { refused: R.secrets }, store);
-      assert.deepEqual(
-        O.checkFolder(join(top, store, 'inner'), true),
-        { refused: R.secrets },
-        store
-      );
+  async () => {
+    for (const { store, project } of SHARED_NAMES) {
+      const top = outside('app');
+      mkdirSync(join(top, store));
+      writeFileSync(join(top, store, project), '');
+      assert.deepEqual(O.checkFolder(top), { warning: O.FOLDER_WARNING }, store);
+      assert.deepEqual(await O.setFolder('ziva', top, 'read'), { warning: O.FOLDER_WARNING });
+      assert.deepEqual((await O.staffer('ziva'))?.folders, [], store);
+      assert.equal(await O.setFolder('ziva', top, 'read', true), undefined, store);
+      assert.deepEqual((await O.staffer('ziva'))?.folders, [{ path: top, write: false }], store);
+      await O.setFolder('ziva', top, null);
     }
   }
 );
+
+test(
+  'outside the home, a real store is refused when given and stores nothing, Accept or not',
+  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  async () => {
+    const top = outside('drive');
+    mkdirSync(join(top, '.docker'));
+    writeFileSync(join(top, '.docker', 'config.json'), '{}');
+    assert.deepEqual(await O.setFolder('ziva', top, 'read', true), {
+      refused: O.FOLDER_REFUSED.secrets
+    });
+    assert.deepEqual((await O.staffer('ziva'))?.folders, []);
+  }
+);
+
+test(
+  'outside the home, a file only named like a store is no store, and a project .claude of settings is still given as the folder itself',
+  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  () => {
+    for (const store of ['.docker', '.kube', '.config']) {
+      const top = outside('app');
+      writeFileSync(join(top, store), '');
+      assert.deepEqual(O.checkFolder(top, true), { real: top }, store);
+    }
+    const project = outside('project');
+    mkdirSync(join(project, '.claude'));
+    writeFileSync(join(project, '.claude', 'settings.json'), '{}');
+    assert.deepEqual(O.checkFolder(join(project, '.claude'), true), {
+      real: join(project, '.claude')
+    });
+    assert.equal(reachesRuns(join(project, '.claude')), true);
+    // gh's settings without its sign-in file are no store.
+    const gh = outside('app');
+    mkdirSync(join(gh, '.config', 'gh'), { recursive: true });
+    writeFileSync(join(gh, '.config', 'gh', 'config.yml'), '');
+    assert.deepEqual(O.checkFolder(gh, true), { real: gh });
+  }
+);
+
+test("in the home, .docker, .kube and .config are refused by name with no sign-in in them, and a project's own inside the home is given", () => {
+  for (const store of ['.docker', '.kube', '.config']) {
+    const at = folder(store, 'inner');
+    for (const accept of [true, false]) {
+      assert.deepEqual(O.checkFolder(`~/${store}`, accept), { refused: O.FOLDER_REFUSED.secrets });
+      assert.deepEqual(O.checkFolder(at, accept), { refused: O.FOLDER_REFUSED.secrets });
+    }
+    assert.equal(reachesRuns(at), false, store);
+    const project = folder('Projects', 'app');
+    mkdirSync(join(project, store), { recursive: true });
+    assert.deepEqual(O.checkFolder(project), { real: project }, store);
+  }
+});
 
 test(
   'on a Mac, checkFolder refuses a secret store or the office typed in another case',
@@ -489,24 +602,26 @@ test(
   { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
   () => {
     const R = O.FOLDER_REFUSED;
-    for (const [store, marks] of Object.entries(O.STORE_MARKS)) {
-      const top = outside('drive');
-      const at = join(top, store);
-      if (store === '.claude.json') writeFileSync(at, '{}');
-      else {
-        mkdirSync(join(at, 'inner'), { recursive: true });
-        for (const mark of marks) {
-          mkdirSync(dirname(join(at, mark)), { recursive: true });
-          writeFileSync(join(at, mark), '');
+    for (const [store, marks] of Object.entries(O.STORE_MARKS))
+      // Each mark alone, so a list that lost one fails; no marks is the name alone.
+      for (const mark of marks.length ? marks : [undefined]) {
+        const top = outside('drive');
+        const at = join(top, store);
+        if (store === '.claude.json') writeFileSync(at, '{}');
+        else {
+          mkdirSync(join(at, 'inner'), { recursive: true });
+          if (mark) {
+            mkdirSync(dirname(join(at, mark)), { recursive: true });
+            writeFileSync(join(at, mark), '');
+          }
+          assert.deepEqual(O.checkFolder(at, true), { refused: R.secrets }, store);
+          assert.deepEqual(O.checkFolder(join(at, 'inner'), true), { refused: R.secrets }, store);
+          assert.equal(O.touchesSecretStore(at), true, store);
         }
-        assert.deepEqual(O.checkFolder(at, true), { refused: R.secrets }, store);
-        assert.deepEqual(O.checkFolder(join(at, 'inner'), true), { refused: R.secrets }, store);
-        assert.equal(O.touchesSecretStore(at), true, store);
+        assert.deepEqual(O.checkFolder(top, true), { refused: R.secrets }, store);
+        // A folder stored before the store was there reaches no run.
+        assert.equal(O.touchesSecretStore(top), true, store);
       }
-      assert.deepEqual(O.checkFolder(top, true), { refused: R.secrets }, store);
-      // A folder stored before the store was there reaches no run.
-      assert.equal(O.touchesSecretStore(top), true, store);
-    }
   }
 );
 
