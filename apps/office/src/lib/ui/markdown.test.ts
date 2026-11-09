@@ -20,7 +20,7 @@ async function shown(text: string, staff?: string): Promise<string> {
 /** What the owner reads of `html`. */
 const visible = (html: string): string => html.replace(/<[^>]*>/g, '');
 
-const FULL_PAGE = '/Users/x/.oddboro/threads/1/vera/m/index.html';
+const FULL_PAGE = '/Users/Shared/.oddboro/threads/1/vera/m/index.html';
 const PAGE_NAME = 'vera:threads/1/vera/m/index.html';
 const LINK = `<a href="#" data-file="${PAGE_NAME}">`;
 const NAMED = `<a href="#" data-file="${PAGE_NAME}" title="Open index.html">`;
@@ -73,17 +73,17 @@ for (const [row, text, html, staff] of [
   ],
   [
     'a link labelled with a bare name keeps that label',
-    '[draft.md](file:///Users/x/.oddboro/threads/1/vera/draft.md)',
+    '[draft.md](file:///Users/Shared/.oddboro/threads/1/vera/draft.md)',
     '<p><a href="#" data-file="vera:threads/1/vera/draft.md">draft.md</a></p>'
   ],
   [
     'a full path on a Linux home is a name',
-    '`/home/x/.oddboro/threads/2/vera/a.md`',
+    '`/home/runner/.oddboro/threads/2/vera/a.md`',
     '<p><a href="#" data-file="vera:threads/2/vera/a.md" title="Open a.md"><code>a.md</code></a></p>'
   ],
   [
     'a full path under a dev home is a name, in plain text too',
-    'See /Users/x/.oddboro-dev/threads/3/vera/b.md.',
+    'See /Users/Shared/.oddboro-dev/threads/3/vera/b.md.',
     '<p>See <a href="#" data-file="vera:threads/3/vera/b.md" title="Open b.md">b.md</a>.</p>'
   ],
   [
@@ -94,12 +94,12 @@ for (const [row, text, html, staff] of [
   ],
   [
     "a full path in plain text into an Odd's own folder still shows its path there",
-    '/Users/x/.oddboro/staff/vera/notes/a.md',
+    '/Users/Shared/.oddboro/staff/vera/notes/a.md',
     '<p><a href="#" data-file="vera:notes/a.md" title="Open notes/a.md">notes/a.md</a></p>'
   ],
   [
     "a file: link to an Odd's own folder opens that file",
-    '[a](file:///Users/x/.oddboro/staff/vera/notes/a.md)',
+    '[a](file:///Users/Shared/.oddboro/staff/vera/notes/a.md)',
     '<p><a href="#" data-file="vera:notes/a.md">a</a></p>'
   ]
 ] as const satisfies readonly (readonly [string, string, string, string?])[])
@@ -114,7 +114,7 @@ for (const [row, text, html] of [
   ['a file: link to no office file stays text', '[a](file:///etc/passwd)'],
   ['a javascript: link stays text', '[a](javascript:alert(1))'],
   ['a data: link stays text', '[a](data:text/html;base64,eA==)'],
-  ['a file: link outside any office folder stays text', '[a](file:///Users/x/notes/a.md)'],
+  ['a file: link outside any office folder stays text', '[a](file:///Users/Shared/notes/a.md)'],
   [
     'a file: autolink to no office file stays text',
     '<file:///etc/passwd>',
@@ -123,17 +123,17 @@ for (const [row, text, html] of [
   ['a thread path with .. steps stays text', '~/.oddboro/threads/1/vera/../../x.md'],
   [
     'a thread path with .. steps in a file: link stays text',
-    '[a](file:///Users/x/.oddboro/threads/1/vera/../../x.md)'
+    '[a](file:///Users/Shared/.oddboro/threads/1/vera/../../x.md)'
   ],
   [
     'a thread number past what a thread can have stays text',
-    '/Users/x/.oddboro/threads/99999999999/vera/a.md'
+    '/Users/Shared/.oddboro/threads/99999999999/vera/a.md'
   ],
   [
     'a thread number with leading zeros stays text, so it never reads another thread',
-    '/Users/x/.oddboro/threads/007/vera/a.md'
+    '/Users/Shared/.oddboro/threads/007/vera/a.md'
   ],
-  ['a full path that is only a thread folder stays text', '/Users/x/.oddboro/threads/1/a.md'],
+  ['a full path that is only a thread folder stays text', '/Users/Shared/.oddboro/threads/1/a.md'],
   ['a path without a home stays as it is', '.oddboro/staff/vera/sims/a/index.html']
 ] as readonly (readonly [string, string, string?])[])
   test(row, async () => {
@@ -151,21 +151,23 @@ test("a .. path in backticks asks the office nothing, so it never falls through 
 
 test('a file: image shows its alt text, with no image and no file: anywhere', async () => {
   for (const src of [
-    'file:///Users/x/.oddboro/threads/1/vera/p.png',
-    'file:///Users/x/.oddboro/staff/vera/p.png'
+    'file:///Users/Shared/.oddboro/threads/1/vera/p.png',
+    'file:///Users/Shared/.oddboro/staff/vera/p.png'
   ]) {
     const out = await shown(`![a](${src})`, 'vera');
     assert.equal(out, '<p>a</p>');
     assert.doesNotMatch(out, /<img|file:/);
   }
   // Inside a link it is still only the words.
-  const inLink = await shown(`[![a](file:///Users/x/.oddboro/threads/1/vera/p.png)](https://x.y)`);
+  const inLink = await shown(
+    `[![a](file:///Users/Shared/.oddboro/threads/1/vera/p.png)](https://x.y)`
+  );
   assert.doesNotMatch(inLink, /<img|file:/);
   assert.match(inLink, />a<\/a>/);
 });
 
 test('a thread path shows as written until the office answers, and stays so when it opens nothing', async () => {
-  const path = '/Users/x/.oddboro/threads/7/vera/gone.md';
+  const path = '/Users/Shared/.oddboro/threads/7/vera/gone.md';
   refused.add('threads/7/vera/gone.md');
   const first = renderMarkdown(`See ${path}`, 'vera');
   assert.deepEqual(first.unknown, [{ staff: 'vera', path: 'threads/7/vera/gone.md' }]);

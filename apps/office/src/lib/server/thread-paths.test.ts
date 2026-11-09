@@ -7,10 +7,10 @@ import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { test } from 'node:test';
 import { L, odd } from './office-under-test.ts';
-import { readStaffFile, openStaffPage } from './files.ts';
-import { askAbout } from '../ui/file-links.ts';
-import { renderMarkdown } from '../ui/markdown.ts';
 
+const { readStaffFile, openStaffPage } = await import('./files.ts');
+const { askAbout } = await import('../ui/file-links.ts');
+const { renderMarkdown } = await import('../ui/markdown.ts');
 const resolveRoute = await import('../../routes/api/files/resolve/+server.ts');
 type ResolveEvent = Parameters<typeof resolveRoute.POST>[0];
 // The page's one call, answered by the office's own route.
@@ -40,7 +40,7 @@ async function rendered(text: string, staff?: string): Promise<string> {
   return renderMarkdown(text, staff).html.trim();
 }
 const fullPath = (id: number, staff: string, path: string) =>
-  `/Users/x/.oddboro/threads/${id}/${staff}/${path}`;
+  `/Users/Shared/.oddboro/threads/${id}/${staff}/${path}`;
 const dataFile = (html: string): string => {
   const m = /data-file="([^"]+)"/.exec(html);
   assert.ok(m, html);

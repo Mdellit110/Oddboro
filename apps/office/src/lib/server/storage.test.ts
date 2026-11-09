@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
 import { L, odd } from './office-under-test.ts';
-import { readStaffFile } from './files.ts';
-import { listStorage, oddStorage } from './storage.ts';
 
+const { readStaffFile } = await import('./files.ts');
+const { listStorage, oddStorage } = await import('./storage.ts');
 const route = await import('../../routes/api/staff/[id]/storage/+server.ts');
 type RouteEvent = Parameters<typeof route.GET>[0];
 const outside = mkdtempSync(join(tmpdir(), 'oddboro-storage-outside-'));
