@@ -3,9 +3,11 @@
   import type { Check } from '@oddboro/ledger/checks';
   import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
+  import DiagnosticsSection from './DiagnosticsSection.svelte';
   import OfficeTools from './OfficeTools.svelte';
   import { selectOnFocus } from './select-on-focus.ts';
   import UpdatesSection from './UpdatesSection.svelte';
+  import { diagnostics } from './diagnostics.svelte.ts';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
@@ -184,6 +186,9 @@
 
     {#if welcomed}
       <UpdatesSection />
+      {#if diagnostics.possible}
+        <DiagnosticsSection />
+      {/if}
     {/if}
 
     <section class="flex flex-col gap-2">

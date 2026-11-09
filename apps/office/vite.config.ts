@@ -1,7 +1,27 @@
+import { sentrySvelteKit } from '@sentry/sveltekit/vite';
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
+
+/**
+ * Sentry's build plugin. It uploads the page's source maps only when the
+ * release build holds SENTRY_AUTH_TOKEN (SENTRY_ORG and SENTRY_PROJECT come
+ * from the environment too); without one it makes no request at all. It never
+ * reports the build itself, and wraps nothing at build time: the office sets
+ * Sentry up by hand (src/instrumentation.server.ts, src/hooks.*.ts).
+ */
+export function buildOptions(env: NodeJS.ProcessEnv) {
+  return {
+    autoInstrument: false,
+    buildTimeInstrumentation: false,
+    telemetry: false,
+    autoUploadSourceMaps: !!env.SENTRY_AUTH_TOKEN,
+    // Maps match by debug id. Injecting a release would stamp the page with
+    // the git hash, which matches no server release (oddboro@<version>).
+    release: { create: false, inject: false }
+  };
+}
 
 /**
  * Vite's dev server has a route, `/__open-in-editor`, that opens a file in an
@@ -43,7 +63,13 @@ export function siteUrl(env: Record<string, string | undefined> = process.env): 
 // they reload on save.
 const port = Number(process.env.ODDBORO_PORT) || 4500;
 export default defineConfig(({ command }) => ({
-  plugins: [noEditorLaunch(), tailwindcss(), sveltekit({ adapter: adapter() })],
+  // Sentry's plugin goes before SvelteKit's, as Sentry's setup asks.
+  plugins: [
+    noEditorLaunch(),
+    tailwindcss(),
+    sentrySvelteKit(buildOptions(process.env)),
+    sveltekit({ adapter: adapter() })
+  ],
   define: { __SITE_URL__: JSON.stringify(siteUrl()) },
   // The office's addresses through Caddy (lib/server/address.ts).
   server: {
@@ -56,7 +82,8 @@ export default defineConfig(({ command }) => ({
   // out of the server build. The adapter also leaves out whatever package.json
   // lists under dependencies, so the office lists only the workspace packages
   // there, and every third-party package under devDependencies, which bundles
-  // it: the app then ships none of them (issue #13).
+  // it: the app then ships none of them (issue #13). Sentry is the exception:
+  // it stays under dependencies, since its tracing hooks modules as they load.
   environments:
     command === 'build'
       ? { ssr: { build: { rolldownOptions: { external: [/^@oddboro\//] } } } }

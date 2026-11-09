@@ -28,6 +28,7 @@ import {
   tickKey,
   type GoogleProduct
 } from '@oddboro/ledger';
+import { fixedError } from '@oddboro/ledger/errors';
 import { deleteSecret, getSecret, setSecret } from './keychain.ts';
 
 export const REDIRECT = `${OFFICE_URL}/connect/callback`;
@@ -176,7 +177,7 @@ class KeychainProvider implements OAuthClientProvider {
   }
   codeVerifier() {
     const v = this.load().verifier;
-    if (!v) throw new Error('No sign-in is in progress for this tool');
+    if (!v) throw fixedError('No sign-in is in progress for this tool');
     return v;
   }
   discoveryState() {
@@ -237,7 +238,7 @@ export async function startSignIn(id: string): Promise<{ url?: string }> {
 /** The service sent the owner back with a code. Trade it for tokens. */
 export async function finishSignIn(state: string, code: string): Promise<string> {
   const id = pending.get(state);
-  if (!id) throw new Error('This sign-in link is old. Click Sign in on the task again.');
+  if (!id) throw fixedError('This sign-in link is old. Click Sign in on the task again.');
   pending.delete(state);
   const { provider, serverUrl } = await signInFor(id);
   // What the store held before, to put back if this Google sign-in is not kept.
