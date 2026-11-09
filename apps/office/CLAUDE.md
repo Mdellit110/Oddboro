@@ -275,11 +275,15 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    last on; the Lessons tab counts its guesses, and the Data group itself
    shows no count. It opens on Chat. Storage
    (`StorageTab.svelte`) is a tree of everything the Odd kept in its own
-   folder, searchable by path, from `/api/staff/[id]/storage`
-   (`listStorage` in `src/lib/server/storage.ts`): never the office's own
+   folder, then, under Shared work, its part of each thread it is on (by the
+   test `workFile` uses, `workTitles` in the ledger), one folder per piece of
+   work by its title, newest first. Search covers both, and a shared file
+   reads as its work's title and its path there, never a thread's number or
+   folder. It comes from `/api/staff/[id]/storage`
+   (`oddStorage` in `src/lib/server/storage.ts`): never the office's own
    `chat.jsonl` and `session.json`, an instruction file, a hidden entry or a
-   link, and at most 5,000 entries, which it says. A file opens in the
-   viewer. It is read when the tab opens and when the office says something
+   link, and at most 5,000 entries across both, which it says. A file opens
+   in the viewer. It is read when the tab opens and when the office says something
    changed. The Odd's name in the header, with an info icon beside
    it, opens its info page (`OddInfo.svelte`), which has no tab, so the
    tabs have room: one scrolling page of sections, most useful first. Who it
@@ -894,7 +898,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     says the viewer opens it, or that it is a page the browser opens (a page links
     even when too big or not text for the viewer), and links that file; anything else stays
     text (`src/lib/ui/file-links.ts` asks once per name per page;
-    `src/lib/ui/markdown.ts` renders it). A bare file
+    `src/lib/ui/markdown.ts` renders it). A full path into a thread's folder, in
+    text or a `file:` link, is that file's `threads/<id>/...` name for the Odd
+    whose part holds it, shown by its bare name; a `file:` link that names no
+    office file stays text. A bare file
     name opens the one file with that name in the Odd's folder, outside hidden folders.
     When no file there has that name, it opens the newest file of that name in
     the Odd's own parts of thread folders, such as a goal's, and the link, the
@@ -904,8 +911,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     through a link to a file or a folder. It takes a bare name, or a path
     inside the Odd's own folder such as `site/index.html`, which opens only
     when its real path lands inside that folder; never a full path, and a path
-    with a folder never reaches a thread, except an attached file's
-    `threads/<id>/...` name, which opens that one file in any part of the
+    with a folder never reaches a thread, except a `threads/<id>/...` name
+    (an attached file's, a Storage entry's, or the one the page turns a full
+    path into), which opens that one file in any part of the
     folder while the Odd is on that thread (`workFile` in the ledger). A folder
     it may not read hides only what is in it. An error the owner reads names
     only the file's bare name (`ownerMessage`); the rest goes to the log. It
