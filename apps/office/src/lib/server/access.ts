@@ -5,6 +5,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
   connector,
   connectorReady,
@@ -12,9 +14,12 @@ import {
   setConnectorConfig,
   tickKey,
   toolCommand,
-  type ConnectorRow
+  type ConnectorRow,
+  type GoogleProduct
 } from '@oddboro/ledger';
 import { getSecret, headerSecret } from './keychain.ts';
+import { driveServer } from './google/drive.ts';
+import { gmailServer } from './google/gmail.ts';
 import { bearer, startSignIn } from './oauth.ts';
 import { outsideToolEnv } from './run-env-allow.ts';
 
@@ -27,6 +32,8 @@ export type ToolInfo = { name: string; description: string; readOnly: boolean };
 export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
   let transport: StdioClientTransport | StreamableHTTPClientTransport;
   switch (c.kind) {
+    case 'builtin':
+      return builtin(c);
     case 'http':
       // A hosted connector is saved with its address (registry.ts).
       transport = new StreamableHTTPClientTransport(new URL(c.config.url!), {
@@ -57,6 +64,36 @@ export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
   }
   const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
   await client.connect(transport);
+  return client;
+}
+
+/** The servers the office serves itself, by the Google product a connector serves. */
+const BUILTIN: Record<
+  GoogleProduct,
+  (token: () => Promise<string>, account?: string) => McpServer
+> = {
+  gmail: gmailServer,
+  drive: driveServer
+};
+
+/**
+ * A server the office serves itself, inside this process: Gmail and Google
+ * Drive, one server per account, whose tools name the account they reach.
+ * Each call asks `bearer` for a live token, so the Google sign-in never
+ * leaves the office, not even to a process of its own.
+ */
+async function builtin(c: ConnectorRow): Promise<Client> {
+  const make = c.config.google && BUILTIN[c.config.google];
+  if (!make) throw new Error(`The office serves no tool named ${c.id}`);
+  const token = async () => {
+    const t = await bearer(c.id);
+    if (!t) throw new Error(`${c.name} needs signing in again. Call reconnect_access.`);
+    return t;
+  };
+  const [ours, theirs] = InMemoryTransport.createLinkedPair();
+  await make(token, c.config.account).connect(theirs);
+  const client = new Client({ name: 'oddboro-office', version: '1.0.0' });
+  await client.connect(ours);
   return client;
 }
 
@@ -99,6 +136,9 @@ export async function hostedSignIn(id: string): Promise<{ url?: string }> {
   try {
     return await startSignIn(id);
   } catch (signInError) {
+    // A Google tool always needs its sign-in: listing its tools takes none, so
+    // the check below would wrongly mark it open.
+    if ((await connector(id))?.config.oauth === 'google') throw signInError;
     try {
       await listTools(id, true);
     } catch {

@@ -9,7 +9,15 @@ import { test } from 'node:test';
 import { PATCH_KEY, STAFF_PATCH_KEYS } from '@oddboro/ledger/grantable';
 import { FLOORS, GROUNDS, WALLS, type OfficeSpec } from '@oddboro/world';
 import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
-import { L, currentOffice, goal, ownerHome, request, type Call } from './office-under-test.ts';
+import {
+  L,
+  currentOffice,
+  goal,
+  ownerHome,
+  request,
+  secrets,
+  type Call
+} from './office-under-test.ts';
 import { OWNER_ACTIONS, type Recording } from './owner-actions.ts';
 
 const ROUTES = fileURLToPath(new URL('../../routes', import.meta.url));
@@ -94,6 +102,39 @@ const fileOf = (name: string) => {
   return { staff: 'sam', path: name, content: 'After.\n', mtime: statSync(path).mtimeMs };
 };
 
+/**
+ * Gmail signed in for Paige, and `send` with Gmail answering as a stand-in, so
+ * a reply or a filter the owner sends reaches its ledger row.
+ */
+async function withGmail(send: () => Promise<void>): Promise<void> {
+  process.env.ODDBORO_GOOGLE_CLIENT_SECRET = 'a-client-secret-for-tests';
+  secrets.set(
+    'gmail:oauth',
+    JSON.stringify({
+      tokens: { access_token: 'ya29.test', refresh_token: '1//test', expires_in: 3600 },
+      savedAt: Date.now()
+    })
+  );
+  await L.connectorReady('gmail', ['get_thread'], ['get_thread']);
+  await L.pg`insert into grants ${L.pg({ staff_id: 'paige', connector_id: 'gmail', level: 'read' })}
+    on conflict do nothing`;
+  const real = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!url.startsWith('https://gmail.googleapis.com/')) return real(input, init);
+    return Response.json({ id: 'g-1', labels: [], messages: [], message: { id: 'g-1' } });
+  }) as typeof fetch;
+  try {
+    await send();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+const asked = (fields: Omit<Parameters<typeof L.raiseAsk>[1], 'title' | 'why' | 'ifApproved'>) =>
+  L.raiseAsk('paige', { title: 'Asked', why: 'w', ifApproved: 'i', ...fields }).then(
+    (r) => r.ask.id
+  );
+
 /** What sends the page's call to the route under test, counting the ledger either side. */
 type Send = (call: Call) => Promise<void>;
 /** For each action that records: any rows it needs, then the call that makes it act. */
@@ -104,6 +145,48 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
   'DELETE /api/accounts': async (send) => send({ body: { id: await accountOf('Gone') } }),
   'POST /api/asks/[id]': async (send) =>
     send({ params: { id: String(await askOf('Book the hall')) }, body: { decision: 'deny' } }),
+  'POST /api/asks/[id]/reply': async (send) => {
+    const id = await asked({
+      kind: 'reply',
+      reply: {
+        to: ['nate@example.com'],
+        cc: [],
+        subject: 'Re: Lunch',
+        body: 'Yes.',
+        summary: 'Nate asks about lunch.'
+      }
+    });
+    await withGmail(() =>
+      send({
+        params: { id: String(id) },
+        body: {
+          action: 'draft',
+          to: ['nate@example.com'],
+          cc: [],
+          subject: 'Re: Lunch',
+          body: 'Yes.'
+        }
+      })
+    );
+  },
+  'POST /api/asks/[id]/filter': async (send) => {
+    const criteria = { from: 'news@shop.example.com' };
+    const action = { skipInbox: true };
+    const id = await asked({
+      kind: 'filter',
+      filter: { criteria, action, summary: 'A newsletter every day.' }
+    });
+    await withGmail(() =>
+      send({ params: { id: String(id) }, body: { criteria, action, tidy: false } })
+    );
+  },
+  'POST /api/asks/[id]/folder': (send) =>
+    ownerHome(async (home) => {
+      const path = join(home, 'asked-for');
+      mkdirSync(path);
+      const id = await asked({ kind: 'folder', folder: { path, level: 'read' } });
+      await send({ params: { id: String(id) }, body: { path, level: 'read' } });
+    }),
   'PUT /api/files': (send) => send({ body: fileOf('plan.md') }),
   'POST /api/goals': (send) => send({ body: { title: 'Grow the garden' } }),
   'PUT /api/goals/[id]': async (send) =>
@@ -190,6 +273,11 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
     await grant('lead', 'https://example.com/mcp');
     await L.pg`update connectors set ready_at = now()`;
     await send({ params: { id: 'sam' }, body: tool('https://example.com/mcp') });
+  },
+  // Down to Read only, which every level allows, since a repeat changes nothing.
+  'PATCH /api/staff/[id]/access': async (send) => {
+    await L.pg`insert into grants ${L.pg({ staff_id: 'sam', connector_id: 'google-drive', level: 'act' })}`;
+    await send({ params: { id: 'sam' }, body: { connector: 'google-drive', level: 'read' } });
   },
   'DELETE /api/staff/[id]/access': async (send) => {
     await grant('paige', 'https://example.org/mcp');

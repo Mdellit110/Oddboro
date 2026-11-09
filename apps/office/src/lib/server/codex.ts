@@ -245,6 +245,18 @@ function filesystem(r: CodexRun, temp: string): Record<string, string> {
   };
 }
 
+/** The variable a Codex run reads the gateway's token from (`bearer_token_env_var`). */
+export const GATEWAY_TOKEN = 'ODDBORO_GATEWAY_TOKEN';
+
+/** The gateway's token a run's servers carry, if any: every outside tool shares the run's one token. */
+function gatewayToken(servers: CodexRun['servers']): string | undefined {
+  for (const s of Object.values(servers)) {
+    const auth = s.type === 'http' ? s.headers.Authorization : undefined;
+    if (auth?.startsWith('Bearer ')) return auth.slice('Bearer '.length);
+  }
+  return undefined;
+}
+
 /**
  * The run's MCP servers in Codex's shape. A server access() allows whole
  * (`mcp__office`, `mcp__c`) gets every tool; one allowed tool by tool
@@ -262,9 +274,19 @@ export function mcpServers(
       const tools = grants.flatMap((g) => (g.tool ? [g.tool] : []));
       let server: Record<string, Toml>;
       switch (s.type) {
-        case 'http':
-          server = { url: s.url, http_headers: s.headers };
+        case 'http': {
+          // The gateway's token comes from Codex's environment, never the command
+          // line, where any program could read it. Any other header goes as it is.
+          const { Authorization, ...rest } = s.headers;
+          const fromEnv = Authorization?.startsWith('Bearer ');
+          const headers = fromEnv || !Authorization ? rest : { Authorization, ...rest };
+          server = {
+            url: s.url,
+            ...(fromEnv ? { bearer_token_env_var: GATEWAY_TOKEN } : {}),
+            ...(Object.keys(headers).length ? { http_headers: headers } : {})
+          };
           break;
+        }
         case 'stdio':
           server = { command: s.command, args: s.args, env: s.env };
           break;
@@ -405,7 +427,12 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   ];
   return {
     args,
-    env: { ...codexEnv(h, runEnv('codex')), TMPDIR: temp },
+    env: {
+      ...codexEnv(h, runEnv('codex')),
+      TMPDIR: temp,
+      // Codex's shell inherits only the core variables, so commands never see it.
+      ...(gatewayToken(r.servers) ? { [GATEWAY_TOKEN]: gatewayToken(r.servers) } : {})
+    },
     stdin: r.input,
     done: () => rmSync(temp, { recursive: true, force: true })
   };

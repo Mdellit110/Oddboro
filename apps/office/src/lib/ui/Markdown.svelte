@@ -39,22 +39,64 @@
   let {
     text,
     staff,
+    copyCode = false,
     class: cls = ''
   }: {
     text: string;
     /** Who wrote it, so a path inside its folder links. */
     staff?: string;
+    /** Each inline `code` copies itself on a click: what a step says to type or paste. */
+    copyCode?: boolean;
     class?: string;
   } = $props();
+
+  /** A click on inline code copies it, and it says Copied until the pointer leaves. */
+  function copies(node: HTMLElement) {
+    if (!copyCode) return;
+    const click = (e: MouseEvent) => {
+      const code = (e.target as Element).closest('code');
+      if (!code || code.closest('pre')) return;
+      void navigator.clipboard.writeText(code.textContent ?? '').then(() => {
+        code.dataset.copied = '';
+        code.addEventListener('pointerleave', () => delete code.dataset.copied, { once: true });
+      });
+    };
+    node.addEventListener('click', click);
+    return () => node.removeEventListener('click', click);
+  }
   const rendered = $derived(renderMarkdown(text, staff));
   // Once per render, for names no page has asked about; the answers render it again.
   $effect(() => void askAbout(rendered.unknown));
 </script>
 
 <!-- Safe: markdown-it runs with html off, so every tag here is one it made. -->
-<div class="md {cls}" {@attach fileLinks}>{@html rendered.html}</div>
+<div class="md {cls}" class:copies={copyCode} {@attach fileLinks} {@attach copies}>
+  {@html rendered.html}
+</div>
 
 <style>
+  /* Inline code the owner copies: a hint on hover, and Copied once it is on the clipboard. */
+  .copies :global(:not(pre) > code) {
+    cursor: copy;
+    position: relative;
+  }
+  .copies :global(:not(pre) > code:hover)::after,
+  .copies :global(:not(pre) > code[data-copied])::after {
+    position: absolute;
+    inset-block-end: calc(100% + 4px);
+    inset-inline-start: 0;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--color-ink);
+    color: var(--color-night);
+    font-size: 10px;
+    white-space: nowrap;
+    pointer-events: none;
+    content: 'Click to copy';
+  }
+  .copies :global(:not(pre) > code[data-copied])::after {
+    content: 'Copied';
+  }
   .md {
     line-height: 1.55;
     overflow-wrap: anywhere;

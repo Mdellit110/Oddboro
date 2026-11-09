@@ -32,6 +32,8 @@ export type ChatEntry = {
   /** `back` is which hand-back a reply or pick-up line shows. */
   handOff?: { line: HandOffLine; step: HandOffStep; back?: number };
   thread?: { line: ThreadLine; steps: HandOffLine[] };
+  /** On a reply a chat run wrote: milliseconds from the owner's message to the reply. */
+  took?: number;
 };
 /** What a chat's reply streams to the page, one server-sent event each. */
 export type ChatEvent =

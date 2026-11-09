@@ -89,9 +89,17 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner giving the office a Gemini API key.'
   },
   {
-    file: 'apps/office/src/lib/server/oauth.ts',
+    file: 'apps/office/src/lib/server/google/http.ts',
     calls: 1,
-    to: "A connector's sign-in server.",
+    to: 'Google: Gmail and Drive.',
+    sends:
+      "The owner's token, and what each call needs: an Odd's read, search, draft, change or send, or a reply or filter the owner sends from its card on the desk.",
+    yes: "The owner signing Gmail or Drive in and granting the Odd it at Read only or Read and write, or the owner's Send, Save to drafts or Create on the card."
+  },
+  {
+    file: 'apps/office/src/lib/server/oauth.ts',
+    calls: 2,
+    to: "A connector's sign-in server, and Google to read which account a Gmail or Drive sign-in is.",
     sends: "The office's sign-in requests and tokens for that connector.",
     yes: 'The owner signing a connector in.'
   },
@@ -115,6 +123,13 @@ export const OUTBOUND: readonly Outbound[] = [
     to: 'Ollama at OLLAMA_URL, this computer unless the owner points it elsewhere.',
     sends: 'Text written to the ledger, or searched for, to turn it into a vector.',
     yes: 'The owner, who sets OLLAMA_URL; with it unset nothing leaves this computer.'
+  },
+  {
+    file: 'packages/ledger/src/office.ts',
+    calls: 1,
+    to: "Google's token revocation address.",
+    sends: 'The Gmail or Drive sign-in being removed, so Google cancels it too.',
+    yes: 'The owner disconnecting that connector.'
   },
   {
     file: 'packages/ledger/src/registry.ts',

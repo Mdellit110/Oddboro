@@ -21,7 +21,8 @@
     "./update-window": "./src/update-window.ts",
     "./work-paths": "./src/work-paths.ts",
     "./desk-answers": "./src/desk-answers.ts",
-    "./live-tables": "./src/live-tables.ts"
+    "./live-tables": "./src/live-tables.ts",
+    "./filters": "./src/filter-words.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

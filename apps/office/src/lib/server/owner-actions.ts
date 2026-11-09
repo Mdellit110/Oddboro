@@ -30,6 +30,9 @@ export const OWNER_ACTIONS = {
   'PUT /api/agents/[tool]': { notAnAction: SETUP },
   'DELETE /api/agents/[tool]': { notAnAction: SETUP },
   'POST /api/asks/[id]': { records: 'decision' },
+  'POST /api/asks/[id]/filter': { records: 'decision' },
+  'POST /api/asks/[id]/folder': { records: 'decision' },
+  'POST /api/asks/[id]/reply': { records: 'decision' },
   'PUT /api/files': { records: 'work' },
   'POST /api/files/open': {
     notAnAction: 'Opens a page the Odd built in the browser; it changes nothing.'
@@ -86,6 +89,7 @@ export const OWNER_ACTIONS = {
   'PATCH /api/staff/[id]#model': { records: 'access' },
   'PATCH /api/staff/[id]#account': { records: 'access' },
   'POST /api/staff/[id]/access': { records: 'access' },
+  'PATCH /api/staff/[id]/access': { records: 'access' },
   'DELETE /api/staff/[id]/access': { records: 'access' },
   'POST /api/staff/[id]/chat': {
     notAnAction:

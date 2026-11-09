@@ -158,8 +158,14 @@ export const TOOL_SERVER_ENV = [
   'LOCALAPPDATA'
 ] as const;
 
-/** The `TOOL_SERVER_ENV` variables the office has set, for the tool server's entry. */
-export const toolServerEnv = (): Record<string, string> =>
-  Object.fromEntries(
+/**
+ * The `TOOL_SERVER_ENV` variables the office has set, for the tool server's
+ * entry. In the app on a Mac only the office reaches the Keychain, through
+ * the shell, so the tool server is told to keep no secret of its own.
+ */
+export const toolServerEnv = (): Record<string, string> => ({
+  ...Object.fromEntries(
     TOOL_SERVER_ENV.flatMap((k) => (process.env[k] ? [[k, process.env[k] as string]] : []))
-  );
+  ),
+  ...(process.env.ODDBORO_SECRETS === 'shell' ? { ODDBORO_SECRETS: 'office' } : {})
+});

@@ -5,7 +5,10 @@
 // migration, in an in-memory PGlite (pglite.ts). Run with
 // `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, test } from 'node:test';
 import { eq, max } from 'drizzle-orm';
 import {
   ASK_KINDS,
@@ -24,8 +27,22 @@ import {
 import { db } from './pglite.ts';
 
 process.env.OLLAMA_URL = 'http://127.0.0.1:9';
-const { DECISIONS, decideAsk, finishTask, giveTask, hire, raiseAsk } =
-  await import('../src/office.ts');
+// A home of the test's own, so a folder ask's folder can be given.
+const HOME = realpathSync(mkdtempSync(join(tmpdir(), 'desk-answers-')));
+process.env.HOME = HOME;
+after(() => rmSync(HOME, { recursive: true, force: true }));
+const {
+  DECISIONS,
+  approveFilter,
+  approveReply,
+  ask: askRow,
+  decideAsk,
+  finishTask,
+  giveFolder,
+  giveTask,
+  hire,
+  raiseAsk
+} = await import('../src/office.ts');
 const { approveGoal, approveHire, approvePlan, updateGoal } = await import('../src/goals.ts');
 const { handOff } = await import('../src/hand-offs.ts');
 const { HAND_OFF_LIMIT } = await import('../src/threads.ts');
@@ -49,9 +66,8 @@ const odd = (id: string, name: string, role = 'Tester') => ({
 await db
   .insert(staff)
   .values([odd('ada', 'Ada'), odd('ivy', 'Ivy'), odd('max', 'Max', MANAGER_ROLE)]);
-await db
-  .insert(connectors)
-  .values({ id: 'gmail', name: 'Gmail', description: 'Gmail', kind: 'http', readyAt: new Date() });
+// Every office has Gmail (0009_google): mark it connected.
+await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
 
 /** A thread Ada leads, with `at` hand-offs used. */
 async function thread(at = 0): Promise<number> {
@@ -133,9 +149,43 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
   },
   hire: {
     approve: {
-      cell: { by: 'hiring', then: ['answer_back', OFF_A_THREAD] },
+      cell: { by: 'Approve a hire by hiring', then: ['answer_back', OFF_A_THREAD] },
       onThread: ['resume:ada'],
       onNone: []
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  reply: {
+    approve: {
+      cell: {
+        by: 'Send the reply, or save it to Gmail drafts',
+        then: ['answer_back', OFF_A_THREAD]
+      },
+      onThread: ['resume:ada'],
+      onNone: []
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  filter: {
+    approve: {
+      cell: {
+        by: 'Create the filter from its card on the desk',
+        then: ['answer_back', OFF_A_THREAD]
+      },
+      onThread: ['resume:ada'],
+      onNone: []
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  // The folder went to Ada with the yes, so the work that waited on it starts.
+  folder: {
+    approve: {
+      cell: { by: 'Give the folder from its card on the desk', then: ['give_folder'] },
+      onThread: ['carry_out:ada'],
+      onNone: ['carry_out:ada']
     },
     deny: NO,
     iterate: REWORK
@@ -168,6 +218,8 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
 };
 
 type Raised = { id: number };
+/** Makes each email, filter and folder asked for its own, as the office refuses a second of one. */
+let raised = 0;
 /** An open ask of each kind, raised as the office raises it, on a thread of Ada's or on none. */
 const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
   approval: async (on) => {
@@ -254,6 +306,55 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
     const id = await thread();
     await db.update(threads).set({ heldBy: a.id }).where(eq(threads.id, id));
     return { id: a.id };
+  },
+  reply: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    const { ask } = await raiseAsk('ada', {
+      kind: 'reply',
+      title: 'Reply to Nate',
+      why: 'w',
+      ifApproved: 'i',
+      reply: {
+        inReplyTo: `m-${++raised}`,
+        to: ['nate@example.com'],
+        cc: [],
+        subject: 'Re: Lunch',
+        body: 'Yes.',
+        summary: 'Nate asks about lunch.'
+      },
+      threadId
+    });
+    return { id: ask.id };
+  },
+  filter: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    const { ask } = await raiseAsk('ada', {
+      kind: 'filter',
+      title: 'File the newsletters',
+      why: 'w',
+      ifApproved: 'i',
+      filter: {
+        criteria: { from: `news-${++raised}@shop.example.com` },
+        action: { skipInbox: true },
+        summary: 'A newsletter every day.'
+      },
+      threadId
+    });
+    return { id: ask.id };
+  },
+  folder: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    const path = join(HOME, `Taxes-${++raised}`);
+    mkdirSync(path);
+    const { ask } = await raiseAsk('ada', {
+      kind: 'folder',
+      title: 'Read the taxes',
+      why: 'w',
+      ifApproved: 'i',
+      folder: { path, level: 'read' },
+      threadId
+    });
+    return { id: ask.id };
   }
 };
 /** The owner's decision, through the function the office answers each with. */
@@ -264,7 +365,16 @@ async function answer(
   reason: string | null
 ): Promise<void> {
   const cell = cellOf(kind, decision);
-  if (decision === 'approve' && typeof cell === 'object' && 'by' in cell) {
+  const asked = await askRow(id);
+  const at = new Date().toISOString();
+  if (decision === 'approve' && asked?.reply)
+    await approveReply(id, { ...asked.reply, sent: { action: 'send', at, gmailId: 'g' } });
+  else if (decision === 'approve' && asked?.filter)
+    await approveFilter(id, { ...asked.filter, created: { at, gmailId: 'g', tidied: 0 } });
+  else if (decision === 'approve' && asked?.folder) {
+    const done = await giveFolder(id, asked.folder.path, asked.folder.level, reason);
+    assert.ok('given' in done, JSON.stringify(done));
+  } else if (decision === 'approve' && typeof cell === 'object' && 'by' in cell) {
     // As the hire route does: hire the Odd, then approve the ask with it.
     const bo = await hire({
       name: 'Bo',
@@ -305,15 +415,20 @@ test("every ask kind's yes, no and send-back has the row pinned here, and reache
 const SILENT_OFF_A_THREAD: readonly (readonly [AskKind, Decision])[] = [
   ['hire', 'approve'],
   ['goal', 'approve'],
+  ['reply', 'approve'],
+  ['filter', 'approve'],
   ['approval', 'deny'],
   ['access', 'deny'],
   ['hire', 'deny'],
-  ['goal', 'deny']
+  ['goal', 'deny'],
+  ['reply', 'deny'],
+  ['filter', 'deny'],
+  ['folder', 'deny']
 ];
 const namesNew1715 = (kind: AskKind, decision: Decision) =>
   effectsOf(cellOf(kind, decision)).some((e) => typeof e === 'object' && e.none === 'NEW-1715');
 
-test('a yes to a hire or a goal, or a no with no reason, to an ask raised on no thread tells the Odd nothing, and only those rows name NEW-1715', async () => {
+test('a yes to a hire, a goal, a reply or a filter, or a no with no reason, to an ask raised on no thread tells the Odd nothing, and only those rows name NEW-1715', async () => {
   for (const [kind, decision] of SILENT_OFF_A_THREAD) {
     const where = `${kind} ${decision}`;
     const { id } = await raise[kind](false);

@@ -3,6 +3,10 @@
 // change), with a reason, and whether a success should reach their desk too.
 // Approving a goal ask sets the goal. Approving a plan takes the parts the owner ticked
 // (`picks`) and answers with the hire asks it made, for the page to open.
+// Approving an access ask answers with the connect task it made, if any, so the
+// desk goes straight on to it. A reply is approved only by sending it or saving
+// it (`reply/+server.ts`), a filter only by creating it (`filter/+server.ts`),
+// and a folder ask only by giving the folder (`folder/+server.ts`).
 import { error, json } from '@sveltejs/kit';
 import {
   approveGoal,
@@ -11,6 +15,7 @@ import {
   decideAsk,
   DECISIONS,
   precedent,
+  tasksFrom,
   type AskKind,
   type AskRow
 } from '@oddboro/ledger';
@@ -75,7 +80,7 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const a = await ask(Number(params.id));
   if (!a) error(404, 'No such ask');
   const yes: Yes = OWNER_ANSWERS.ask[a.kind].approve;
-  if (decision === 'approve' && 'by' in yes) error(400, `Approve a ${a.kind} by ${yes.by}`);
+  if (decision === 'approve' && 'by' in yes) error(400, yes.by);
   const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 2000) : '';
   if (decision === 'approve' && worksOnYes(a.kind)) {
     return APPROVAL_WORK[a.kind](a, reason || null, body.picks);
@@ -84,6 +89,10 @@ export const POST: RequestHandler = async ({ params, request }) => {
     await decideAsk(a.id, decision, reason || null, body.report === true);
   } catch (e) {
     error(400, e instanceof Error ? e.message : String(e));
+  }
+  if (decision === 'approve' && a.access) {
+    const task = (await tasksFrom(a.staffId)).find((t) => t.askId === a.id && t.status === 'open');
+    return json({ ok: true, task: task ?? null });
   }
   return json({ ok: true });
 };

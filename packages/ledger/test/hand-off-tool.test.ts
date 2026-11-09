@@ -43,9 +43,8 @@ await db
     odd('paige', 'Paige')
   ]);
 // Lena reads Gmail, which Paige lacks.
-await db
-  .insert(connectors)
-  .values({ id: 'gmail', name: 'Gmail', description: 'Gmail', kind: 'http', readyAt: new Date() });
+// Every office has Gmail (0009_google): mark it connected.
+await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
 await db.insert(grants).values({ staffId: 'lead', connectorId: 'gmail', level: 'read' });
 
 const handOffTool = async (c: Client) =>
@@ -407,6 +406,8 @@ test('every office tool refuses a key it does not take, and says which keys it d
   // tell_lead, and a run on that work offers resume_at.
   await db.insert(staff).values({ ...odd('all', 'Ada'), tools: OFFICE_TOOLS.map((t) => t.id) });
   await db.insert(staffGoals).values({ staffId: 'all', goalId: fair.id, part: 'Everything' });
+  // Gmail at any level offers propose_reply.
+  await db.insert(grants).values({ staffId: 'all', connectorId: 'gmail', level: 'read' });
   const reached = new Set<string>();
   const runs: Record<string, string>[] = [chat, { THREAD_ID: String(sale.id) }];
   for (const env of runs) {
@@ -443,6 +444,8 @@ await db
 await db
   .insert(staffGoals)
   .values(Object.keys(HOLDERS).map((staffId) => ({ staffId, goalId: fair.id, part: 'Some' })));
+// `withGmail` tools come only with Gmail, which only Tot holds.
+await db.insert(grants).values({ staffId: 'tot', connectorId: 'gmail', level: 'read' });
 const RUNS = { chat, thread: { THREAD_ID: String(sale.id) } };
 type Run = keyof typeof RUNS;
 /** A tool offered in one kind of run only, whoever holds it. */
@@ -466,7 +469,9 @@ test("an Odd's registered tools are exactly the always tools, the ones it holds 
   for (const [id, holds] of Object.entries(HOLDERS))
     for (const run of ['chat', 'thread'] as const) {
       const offered = new Set<string>(
-        OFFICE_TOOLS.filter((t) => t.always || holds.includes(t.id)).map((t) => t.id)
+        OFFICE_TOOLS.filter(
+          (t) => (t.always || holds.includes(t.id)) && (!t.withGmail || id === 'tot')
+        ).map((t) => t.id)
       );
       const riding = Object.entries(RIDES_WITH).filter(([, rides]) => offered.has(rides));
       const want = [...offered, ...riding.map(([name]) => name)]

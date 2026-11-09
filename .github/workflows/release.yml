@@ -137,6 +137,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          ODDBORO_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
           printf '%s' "$APPLE_API_KEY_CONTENTS" > "$APPLE_API_KEY_PATH"
@@ -214,6 +215,7 @@ jobs:
           NOTES: ${{ needs.version.outputs.notes }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          ODDBORO_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           ODDBORO_RELEASE_NOTES="$NOTES" \
           ODDBORO_RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" \
@@ -299,6 +301,7 @@ jobs:
           NOTES: ${{ needs.version.outputs.notes }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          ODDBORO_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           ODDBORO_RELEASE_NOTES="$NOTES" \
           ODDBORO_RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" \

@@ -81,3 +81,41 @@ canvas {
     transition-duration: 0.01ms !important;
   }
 }
+
+@layer components {
+  /* A choice the owner picks: a chat's first questions, a task's Choose one. One size, one column. */
+  .choice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    inline-size: 100%;
+    min-block-size: 2.25rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    background: var(--color-raise);
+    color: var(--color-ink);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    text-align: start;
+    cursor: pointer;
+    transition:
+      background-color 120ms,
+      border-color 120ms;
+  }
+  .choice:hover:not(:disabled) {
+    border-color: var(--color-sea);
+    background: color-mix(in srgb, var(--color-sea) 15%, transparent);
+  }
+  .choice:active:not(:disabled) {
+    background: color-mix(in srgb, var(--color-sea) 30%, transparent);
+  }
+  .choice:focus-visible {
+    outline: 2px solid var(--color-sea);
+    outline-offset: 2px;
+  }
+  .choice:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}

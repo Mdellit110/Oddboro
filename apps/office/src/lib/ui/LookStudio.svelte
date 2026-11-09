@@ -28,6 +28,13 @@
     /** The look the owner kept, if any. */
     kept?: Drawn;
     onkeep: (d: Drawn) => void | Promise<void>;
+    /**
+     * Keep each look built from parts as it lands, with no Keep button: the
+     * hire window's Next is the one click. A look still rendering clears it
+     * (`onclear`), so Next never moves on with the one before.
+     */
+    autoKeep?: boolean;
+    onclear?: () => void;
     keepLabel?: string;
     /** Told when a drawing starts and ends, so the window can show it. */
     onbusy?: (busy: boolean) => void;
@@ -40,6 +47,8 @@
     description = $bindable(''),
     kept,
     onkeep,
+    autoKeep = false,
+    onclear,
     keepLabel = 'Keep',
     onbusy
   }: Props = $props();
@@ -50,7 +59,8 @@
   // only parts show.
   const agentTools = new AgentTools();
   let way = $state<'draw' | 'parts' | undefined>();
-  const mode = $derived(agentTools.drawsLooks ? (way ?? 'draw') : 'parts');
+  // Parts first: it takes no time. Drawing is there for a look made to order.
+  const mode = $derived(agentTools.drawsLooks ? (way ?? 'parts') : 'parts');
   /** The look built from parts, as it stands. */
   let built = $state<Built | undefined>();
   let builtKept = $state(false);
@@ -172,7 +182,7 @@
       role="radiogroup"
       aria-label="How to make the look"
     >
-      {#each [{ id: 'draw', label: 'Draw them' }, { id: 'parts', label: 'Build from parts' }] as const as w (w.id)}
+      {#each [{ id: 'parts', label: 'Build from parts' }, { id: 'draw', label: 'Draw them' }] as const as w (w.id)}
         <button
           class="flex-1 rounded-md px-2 py-1 text-xs {mode === w.id
             ? 'bg-sea/25 text-ink'
@@ -199,13 +209,18 @@
       onlook={(b) => {
         built = b;
         builtKept = false;
+        if (!autoKeep) return;
+        if (b && !b.problems.length) void keepBuilt();
+        else onclear?.();
       }}
     />
-    <button
-      class="rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
-      disabled={busy || !built || built.problems.length > 0 || builtKept}
-      onclick={keepBuilt}>{builtKept ? 'Kept' : keepLabel}</button
-    >
+    {#if !autoKeep}
+      <button
+        class="rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
+        disabled={busy || !built || built.problems.length > 0 || builtKept}
+        onclick={keepBuilt}>{builtKept ? 'Kept' : keepLabel}</button
+      >
+    {/if}
   {:else if agentTools.loaded}
     <label class="flex flex-col gap-1">
       <span class="text-xs text-muted">What do they look like?</span>

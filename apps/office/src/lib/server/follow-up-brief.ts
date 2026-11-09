@@ -1,9 +1,18 @@
 // What a staffer is told, for each kind of follow-up. One case per kind, and
 // no default, so a new kind of follow-up fails the type check here until it
 // says what its run is told.
-import { goalWhen, home, modelSection, officeSection, SWITCH_NAMES } from '@oddboro/ledger';
+import {
+  FOLDER_SAID,
+  goalWhen,
+  home,
+  modelSection,
+  officeSection,
+  shownFolder,
+  SWITCH_NAMES
+} from '@oddboro/ledger';
 import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow } from '@oddboro/ledger';
 import { workPath } from '@oddboro/ledger/work-paths';
+import { filterWords } from '@oddboro/ledger/filters';
 import { ACT_WRITE } from './house.ts';
 
 /** The owner's answers a hub picks its thread up with, one a line (`answerThread`). */
@@ -16,7 +25,9 @@ export function followUpBrief(
   a?: AskRow,
   r?: ReportRow,
   t?: { row: TaskRow; files: string[] },
-  g?: GoalRow
+  g?: GoalRow,
+  /** Twins answered with `a` whose work this carry-out does too (`standsFor`). */
+  also: AskRow[] = []
 ): string[] {
   switch (f.kind) {
     case 'resume':
@@ -28,7 +39,7 @@ export function followUpBrief(
     case 'task_done':
       return taskDoneBrief(f, r, t);
     case 'carry_out':
-      return carryOutBrief(f, a);
+      return carryOutBrief(f, a, also);
     case 'denied':
       return deniedBrief(f, a);
     case 'rework':
@@ -166,16 +177,55 @@ function askLinesOf(a?: AskRow): string[] {
     ? [
         `- Ask #${a.id}: ${a.title}`,
         `- Why: ${a.why}`,
-        `- What you said would happen: ${a.ifApproved}`
+        `- What you said would happen: ${a.ifApproved}`,
+        ...(a.reply
+          ? [
+              `- The reply: to ${a.reply.to.join(', ')}${a.reply.cc.length ? `, cc ${a.reply.cc.join(', ')}` : ''}${a.reply.gmailThreadId ? `, in Gmail thread ${a.reply.gmailThreadId}` : ''}${a.reply.inReplyTo ? `, answering message ${a.reply.inReplyTo}` : ''}`,
+              `- Its subject: ${a.reply.subject}`,
+              '- Its body:',
+              '',
+              a.reply.body,
+              ''
+            ]
+          : []),
+        ...(a.filter
+          ? [`- The filter: ${filterWords(a.filter)}`, `- Its summary: ${a.filter.summary}`]
+          : []),
+        ...(a.folder
+          ? [
+              `- The folder you asked for: ${shownFolder(a.folder.path)} (${FOLDER_SAID[a.folder.level]})`
+            ]
+          : [])
       ]
     : [];
 }
 
-function carryOutBrief(f: FollowUpRow, a?: AskRow): string[] {
+function carryOutBrief(f: FollowUpRow, a: AskRow | undefined, also: AskRow[]): string[] {
   const askLines = askLinesOf(a);
+  const alsoAnswers = (what: string) =>
+    also.length
+      ? [
+          `This also answers your ${also.length > 1 ? 'asks' : 'ask'} ${also.map((x) => `#${x.id}`).join(', ')}, which another of your runs raised for the same ${what}: do that work once, here.`
+        ]
+      : [];
+  // What the owner gave for a folder ask, which may be narrower than it asked.
+  const given = a?.folder?.given;
+  if (given)
+    return [
+      `{owner} approved your ask #${a?.id} and gave you ${shownFolder(given.path)} (${FOLDER_SAID[given.level]}). This run reaches it.`,
+      ...alsoAnswers('folder'),
+      '',
+      ...askLines,
+      `- Their reason: ${a?.reason ?? 'none given'}`,
+      '',
+      '1. Check you can reach it: list the folder.',
+      '2. If work was waiting on it, do it now, within what they gave you. If they gave less than you asked and the work needs more, say so in your reply.',
+      '3. If nothing was waiting, stop there.'
+    ];
   if (a?.access)
     return [
       `{owner} approved your ask #${a.id}, and the access is ready now.`,
+      ...alsoAnswers('tool'),
       '',
       ...askLines,
       '',
@@ -217,7 +267,7 @@ function reworkBrief(f: FollowUpRow, a?: AskRow): string[] {
     `- What they want changed: ${f.note}`,
     '',
     '1. Do any work the new version needs first, such as rewriting a file in your folder.',
-    `2. Raise the new version with the same tool as before (raise_ask, propose_hire, ask_for_access, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
+    `2. Raise the new version with the same tool as before (raise_ask, propose_reply, propose_filter, propose_hire, ask_for_access, ask_for_folder, propose_goal or propose_goal_plan), or the one their note calls for, passing revises: ${a?.id}.`,
     '3. Do not carry out the ask itself. They decide the new version.'
   ];
 }

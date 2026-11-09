@@ -17,6 +17,9 @@ export type DeskItem = (typeof DESK_ITEMS)[number];
  * - `grant_access`: the access the ask names is granted (`grantAccess`). A tool
  *   already connected starts the work that waited on it (`carry_out`) at once;
  *   otherwise the owner gets a task to connect it, and finishing that starts it.
+ * - `give_folder`: the folder the owner gave went to the Odd with the yes
+ *   (`giveFolder`), and the work that waited on it starts, once for each place
+ *   a result goes back to.
  * - `start_held`: the hand-off the ask held starts, as the ask is claimed.
  * - `answer_window`: the usage window's answer (`answerWindow`).
  * - `answer_hand_offs`: the yes or no to more hand-offs goes to the thread's hub
@@ -31,6 +34,7 @@ export type Effect =
   | 'approval_work'
   | 'carry_out'
   | 'grant_access'
+  | 'give_folder'
   | 'start_held'
   | 'answer_window'
   | 'answer_hand_offs'
@@ -46,8 +50,12 @@ export type TaskEffect = Extract<
 >;
 
 export type AskAnswer = {
-  /** A hire is approved by hiring (`approveHire`), never from the desk; then its answer goes back. */
-  approve: readonly AskEffect[] | { by: 'hiring'; then: readonly AskEffect[] };
+  /**
+   * A hire, a reply, a filter or a folder is approved by doing it (`approveHire`,
+   * `reply/`, `filter/`, `folder/`), never by a bare yes: `by` is what the
+   * office answers a bare yes with. Then `then` runs.
+   */
+  approve: readonly AskEffect[] | { by: string; then: readonly AskEffect[] };
   deny: readonly AskEffect[];
   /** `refused`: the office raised it, so the owner says yes or no and nobody reworks it. */
   iterate: readonly AskEffect[] | 'refused';
@@ -67,7 +75,7 @@ export const OWNER_ANSWERS = {
     approval: { approve: ['carry_out'], deny: NO, iterate: REWORK },
     access: { approve: ['grant_access'], deny: NO, iterate: REWORK },
     hire: {
-      approve: { by: 'hiring', then: ['answer_back', OFF_A_THREAD] },
+      approve: { by: 'Approve a hire by hiring', then: ['answer_back', OFF_A_THREAD] },
       deny: NO,
       iterate: REWORK
     },
@@ -85,7 +93,28 @@ export const OWNER_ANSWERS = {
       iterate: 'refused'
     },
     // The office raised it, not the Odd named on it, so a no has no lesson.
-    window: { approve: ['answer_window'], deny: ['answer_window'], iterate: 'refused' }
+    window: { approve: ['answer_window'], deny: ['answer_window'], iterate: 'refused' },
+    reply: {
+      approve: {
+        by: 'Send the reply, or save it to Gmail drafts',
+        then: ['answer_back', OFF_A_THREAD]
+      },
+      deny: NO,
+      iterate: REWORK
+    },
+    filter: {
+      approve: {
+        by: 'Create the filter from its card on the desk',
+        then: ['answer_back', OFF_A_THREAD]
+      },
+      deny: NO,
+      iterate: REWORK
+    },
+    folder: {
+      approve: { by: 'Give the folder from its card on the desk', then: ['give_folder'] },
+      deny: NO,
+      iterate: REWORK
+    }
   } satisfies Record<AskKind, AskAnswer>,
   task: {
     done: {
