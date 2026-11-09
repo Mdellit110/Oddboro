@@ -3,8 +3,11 @@
 import { onPlatform } from './office-under-test.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AGENT_PLATFORMS, AGENTS, type Agent } from '@oddboro/ledger';
-import { SANDBOX_PATHS, sandboxPaths, type SandboxPaths } from './sandbox-paths.ts';
+import type { Agent } from '@oddboro/ledger';
+import type { SandboxPaths } from './sandbox-paths.ts';
+
+const { AGENT_PLATFORMS, AGENTS } = await import('@oddboro/ledger');
+const { SANDBOX_PATHS, sandboxPaths } = await import('./sandbox-paths.ts');
 
 /**
  * Where each tool's walls name the system's own paths: Claude Code's sandbox

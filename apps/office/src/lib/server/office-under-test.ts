@@ -538,6 +538,15 @@ mock.module('@oddboro/ledger/secrets', {
 // A Codex run starts only from a signed-in home; the stand-in reads nothing in it.
 mkdirSync(join(folder, 'codex'));
 writeFileSync(join(folder, 'codex', 'auth.json'), '{}');
+// A static import beside this file loads as this file waits on its port above,
+// so home.ts would read no ODDBORO_DB_PORT and every such test file would bind
+// the one fixed port.
+const { DATABASE_PORT } = await import('@oddboro/ledger/home');
+assert.equal(
+  DATABASE_PORT,
+  port,
+  "This test file loaded the office's code before the harness set its port. Import the office's modules with `await import(...)` in the test file."
+);
 const { startLocalDatabase } = await import('@oddboro/ledger/local-db');
 const stopDatabase = await startLocalDatabase();
 const { bringUpToDate } = await import('@oddboro/ledger/upgrade');

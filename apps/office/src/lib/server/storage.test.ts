@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { L } from './office-under-test.ts';
-import { listStorage } from './storage.ts';
 
+const { listStorage } = await import('./storage.ts');
 const route = await import('../../routes/api/staff/[id]/storage/+server.ts');
 const outside = mkdtempSync(join(tmpdir(), 'oddboro-storage-outside-'));
 after(() => rmSync(outside, { recursive: true, force: true }));
