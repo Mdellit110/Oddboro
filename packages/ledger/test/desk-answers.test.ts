@@ -25,6 +25,7 @@ import {
   type Step
 } from '../src/schema.ts';
 import { db } from './pglite.ts';
+import { TEMP_IN_APPDATA } from './store-states.ts';
 
 process.env.OLLAMA_URL = 'http://127.0.0.1:9';
 // A home of the test's own, so a folder ask's folder can be given.
@@ -437,9 +438,14 @@ async function answer(
   else await decideAsk(id, decision, reason);
 }
 
-test("every ask kind's yes, no and send-back has the row pinned here, and reaches the Odd as pinned, on a thread and on none", async () => {
+test("every ask kind's yes, no and send-back has the row pinned here, and reaches the Odd as pinned, on a thread and on none", async (t) => {
   for (const kind of ASK_KINDS)
     for (const decision of DECISIONS) {
+      // A yes to a folder ask gives a folder under the temp folder.
+      if (kind === 'folder' && decision === 'approve' && TEMP_IN_APPDATA) {
+        t.diagnostic(`left out a folder ask's yes: ${TEMP_IN_APPDATA}`);
+        continue;
+      }
       const pin = PINNED[kind][decision];
       assert.deepEqual(cellOf(kind, decision), pin.cell, `${kind} ${decision}`);
       const places = pin.onNone ? [true, false] : [true];

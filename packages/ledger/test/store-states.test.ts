@@ -9,7 +9,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import './pglite.ts';
-import { MARK_STATES, onThisDisk, STORE_STATES, type StoreState } from './store-states.ts';
+import {
+  MARK_STATES,
+  onThisDisk,
+  STORE_STATES,
+  TEMP_IN_APPDATA,
+  type StoreState
+} from './store-states.ts';
 
 // The home for the office's home and code, fixed as office.ts loads. Each row
 // sets HOME to one of its own, since `homedir()` reads it live.
@@ -74,10 +80,7 @@ for (const platform of ['darwin', 'linux', 'win32'] as const)
         `on ${platform}, ${where}: ${s.state}`,
         {
           skip:
-            (!onThisDisk(s) && 'only a disk that ignores case has this state') ||
-            (where === 'outside the home' &&
-              process.platform === 'win32' &&
-              "Windows' temp folder sits in the home's AppData")
+            (!onThisDisk(s) && 'only a disk that ignores case has this state') || TEMP_IN_APPDATA
         },
         () =>
           inFreshFolder('store-states-home-', (home) => {

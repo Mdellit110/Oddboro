@@ -14,6 +14,7 @@ import { after, test } from 'node:test';
 import type { Capabilities } from '../src/capabilities.ts';
 import type { ConnectorRow } from '../src/office.ts';
 import { db, toolServer } from './tool-server.ts';
+import { TEMP_IN_APPDATA } from './store-states.ts';
 
 const W = await import('../src/access-words.ts');
 const A = await import('../src/agents.ts');
@@ -106,65 +107,69 @@ const runs = {
   })
 };
 
-test('ownTools is what a run reaches: the switch as its tool takes it, the web, the internet only with both, and given folders still on the disk', () => {
-  const on = (who: ReturnType<typeof odd>, platform: NodeJS.Platform) => {
-    const o = C.ownTools(who, platform);
-    return { commands: o.commands, web: o.web, network: o.network };
-  };
-  assert.deepEqual(on(odd('claude', true, true), 'darwin'), {
-    commands: true,
-    web: true,
-    network: true
-  });
-  assert.deepEqual(on(odd('claude', true, false), 'darwin'), {
-    commands: true,
-    web: false,
-    network: false
-  });
-  // Codex follows the switch on a Mac and Linux. Its walls did not hold the
-  // office's own ports with its network on, so its commands stay off it.
-  for (const platform of ['darwin', 'linux'] as const) {
-    assert.deepEqual(
-      on(odd('codex', true, true), platform),
-      { commands: true, web: true, network: false },
-      platform
-    );
-    assert.deepEqual(
-      on(odd('codex', false, true), platform),
-      { commands: false, web: true, network: false },
-      platform
-    );
+test(
+  'ownTools is what a run reaches: the switch as its tool takes it, the web, the internet only with both, and given folders still on the disk',
+  { skip: TEMP_IN_APPDATA },
+  () => {
+    const on = (who: ReturnType<typeof odd>, platform: NodeJS.Platform) => {
+      const o = C.ownTools(who, platform);
+      return { commands: o.commands, web: o.web, network: o.network };
+    };
+    assert.deepEqual(on(odd('claude', true, true), 'darwin'), {
+      commands: true,
+      web: true,
+      network: true
+    });
+    assert.deepEqual(on(odd('claude', true, false), 'darwin'), {
+      commands: true,
+      web: false,
+      network: false
+    });
+    // Codex follows the switch on a Mac and Linux. Its walls did not hold the
+    // office's own ports with its network on, so its commands stay off it.
+    for (const platform of ['darwin', 'linux'] as const) {
+      assert.deepEqual(
+        on(odd('codex', true, true), platform),
+        { commands: true, web: true, network: false },
+        platform
+      );
+      assert.deepEqual(
+        on(odd('codex', false, true), platform),
+        { commands: false, web: true, network: false },
+        platform
+      );
+    }
+    // On Windows its sandbox opened every Odd's folder, so it has no shell whatever is stored.
+    assert.deepEqual(on(odd('codex', true, true), 'win32'), {
+      commands: false,
+      web: true,
+      network: false
+    });
+    // The network follows the table: a tool marked as holding its walls open gets it, with commands on.
+    const measured = A.AGENT_PLATFORMS.codex.networkWithWeb;
+    A.AGENT_PLATFORMS.codex.networkWithWeb = ['darwin'];
+    try {
+      assert.equal(on(odd('codex', true, true), 'darwin').network, true);
+      assert.equal(on(odd('codex', false, true), 'darwin').network, false);
+    } finally {
+      A.AGENT_PLATFORMS.codex.networkWithWeb = measured;
+    }
+    assert.deepEqual(on(odd('grok', true, true), 'darwin'), {
+      commands: false,
+      web: true,
+      network: false
+    });
+    for (const platform of ['linux', 'win32'] as const)
+      assert.deepEqual(
+        on(odd('claude', true, true), platform),
+        { commands: false, web: true, network: false },
+        platform
+      );
+    assert.deepEqual(C.ownTools(odd('claude', false, false), 'darwin').granted, [
+      { path: kept, write: true }
+    ]);
   }
-  // On Windows its sandbox opened every Odd's folder, so it has no shell whatever is stored.
-  assert.deepEqual(on(odd('codex', true, true), 'win32'), {
-    commands: false,
-    web: true,
-    network: false
-  });
-  // The network follows the table: a tool marked as holding its walls open gets it, with commands on.
-  const measured = A.AGENT_PLATFORMS.codex.networkWithWeb;
-  A.AGENT_PLATFORMS.codex.networkWithWeb = ['darwin'];
-  try {
-    assert.equal(on(odd('codex', true, true), 'darwin').network, true);
-    assert.equal(on(odd('codex', false, true), 'darwin').network, false);
-  } finally {
-    A.AGENT_PLATFORMS.codex.networkWithWeb = measured;
-  }
-  assert.deepEqual(on(odd('grok', true, true), 'darwin'), {
-    commands: false,
-    web: true,
-    network: false
-  });
-  for (const platform of ['linux', 'win32'] as const)
-    assert.deepEqual(
-      on(odd('claude', true, true), platform),
-      { commands: false, web: true, network: false },
-      platform
-    );
-  assert.deepEqual(C.ownTools(odd('claude', false, false), 'darwin').granted, [
-    { path: kept, write: true }
-  ]);
-});
+);
 
 test('a handed-over run keeps its own commands, web and folders; a write grant waits for the yes', () => {
   const caps: Capabilities = {
@@ -590,31 +595,35 @@ test(
   }
 );
 
-test("office_report lists each Odd's tool, own tools and folders", async () => {
-  const r = await manager.callTool({ name: 'office_report', arguments: {} });
-  const text = (r.content as { type: string; text: string }[])[0]?.text ?? '';
-  const report = JSON.parse(text) as { staff: Record<string, unknown>[] };
-  const mona = report.staff.find((s) => s.id === 'mona');
-  assert.ok(mona, text);
-  assert.deepEqual(
-    [mona.runsOn, mona.ownTools, mona.folders],
-    [
-      'Claude Code',
-      // Another Odd reads the report, so it names whose tools and card they are.
-      process.platform === 'darwin'
-        ? "Mona's own tools work on files, plus web search and fetch. No shell: the owner can switch on Run commands in Mona's Settings tab, under Office."
-        : "Mona's own tools work on files, plus web search and fetch. No shell: Claude Code can't run commands here.",
-      [`${kept} (read only)`]
-    ]
-  );
-  const cody = report.staff.find((s) => s.id === 'cody');
-  assert.ok(cody, text);
-  // With no owner's name set, the office calls them "the owner". Codex has
-  // no shell on Windows, so there its line names no one.
-  assert.equal(
-    cody.ownTools,
-    process.platform === 'win32'
-      ? "Cody's own tools work on files, plus web search. No shell: Codex can't run commands here."
-      : "Cody's own tools work on files, plus a shell confined to Cody's folders and the owner's developer tools (read only), with no network, and web search."
-  );
-});
+test(
+  "office_report lists each Odd's tool, own tools and folders",
+  { skip: TEMP_IN_APPDATA },
+  async () => {
+    const r = await manager.callTool({ name: 'office_report', arguments: {} });
+    const text = (r.content as { type: string; text: string }[])[0]?.text ?? '';
+    const report = JSON.parse(text) as { staff: Record<string, unknown>[] };
+    const mona = report.staff.find((s) => s.id === 'mona');
+    assert.ok(mona, text);
+    assert.deepEqual(
+      [mona.runsOn, mona.ownTools, mona.folders],
+      [
+        'Claude Code',
+        // Another Odd reads the report, so it names whose tools and card they are.
+        process.platform === 'darwin'
+          ? "Mona's own tools work on files, plus web search and fetch. No shell: the owner can switch on Run commands in Mona's Settings tab, under Office."
+          : "Mona's own tools work on files, plus web search and fetch. No shell: Claude Code can't run commands here.",
+        [`${kept} (read only)`]
+      ]
+    );
+    const cody = report.staff.find((s) => s.id === 'cody');
+    assert.ok(cody, text);
+    // With no owner's name set, the office calls them "the owner". Codex has
+    // no shell on Windows, so there its line names no one.
+    assert.equal(
+      cody.ownTools,
+      process.platform === 'win32'
+        ? "Cody's own tools work on files, plus web search. No shell: Codex can't run commands here."
+        : "Cody's own tools work on files, plus a shell confined to Cody's folders and the owner's developer tools (read only), with no network, and web search."
+    );
+  }
+);

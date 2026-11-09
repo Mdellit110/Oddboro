@@ -18,6 +18,7 @@ import { afterEach, test } from 'node:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { db, sql, toolServer } from './tool-server.ts';
 import { oneThreadPerGoal } from './one-thread.ts';
+import { TEMP_IN_APPDATA } from './store-states.ts';
 
 const { connectors, goals, grants, staff, threads } = await import('../src/schema.ts');
 const { eq, inArray } = await import('drizzle-orm');
@@ -493,40 +494,44 @@ test('a hire proposal names every office tool the owner can give, and none every
   );
 });
 
-test("the hand_off tool names what each colleague lacks of the lead's tools once, in plain words", async () => {
-  // The tool server's home, holding the folder Lena gave her Odds, so it is
-  // shown as ~/x and is on the disk for a colleague that has it.
-  const home = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-lacks-')));
-  const x = join(home, 'x');
-  mkdirSync(x);
-  const folders = [{ path: x, write: false }];
-  await db.update(staff).set({ web: true, folders }).where(eq(staff.id, 'lead'));
-  // Wes has Gmail and the web, so lacks the folder; Fay has Gmail and the folder, so lacks the web.
-  await db.insert(staff).values([
-    { ...odd('wes', 'Wes'), web: true },
-    { ...odd('fay', 'Fay'), folders }
-  ]);
-  await db
-    .insert(grants)
-    .values(
-      ['wes', 'fay'].map((staffId) => ({ staffId, connectorId: 'gmail', level: 'read' as const }))
-    );
-  try {
-    const t = await handOffTool(await toolServer('lead', { RUN_KEY: 'k-lacks', HOME: home }));
-    const lines = (t?.description ?? '').split('\n');
-    for (const line of [
-      '- wes: Wes, Tester. Tests. Lacks your folder ~/x.',
-      '- fay: Fay, Tester. Tests. Lacks the web.',
-      '- paige: Paige, Tester. Tests. Lacks your Gmail, the web, and your folder ~/x.'
-    ])
-      assert.ok(lines.includes(line), `${line}\n${t?.description}`);
-  } finally {
-    await db.delete(grants).where(inArray(grants.staffId, ['wes', 'fay']));
-    await db.delete(staff).where(inArray(staff.id, ['wes', 'fay']));
-    await db.update(staff).set({ web: false, folders: [] }).where(eq(staff.id, 'lead'));
-    rmSync(home, { recursive: true, force: true });
+test(
+  "the hand_off tool names what each colleague lacks of the lead's tools once, in plain words",
+  { skip: TEMP_IN_APPDATA },
+  async () => {
+    // The tool server's home, holding the folder Lena gave her Odds, so it is
+    // shown as ~/x and is on the disk for a colleague that has it.
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-lacks-')));
+    const x = join(home, 'x');
+    mkdirSync(x);
+    const folders = [{ path: x, write: false }];
+    await db.update(staff).set({ web: true, folders }).where(eq(staff.id, 'lead'));
+    // Wes has Gmail and the web, so lacks the folder; Fay has Gmail and the folder, so lacks the web.
+    await db.insert(staff).values([
+      { ...odd('wes', 'Wes'), web: true },
+      { ...odd('fay', 'Fay'), folders }
+    ]);
+    await db
+      .insert(grants)
+      .values(
+        ['wes', 'fay'].map((staffId) => ({ staffId, connectorId: 'gmail', level: 'read' as const }))
+      );
+    try {
+      const t = await handOffTool(await toolServer('lead', { RUN_KEY: 'k-lacks', HOME: home }));
+      const lines = (t?.description ?? '').split('\n');
+      for (const line of [
+        '- wes: Wes, Tester. Tests. Lacks your folder ~/x.',
+        '- fay: Fay, Tester. Tests. Lacks the web.',
+        '- paige: Paige, Tester. Tests. Lacks your Gmail, the web, and your folder ~/x.'
+      ])
+        assert.ok(lines.includes(line), `${line}\n${t?.description}`);
+    } finally {
+      await db.delete(grants).where(inArray(grants.staffId, ['wes', 'fay']));
+      await db.delete(staff).where(inArray(staff.id, ['wes', 'fay']));
+      await db.update(staff).set({ web: false, folders: [] }).where(eq(staff.id, 'lead'));
+      rmSync(home, { recursive: true, force: true });
+    }
   }
-});
+);
 
 test("an Odd that names GitHub's address with a key header gets the catalog's GitHub, which signs in", async () => {
   const c = await toolServer('jo', { RUN_KEY: 'k-jo-github' });

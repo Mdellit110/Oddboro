@@ -10,6 +10,7 @@ import { after, beforeEach, test } from 'node:test';
 import { AGENTS, COMMANDS_WHY, commandsHow, type Agent } from '../src/agents.ts';
 import { staff } from '../src/schema.ts';
 import { db, sql } from './pglite.ts';
+import { TEMP_IN_APPDATA } from './store-states.ts';
 
 // A home of the test's own, with the office's home and code inside it, set
 // before office.ts loads: home.ts fixes both at import.
@@ -187,7 +188,7 @@ test("while the office holds the network, a change that would open a Claude Code
   );
 });
 
-test('setOwnTool and setFolder record one line each', async () => {
+test('setOwnTool and setFolder record one line each', { skip: TEMP_IN_APPDATA }, async () => {
   // Ziva is on Claude Code, which follows the switch on a Mac only.
   await onPlatform('darwin', async () => {
     await O.setOwnTool('ziva', 'commands', true);
@@ -264,89 +265,101 @@ test('Run commands cannot be stored for a tool that does not follow it, from any
   assert.deepEqual(await titles(), ['Moved Gus from Grok to Claude Code', 'Let Gus run commands']);
 });
 
-test('a folder the check refuses is never stored, from any caller, and a folder given is stored by its real path', async () => {
-  await db.insert(staff).values({
-    id: 'Fay',
-    name: 'Fay',
-    role: 'r',
-    variant: 'v',
-    portrait: 'p',
-    remit: 'r',
-    desk: 'd'
-  });
-  folder('.ssh');
-  assert.deepEqual(await O.setFolder('Fay', '~/.ssh', 'read'), {
-    refused: O.FOLDER_REFUSED.secrets
-  });
-  assert.deepEqual(await O.setFolder('Fay', join(HOME, '.ssh'), 'write'), {
-    refused: O.FOLDER_REFUSED.secrets
-  });
-  assert.deepEqual(await O.setFolder('Fay', HOME, 'read'), { refused: O.FOLDER_REFUSED.home });
-  assert.deepEqual((await O.staffer('Fay'))?.folders, []);
-  assert.deepEqual(await titles(), []);
-  const notes = folder('notes');
-  symlinkSync(notes, join(HOME, 'notes-link'));
-  assert.equal(await O.setFolder('Fay', '~/notes-link', 'read'), undefined);
-  assert.deepEqual((await O.staffer('Fay'))?.folders, [{ path: notes, write: false }]);
-});
+test(
+  'a folder the check refuses is never stored, from any caller, and a folder given is stored by its real path',
+  { skip: TEMP_IN_APPDATA },
+  async () => {
+    await db.insert(staff).values({
+      id: 'Fay',
+      name: 'Fay',
+      role: 'r',
+      variant: 'v',
+      portrait: 'p',
+      remit: 'r',
+      desk: 'd'
+    });
+    folder('.ssh');
+    assert.deepEqual(await O.setFolder('Fay', '~/.ssh', 'read'), {
+      refused: O.FOLDER_REFUSED.secrets
+    });
+    assert.deepEqual(await O.setFolder('Fay', join(HOME, '.ssh'), 'write'), {
+      refused: O.FOLDER_REFUSED.secrets
+    });
+    assert.deepEqual(await O.setFolder('Fay', HOME, 'read'), { refused: O.FOLDER_REFUSED.home });
+    assert.deepEqual((await O.staffer('Fay'))?.folders, []);
+    assert.deepEqual(await titles(), []);
+    const notes = folder('notes');
+    symlinkSync(notes, join(HOME, 'notes-link'));
+    assert.equal(await O.setFolder('Fay', '~/notes-link', 'read'), undefined);
+    assert.deepEqual((await O.staffer('Fay'))?.folders, [{ path: notes, write: false }]);
+  }
+);
 
-test('checkFolder refuses what holds keys, the home, the office and its code, and what holds the home', () => {
-  const R = O.FOLDER_REFUSED;
-  // The glob line names its character: the next test reads it.
-  const { glob: _glob, ...fixed } = R;
-  assert.deepEqual(fixed, {
-    missing: 'No such folder.',
-    home: 'Pick a folder inside your home, not the whole home.',
-    secrets: 'That folder holds your keys or sign-ins.',
-    code: "That folder holds Oddboro's own code.",
-    nested: 'That folder is inside one this Odd already has, or holds one.',
-    broad: 'That folder is a whole drive or holds system files. Ask for a narrower one.'
-  });
-  const refused = (path: string) => O.checkFolder(path);
-  for (const s of O.SECRET_STORES) folder(s);
-  folder('.ssh', 'keys');
-  folder('.oddboro', 'staff');
-  folder('code', 'oddboro', 'apps');
-  writeFileSync(join(HOME, 'notes.txt'), 'x');
+test(
+  'checkFolder refuses what holds keys, the home, the office and its code, and what holds the home',
+  { skip: TEMP_IN_APPDATA },
+  () => {
+    const R = O.FOLDER_REFUSED;
+    // The glob line names its character: the next test reads it.
+    const { glob: _glob, ...fixed } = R;
+    assert.deepEqual(fixed, {
+      missing: 'No such folder.',
+      home: 'Pick a folder inside your home, not the whole home.',
+      secrets: 'That folder holds your keys or sign-ins.',
+      code: "That folder holds Oddboro's own code.",
+      nested: 'That folder is inside one this Odd already has, or holds one.',
+      broad: 'That folder is a whole drive or holds system files. Ask for a narrower one.'
+    });
+    const refused = (path: string) => O.checkFolder(path);
+    for (const s of O.SECRET_STORES) folder(s);
+    folder('.ssh', 'keys');
+    folder('.oddboro', 'staff');
+    folder('code', 'oddboro', 'apps');
+    writeFileSync(join(HOME, 'notes.txt'), 'x');
 
-  assert.deepEqual(refused('~/nowhere'), { refused: R.missing });
-  assert.deepEqual(refused('~/notes.txt'), { refused: R.missing });
-  assert.deepEqual(refused('relative/path'), { refused: R.missing });
-  assert.deepEqual(refused('~'), { refused: R.home });
-  assert.deepEqual(refused(HOME), { refused: R.home });
-  // A folder holding the home holds its secret stores, whether they exist or not.
-  assert.deepEqual(refused(tmpdir()), { refused: R.secrets });
-  for (const s of O.SECRET_STORES) assert.deepEqual(refused(`~/${s}`), { refused: R.secrets }, s);
-  assert.deepEqual(refused('~/.ssh/keys'), { refused: R.secrets });
-  assert.deepEqual(refused('~/.oddboro/staff'), { refused: R.secrets });
-  assert.deepEqual(refused('~/code'), { refused: R.code });
-  assert.deepEqual(refused('~/code/oddboro/apps'), { refused: R.code });
+    assert.deepEqual(refused('~/nowhere'), { refused: R.missing });
+    assert.deepEqual(refused('~/notes.txt'), { refused: R.missing });
+    assert.deepEqual(refused('relative/path'), { refused: R.missing });
+    assert.deepEqual(refused('~'), { refused: R.home });
+    assert.deepEqual(refused(HOME), { refused: R.home });
+    // A folder holding the home holds its secret stores, whether they exist or not.
+    assert.deepEqual(refused(tmpdir()), { refused: R.secrets });
+    for (const s of O.SECRET_STORES) assert.deepEqual(refused(`~/${s}`), { refused: R.secrets }, s);
+    assert.deepEqual(refused('~/.ssh/keys'), { refused: R.secrets });
+    assert.deepEqual(refused('~/.oddboro/staff'), { refused: R.secrets });
+    assert.deepEqual(refused('~/code'), { refused: R.code });
+    assert.deepEqual(refused('~/code/oddboro/apps'), { refused: R.code });
 
-  // A name that only starts like a secret store is not one.
-  const sshx = folder('.sshx');
-  assert.deepEqual(refused('~/.sshx'), { real: sshx });
-  assert.deepEqual(refused(' ~/.sshx/ '), { real: sshx });
-});
+    // A name that only starts like a secret store is not one.
+    const sshx = folder('.sshx');
+    assert.deepEqual(refused('~/.sshx'), { real: sshx });
+    assert.deepEqual(refused(' ~/.sshx/ '), { real: sshx });
+  }
+);
 
-test('checkFolder refuses a folder whose real path holds a character Codex reads as a glob, naming it, and takes {, } and !', () => {
-  const R = O.FOLDER_REFUSED;
-  assert.equal(R.glob('['), "That folder's path has a character an Odd's tool can't take: [");
-  folder('Photos [2024]');
-  assert.deepEqual(O.checkFolder('~/Photos [2024]'), { refused: R.glob('[') });
-  folder('a*b', 'inner');
-  assert.deepEqual(O.checkFolder('~/a*b/inner'), { refused: R.glob('*') });
-  folder('q?x');
-  assert.deepEqual(O.checkFolder('~/q?x'), { refused: R.glob('?') });
-  folder('a]b');
-  assert.deepEqual(O.checkFolder('~/a]b'), { refused: R.glob(']') });
-  const braces = folder('x{y}');
-  assert.deepEqual(O.checkFolder('~/x{y}'), { real: braces });
-  const bang = folder('i!j');
-  assert.deepEqual(O.checkFolder('~/i!j'), { real: bang });
-  // A typed path with no such character, whose real path has one.
-  symlinkSync(folder('pics [old]'), join(HOME, 'pics'));
-  assert.deepEqual(O.checkFolder('~/pics'), { refused: R.glob('[') });
-});
+test(
+  'checkFolder refuses a folder whose real path holds a character Codex reads as a glob, naming it, and takes {, } and !',
+  { skip: TEMP_IN_APPDATA },
+  () => {
+    const R = O.FOLDER_REFUSED;
+    assert.equal(R.glob('['), "That folder's path has a character an Odd's tool can't take: [");
+    folder('Photos [2024]');
+    assert.deepEqual(O.checkFolder('~/Photos [2024]'), { refused: R.glob('[') });
+    folder('a*b', 'inner');
+    assert.deepEqual(O.checkFolder('~/a*b/inner'), { refused: R.glob('*') });
+    folder('q?x');
+    assert.deepEqual(O.checkFolder('~/q?x'), { refused: R.glob('?') });
+    folder('a]b');
+    assert.deepEqual(O.checkFolder('~/a]b'), { refused: R.glob(']') });
+    const braces = folder('x{y}');
+    assert.deepEqual(O.checkFolder('~/x{y}'), { real: braces });
+    const bang = folder('i!j');
+    assert.deepEqual(O.checkFolder('~/i!j'), { real: bang });
+    // A typed path with no such character, whose real path has one.
+    symlinkSync(folder('pics [old]'), join(HOME, 'pics'));
+    assert.deepEqual(O.checkFolder('~/pics'), { refused: R.glob('[') });
+  }
+);
 
 test('the secret stores are the ones the office keeps shut', () => {
   assert.deepEqual(O.SECRET_STORES, [
@@ -367,12 +380,16 @@ test('the secret stores are the ones the office keeps shut', () => {
   ]);
 });
 
-test("checkFolder refuses Docker's and Kubernetes' folders, which hold sign-ins and cluster keys", () => {
-  folder('.docker');
-  folder('.kube');
-  assert.deepEqual(O.checkFolder('~/.docker'), { refused: O.FOLDER_REFUSED.secrets });
-  assert.deepEqual(O.checkFolder('~/.kube'), { refused: O.FOLDER_REFUSED.secrets });
-});
+test(
+  "checkFolder refuses Docker's and Kubernetes' folders, which hold sign-ins and cluster keys",
+  { skip: TEMP_IN_APPDATA },
+  () => {
+    folder('.docker');
+    folder('.kube');
+    assert.deepEqual(O.checkFolder('~/.docker'), { refused: O.FOLDER_REFUSED.secrets });
+    assert.deepEqual(O.checkFolder('~/.kube'), { refused: O.FOLDER_REFUSED.secrets });
+  }
+);
 
 /** Each name a project may share with a store: what a project keeps there, and each file only the real store holds. */
 const SHARED_NAMES = [
@@ -391,7 +408,7 @@ const reachesRuns = (path: string) =>
 for (const platform of ['darwin', 'linux'] as const)
   test(
     `outside the home on ${platform}, a project's own .docker, .kube or .config is given and reaches runs: the folder, one in it and one holding it`,
-    { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+    { skip: TEMP_IN_APPDATA },
     () =>
       onPlatform(platform, async () => {
         for (const { store, project } of SHARED_NAMES) {
@@ -411,7 +428,7 @@ for (const platform of ['darwin', 'linux'] as const)
 for (const platform of ['darwin', 'linux'] as const)
   test(
     `outside the home on ${platform}, a real Docker, Kubernetes or sign-in folder is refused whatever the owner accepts, and one already stored reaches no run`,
-    { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+    { skip: TEMP_IN_APPDATA },
     () =>
       onPlatform(platform, async () => {
         for (const { store, project, marks } of SHARED_NAMES)
@@ -437,7 +454,7 @@ for (const platform of ['darwin', 'linux'] as const)
 
 test(
   "outside the home, the warning still comes first for a project's own .docker, .kube or .config in system files, and only the Accept gives it",
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   async () => {
     for (const { store, project } of SHARED_NAMES) {
       const top = outside('app');
@@ -455,7 +472,7 @@ test(
 
 test(
   'outside the home, a real store is refused when given and stores nothing, Accept or not',
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   async () => {
     const top = outside('drive');
     mkdirSync(join(top, '.docker'));
@@ -469,7 +486,7 @@ test(
 
 test(
   'outside the home, a file only named like a store is no store, and a project .claude of settings is still given as the folder itself',
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   () => {
     for (const store of ['.docker', '.kube', '.config']) {
       const top = outside('app');
@@ -491,19 +508,25 @@ test(
   }
 );
 
-test("in the home, .docker, .kube and .config are refused by name with no sign-in in them, and a project's own inside the home is given", () => {
-  for (const store of ['.docker', '.kube', '.config']) {
-    const at = folder(store, 'inner');
-    for (const accept of [true, false]) {
-      assert.deepEqual(O.checkFolder(`~/${store}`, accept), { refused: O.FOLDER_REFUSED.secrets });
-      assert.deepEqual(O.checkFolder(at, accept), { refused: O.FOLDER_REFUSED.secrets });
+test(
+  "in the home, .docker, .kube and .config are refused by name with no sign-in in them, and a project's own inside the home is given",
+  { skip: TEMP_IN_APPDATA },
+  () => {
+    for (const store of ['.docker', '.kube', '.config']) {
+      const at = folder(store, 'inner');
+      for (const accept of [true, false]) {
+        assert.deepEqual(O.checkFolder(`~/${store}`, accept), {
+          refused: O.FOLDER_REFUSED.secrets
+        });
+        assert.deepEqual(O.checkFolder(at, accept), { refused: O.FOLDER_REFUSED.secrets });
+      }
+      assert.equal(reachesRuns(at), false, store);
+      const project = folder('Projects', 'app');
+      mkdirSync(join(project, store), { recursive: true });
+      assert.deepEqual(O.checkFolder(project), { real: project }, store);
     }
-    assert.equal(reachesRuns(at), false, store);
-    const project = folder('Projects', 'app');
-    mkdirSync(join(project, store), { recursive: true });
-    assert.deepEqual(O.checkFolder(project), { real: project }, store);
   }
-});
+);
 
 test(
   'on a Mac, checkFolder refuses a secret store or the office typed in another case',
@@ -518,19 +541,23 @@ test(
   }
 );
 
-test('checkFolder refuses a link into a secret store, and a folder holding where one leads', () => {
-  folder('.ssh');
-  symlinkSync(join(HOME, '.ssh'), join(HOME, 'x'));
-  assert.deepEqual(O.checkFolder('~/x'), { refused: O.FOLDER_REFUSED.secrets });
-  // A secret store that is itself a link, as a dotfiles folder makes one.
-  rmSync(join(HOME, '.gnupg'), { recursive: true, force: true });
-  symlinkSync(folder('dots', 'gnupg'), join(HOME, '.gnupg'));
-  assert.deepEqual(O.checkFolder('~/dots'), { refused: O.FOLDER_REFUSED.secrets });
-  // A folder that only holds a `.ssh` of its own is not a secret store.
-  const project = folder('project');
-  folder('project', '.ssh');
-  assert.deepEqual(O.checkFolder('~/project'), { real: project });
-});
+test(
+  'checkFolder refuses a link into a secret store, and a folder holding where one leads',
+  { skip: TEMP_IN_APPDATA },
+  () => {
+    folder('.ssh');
+    symlinkSync(join(HOME, '.ssh'), join(HOME, 'x'));
+    assert.deepEqual(O.checkFolder('~/x'), { refused: O.FOLDER_REFUSED.secrets });
+    // A secret store that is itself a link, as a dotfiles folder makes one.
+    rmSync(join(HOME, '.gnupg'), { recursive: true, force: true });
+    symlinkSync(folder('dots', 'gnupg'), join(HOME, '.gnupg'));
+    assert.deepEqual(O.checkFolder('~/dots'), { refused: O.FOLDER_REFUSED.secrets });
+    // A folder that only holds a `.ssh` of its own is not a secret store.
+    const project = folder('project');
+    folder('project', '.ssh');
+    assert.deepEqual(O.checkFolder('~/project'), { real: project });
+  }
+);
 
 /** A folder outside the test's home, made now, by its real path. */
 function outside(...parts: string[]): string {
@@ -543,7 +570,7 @@ function outside(...parts: string[]): string {
 
 test(
   'checkFolder gives a folder outside the home, warning first when it sits in system files',
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   () => {
     assert.equal(
       O.FOLDER_WARNING,
@@ -561,7 +588,7 @@ test(
 
 test(
   'outside the home, checkFolder refuses a secret store by what it holds, in the folder, above it and one level down',
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   () => {
     const R = O.FOLDER_REFUSED;
     const keys = outside('keys');
@@ -601,7 +628,7 @@ test(
 
 test(
   'outside the home, every secret store is refused and kept from runs: the folder, one in it and one holding it',
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   () => {
     const R = O.FOLDER_REFUSED;
     for (const [store, marks] of Object.entries(O.STORE_MARKS))
@@ -629,7 +656,7 @@ test(
 
 test(
   "outside the home, an ordinary folder named Library or AppData with no one's sign-ins in it is not a secret store",
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   () => {
     for (const store of ['Library', 'AppData']) {
       const top = outside('photos');
@@ -643,7 +670,7 @@ test(
 
 test(
   'setFolder warns on a whole drive or system files and stores nothing, and the Accept gives it',
-  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  { skip: TEMP_IN_APPDATA },
   async () => {
     const out = outside('wide');
     assert.deepEqual(await O.setFolder('ziva', out, 'read'), { warning: O.FOLDER_WARNING });

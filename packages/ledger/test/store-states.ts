@@ -229,6 +229,15 @@ export const MARK_STATES: StoreState[] = Object.entries(STORE_FILES).flatMap(([s
   })
 );
 
+/**
+ * Why a test of the folder check skips on real Windows: the temp folder every
+ * test builds in sits in the real home's AppData, a secret store, so the check
+ * refuses all of it, and `HOME` cannot move the home there. Read once, before
+ * any faked platform.
+ */
+export const TEMP_IN_APPDATA =
+  process.platform === 'win32' && "Windows' temp folder sits in the home's AppData";
+
 /** Whether this disk can tell case variants apart: a Mac's cannot. Read once, before any faked platform. */
 const CASE_FOLDS_HERE = process.platform === 'darwin';
 
