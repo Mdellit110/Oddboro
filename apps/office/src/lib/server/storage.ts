@@ -3,13 +3,14 @@
 // changed. Never the office's own files there (the chat log and the run
 // session), never an instruction file or a hidden one (`.claude`, `.grok`,
 // `.git` and the rest), and never through a link, so the list stays inside
-// those folders. It stops at `STORAGE_CAP` entries in all and says so. Read
-// when the tab opens; nothing watches the folders.
+// those folders. It stops at `STORAGE_CAP` entries in all and says so, shared
+// work counted first, so a full folder of its own never hides what it built
+// with others. Read when the tab opens; nothing watches the folders.
 import { type Dirent, lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { home, threadFolder, threadPart, workTitles } from '@oddboro/ledger';
-import { THREADS_DIR, workName, workPath } from '@oddboro/ledger/work-paths';
-import { INSTRUCTIONS, isFolder, readable } from './files.ts';
+import { home, threadPart, workTitles } from '@oddboro/ledger';
+import { workName } from '@oddboro/ledger/work-paths';
+import { INSTRUCTIONS, threadsWithPart } from './files.ts';
 
 /** The most entries the tab lists. */
 export const STORAGE_CAP = 5000;
@@ -85,28 +86,6 @@ export function listStorage(
 }
 
 /**
- * The threads `staff` has a part of on the disk, newest first. A thread's
- * folder or a part that is a link leads somewhere else, so neither counts, and
- * a folder no thread could own is passed over: a number past what `workPath`
- * takes would fail the titles query.
- */
-function threadsWithPart(staff: string): number[] {
-  const threads = home(THREADS_DIR);
-  if (!isFolder(threads)) return [];
-  return readable(threads)
-    .map((d) => d.name)
-    .filter((name) => /^[1-9]\d*$/.test(name))
-    .map(Number)
-    .filter(
-      (id) =>
-        workPath(workName(id, staff)) &&
-        isFolder(threadFolder(id)) &&
-        isFolder(threadPart(id, staff))
-    )
-    .sort((a, b) => b - a);
-}
-
-/**
  * `staff`'s part of each thread it is on now, newest first, by the names the
  * viewer opens them by, up to `cap` entries. The titles come first, so a part
  * of a thread it has left uses none of the cap. A part with nothing shown in
@@ -137,12 +116,17 @@ async function listWork(
   return { work, capped: false };
 }
 
-/** Everything an Odd has kept: its own folder, then its parts of threads, under one cap. */
+/**
+ * Everything an Odd has kept, under one cap: its parts of threads first, then
+ * its own folder with what is left, since the page's reason for shared work is
+ * finding what was built.
+ */
 export async function oddStorage(
   staff: string,
   cap = STORAGE_CAP
 ): Promise<{ entries: StoredEntry[]; work: StoredWork[]; capped: boolean }> {
-  const own = listStorage(home('staff', staff), cap);
-  const { work, capped } = await listWork(staff, cap - own.entries.length);
+  const { work, capped } = await listWork(staff, cap);
+  const used = work.reduce((sum, w) => sum + w.entries.length, 0);
+  const own = listStorage(home('staff', staff), cap - used);
   return { entries: own.entries, work, capped: own.capped || capped };
 }

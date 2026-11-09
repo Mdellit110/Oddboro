@@ -29,7 +29,7 @@ import {
   workFile
 } from '@oddboro/ledger';
 import { fixedError, isFixedError } from '@oddboro/ledger/errors';
-import { workPath } from '@oddboro/ledger/work-paths';
+import { workName, workPath } from '@oddboro/ledger/work-paths';
 import { PAGE } from '#lib/pages.ts';
 
 const HOMES = home('staff');
@@ -133,7 +133,7 @@ function filesNamed(root: string, name: string): string[] {
 }
 
 /** The entries of `dir`, or none when the office may not read it. */
-export function readable(dir: string): Dirent[] {
+function readable(dir: string): Dirent[] {
   try {
     return readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -150,16 +150,9 @@ export function readable(dir: string): Dirent[] {
  * searched, and the search never follows a link, so it stays inside those parts.
  */
 function fileInThreads(staff: string, name: string): string | undefined {
-  if (!isFolder(THREADS)) return undefined;
-  const ids = readable(THREADS)
-    .map((d) => d.name)
-    .filter((d) => /^\d+$/.test(d))
-    .map(Number)
-    .sort((a, b) => b - a);
   let newest: { file: string; at: number } | undefined;
-  for (const id of ids) {
+  for (const id of threadsWithPart(staff)) {
     const part = threadPart(id, staff);
-    if (!isFolder(threadFolder(id)) || !isFolder(part)) continue;
     for (const found of filesNamed(part, name)) {
       const file = join(part, found);
       const at = statSync(file).mtimeMs;
@@ -169,8 +162,29 @@ function fileInThreads(staff: string, name: string): string | undefined {
   return newest?.file;
 }
 
+/**
+ * The threads `staff` has a part of on the disk, newest first. A thread's
+ * folder or a part that is a link leads somewhere else, so neither counts, and
+ * a folder no thread could own (a leading zero, a word, a number past what
+ * `workPath` takes) is passed over.
+ */
+export function threadsWithPart(staff: string): number[] {
+  if (!isFolder(THREADS)) return [];
+  return readable(THREADS)
+    .map((d) => d.name)
+    .filter((name) => /^[1-9]\d*$/.test(name))
+    .map(Number)
+    .filter(
+      (id) =>
+        workPath(workName(id, staff)) &&
+        isFolder(threadFolder(id)) &&
+        isFolder(threadPart(id, staff))
+    )
+    .sort((a, b) => b - a);
+}
+
 /** Whether `path` is a folder itself, not a link to one. */
-export const isFolder = (path: string): boolean =>
+const isFolder = (path: string): boolean =>
   !!lstatSync(path, { throwIfNoEntry: false })?.isDirectory();
 
 /**

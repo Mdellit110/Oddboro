@@ -258,7 +258,7 @@ test('a folder with no thread, a part of a thread the Odd is off and an odd fold
   assert.equal(capped, false, 'one file fits a cap of one');
 });
 
-test("the cap covers an Odd's own entries and its shared work together, and says so", async () => {
+test("the cap covers an Odd's shared work and its own entries together, shared work first, and says so", async () => {
   const id = await newOdd();
   put(join(L.home('staff', id), 'a.md'));
   put(join(L.home('staff', id), 'b.md'));
@@ -267,18 +267,43 @@ test("the cap covers an Odd's own entries and its shared work together, and says
   put(join(L.threadPart(t, id), 'two.md'));
 
   const under = await oddStorage(id, 4);
-  assert.equal(under.capped, false);
+  assert.equal(under.capped, false, 'own plus shared exactly equal to the cap');
   assert.equal(under.work[0].entries.length, 2);
+  assert.equal(under.entries.length, 2);
 
+  // Own over what is left: every shared entry listed, own cut, capped.
   const over = await oddStorage(id, 3);
   assert.equal(over.capped, true);
-  assert.equal(over.entries.length, 2);
-  assert.deepEqual(over.work.map(files), [[`threads/${t}/${id}/one.md`]]);
+  assert.deepEqual(over.work.map(files), [
+    [`threads/${t}/${id}/one.md`, `threads/${t}/${id}/two.md`]
+  ]);
+  assert.equal(over.entries.length, 1);
 
-  // Full on its own folder alone: no room for any shared work, and it says so.
-  const full = await oddStorage(id, 2);
+  // Full on shared work alone: stops there, says so, no own entries.
+  const full = await oddStorage(id, 1);
   assert.equal(full.capped, true);
-  assert.deepEqual(full.work, []);
+  assert.deepEqual(full.work.map(files), [[`threads/${t}/${id}/one.md`]]);
+  assert.deepEqual(full.entries, []);
+});
+
+test('an Odd over the cap on its own folder, with no threads, says it is capped', async () => {
+  const id = await newOdd();
+  for (const name of ['a.md', 'b.md', 'c.md']) put(join(L.home('staff', id), name));
+  const { entries, work, capped } = await oddStorage(id, 2);
+  assert.equal(entries.length, 2);
+  assert.deepEqual(work, []);
+  assert.equal(capped, true);
+});
+
+test('an own folder and shared work each under the cap are both complete and not capped', async () => {
+  const id = await newOdd();
+  put(join(L.home('staff', id), 'a.md'));
+  const t = await thread('Shared', id);
+  put(join(L.threadPart(t, id), 'one.md'));
+  const { entries, work, capped } = await oddStorage(id, 3);
+  assert.equal(entries.length, 1);
+  assert.deepEqual(work.map(files), [[`threads/${t}/${id}/one.md`]]);
+  assert.equal(capped, false);
 });
 
 test('the cap counts down across parts, so a later part gets only what is left', async () => {
