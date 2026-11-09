@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, beforeEach, test } from 'node:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { onThisDisk, STORE_STATES } from './store-states.ts';
 import { db, sql, toolServer } from './tool-server.ts';
 
 // A home of the test's own, for this process and the tool server's, so a
@@ -249,3 +250,39 @@ test(
     assert.deepEqual(await folders(), [{ path: out, write: false }]);
   }
 );
+
+// One tool server per place, so the table fits under the suite's limit. Each
+// row clears the desk first, since two rows ask for the same folder.
+for (const where of ['in the home', 'outside the home'] as const)
+  test(
+    `the tool answers every state of a secret store as the Settings tab does, ${where}`,
+    {
+      skip:
+        where === 'outside the home' &&
+        process.platform === 'win32' &&
+        "Windows' temp folder sits in the home's AppData"
+    },
+    async (t) => {
+      const c = await theo(`k-states-${where}`);
+      for (const s of STORE_STATES.filter((row) => onThisDisk(row) && !row.homeOnly))
+        await t.test(s.state, async () => {
+          await sql`delete from asks`;
+          const p = s.make(where === 'in the home' ? HOME : outside(), HOME);
+          const r = await call(c, { path: p, level: 'read', why: 'w' });
+          // A temp folder holds no store, and is system files on a Mac and Linux.
+          const refusal = s.refused
+            ? O.FOLDER_REFUSED.secrets
+            : where === 'outside the home' && O.FOLDER_REFUSED.broad;
+          if (refusal) {
+            assert.ok(r.error && r.text.endsWith(refusal), r.text);
+            assert.deepEqual(await folderAsks(), []);
+          } else {
+            assert.ok(!r.error, r.text);
+            assert.deepEqual(
+              (await folderAsks()).map((a) => a.folder),
+              [{ path: p, level: 'read' }]
+            );
+          }
+        });
+    }
+  );

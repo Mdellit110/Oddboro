@@ -2,11 +2,12 @@
 // (office-under-test.ts), whose ledger takes the line a held network records.
 // Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { StaffRow } from '@oddboro/ledger';
 import { setZone } from '@oddboro/ledger/time';
+import { onThisDisk, STORE_STATES } from '../../../../../packages/ledger/test/store-states.ts';
 import { folder, onPlatform, ownerHome } from './office-under-test.ts';
 
 // After the office under test set its home, as the office's own imports are.
@@ -171,6 +172,32 @@ test(
         ['a folder holding a marked .docker', holder, true],
         ['that marked .docker', join(holder, '.docker'), true]
       ]);
+    });
+  }
+);
+
+const STATES = STORE_STATES.filter(onThisDisk);
+
+test("runs get exactly the stored folders no store state refuses, and the card's line marks the rest, in the home", async () => {
+  // The rows by name get a home of their own: the link rows put a key in the
+  // home's .ssh, and those rows are about a store with no mark in it.
+  for (const rows of [STATES.filter((s) => !s.homeOnly), STATES.filter((s) => s.homeOnly)])
+    await ownerHome(async (madeHome) => {
+      const home = realpathSync(madeHome);
+      assertLineFollowsWhatRunsGet(rows.map((s) => [s.state, s.make(home, home), s.refused]));
+    });
+});
+
+test(
+  "runs get exactly the stored folders no store state refuses, and the card's line marks the rest, outside the home",
+  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  async () => {
+    await ownerHome(async (madeHome) => {
+      const home = realpathSync(madeHome);
+      const outside = mkdtempSync(join(realpathSync(folder), 'store-states-'));
+      assertLineFollowsWhatRunsGet(
+        STATES.filter((s) => !s.homeOnly).map((s) => [s.state, s.make(outside, home), s.refused])
+      );
     });
   }
 );
