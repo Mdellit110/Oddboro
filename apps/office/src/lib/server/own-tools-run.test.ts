@@ -4,8 +4,16 @@
 // arguments and environment each tool gets, Claude Code's sandbox for
 // commands, and what the Odd is told. Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { test } from 'node:test';
 import {
@@ -430,6 +438,32 @@ test('the folder route says each refusal and records each change', async () => {
     assert.ok(await recorded('Let Wes browse the web'));
   });
 });
+
+test(
+  "a folder of system files is only a warning, and given nothing, until the owner's Accept sends accept",
+  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  async () => {
+    await setOwn('wes', {});
+    await ownerHome(async () => {
+      // In the system's temp folder and outside this home, so it counts as system files.
+      const broad = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-broad-')));
+      try {
+        const change = { folder: broad, access: 'read' };
+        for (const asked of [change, { ...change, accept: false }]) {
+          const said = await patch('wes', asked);
+          assert.equal(said.status, 200);
+          assert.deepEqual(await said.json(), { warning: L.FOLDER_WARNING });
+          assert.deepEqual((await L.staffer('wes'))?.folders, []);
+        }
+        const accepted = await patch('wes', { ...change, accept: true });
+        assert.deepEqual(await accepted.json(), { ok: true });
+        assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: broad, write: false }]);
+      } finally {
+        rmSync(broad, { recursive: true, force: true });
+      }
+    });
+  }
+);
 
 test("with Run commands, Bash can write only the run's write folders", onMac, async () => {
   const madeData = !existsSync(ownerData);
