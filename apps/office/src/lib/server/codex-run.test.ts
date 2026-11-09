@@ -424,11 +424,10 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
-test("a Codex Odd without Run commands is told it has no shell and the owner can switch one on; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
+test("a Codex Odd without Run commands is told it has no shell and to ask for one with ask_for_switch; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;
-  const switchOn = (name: string) =>
-    `${owner} can switch on ${name} in your Settings tab, under Office.`;
+  const switchOn = (name: string) => `ask ${owner} to turn on ${name} with ask_for_switch.`;
   const off = await chatOf('cody');
   assert.ok(
     off.system.includes(

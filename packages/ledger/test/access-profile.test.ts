@@ -187,12 +187,16 @@ test('a handed-over run keeps its own commands, web and folders; a write grant w
   assert.equal(C.capped(caps, 'read').outside[0].level, 'read');
 });
 
-/** The line an Odd hears for each own tool it lacks, when {owner} can switch it on, by whose card it is. */
-const switchLines = (whose: string) => ({
+/** The line an Odd hears for each own tool it lacks, when it can ask for it. */
+const SWITCH = {
+  commands: 'No shell: ask {owner} to turn on Run commands with ask_for_switch.',
+  web: 'No web: ask {owner} to turn on Browse the web with ask_for_switch.'
+};
+/** The line another Odd reads about one, naming the owner's control on that Odd's card. */
+const switchLinesOf = (whose: string) => ({
   commands: `No shell: {owner} can switch on Run commands in ${whose} Settings tab, under Office.`,
   web: `No web: {owner} can switch on Browse the web in ${whose} Settings tab, under Office.`
 });
-const SWITCH = switchLines('your');
 
 test('each Odd is told its own tools, and how to get each one it lacks', () => {
   const shell = "a shell confined to your folders and {owner}'s developer tools (read only)";
@@ -225,7 +229,7 @@ test('each Odd is told its own tools, and how to get each one it lacks', () => {
   }
 });
 
-test('an Odd is told the owner can switch on a tool it lacks exactly when the owner can, and never told of a tool it lacks', () => {
+test('an Odd is told it can ask for a tool it lacks exactly when it can be had, and never told of a tool it lacks', () => {
   const shell = "a shell confined to your folders and {owner}'s developer tools (read only)";
   type Row = {
     agent: (typeof A.AGENTS)[number];
@@ -384,7 +388,7 @@ test('an Odd is told the owner can switch on a tool it lacks exactly when the ow
     const row = JSON.stringify({ ...r, hears: undefined });
     assert.equal(said, r.hears, row);
     // The Run commands switch line only where the owner's switch reaches the tool and it is off.
-    const lines = switchLines(r.about === undefined ? 'your' : `${r.about}'s`);
+    const lines = r.about === undefined ? SWITCH : switchLinesOf(`${r.about}'s`);
     const switchable = A.commandsHow(r.agent, r.platform).state === 'switch' && !r.commands;
     assert.equal(said.includes(lines.commands), switchable, row);
     assert.equal(said.includes(lines.web), !r.web, row);
@@ -402,8 +406,8 @@ test("the Odd is told the card's own tab, section and switch names, and office_r
   const [line] = C.ownToolsSaid('claude', off, false);
   // The words come from the constants the Settings tab shows (AccessTab reads OFFICE_SECTION and SWITCH_NAMES).
   for (const name of Object.values(W.SWITCH_NAMES))
-    assert.ok(line.includes(`switch on ${name} in ${W.officeSection('your')}.`), line);
-  assert.ok(line.includes(`in your ${W.SETTINGS_TAB} tab, under ${W.OFFICE_SECTION}.`), line);
+    assert.ok(line.includes(`turn on ${name} with ask_for_switch.`), line);
+  assert.doesNotMatch(line, /Settings tab/);
   const [rowans] = C.ownToolsSaid('claude', off, false, 'Rowan');
   assert.ok(
     rowans.includes("can switch on Browse the web in Rowan's Settings tab, under Office."),

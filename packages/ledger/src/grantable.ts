@@ -46,9 +46,11 @@ export type GrantKind = (typeof GRANT_KINDS)[number];
  * their caller.
  */
 export type Readers = {
-  commands: { agent: Agent; how: CommandsHow; where: string };
-  web: { where: string };
-  folders: { owner: string; where: string };
+  // `where` is the card another Odd reads about: the owner's own control there,
+  // since a reader can ask only for itself. With none, the Odd reads its own line.
+  commands: { agent: Agent; how: CommandsHow; where?: string };
+  web: { where?: string };
+  folders: Record<string, never>;
   office_tools: { owner: string; where: string };
   // house() knows no tool and no owner's name, so it never offers a switch.
   outside_tools: { has: (tool: string) => boolean };
@@ -65,7 +67,7 @@ export type OwnerGrant<K extends GrantKind> = {
   missing: ((r: Readers[K]) => string) | { none: string };
   /** The functions that say `missing` to an Odd. */
   heard: readonly Hearer[];
-  /** How the Odd gets it: an ask, or the owner's own control on its Settings tab. */
+  /** How the Odd gets it: an ask it can raise, or the owner's own control on its Settings tab. */
   route: { ask: AskKind } | { owner: 'settings' };
   /** What approving the route's ask does (its `OWNER_ANSWERS` cell), when the route is an ask. */
   approving?: readonly Effect[];
@@ -110,29 +112,35 @@ export const OWNER_GRANTS = {
     // The switch is offered only when it reaches the tool on this system
     // (`commandsHow`), so an Odd is never told of one the owner cannot move.
     missing: ({ agent, how, where }: Readers['commands']) =>
-      how.state === 'switch'
-        ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
-        : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`,
+      how.state !== 'switch'
+        ? `No shell: ${AGENT_NAMES[agent]} can't run commands here.`
+        : where
+          ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
+          : `No shell: ask {owner} to turn on ${SWITCH_NAMES.commands} with ask_for_switch.`,
     heard: ['ownToolsLine'],
-    route: { owner: 'settings' },
+    route: { ask: 'switch' },
+    approving: OWNER_ANSWERS.ask.switch.approve,
     atHire: HIRE_DEFAULTS.staff.commands
   },
   web: {
     control: { patch: ['web'] },
     // Browse the web follows the owner on every tool.
     missing: ({ where }: Readers['web']) =>
-      `No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`,
+      where
+        ? `No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`
+        : `No web: ask {owner} to turn on ${SWITCH_NAMES.web} with ask_for_switch.`,
     heard: ['ownToolsLine'],
-    route: { owner: 'settings' },
+    route: { ask: 'switch' },
+    approving: OWNER_ANSWERS.ask.switch.approve,
     atHire: HIRE_DEFAULTS.staff.web
   },
   folders: {
     control: { patch: ['folder', 'access', 'accept'] },
     // Said only to an Odd with no folder at all.
-    missing: ({ owner, where }: Readers['folders']) =>
-      `${owner} can give you a folder outside the office in ${where}.`,
+    missing: () => 'When a job needs a folder outside the office, ask with ask_for_folder.',
     heard: ['accessInRun'],
-    route: { owner: 'settings' },
+    route: { ask: 'folder' },
+    approving: OWNER_ANSWERS.ask.folder.approve.then,
     atHire: HIRE_DEFAULTS.staff.folders.length > 0
   },
   office_tools: {

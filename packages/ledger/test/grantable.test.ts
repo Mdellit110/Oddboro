@@ -7,9 +7,10 @@ import { test } from 'node:test';
 import './pglite.ts';
 
 const { getTableColumns } = await import('drizzle-orm');
-const { LEVELS, officeSection, settingsTab } = await import('../src/access-words.ts');
+const { LEVELS, officeSection } = await import('../src/access-words.ts');
 // Through `say` only (below), so each call is noted: the bare names stay out of scope.
 const C = await import('../src/capabilities.ts');
+const { OWNER_ANSWERS } = await import('../src/desk-answers.ts');
 const G = await import('../src/grantable.ts');
 const { hire, officeAgent } = await import('../src/office.ts');
 const { GRANTABLE_TOOLS, isGrantable } = await import('../src/tools.ts');
@@ -76,36 +77,37 @@ function noting(called: Set<Hearer>): Say {
  */
 const HEARD: Record<GrantKind, (say: Say) => void> = {
   commands: (say) => {
-    const lacks =
-      'No shell: {owner} can switch on Run commands in your Settings tab, under Office.';
+    const lacks = 'No shell: ask {owner} to turn on Run commands with ask_for_switch.';
+    assert.equal(
+      G.OWNER_GRANTS.commands.missing({ agent: 'claude', how: { state: 'switch' } }),
+      lacks
+    );
+    // Another Odd reading the line cannot ask for this Odd: it is told the owner's control.
     assert.equal(
       G.OWNER_GRANTS.commands.missing({ agent: 'claude', how: { state: 'switch' }, where }),
-      lacks
+      'No shell: {owner} can switch on Run commands in your Settings tab, under Office.'
     );
     assert.ok(say.ownToolsLine('claude', bare).includes(lacks));
     // A tool that never follows the switch is never offered it.
     const grok = { ...bare, commandsHow: { state: 'never', why: '' } } as const;
     const never = "No shell: Grok can't run commands here.";
-    assert.equal(
-      G.OWNER_GRANTS.commands.missing({ agent: 'grok', how: grok.commandsHow, where }),
-      never
-    );
+    assert.equal(G.OWNER_GRANTS.commands.missing({ agent: 'grok', how: grok.commandsHow }), never);
     assert.ok(say.ownToolsLine('grok', grok).includes(never));
     assert.doesNotMatch(say.ownToolsLine('claude', { ...bare, commands: true }), /No shell/);
   },
   web: (say) => {
-    const lacks =
-      'No web: {owner} can switch on Browse the web in your Settings tab, under Office.';
-    assert.equal(G.OWNER_GRANTS.web.missing({ where }), lacks);
+    const lacks = 'No web: ask {owner} to turn on Browse the web with ask_for_switch.';
+    assert.equal(G.OWNER_GRANTS.web.missing({}), lacks);
+    assert.equal(
+      G.OWNER_GRANTS.web.missing({ where }),
+      'No web: {owner} can switch on Browse the web in your Settings tab, under Office.'
+    );
     assert.ok(say.ownToolsLine('claude', bare).includes(lacks));
     assert.doesNotMatch(say.ownToolsLine('claude', { ...bare, web: true }), /No web/);
   },
   folders: (say) => {
-    const lacks = 'Sam can give you a folder outside the office in your Settings tab.';
-    assert.equal(
-      G.OWNER_GRANTS.folders.missing({ owner: 'Sam', where: settingsTab('your') }),
-      lacks
-    );
+    const lacks = 'When a job needs a folder outside the office, ask with ask_for_folder.';
+    assert.equal(G.OWNER_GRANTS.folders.missing(), lacks);
     assert.ok(
       say
         .accessInRun(heldBack, 'Sam', {})
@@ -190,6 +192,13 @@ test('a grant the owner gives through an ask says what approving it does, from t
     const g = G.OWNER_GRANTS[kind];
     assert.equal('ask' in g.route, 'approving' in g, kind);
   }
+  // A grant an Odd can ask for says how, and what the yes does.
+  for (const kind of ['commands', 'web'] as const) {
+    assert.deepEqual(G.OWNER_GRANTS[kind].route, { ask: 'switch' }, kind);
+    assert.equal(G.OWNER_GRANTS[kind].approving, OWNER_ANSWERS.ask.switch.approve, kind);
+  }
+  assert.deepEqual(G.OWNER_GRANTS.folders.route, { ask: 'folder' });
+  assert.equal(G.OWNER_GRANTS.folders.approving, OWNER_ANSWERS.ask.folder.approve.then);
 });
 
 test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a manager from its own: Draft, with exactly its tools', async () => {

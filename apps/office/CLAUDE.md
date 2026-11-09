@@ -494,8 +494,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (`caps.own`), less a held network, and passes the given folders still on
    the disk and in no secret store (`touchesSecretStore` in the ledger); the prompt lists them under "Where things are", and "What you
    can do" says what the Odd's own tools reach and, for Run commands or
-   Browse the web when it lacks one, whether the owner can switch it on in
-   its Settings tab (`ownToolsSaid` in the ledger's `capabilities.ts`, held
+   Browse the web when it lacks one, whether it can ask for it with
+   `ask_for_switch` (`ownToolsSaid` in the ledger's `capabilities.ts`, held
    network included), the same line `my_access` gives. `office_report` gives
    it too, naming the Odd, since another Odd reads it ("Rowan's own tools",
    "Rowan's Settings tab").

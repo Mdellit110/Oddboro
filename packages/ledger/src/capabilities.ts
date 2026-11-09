@@ -17,7 +17,6 @@ import {
   levelRoute,
   officeSection,
   parseLevel,
-  settingsTab,
   SWITCH_NAMES,
   writesWait,
   type Level
@@ -185,8 +184,9 @@ export function officeHeldIn(env: Record<string, string | undefined>): boolean {
  * the run knows three things, so the office passes them in its environment:
  * its ceiling (`CEILING`), set when it is below the Odd's own level, the
  * sign-ins that ran out (`SIGNED_OUT`), and whether the office holds the
- * network (`officeHeldIn`). An Odd lacking an office tool the owner can give,
- * or with no folder, is told where the owner gives one (`OWNER_GRANTS`).
+ * network (`officeHeldIn`). An Odd lacking an office tool the owner can give
+ * is told where the owner gives one, and one with no folder how to ask for
+ * one (`OWNER_GRANTS`).
  */
 export function accessInRun(
   own: Capabilities,
@@ -219,9 +219,7 @@ export function accessInRun(
       : [OWNER_GRANTS.office_tools.missing({ owner, where: officeSection('your') })]),
     ...(folders.length
       ? [`Folders ${owner} gave you:`, ...folders.map((l) => `- ${l}`)]
-      : [
-          `${owner} has given you no folders. ${OWNER_GRANTS.folders.missing({ owner, where: settingsTab('your') })}`
-        ]),
+      : [`${owner} has given you no folders. ${OWNER_GRANTS.folders.missing()}`]),
     lines.length
       ? lines.map((l, i) => `- (id: ${outside[i].connector.id}) ${l}`).join('\n')
       : `${owner} has connected no outside tools for you yet.`
@@ -295,8 +293,10 @@ export function askAboveLevel(held: Level, asked: 'read' | 'write', owner: strin
  * folders and {owner}'s developer tools, read only, and to the internet only
  * when `network` says so, and the tool's own web search (and page fetch, where
  * it has one) when the owner switched Browse the web on. Each one it lacks
- * gets a line saying whether {owner} can switch it on, and where (its card's
- * Settings tab, under Office). Gemini's policy allows a write only by its full path.
+ * gets a line saying whether it can be had: the Odd itself asks with
+ * ask_for_switch; another Odd reading the line is told the owner can switch it
+ * on, and where (its card's Settings tab, under Office). Gemini's policy
+ * allows a write only by its full path.
  * `about` names the Odd when another Odd reads the line (`ownToolsSaid`).
  * `{owner}` is left for the caller to fill.
  */
@@ -312,7 +312,7 @@ export function ownToolsLine(
     ...(own.web ? [FETCHES_PAGES[agent] ? 'web search and fetch' : 'web search'] : [])
   ];
   const opens = `${about === undefined ? 'Your' : whose} own tools work on files`;
-  const where = officeSection(whose);
+  const where = about === undefined ? undefined : officeSection(whose);
   const line = [
     plus.length ? `${opens}, plus ${plus.join(', and ')}.` : `${opens} only.`,
     ...(own.commands

@@ -249,7 +249,7 @@ test('Grok gets the web but never a shell', async () => {
   // Grok never runs commands, so it is never offered the Run commands switch, whatever is stored.
   assert.ok(
     off.system.includes(
-      `Your own tools work on files only. No shell: Grok can't run commands here. No web: ${await L.ownerName()} can switch on Browse the web in your Settings tab, under Office.`
+      `Your own tools work on files only. No shell: Grok can't run commands here. No web: ask ${await L.ownerName()} to turn on Browse the web with ask_for_switch.`
     ),
     off.system
   );
@@ -273,7 +273,7 @@ test('the system prompt says what the Odd reaches', async () => {
   // Claude Code follows the Run commands switch on a Mac only, so only there is Fern told the owner can switch it on.
   const noShell =
     process.platform === 'darwin'
-      ? `No shell: ${owner} can switch on Run commands in your Settings tab, under Office.`
+      ? `No shell: ask ${owner} to turn on Run commands with ask_for_switch.`
       : "No shell: Claude Code can't run commands here.";
   assert.ok(
     system.includes(`Your own tools work on files, plus web search and fetch. ${noShell}`),

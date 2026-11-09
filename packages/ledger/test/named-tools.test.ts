@@ -68,16 +68,24 @@ const descriptions = (schema: unknown): string[] =>
 
 /** Each tool the Odd's server lists, with the office tools it names that the Odd does not hold. */
 async function unheld(id: string): Promise<Record<string, string[]>> {
-  const { tools } = await (await toolServer(id, { RUN_KEY: `k-${id}` })).listTools();
+  const server = await toolServer(id, { RUN_KEY: `k-${id}` });
+  const { tools } = await server.listTools();
   const held = new Set(tools.map((t) => t.name));
-  return Object.fromEntries(
-    tools.map((t) => [
-      t.name,
-      named([t.description ?? '', ...descriptions(t.inputSchema)].join('\n')).filter(
-        (n) => !held.has(n)
-      )
-    ])
-  );
+  const reply = (await server.callTool({ name: 'my_access', arguments: {} })) as {
+    content: { text: string }[];
+  };
+  return {
+    ...Object.fromEntries(
+      tools.map((t) => [
+        t.name,
+        named([t.description ?? '', ...descriptions(t.inputSchema)].join('\n')).filter(
+          (n) => !held.has(n)
+        )
+      ])
+    ),
+    // my_access says how an Odd gets what it lacks, so its answer is held the same way.
+    'my_access answer': named(reply.content[0].text).filter((n) => !held.has(n))
+  };
 }
 
 const seen: Record<string, Set<string>> = {};
