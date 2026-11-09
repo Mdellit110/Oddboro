@@ -31,6 +31,7 @@ import {
   patch,
   recorded,
   refusal,
+  request,
   runOf,
   secrets,
   setOwn,
@@ -458,6 +459,50 @@ test(
         const accepted = await patch('wes', { ...change, accept: true });
         assert.deepEqual(await accepted.json(), { ok: true });
         assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: broad, write: false }]);
+      } finally {
+        rmSync(broad, { recursive: true, force: true });
+      }
+    });
+  }
+);
+
+test(
+  "on a folder ask, a folder of system files is only a warning, and given nothing, until the owner's Accept sends accept",
+  { skip: process.platform === 'win32' && "Windows' temp folder sits in the home's AppData" },
+  async () => {
+    await setOwn('wes', {});
+    await ownerHome(async () => {
+      // In the system's temp folder and outside this home, so it counts as system files.
+      const broad = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-broad-')));
+      try {
+        const { ask } = await L.raiseAsk('wes', {
+          title: 'Asked',
+          why: 'w',
+          ifApproved: 'i',
+          kind: 'folder',
+          folder: { path: broad, level: 'read' }
+        });
+        const give = (body: unknown) =>
+          request('/api/asks/[id]/folder', 'POST', { params: { id: String(ask.id) }, body });
+        const status = async () =>
+          (await L.pg<{ status: string }[]>`select status from asks where id = ${ask.id}`)[0]
+            .status;
+        const change = { path: broad, level: 'read' };
+        // Only `true` is an Accept: the route must not take any other value for one.
+        for (const asked of [change, { ...change, accept: false }, { ...change, accept: 'yes' }]) {
+          const said = await give(asked);
+          assert.equal(said.status, 200);
+          assert.deepEqual(await said.json(), { warning: L.FOLDER_WARNING });
+          assert.deepEqual((await L.staffer('wes'))?.folders, []);
+          assert.equal(await status(), 'open');
+        }
+        const accepted = await give({ ...change, accept: true });
+        assert.deepEqual(await accepted.json(), {
+          ok: true,
+          given: { path: broad, level: 'read' }
+        });
+        assert.deepEqual((await L.staffer('wes'))?.folders, [{ path: broad, write: false }]);
+        assert.equal(await status(), 'approved');
       } finally {
         rmSync(broad, { recursive: true, force: true });
       }
