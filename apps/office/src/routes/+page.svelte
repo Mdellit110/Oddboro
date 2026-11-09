@@ -173,7 +173,10 @@
     selected = id;
     railAsked = false;
     letGo = false;
-    if (id) rightCollapsed = false;
+    if (id) {
+      rightCollapsed = false;
+      wins.raised = false;
+    }
   }
 
   $effect(() => {
@@ -1185,7 +1188,7 @@
       min={340}
       max={Math.max(760, Math.round(innerWidth * 0.4))}
       storageKey="oddboro.panel.start"
-      onTop={front?.kind === 'file' || front?.kind === 'report'}
+      onTop={wins.raised && (front?.kind === 'file' || front?.kind === 'report')}
     >
       <div class="flex h-full min-h-0 flex-col">
         <div class="pb-2">{@render plate(true)}</div>
@@ -1272,7 +1275,7 @@
                   onhired={(p) => {
                     close(w.id, true);
                     refresh();
-                    selected = p.id;
+                    select(p.id);
                   }}
                 />
               {:else if w.kind === 'report'}

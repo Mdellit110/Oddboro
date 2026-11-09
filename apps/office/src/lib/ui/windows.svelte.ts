@@ -29,13 +29,15 @@ export const wins = $state<{
   active?: string;
   /** False when the owner folded the panel away: the windows stay open behind it. */
   shown: boolean;
+  /** True when the owner last opened a window, false when they last picked an Odd. */
+  raised: boolean;
   /** A window's own words for its tab, e.g. the name of the person being hired. */
   titles: Record<string, string>;
   dirty: Record<string, boolean>;
   busy: Record<string, boolean>;
   /** A close waiting on the owner's word, because the window has unsaved edits or is drawing. */
   confirm?: { id: string; go: () => void };
-}>({ list: [], shown: false, titles: {}, dirty: {}, busy: {} });
+}>({ list: [], shown: false, raised: false, titles: {}, dirty: {}, busy: {} });
 
 /**
  * An item a window wants opened on the desk, such as the task a service's
@@ -54,6 +56,7 @@ export function open(w: Win): void {
   }
   wins.active = w.id;
   wins.shown = true;
+  wins.raised = true;
 }
 
 /** The one Lessons window, on that filter. Already open, it switches to it. */

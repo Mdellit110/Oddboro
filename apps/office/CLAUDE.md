@@ -75,7 +75,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Each resizes by dragging its inner edge (or the arrow keys on it), and
    remembers its width per viewer. Where the two overlap, the end one paints
    over the start one, except while the start one's front window is a file
-   or a report (`onTop`). The start side is the office plate (name,
+   or a report the owner opened after they last picked an Odd (`onTop`,
+   `raised` in `windows.svelte.ts`). The start side is the office plate (name,
    the clock, Setup, and the Desk, Goals, Lessons, Ledger, Services, Hire and Office
    buttons), which opens into a bar of windows
    (`src/lib/ui/windows.svelte.ts`): the Desk, the Goals, the Lessons, the
