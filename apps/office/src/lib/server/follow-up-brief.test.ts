@@ -58,6 +58,20 @@ test('a call the office made tells the Odd not to make it again, with what came 
   assert.ok(lines.includes('- What it returned: captured'));
 });
 
+test('a switch the owner turned on tells the Odd its run has it, names what it asked for, and does the work once for a twin ask', () => {
+  const asked = { ...ask, kind: 'switch', switches: ['web'] } as AskRow;
+  const twin = { ...ask, id: 8 } as AskRow;
+  const lines = followUpBrief(followUp('carry_out'), asked, undefined, undefined, undefined, [
+    twin
+  ]);
+  assert.equal(
+    lines[0],
+    '{owner} approved your ask #7 and turned on Browse the web for you. This run has it.'
+  );
+  assert.match(lines[1], /^This also answers your ask #8, /);
+  assert.ok(lines.includes('- What you asked to turn on: Browse the web'));
+});
+
 test('every follow-up kind gets its own brief, and feedback gets the feedback brief, as do a hand-off with no hand-off row, a goal with no goal and a task_done with no task', () => {
   // A hand-off, a hand-back and an edit are briefed before this when their row is there.
   const feedbackKinds: FollowUpKind[] = ['feedback', 'hand_off', 'handed_back', 'edited'];

@@ -191,6 +191,12 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
     deny: NO,
     iterate: REWORK
   },
+  // The switches went to Ada with the yes, so the work that waited on them starts.
+  switch: {
+    approve: { cell: ['turn_on'], onThread: ['carry_out:ada'], onNone: ['carry_out:ada'] },
+    deny: NO,
+    iterate: REWORK
+  },
   // The office made the call with the yes, so the Odd carries on with what it returned.
   call: {
     approve: {
@@ -317,6 +323,20 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
     const id = await thread();
     await db.update(threads).set({ heldBy: a.id }).where(eq(threads.id, id));
     return { id: a.id };
+  },
+  // A yes turns the switch on, so each ask starts with it off.
+  switch: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    await db.update(staff).set({ web: false }).where(eq(staff.id, 'ada'));
+    const { ask } = await raiseAsk('ada', {
+      kind: 'switch',
+      title: 'Turn on Browse the web',
+      why: 'w',
+      ifApproved: 'i',
+      switches: ['web'],
+      threadId
+    });
+    return { id: ask.id };
   },
   reply: async (on) => {
     const threadId = on ? await thread() : undefined;
@@ -449,6 +469,7 @@ const SILENT_OFF_A_THREAD: readonly (readonly [AskKind, Decision])[] = [
   ['reply', 'deny'],
   ['filter', 'deny'],
   ['folder', 'deny'],
+  ['switch', 'deny'],
   ['call', 'deny']
 ];
 const namesNew1715 = (kind: AskKind, decision: Decision) =>

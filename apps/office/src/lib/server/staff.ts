@@ -1475,7 +1475,7 @@ export async function followThrough(
   const task = t ? { row: t, files: await taskFiles(t.id) } : undefined;
   // One carry-out may stand for twin asks that start no run of their own.
   const also =
-    f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder')
+    f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder' || a?.kind === 'switch')
       ? await standsFor(a)
       : [];
   const details: Record<FollowUpKind, string> = {

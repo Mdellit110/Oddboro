@@ -679,11 +679,13 @@
                     : 'Make this call'
                   : a.access
                     ? 'Connect'
-                    : a.kind === 'window'
-                      ? 'Let it carry on'
-                      : a.plan && picked(a) < a.plan.items.length
-                        ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                        : 'Approve'}</button
+                    : a.kind === 'switch'
+                      ? 'Turn on'
+                      : a.kind === 'window'
+                        ? 'Let it carry on'
+                        : a.plan && picked(a) < a.plan.items.length
+                          ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                          : 'Approve'}</button
             >
           {/if}
         </div>

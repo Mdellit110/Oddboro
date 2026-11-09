@@ -20,6 +20,9 @@ export type DeskItem = (typeof DESK_ITEMS)[number];
  * - `give_folder`: the folder the owner gave went to the Odd with the yes
  *   (`giveFolder`), and the work that waited on it starts, once for each place
  *   a result goes back to.
+ * - `turn_on`: the switches the ask names turned on with the yes
+ *   (`turnOnSwitches`), and the work that waited on them starts, once for each
+ *   place a result goes back to.
  * - `start_held`: the hand-off the ask held starts, as the ask is claimed.
  * - `answer_window`: the usage window's answer (`answerWindow`).
  * - `answer_hand_offs`: the yes or no to more hand-offs goes to the thread's hub
@@ -35,6 +38,7 @@ export type Effect =
   | 'carry_out'
   | 'grant_access'
   | 'give_folder'
+  | 'turn_on'
   | 'start_held'
   | 'answer_window'
   | 'answer_hand_offs'
@@ -115,6 +119,8 @@ export const OWNER_ANSWERS = {
       deny: NO,
       iterate: REWORK
     },
+    // Plain Approve is the desk's Turn on.
+    switch: { approve: ['turn_on'], deny: NO, iterate: REWORK },
     call: {
       approve: { by: 'Approve the call from its card on the desk', then: ['carry_out'] },
       deny: NO,
