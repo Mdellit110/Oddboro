@@ -357,14 +357,13 @@ ODDBORO_RELEASE_URL=http://127.0.0.1:4598 \
 
 ## Icons and signing
 
-- The icons are Oddboro's mark: a night rounded square with an ember ring.
-  `logo.png` in the site and the office is the same ring on night to the
-  edges. Regenerate with
-  `npm run tauri -w @oddboro/desktop -- icon <1024px png> -o src-tauri/icons`,
-  then delete the `android/`, `ios/`, `Square*`, `StoreLogo.png` and
-  `64x64.png` files it also writes. `icon.ico` stays: Windows builds embed
-  it. `icons/tray.png` is the menu bar ring, a template image macOS tints;
-  Windows shows `icons/32x32.png` in the tray instead.
+- The icons are Oddboro's mark, the glowing pixel O, on a black rounded
+  square. `npm run mark -w @oddboro/sprites` draws every one, on a Mac:
+  `icon.icns`, `icon.ico` (Windows builds embed it), the PNGs, and
+  `icons/tray.png`, the letter alone as a template image macOS tints. Windows
+  shows `icons/32x32.png` in the tray instead. Never edit an icon by hand.
+- `branding/google-oauth-logo.png` is the logo for the Google OAuth client's
+  branding page: 120 by 120, as Google asks. The same script draws it.
 - No `signingIdentity` in the config: `release.ts` passes the Developer ID
   as `APPLE_SIGNING_IDENTITY`.
 
