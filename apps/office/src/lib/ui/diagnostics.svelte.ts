@@ -9,13 +9,6 @@ export const diagnostics = $state<{ possible: boolean; answer: Answer }>({
   answer: 'unasked'
 });
 
-/**
- * What a report never carries, in the words the owner approved. The ask and
- * the Setup switch both say it, so the two cannot drift apart.
- */
-export const NEVER_CARRIED =
-  "Never your chats, files, Odds' work, family details or name. Error text only in fixed forms, never your words.";
-
 /** Keep the owner's answer in the office, then show it here. Throws with the server's message. */
 export async function answerDiagnostics(answer: 'yes' | 'no'): Promise<void> {
   const kept = await call<{ answer: Answer }>('/api/diagnostics', { answer }, 'PUT');

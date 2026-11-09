@@ -285,13 +285,7 @@
   }
   const status = $derived(Object.fromEntries(tags.map((t) => [t.id, statusOf(t)])));
 
-  /** The Desk asks about reports once the office is open, until the owner answers. */
-  const askDiagnostics = $derived(
-    diagnostics.possible && diagnostics.answer === 'unasked' && welcomed
-  );
-  const deskCount = $derived(
-    desk.asks.length + desk.tasks.length + desk.reports.length + Number(askDiagnostics)
-  );
+  const deskCount = $derived(desk.asks.length + desk.tasks.length + desk.reports.length);
 
   /** Rooms a new hire can work in: any with a place to work, read or sort mail. */
   const hireRooms = $derived.by(() => {
@@ -1224,7 +1218,6 @@
               {#if w.kind === 'desk'}
                 <DeskDrawer
                   {desk}
-                  {askDiagnostics}
                   {staff}
                   focus={deskFocus}
                   onhire={hireProposal}

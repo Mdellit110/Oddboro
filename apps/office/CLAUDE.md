@@ -1104,7 +1104,7 @@ sample stay in the window to move back to.
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
 welcomed, the page loads the sample's empty lot (`currentOffice({ lot: true })`,
-`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs seven cards, the same on a Mac, Linux and Windows (hard rule 14), in
+`lotOf` from `@oddboro/world`), and `Onboarding.svelte` runs six cards (`steps.ts`), the same on a Mac, Linux and Windows (hard rule 14), in
 the start panel, titled "{name}'s Lot" until the office stands on it. The
 command center's buttons and tabs appear there once the first run is over, so
 the owner meets the panel first. The cards: Your computer (`MacCard`, the checks
@@ -1113,10 +1113,9 @@ or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
 every run. Next waits until the picked tool is signed in), the Office Manager (`ManagerCard`: four ready-made ones from
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
 owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
-a description or a chip, and starts the design job), Help improve Oddboro
-(`DiagnosticsCard`, only when the office has somewhere to send reports: Send
-reports or Don't send, each kept at once; Next works without an answer, and the
-Desk asks once the office is open), and Open the office. `POST /api/onboarding` keeps the time zone, finishes the
+a description or a chip, and starts the design job), and Open the office.
+No card asks about error reports: the owner turns them on in Setup (see
+"Diagnostics"), so a new owner gets to work sooner. `POST /api/onboarding` keeps the time zone, finishes the
 welcome, hires the manager (`hireManager`), writes their hello into their chat
 (each ready-made manager's `hello` in `managers.ts`, in their own voice; a
 described one gets `customHello`),
@@ -1208,12 +1207,12 @@ Error and trace reports go to Sentry only after the owner's yes.
 1. The address is `ODDBORO_DIAGNOSTICS_DSN`, from the environment or `.env`.
    The app's shell passes its own (`apps/desktop/CLAUDE.md`). With none,
    `serverOptions` (`src/lib/server/diagnostics.ts`) returns nothing: the SDK
-   never starts, the office never asks, and the relay drops what it gets.
+   never starts, Setup shows no switch, and the relay drops what it gets.
 2. The answer is `OFFICE_DIAGNOSTICS` in `.env`: `yes`, `no`, or unasked for
-   anything else. `PUT /api/diagnostics` writes it, from the first visit's
-   card, the Desk's From Oddboro item and the Setup switch
-   (`DiagnosticsSection`). It holds from the next report, with no restart.
-   `npm run reset` clears it.
+   anything else, which sends nothing. `PUT /api/diagnostics` writes it, from
+   the Setup switch (`DiagnosticsSection`), the one place the owner turns
+   reports on; neither the first visit nor the Desk asks. It holds from the
+   next report, with no restart. `npm run reset` clears it.
 3. The gate: `gated` wraps the SDK's transport and asks `diagnosticsOn()` on
    every send. What leaves has passed the one allow list in
    `src/lib/diagnostics.ts` (`scrubEvent`, `scrubSpan`):

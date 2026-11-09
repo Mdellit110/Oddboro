@@ -1,7 +1,7 @@
 <script lang="ts">
   // Where the data lives: your computer in the middle with the office on its screen,
   // Anthropic and the tools you connect at the edges on dashed lines you open,
-  // and New Altitude off the map, with only the error reports the owner says yes to flowing to it.
+  // and New Altitude off the map, with only the error reports the owner turns on flowing to it.
   //
   // Each fact lights the part of the map it is about and dims the rest. While
   // the section is on screen the highlight steps through the four facts. The
@@ -21,9 +21,9 @@
     },
     {
       title: 'Nothing comes to us unless you say so.',
-      text: 'New Altitude runs no server for your office. If you say yes, error reports go to our relay so we can fix what broke. Nothing else ever does.',
+      text: 'New Altitude runs no server for your office. If you turn on error reports in Setup, they go to our relay so we can fix what broke. Nothing else ever does.',
       shows:
-        "Highlights New Altitude, off the map, and the two dashed lines, the only paths your office's data takes. Error reports reach us only if you say yes."
+        "Highlights New Altitude, off the map, and the two dashed lines, the only paths your office's data takes. Error reports reach us only if you turn them on."
     },
     {
       title: 'Claude works under your own account.',
@@ -186,7 +186,7 @@
       >
       <p class="text-muted text-xs">
         <span class="text-ink font-semibold">New Altitude</span> is off the map. Your office's data never
-        flows here. Error reports do, only if you say yes.
+        flows here. Error reports do, only if you turn them on.
       </p>
     </div>
   </figure>

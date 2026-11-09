@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { NEVER_CARRIED, answerDiagnostics, diagnostics } from './diagnostics.svelte.ts';
+  import { answerDiagnostics, diagnostics } from './diagnostics.svelte.ts';
 
-  // The Setup window's Diagnostics section: one switch for error and trace
-  // reports. Off keeps `no` at once; the office stops sending from the next
-  // report, with no restart.
+  // The Setup window's Diagnostics section: the one place the owner turns
+  // error and trace reports on or off. With no answer the switch is off and
+  // nothing is sent. Each flip keeps the answer at once; the office follows it
+  // from the next report, with no restart.
   let busy = $state(false);
   let problem = $state('');
   const on = $derived(diagnostics.answer === 'yes');
@@ -41,8 +42,11 @@
       <span class="size-4 rounded-full {on ? 'bg-night' : 'bg-muted'}"></span>
     </span>
   </button>
-  <p id="diagnostics-sent" class="text-xs text-muted">
-    {NEVER_CARRIED}
+  <p id="diagnostics-sent" class="text-xs leading-relaxed text-muted">
+    When something breaks, Oddboro can send New Altitude a report: what failed, where in the code,
+    and how long it took. Never your chats, files, Odds' work, family details or name. Error text
+    only in fixed forms, never your words. Sentry stores reports with your city and country, never
+    your IP address.
     <a
       class="text-sea underline underline-offset-2"
       href="https://oddboro.com/privacy"

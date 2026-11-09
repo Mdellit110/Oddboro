@@ -27,7 +27,7 @@ use crate::env;
 use crate::server::GaveUp;
 
 const DSN_KEY: &str = "ODDBORO_DIAGNOSTICS_DSN";
-/// The owner's answer, which the office's Setup and first visit write.
+/// The owner's answer, which the office's Setup writes.
 const ANSWER_KEY: &str = "OFFICE_DIAGNOSTICS";
 /// The most a report may hold up the dialog or the panic that sent it.
 const SEND_TIMEOUT: Duration = Duration::from_secs(2);
