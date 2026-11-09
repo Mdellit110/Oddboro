@@ -1257,8 +1257,8 @@ account.
    `src/lib/diagnostics.ts`; the shell's `needs_sign_in` is the same rule,
    and both are tested against `src/lib/needs-sign-in.cases.json`), go only
    while the office is signed in, each with the account's access token in
-   its `authorization` header. Signed out, the gate drops them, the page
-   offers no reports (`shown()`) and its traces follow a no (`pageAnswer()`).
+   its `authorization` header. Signed out, the gate drops them, Setup shows
+   no switch (`shown()`) and the page's traces follow a no (`pageAnswer()`).
    Any other address never gets the token. The gate gets it from
    `accountToken()` and reuses it for `TOKEN_REUSE_MS`, under the refresh
    margin, within one sign-in: a burst of reports reads the secret store

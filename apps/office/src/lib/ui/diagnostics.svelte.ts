@@ -11,10 +11,10 @@ export const diagnostics = $state<ReportsState>({
   answer: 'unasked'
 });
 
-/** Whether the page offers reports: the first-visit card, the Setup switch and the Desk's ask. */
+/** Whether Setup shows the reports switch, the one place the page offers reports. */
 export const shown = (): boolean => reportsOffered(diagnostics, account.status.state === 'in');
 
-/** The answer the page's own traces follow: no while the page offers no reports. */
+/** The answer the page's own traces follow: no while Setup shows no switch. */
 export const pageAnswer = (): Answer => (shown() ? diagnostics.answer : 'no');
 
 /** Keep the owner's answer in the office, then show it here. Throws with the server's message. */
