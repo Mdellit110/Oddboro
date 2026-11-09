@@ -81,6 +81,9 @@ export const STORE_STATES: StoreState[] = [
     '.ssh',
     ['config']
   ),
+  holds('a project with a .aws and no login in it is given', false, 'code/x-aws-no-login', '.aws', [
+    'login.json'
+  ]),
   holds('a project with a .ssh holding only id_rsa.pub is given', false, 'code/x-ssh-pub', '.ssh', [
     'id_rsa.pub'
   ]),
@@ -208,7 +211,7 @@ const STORE_FILES: Record<string, string[]> = {
     'authorized_keys',
     'known_hosts'
   ],
-  '.aws': ['credentials', 'sso/', 'cli/cache/'],
+  '.aws': ['credentials', 'sso/', 'cli/cache/', 'login/'],
   '.gnupg': ['private-keys-v1.d/', 'secring.gpg', 'pubring.kbx'],
   '.docker': ['config.json'],
   '.kube': ['config'],

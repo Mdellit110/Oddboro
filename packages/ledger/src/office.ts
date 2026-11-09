@@ -546,7 +546,7 @@ export const STORE_MARKS: Record<string, string[]> = {
     'authorized_keys',
     'known_hosts'
   ],
-  '.aws': ['credentials', 'sso', 'cli/cache'],
+  '.aws': ['credentials', 'sso', 'cli/cache', 'login'],
   '.gnupg': ['private-keys-v1.d', 'secring.gpg', 'pubring.kbx'],
   '.config': ['gcloud', 'gh/hosts.yml'],
   Library: ['Keychains/login.keychain-db', 'Cookies'],
