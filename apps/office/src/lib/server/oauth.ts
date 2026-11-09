@@ -13,8 +13,17 @@
 // connector signs in on its own, with its product's scopes, and one Google
 // account is one connector: a sign-in to an address another connector of the
 // same product holds is not kept.
+//
+// GitHub lets no app register itself, so a hosted server that signs in
+// through GitHub (GitHub's own MCP server) signs in with New Altitude's GitHub
+// OAuth App the same way: its id in the code, its secret from the build
+// (ODDBORO_GITHUB_CLIENT_SECRET), and the office's own scopes.
 import { randomUUID } from 'node:crypto';
-import { auth, type OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
+import {
+  auth,
+  discoverOAuthServerInfo,
+  type OAuthClientProvider
+} from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
   OAuthClientInformationMixed,
   OAuthClientMetadata,
@@ -66,15 +75,52 @@ const covers = (tokens: OAuthTokens | undefined, scopes: string): boolean => {
   return scopes.split(/\s+/).every((s) => has.has(s));
 };
 
+/** The sign-in server GitHub's hosted MCP server names. It offers no registration. */
+const GITHUB_ISSUER = 'https://github.com/login/oauth';
+/** New Altitude's GitHub OAuth App, "Oddboro". */
+const GITHUB_CLIENT_ID = 'Ov23liHSAMGGQ2kvqbkS';
+/**
+ * What a GitHub sign-in asks for: the repositories the owner can reach (GitHub
+ * has no scope that reads private ones only; the server's address and the
+ * Odd's grant hold what it may do), their organizations, and who they are.
+ * Never the packages, gists, projects or notifications GitHub's server also
+ * lists, which the SDK would ask for on its own.
+ */
+export const GITHUB_SCOPES = 'repo read:org read:user';
+
+/**
+ * Whether a sign-in server's address, as the server gave it, is `b`, with or
+ * without one trailing slash. No pattern, since the address comes from the
+ * server and a pattern on it can be made slow.
+ */
+const sameServer = (a: string | undefined, b: string) => a === b || a === `${b}/`;
+
+/** A build without a sign-in client's secret: that sign-in cannot start, whatever the server offers. */
+export class BuiltWithout extends Error {}
+
 /** New Altitude's Google client, or why this build cannot sign in to Google. */
 function googleClient(): OAuthClientInformationMixed {
   const secret = process.env.ODDBORO_GOOGLE_CLIENT_SECRET;
   if (!secret)
-    throw new Error(
+    throw new BuiltWithout(
       'This copy of Oddboro was built without its Google sign-in. Update Oddboro, or in development set ODDBORO_GOOGLE_CLIENT_SECRET in .env.'
     );
   return {
     client_id: GOOGLE_CLIENT_ID,
+    client_secret: secret,
+    token_endpoint_auth_method: 'client_secret_post'
+  };
+}
+
+/** New Altitude's GitHub app, or why this build cannot sign in through GitHub. */
+function githubClient(): OAuthClientInformationMixed {
+  const secret = process.env.ODDBORO_GITHUB_CLIENT_SECRET;
+  if (!secret)
+    throw new BuiltWithout(
+      'This copy of Oddboro was built without its GitHub sign-in. Update Oddboro, or in development set ODDBORO_GITHUB_CLIENT_SECRET in .env.'
+    );
+  return {
+    client_id: GITHUB_CLIENT_ID,
     client_secret: secret,
     token_endpoint_auth_method: 'client_secret_post'
   };
@@ -188,6 +234,15 @@ export class KeychainProvider implements OAuthClientProvider {
   get redirectUrl() {
     return this.place.redirect;
   }
+  /** Whether this sign-in goes through GitHub, from the server the office found (`knowServer`). */
+  get github(): boolean {
+    const found = this.load().discovery as { authorizationServerUrl?: string } | undefined;
+    return sameServer(found?.authorizationServerUrl, GITHUB_ISSUER);
+  }
+  /** The scopes this sign-in asks for: the office's own for Google and GitHub, else the server's. */
+  get scope(): string | undefined {
+    return this.google ?? (this.github ? GITHUB_SCOPES : undefined);
+  }
   get clientMetadata(): OAuthClientMetadata {
     return {
       client_name: 'Oddboro office',
@@ -205,11 +260,14 @@ export class KeychainProvider implements OAuthClientProvider {
     return s;
   }
   clientInformation() {
-    return this.google ? googleClient() : this.load().client;
+    if (this.google) return googleClient();
+    if (this.github) return githubClient();
+    return this.load().client;
   }
   saveClientInformation(client: OAuthClientInformationMixed) {
-    // Google's client is fixed and never registered, so nothing to keep.
-    if (!this.google) this.save({ client });
+    // Google's and GitHub's clients are fixed and never registered, so nothing
+    // to keep, and their secret never goes in the store.
+    if (!this.google && !this.github) this.save({ client });
   }
   tokens() {
     return this.fresh ? undefined : this.load().tokens;
@@ -331,6 +389,22 @@ async function signInFor(id: string): Promise<{ provider: KeychainProvider; serv
 }
 
 /**
+ * Find a hosted server's sign-in server before the SDK does, and keep it as
+ * the SDK keeps it, which then uses it. The SDK picks the scopes before it
+ * asks for the client, so a sign-in through GitHub would otherwise ask for
+ * every scope GitHub's server lists.
+ */
+async function knowServer(provider: KeychainProvider, serverUrl: string): Promise<void> {
+  if (provider.discoveryState() !== undefined) return;
+  const found = await discoverOAuthServerInfo(serverUrl, { fetchFn: steadyFetch });
+  provider.saveDiscoveryState({
+    authorizationServerUrl: String(found.authorizationServerUrl),
+    resourceMetadata: found.resourceMetadata,
+    authorizationServerMetadata: found.authorizationServerMetadata
+  });
+}
+
+/**
  * Start signing in. Returns the page to open, or nothing when the tool was
  * already signed in (a stored refresh token still works).
  */
@@ -340,7 +414,8 @@ export async function startSignIn(id: string): Promise<{ url?: string }> {
   // renewed, still without it: Google asks for consent again instead. The
   // stored one keeps working until the new one lands.
   if (provider.google && !covers(provider.tokens(), provider.google)) provider.fresh = true;
-  const result = await auth(provider, { serverUrl, fetchFn: steadyFetch });
+  if (!provider.google) await knowServer(provider, serverUrl);
+  const result = await auth(provider, { serverUrl, scope: provider.scope, fetchFn: steadyFetch });
   if (result === 'AUTHORIZED') {
     await tickKey(`oauth:${id}`);
     return {};
@@ -356,7 +431,12 @@ export async function finishSignIn(state: string, code: string): Promise<string>
   const { provider, serverUrl } = await signInFor(id);
   // What the store held before, to put back if this Google sign-in is not kept.
   const before = getSecret(id, 'oauth');
-  await auth(provider, { serverUrl, authorizationCode: code, fetchFn: steadyFetch });
+  await auth(provider, {
+    serverUrl,
+    authorizationCode: code,
+    scope: provider.scope,
+    fetchFn: steadyFetch
+  });
   if (provider.google) await keepGoogleAccount(id, provider.tokens()?.access_token, before);
   await tickKey(`oauth:${id}`);
   return id;

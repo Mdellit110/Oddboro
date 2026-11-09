@@ -135,6 +135,7 @@ never get IPC without one.
 | `ODDBORO_UPDATE_TOKEN`         | a fresh secret per run, release builds only                |
 | `ODDBORO_SECRETS`              | `shell` on a Mac: the shell keeps the office's secrets     |
 | `ODDBORO_GOOGLE_CLIENT_SECRET` | the Google sign-in client's secret, when the build had one |
+| `ODDBORO_GITHUB_CLIENT_SECRET` | the GitHub sign-in app's secret, when the build had one    |
 | `ODDBORO_DIAGNOSTICS_DSN`      | the report address from step 11, when the shell found one  |
 
 - `ODDBORO_APP=1`. With it the server quits on SIGTERM once its HTTP server
@@ -353,6 +354,7 @@ release`. Never commit a value.
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password                                                                                                                   | `security find-generic-password -s oddboro-updater-key -a password -w \| pbcopy`                                                                       |
 | `KEYCHAIN_PASSWORD`                  | Any random string, for the runner's temporary keychain                                                                         | `openssl rand -hex 24 \| pbcopy`                                                                                                                       |
 | `GOOGLE_OAUTH_CLIENT_SECRET`         | The Desktop OAuth client's secret for Google sign-in. Google treats it as not confidential, but it stays out of the repo       | New Altitude's password manager, "Oddboro Google OAuth client"                                                                                         |
+| `OAUTH_GITHUB_CLIENT_SECRET`         | The GitHub OAuth App's secret, for servers that sign in through GitHub. It ships in the app, but stays out of the repo         | The "Oddboro" OAuth App in New Altitude's GitHub organization settings, Developer settings. GitHub refuses secret names that start with `GITHUB_`      |
 | `SENTRY_AUTH_TOKEN`                  | A Sentry auth token for the project the release uploads to, which uploads the shell's debug files and the office's source maps | An organization auth token from the organization's settings in Sentry                                                                                  |
 
 Three variables too, none of them secret: `ODDBORO_DIAGNOSTICS_DSN`, the

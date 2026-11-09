@@ -631,7 +631,10 @@ hand-off or number, which ledger tests and the office's format test share.
   and Region, none of it secret, and all three share one sign-in in the secret
   store (`AWS_SIGN_IN`). An AWS tool no Odd holds drops its role (`forgetAws`),
   except Secrets Manager while a tool's key comes from AWS, and the sign-in
-  goes once no AWS tool has a role (`test/aws-tools.test.ts`).
+  goes once no AWS tool has a role (`test/aws-tools.test.ts`). GitHub is a
+  built-in tool too (`GITHUB_ID`, GitHub's own hosted server), which signs in
+  with New Altitude's app; `ask_for_access` turns any `api.githubcopilot.com`
+  address an Odd names into it, dropping a key header (`GITHUB_ADDRESS`).
 - What the office saves in the secret store, it removes. Revoking the last
   grant to a tool removes its keys and sign-in (`forgetConnector`), and a tool
   that changes how it lets the office in loses the secrets the old way used
