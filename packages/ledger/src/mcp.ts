@@ -128,6 +128,7 @@ import {
   GRANTABLE_TOOLS,
   hasTool,
   isGrantable,
+  OFFICE_TOOLS,
   type OfficeToolId,
   type RIDES_WITH
 } from './tools.ts';
@@ -696,8 +697,11 @@ function mailbox(
     };
   return { connector: m.id, account: m.account };
 }
+/** Whether the Odd holds `tool` and, when its row says `withGmail`, a Gmail account. */
+const hasWithMail = (tool: OfficeToolId) =>
+  has(tool) && (mailboxes.length > 0 || !OFFICE_TOOLS.some((t) => t.id === tool && t.withGmail));
 
-if (has('propose_reply') && mailboxes.length)
+if (hasWithMail('propose_reply'))
   tool(
     'propose_reply',
     {
@@ -776,7 +780,7 @@ if (has('propose_reply') && mailboxes.length)
 // then the office creates it in Gmail. Only for an Odd that holds Gmail at any
 // level, since it files mail the Odd read there.
 const filterText = z.string().trim().max(500).optional();
-if (has('propose_filter') && mailboxes.length)
+if (hasWithMail('propose_filter'))
   tool(
     'propose_filter',
     {
