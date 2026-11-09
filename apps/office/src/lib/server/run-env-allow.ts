@@ -38,6 +38,8 @@ export const RUN_ENV_ALLOW: {
     'NODE_EXTRA_CA_CERTS',
     'SSL_CERT_FILE',
     'SSL_CERT_DIR',
+    'REQUESTS_CA_BUNDLE',
+    'CURL_CA_BUNDLE',
     // Where an owner who moved them keeps each tool's own files. Every run
     // got them before this list, and Claude Code reads its config from
     // XDG_CONFIG_HOME (`gitEnv` says so), so they stay until a run without

@@ -22,7 +22,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Agent } from '@oddboro/ledger';
 
-const { RUN_ENV_ALLOW, TOOL_SERVER_ENV, toolServerEnv } = await import('./run-env-allow.ts');
+const { RUN_ENV_ALLOW, TOOL_SERVER_ENV, outsideToolEnv, toolServerEnv } =
+  await import('./run-env-allow.ts');
 
 /** The Odd on each tool. */
 const ODDS: Record<Agent, string> = {
@@ -49,13 +50,20 @@ const HOSTILE = {
   ODDBORO_UNRELATED: '1',
   ODDBORO_UPDATE_TOKEN: 'not-a-token'
 };
+/** Where an owner behind a proxy that inspects traffic keeps its certificate, for each kind of tool. */
+const CERTIFICATES = {
+  NODE_EXTRA_CA_CERTS: '/nonexistent/proxy.pem',
+  SSL_CERT_FILE: '/nonexistent/proxy.pem',
+  SSL_CERT_DIR: '/nonexistent/certs',
+  REQUESTS_CA_BUNDLE: '/nonexistent/proxy.pem',
+  CURL_CA_BUNDLE: '/nonexistent/proxy.pem'
+};
 /** An owner behind a proxy that inspects traffic. */
 const PROXIED = {
   HTTPS_PROXY: 'http://127.0.0.1:9',
   https_proxy: 'http://127.0.0.1:9',
   NO_PROXY: 'localhost',
-  NODE_EXTRA_CA_CERTS: '/nonexistent/proxy.pem',
-  SSL_CERT_FILE: '/nonexistent/proxy.pem'
+  ...CERTIFICATES
 };
 /** A setting of the office's own, which only the tool server gets. */
 const SERVER_ONLY = { OFFICE_TIME_ZONE: 'Europe/Paris' };
@@ -248,6 +256,12 @@ test("an owner's proxy and certificate settings reach every run", async () => {
       assert.ok(listed(n, gave.envNames, platform), `${agent} on ${platform} lost ${n}`);
   });
 });
+
+test("an owner's certificate settings reach the server of an outside tool the gateway starts", () =>
+  withEnv(CERTIFICATES, () => {
+    const env = outsideToolEnv();
+    for (const [name, value] of Object.entries(CERTIFICATES)) assert.equal(env[name], value, name);
+  }));
 
 test('where the shell keeps the secrets the tool server is told the office has them, and otherwise it is told nothing', () =>
   withEnv({ ODDBORO_SECRETS: 'shell' }, () => {
