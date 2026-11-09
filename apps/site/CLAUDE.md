@@ -119,6 +119,7 @@ are: daylight, and night.
 ```sh
 npm run dev -w @oddboro/site        # http://localhost:4501
 npm run build -w @oddboro/site      # prerender to apps/site/build/
+npm run deploy -w @oddboro/site     # build, then put it live at oddboro.com (Cloudflare)
 npm run preview -w @oddboro/site    # serve the build on 4501
 npm run art -w @oddboro/site        # regenerate static/art/, src/lib/hero/scene.json and src/lib/vignettes.json
 npm run office-gif -w @oddboro/site # the README's office, docs/office.gif; add -- --night for docs/office-night.gif
@@ -316,3 +317,13 @@ src/content/legal/           privacy.md and terms.md. The legal writer owns thes
 src/routes/                  /, /releases/, /connectors/open-brain/, /connectors/aws-*/, /privacy/, /terms/, /sitemap.xml. +layout.ts prerenders everything.
 static/                      logo.png (the mark, drawn by `npm run mark -w @oddboro/sprites`: favicon, header, footer), robots.txt, art/ (night) and art/day/.
 ```
+
+## Hosting
+
+Cloudflare serves the site at oddboro.com: a Worker with static assets, named
+`oddboro-site`, set up in `wrangler.jsonc`. `npm run deploy -w @oddboro/site`
+builds and uploads it; it needs `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` in the environment. The other domains (oddboro.ai,
+oddborough.com, oddborro.com, oddsboro.com, and every `www`) redirect to
+https://oddboro.com with a 301 that keeps the path, from a redirect rule on each
+zone. Every zone sends HTTP to HTTPS and needs TLS 1.2 or later.
