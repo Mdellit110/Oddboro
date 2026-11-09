@@ -93,8 +93,11 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
       return json({ ok: true });
     }
     if (b.access !== 'read' && b.access !== 'write') error(400, 'Pick read or write');
-    const set = await setFolder(params.id, b.folder, b.access);
-    if (set) error(400, set.refused);
+    // A whole drive or system files comes back as a warning, given nothing,
+    // until the owner presses Accept, which sends `accept`.
+    const set = await setFolder(params.id, b.folder, b.access, b.accept === true);
+    if (set && 'refused' in set) error(400, set.refused);
+    if (set) return json({ warning: set.warning });
     return json({ ok: true });
   }
   const permission = parseLevel(b.permission);

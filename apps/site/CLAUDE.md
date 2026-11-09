@@ -30,6 +30,15 @@ check that catches a missed place: `docs/architecture.md`.
   the `oddboro` secret store service, `local.oddboro.com`). Keep them in step
   with the app.
 
+## Info pages
+
+`/info/<name>/` explains a safety limit the office links to, rendered from
+`src/content/info/<name>.md` through `LegalDoc.svelte` with "Safety" over the
+title (`info` in `src/lib/server/legal.ts`). `/info/folder-sharing/` is the
+office's folder warning's More info (`FolderWarning.svelte`): which folders
+the office refuses, which warn, and why. Its words follow `checkFolder` in
+the ledger, and change with it.
+
 ## Connector guides
 
 `/connectors/<name>/` walks the owner through giving an Odd one outside

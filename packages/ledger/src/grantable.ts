@@ -20,6 +20,7 @@ export const STAFF_PATCH_KEYS = [
   'web',
   'folder',
   'access',
+  'accept',
   'effort',
   'model',
   'account'
@@ -126,7 +127,7 @@ export const OWNER_GRANTS = {
     atHire: HIRE_DEFAULTS.staff.web
   },
   folders: {
-    control: { patch: ['folder', 'access'] },
+    control: { patch: ['folder', 'access', 'accept'] },
     // Said only to an Odd with no folder at all.
     missing: ({ owner, where }: Readers['folders']) =>
       `${owner} can give you a folder outside the office in ${where}.`,
@@ -170,7 +171,7 @@ export const OWNER_GRANTS = {
 
 /**
  * Every PATCH key is the control of a grant, a setting of how the Odd runs,
- * or a qualifier another key needs (`on` for `tool`, `access` for `folder`).
+ * or a qualifier another key needs (`on` for `tool`, `access` and `accept` for `folder`).
  */
 export const PATCH_KEY: Record<StaffPatchKey, GrantKind | 'run setting' | 'qualifier'> = {
   permission: 'level',
@@ -181,6 +182,7 @@ export const PATCH_KEY: Record<StaffPatchKey, GrantKind | 'run setting' | 'quali
   web: 'web',
   folder: 'folders',
   access: 'qualifier',
+  accept: 'qualifier',
   effort: 'run setting',
   model: 'run setting',
   account: 'run setting'
