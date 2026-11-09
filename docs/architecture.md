@@ -76,7 +76,10 @@ in `apps/office/CLAUDE.md`.
 
 - **An ask kind.** Start at `ASK_KINDS` in `packages/ledger/src/schema.ts`.
   Check-types fails at `OWNER_ANSWERS.ask` in
-  `packages/ledger/src/desk-answers.ts`, which says what each answer does.
+  `packages/ledger/src/desk-answers.ts`, which says what each answer does. A
+  kind the owner answers on its own card (a reply, a filter, a folder, a call)
+  gives `approve` a `by`, the line a bare yes gets, and its route approves it;
+  a plain yes (a `switch` ask) names its effects directly.
 - **A follow-up kind.** Start at `FOLLOW_UP_KINDS` in `schema.ts`. Check-types
   fails at every `Record<FollowUpKind, ...>`, `AT_DRAFT` and
   `SERVES_NO_THREAD` in `hand-offs.ts` among them, and at the switch in
@@ -85,7 +88,9 @@ in `apps/office/CLAUDE.md`.
   fails at `OWNER_ANSWERS`, `Item` in `DeskDrawer.svelte`, `replyBrief` and
   `openDelivered`.
 - **A connector kind.** Start at `CONNECTOR_KINDS` in `schema.ts`. Check-types
-  fails at each switch on it, each ending in a `never` default.
+  fails at each switch on it, each ending in a `never` default. `builtin`
+  connectors (Gmail, Google Drive) are served by the office itself (`builtin`
+  in `access.ts`).
 - **Something the owner can grant, or an owner control on an Odd's card.**
   Start at `OWNER_GRANTS` and `PATCH_KEY` in
   `packages/ledger/src/grantable.ts`. Check-types fails a key added to
@@ -104,6 +109,10 @@ in `apps/office/CLAUDE.md`.
   `apps/office/src/lib/server/sandbox-paths.ts` declares that system, and
   `launch-contract.test.ts` launches the tool there. `scripts/check-platform.ts`
   fails a `process.platform` read anywhere but `currentPlatform()`.
+- **A secret store.** Start at `STORE_MARKS` in `packages/ledger/src/office.ts`;
+  `SECRET_STORES` is its keys, so one list says what a run and a given folder
+  stay out of. Each entry says how the store is found outside the home.
+  `own-tools.test.ts` walks every entry.
 - **A variable a run needs.** Start at `RUN_ENV_ALLOW` in
   `apps/office/src/lib/server/run-env-allow.ts`, or `TOOL_SERVER_ENV` beside
   it for the tool server. `launch-contract.test.ts` fails a name that reaches
@@ -113,7 +122,8 @@ in `apps/office/CLAUDE.md`.
   `packages/ledger/src/tools.ts`, and register it in `mcp.ts` behind
   `has()`. A tool registered only alongside another, never granted alone
   (such as `my_pokes` with `poke_owner`), goes in `RIDES_WITH` instead,
-  under the tool it rides with.
+  under the tool it rides with. An `always` row with `withGmail` is offered
+  only while the Odd holds Gmail.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in

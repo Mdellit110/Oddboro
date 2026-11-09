@@ -2,8 +2,8 @@
 // or Gemini for an Odd the owner moved to one (cli.ts), run headless, with the staffer's job
 // description from Postgres added to the system prompt. Server only.
 //
-// A Claude Code run gets five file tools (Read, Glob, Grep, Write, Edit), and
-// with the owner's switches as its tool takes them (`OwnTools`), Bash in
+// A Claude Code run gets the office's file tools where `FILES_VIA_OFFICE` says,
+// else its own five (Read, Glob, Grep, Write, Edit), and with the owner's switches as its tool takes them (`OwnTools`), Bash in
 // Claude Code's sandbox and WebSearch and WebFetch. It may read only its own
 // folder, the owner's data folder, on a thread the thread's folder, and the
 // folders the owner gave it (see `readable`), may write only inside the

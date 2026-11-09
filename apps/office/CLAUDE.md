@@ -457,7 +457,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `heldReach`). The Odds list shows `reach` as chips beside each Odd's
    role: Commands, Web and its folder count. Run commands shows
    `reach.commands` and how the Odd's tool takes it (`commandsHow`): a switch
-   on Claude Code on a Mac, else checked (Codex) or unchecked and locked,
+   on Claude Code on a Mac and Codex on a Mac and Linux, else unchecked and locked,
    with its reason under it, and the PATCH refuses `{commands}` for a locked
    one. Under one locked off, when a tool on this system follows the switch
    (`offer`), one click moves the Odd there with Run commands on ("Switch Sam
@@ -539,7 +539,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    sign-in check, so the sign-in from the office's page (item 18), where a run
    without one points, is kept as a file. Every run
    passes the office's switches as `-c` (`SWITCHES`) under `--strict-config`.
-   A Codex Odd has a shell, held by one kernel permission profile per run
+   With Run commands on (a Mac or Linux), a Codex Odd has a shell, held by
+   one kernel permission profile per run
    (`filesystem` in `codex.ts`): everything shut but the system's own folders
    and Apple's developer tools (`codexReads` in `SANDBOX_PATHS`, and the folder `xcode-select -p`
    names, Xcode.app's on a Mac that uses it, found once: `developerReads`) and node's OpenSSL config (`opensslConf`), read, `/tmp` shut, its thread folders, the owner's data folder, the folders the owner gave it
@@ -550,8 +551,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    (`codex-tmp/<run key>`) written, instruction files and the edited file
    never, and no network, Browse the web or not (`network` in the profile,
    from `commandsOnline`: with it on, Codex's commands reached the office's own
-   API and database on this Mac). Codex reads files through that shell, so its Run
-   commands shows on and locked. Its own web search is set per run, `live`
+   API and database on this Mac). The office carries its files
+   (`FILES_VIA_OFFICE`), so with Run commands off it has no shell. On Windows
+   it never has one: Codex's own sandbox opened every Odd's folder to reads,
+   so a run there is in Codex's read-only mode and Run commands stays locked
+   off. Its own web search is set per run, `live`
    with Browse the web and `disabled` without (`web_search`, not one of
    `SWITCHES`). The run is a process group of its
    own; when it ends or times out, that group and each of its commands'
@@ -609,8 +613,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `inProgress` (the `Work` shape in `src/lib/staff/work.ts`) with what it
    is, when it started, and the tool it is using now. The list reaches the
    page with each `working` event; only work starting or ending reloads the
-   card's tabs. Every Claude Code run gets five file
-   tools (Read, Glob, Grep, Write, Edit), `Bash` with Run commands and
+   card's tabs. Every Claude Code run gets the
+   office's file tools where `FILES_VIA_OFFICE` says, else its own five
+   (Read, Glob, Grep, Write, Edit), `Bash` with Run commands and
    `WebSearch` and `WebFetch` with Browse the web, and reads only its own
    folder, the owner's data folder (as a Grok run does), Claude
    Code's sessions folder for its own folder, where long
