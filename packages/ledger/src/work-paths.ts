@@ -17,14 +17,15 @@ const LAST_ID = 2 ** 31 - 1;
 /**
  * The thread and the path inside its folder that `path` names, or undefined
  * when it names no file in a thread's folder. A `.` or `..` step, or an empty
- * one, names nothing, so the name never leaves that folder.
+ * one, names nothing, so the name never leaves that folder. A backslash divides
+ * steps too, since Windows reads it as a folder separator.
  */
 export function workPath(path: string): { thread: number; inside: string } | undefined {
   const m = NAMED.exec(path);
   if (
     !m ||
     Number(m[1]) > LAST_ID ||
-    m[2].split('/').some((step) => step === '' || step === '.' || step === '..')
+    m[2].split(/[/\\]/).some((step) => step === '' || step === '.' || step === '..')
   )
     return undefined;
   return { thread: Number(m[1]), inside: m[2] };
