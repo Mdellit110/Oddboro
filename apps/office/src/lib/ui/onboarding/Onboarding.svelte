@@ -61,7 +61,7 @@
     manager: 'Your office manager',
     space: 'Your space',
     account: 'New Altitude',
-    diagnostics: 'Help fix Oddboro',
+    diagnostics: 'Help improve Oddboro',
     go: 'Open the office'
   };
   let step = $state<Step>('mac');
