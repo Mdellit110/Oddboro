@@ -14,15 +14,16 @@ test('every run is told that only its reply and its tool calls reach the owner',
   );
 });
 
-test('every run is told that the owner reads every reply, so work goes by its title and a file by its name', () => {
+test("every run is told that the owner reads every reply, so work goes by its title, a file by its name, and a colleague's or an unclear file by its full path", () => {
   assert.match(
     section,
     /- \{owner\} reads every reply you write, in any run, even one that goes back to a colleague\./
   );
   assert.match(
     section,
-    /never by a number, and a file by its name alone \(plan\.md\), never by its folder or path\./
+    /never by a number, and a file by its name alone \(plan\.md\); when that name could mean more than one file, or the file is a colleague's, give its full path, which the page turns into a button and \{owner\} never sees\./
   );
+  assert.doesNotMatch(section, /never by its folder or path/);
 });
 
 test('every run is told never to claim it sent, gave, brought or handed something no tool call did', () => {

@@ -133,7 +133,7 @@ function filesNamed(root: string, name: string): string[] {
 }
 
 /** The entries of `dir`, or none when the office may not read it. */
-function readable(dir: string): Dirent[] {
+export function readable(dir: string): Dirent[] {
   try {
     return readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -170,7 +170,7 @@ function fileInThreads(staff: string, name: string): string | undefined {
 }
 
 /** Whether `path` is a folder itself, not a link to one. */
-const isFolder = (path: string): boolean =>
+export const isFolder = (path: string): boolean =>
   !!lstatSync(path, { throwIfNoEntry: false })?.isDirectory();
 
 /**

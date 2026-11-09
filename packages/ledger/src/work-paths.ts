@@ -1,5 +1,6 @@
 // How a file in a goal's or work's folder is named when an Odd attaches it to
-// an ask or a task: its path from the office's folder, such as
+// an ask or a task, when the page reads an Odd's full path to it, and when
+// Storage lists it: its path from the office's folder, such as
 // "threads/12/paige/index.html", so the name leads to that one file whoever's
 // part of the folder holds it. Plain string work with no imports, so the page
 // can show such a file by its bare name; `workFile` in threads.ts finds it.
