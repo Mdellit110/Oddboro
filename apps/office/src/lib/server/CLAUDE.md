@@ -36,12 +36,13 @@ then names every other place.
   installer, a tool's update check, an AI tool's run) is not counted, so the
   guard does not catch one; that file says what else it does not count.
 - To add a route that changes something (a POST, PUT, PATCH or DELETE
-  handler, or a staff PATCH body key), add its row to `OWNER_ACTIONS` in
-  `owner-actions.ts`: the ledger kind it records, the Linear row that owes
-  one, or why it is not an action. `owner-actions.test.ts` fails until the
-  row is there, and drives each recording row to check it writes exactly one
-  ledger row of that kind. A GET that changes something, or a page's `load`
-  that does, gets a row by hand: the test cannot tell it from a read.
+  handler, a staff PATCH body key, or an `op` in `TASK_OPS`), add its row to
+  `OWNER_ACTIONS` in `owner-actions.ts`: the ledger kind it records, what it
+  changes or the Linear row that owes one, or why it is not an action.
+  `owner-actions.test.ts` fails until the row is there, and drives each
+  recording row to check it writes exactly one ledger row of that kind. A GET
+  that changes something, or a page's `load` that does, gets a row by hand:
+  the test cannot tell it from a read.
 - To add a kind of run (`UsageKind` in the ledger), add its row to
   `RUN_FAILURE` in `run-failures.ts`: each place the owner finds its error.
   The type check fails until the row is there and `failed-run.test.ts` has a

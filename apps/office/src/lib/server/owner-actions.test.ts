@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { PATCH_KEY, STAFF_PATCH_KEYS } from '@oddboro/ledger/grantable';
 import { FLOORS, GROUNDS, WALLS, type OfficeSpec } from '@oddboro/world';
+import type { Step } from '@oddboro/ledger';
 import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
 import {
   L,
@@ -18,11 +19,12 @@ import {
   secrets,
   type Call
 } from './office-under-test.ts';
-import { OWNER_ACTIONS, type Recording } from './owner-actions.ts';
+import { OWNER_ACTIONS, TASK_OPS, type Recording } from './owner-actions.ts';
 
 const ROUTES = fileURLToPath(new URL('../../routes', import.meta.url));
 const ACTIONS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const STAFF = '/api/staff/[id]';
+const TASK = '/api/tasks/[id]';
 
 /** Each route under src/routes with this file (`+server.ts` or `+page.server.ts`), by its route id. */
 function routeIds(file: string, dir = ROUTES): string[] {
@@ -56,6 +58,8 @@ async function handlers(): Promise<string[]> {
             (k) => `PATCH ${STAFF}#${k}`
           )
         );
+      else if (method === 'POST' && route === TASK)
+        keys.push(...TASK_OPS.map((op) => `POST ${TASK}#${op}`));
       else keys.push(`${method} ${route}`);
     }
   }
@@ -275,7 +279,7 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
   'PATCH /api/staff/[id]#account': async (send) =>
     send({ params: { id: 'cleo' }, body: { account: await accountOf('Shared') } }),
   // A tool already connected: one not yet connected puts its connect steps on
-  // the desk instead, and the owner finishing them is the row (POST /api/tasks/[id]).
+  // the desk instead, and the owner finishing them is the row (POST /api/tasks/[id]#finish).
   'POST /api/staff/[id]/access': async (send) => {
     await grant('lead', 'https://example.com/mcp');
     await L.pg`update connectors set ready_at = now()`;
@@ -309,7 +313,7 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
     >`select id from connectors where id like 'renamed-example-org%'`;
     await send({ params: { id: c.id }, body: { name: 'Open Brain' } });
   },
-  'POST /api/tasks/[id]': async (send) => {
+  'POST /api/tasks/[id]#finish': async (send) => {
     const t = await L.giveTask('lead', { title: 'Sign the form', why: 'w', steps: ['Sign it'] });
     await send({ params: { id: String(t.id) }, body: { op: 'finish', note: 'Done.' } });
   }
@@ -358,6 +362,10 @@ async function tableDigests(): Promise<Map<string, string>> {
   return new Map(digests);
 }
 
+/** A task with one step, by its id as the route takes it. */
+const taskOf = async (title: string, step: string | Step) =>
+  String((await L.giveTask('lead', { title, why: 'w', steps: [step] })).id);
+
 /**
  * Actions that write no ledger row but change a row of the office's: any
  * rows each needs, then its call. Only these are driven, so another route that
@@ -370,21 +378,37 @@ const CHANGES: Partial<Record<keyof typeof OWNER_ACTIONS, (send: Send) => Promis
     await send({ params: { id: 'sam' } });
   },
   'PUT /api/update': (send) => send({ body: { start: '01:00', end: '03:00' } }),
-  'POST /api/setup': async (send) => send({ body: { name: await L.ownerName() } })
+  'POST /api/setup': async (send) => send({ body: { name: await L.ownerName() } }),
+  'POST /api/tasks/[id]#tick': async (send) =>
+    send({
+      params: { id: await taskOf('Tick a step', 'Tick it') },
+      body: { op: 'tick', index: 0 }
+    }),
+  'POST /api/tasks/[id]#untick': async (send) => {
+    const id = await taskOf('Untick a step', 'Untick it');
+    await L.tickStep(Number(id), 0);
+    await send({ params: { id }, body: { op: 'untick', index: 0 } });
+  },
+  'POST /api/tasks/[id]#choose': async (send) => {
+    const action = { kind: 'choice' as const, options: ['Red', 'Blue'] };
+    const id = await taskOf('Pick a colour', { text: 'Pick one', done: false, action });
+    await send({ params: { id }, body: { op: 'choose', index: 0, answer: 'Blue' } });
+  }
 };
 
-test('marking delivered pokes read, setting the update window and setup each change a row of the office, and none is classed as changing none', async (t) => {
+test("marking pokes read, the update window, setup and working a task's steps each change a row of the office and write no ledger row, and none is classed as changing nothing", async (t) => {
   for (const [key, act] of Object.entries(CHANGES)) {
     await t.test(key, async () => {
       const [method, at] = key.split(' ');
       let changed: string[] = [];
       await act(async (call) => {
         const before = await tableDigests();
-        await request(at, method, call);
+        await request(at.split('#')[0], method, call);
         const after = await tableDigests();
         changed = [...after.keys()].filter((k) => after.get(k) !== before.get(k));
       });
       assert.notDeepEqual(changed, [], `${key} changed no table`);
+      assert.ok(!changed.includes('ledger'), `${key} wrote a ledger row, and is classed as none`);
       assert.ok(
         !('notAnAction' in OWNER_ACTIONS[key as keyof typeof OWNER_ACTIONS]),
         `${key} changed ${changed.join(', ')}, yet is classed as changing none of the office's records`

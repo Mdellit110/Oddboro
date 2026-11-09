@@ -2,24 +2,48 @@
 // ledger. Every POST, PUT, PATCH and DELETE handler under src/routes has one
 // row, keyed `<METHOD> <route id>`; the staff PATCH takes several actions, one
 // per body key, so it has a row per key `PATCH_KEY` does not class as a
-// qualifier. A GET reads, so the test cannot find one that changes something:
-// such a GET, or a page's `load`, gets a row by hand. owner-actions.test.ts
-// fails on a handler with no row and on a GET row whose handler is gone, and
-// drives each `records` row to check it writes exactly one ledger row of that
-// kind.
+// qualifier, and the task POST has a row per `op` in `TASK_OPS`. A GET reads,
+// so the test cannot find one that changes something: such a GET, or a page's
+// `load`, gets a row by hand. owner-actions.test.ts fails on a handler with no
+// row and on a GET row whose handler is gone, and drives each `records` row to
+// check it writes exactly one ledger row of that kind.
 import type { LedgerKind } from '@oddboro/ledger';
 
-/** The Linear row that owes a ledger line for each action that writes none today. */
+/** The Linear row that owes a ledger line for each action that names it. */
 const NO_ROW = 'NEW-1693';
 const SETUP = 'Setting up the office, before or beside its records, not an action on them.';
 
 export type OwnerAction =
   /** It writes one ledger row of this kind. */
   | { records: LedgerKind }
-  /** It changes the office's records and writes no ledger row: the Linear row that owes one. */
+  /**
+   * It changes the office's records and writes no ledger row: what it changes,
+   * or the Linear row that owes one.
+   */
   | { none: string }
   /** It changes none of the office's records, and why. */
   | { notAnAction: string };
+
+/** Every `op` the task route takes. The route's `op` has this type, so it can compare no other. */
+export const TASK_OPS = [
+  'finish',
+  'tick',
+  'untick',
+  'choose',
+  'oauth',
+  'secret',
+  'aws-current',
+  'aws-sign-in',
+  'aws-roles',
+  'aws-choose',
+  'aws-secrets-connected',
+  'aws-secret-names',
+  'aws-secret-keys',
+  'aws-secret',
+  'tools',
+  'confirm-tools'
+] as const;
+export type TaskOp = (typeof TASK_OPS)[number];
 
 export const OWNER_ACTIONS = {
   // The owner's New Altitude account lives in the system's secret store, and
@@ -116,7 +140,45 @@ export const OWNER_ACTIONS = {
     notAnAction: 'Drafts a job description for the hire window; nothing is kept until a hire.'
   },
   'PUT /api/switches': { none: NO_ROW },
-  'POST /api/tasks/[id]': { records: 'work' },
+  'POST /api/tasks/[id]#finish': { records: 'work' },
+  // Finishing is the task's one ledger row, so the steps before it write none.
+  'POST /api/tasks/[id]#tick': { none: 'Ticks one step of the task.' },
+  'POST /api/tasks/[id]#untick': { none: 'Unticks one step of the task and forgets its answer.' },
+  'POST /api/tasks/[id]#choose': { none: "Ticks a choice step with the owner's answer." },
+  'POST /api/tasks/[id]#oauth': {
+    none: 'Starts a sign-in; a server that needs none is marked open and its step ticks.'
+  },
+  'POST /api/tasks/[id]#secret': {
+    none: "Keeps the owner's key in the secret store, drops any AWS secret named for it, and ticks the step."
+  },
+  'POST /api/tasks/[id]#aws-current': {
+    notAnAction: "Reads where the office signed in to AWS, and this tool's role so far."
+  },
+  'POST /api/tasks/[id]#aws-sign-in': {
+    none: "Starts the AWS sign-in; a new place to sign in drops every AWS tool's role."
+  },
+  'POST /api/tasks/[id]#aws-roles': {
+    notAnAction: 'Waits for the AWS sign-in, whose tokens are no record, and lists its roles.'
+  },
+  'POST /api/tasks/[id]#aws-choose': {
+    none: "Sets the tool's AWS role and Region, connects it, and ticks the step."
+  },
+  'POST /api/tasks/[id]#aws-secrets-connected': {
+    notAnAction: 'Reads whether the office has a role to read keys from AWS with.'
+  },
+  'POST /api/tasks/[id]#aws-secret-names': {
+    notAnAction: "Reads the names and descriptions of the AWS account's secrets."
+  },
+  'POST /api/tasks/[id]#aws-secret-keys': {
+    notAnAction: 'Reads the key names inside one AWS secret.'
+  },
+  'POST /api/tasks/[id]#aws-secret': {
+    none: "Names the AWS secret a tool's key comes from, and ticks the step."
+  },
+  'POST /api/tasks/[id]#tools': { notAnAction: 'Lists the tools the server offers.' },
+  'POST /api/tasks/[id]#confirm-tools': {
+    none: 'Marks the tool ready with the tools it lists, and ticks the step.'
+  },
   // The app's shell reporting an update, and the owner picking when it
   // installs: both write the `app_update` row.
   'POST /api/update': { none: NO_ROW },
