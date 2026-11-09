@@ -23,8 +23,6 @@ import {
   ownerName,
   recordUsage,
   runsGoing,
-  commandsHow,
-  currentPlatform,
   type Agent,
   type ModelUsage,
   type UsageKind
