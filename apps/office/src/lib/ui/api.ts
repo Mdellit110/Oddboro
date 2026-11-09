@@ -17,10 +17,13 @@ export type ApiUrl = `/${Path}` | `/${Path}?${string}`;
 export async function call<T = { ok: true }>(
   url: ApiUrl,
   body?: unknown,
-  method = body === undefined ? 'GET' : 'POST'
+  method = body === undefined ? 'GET' : 'POST',
+  /** Drops the call; the office stops work it was doing for it, such as a drawing. */
+  signal?: AbortSignal
 ): Promise<T> {
   const res = await fetch(url, {
     method,
+    signal,
     headers: method === 'GET' ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body)
   });

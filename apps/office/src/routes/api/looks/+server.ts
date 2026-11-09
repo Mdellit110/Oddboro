@@ -32,7 +32,9 @@ export const POST: RequestHandler = async ({ request }) => {
         note: text('note', 600) || undefined,
         previous: b.previous ? drawnFrom(b.previous as Record<string, unknown>) : undefined,
         photo: photo ? { mediaType: photo[1], data: photo[2] } : undefined,
-        model: MODELS.includes(text('model', 40)) ? text('model', 40) : undefined
+        model: MODELS.includes(text('model', 40)) ? text('model', 40) : undefined,
+        // The page drops the request to stop the drawing (Build from parts, or Stop).
+        signal: request.signal
       })
     );
   } catch (e) {

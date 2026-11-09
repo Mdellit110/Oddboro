@@ -22,6 +22,18 @@ export const LEVEL_NAME: Record<Level, string> = { read: 'Read', draft: 'Draft',
 export type GrantLevel = Extract<Level, 'read' | 'act'>;
 /** What the owner reads for a grant level; the Odd reads the same words in lower case. */
 export const GRANT_LABEL: Record<GrantLevel, string> = { read: 'Read only', act: 'Read and write' };
+/**
+ * The lowest level a grant works at. A level says how much an Odd does on
+ * its own, not what it may reach: write works from Draft, where each change
+ * waits for the owner's yes, and at Act it goes without asking.
+ */
+export const GRANT_NEEDS: Record<GrantLevel, Level> = { read: 'read', act: 'draft' };
+/** Whether a grant works at `level`. */
+export const grantWorks = (grant: Level, level: Level): boolean =>
+  grant === 'read' || levelAtMost(GRANT_NEEDS.act, level);
+/** Whether each change through a grant waits for the owner's yes: write, held at Draft. */
+export const writesWait = (grant: Level, level: Level): boolean =>
+  grant === 'act' && level === 'draft';
 /** A folder the owner gives is read, or read and changed (`write`). */
 export type FolderAccess = 'read' | 'write';
 /** What the owner reads for a folder level. */

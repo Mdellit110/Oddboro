@@ -41,7 +41,7 @@ export const LIVE_TABLES: Record<TableName, LiveTable> = {
   lessons: { trigger: 'all', page: ['refresh', 'version'] },
   lesson_uses: { trigger: 'all', page: ['version'] },
   ledger: { trigger: 'all', page: ['ledger'] },
-  connectors: { trigger: 'all', page: ['version'] },
+  connectors: { trigger: 'all', page: ['refresh', 'version'] },
   grants: { trigger: 'all', page: ['version'] },
   jobs: { trigger: 'all', page: ['version'] },
   threads: { trigger: 'all', page: ['refresh', 'version'] },

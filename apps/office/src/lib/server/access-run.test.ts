@@ -152,7 +152,7 @@ test('every developer tool credential file sits in a listed folder, and no liste
 });
 
 test(
-  "a handed-over run keeps the Odd's own Run commands, Browse the web and given folders; only its outside tools come down to Draft",
+  "a handed-over run keeps the Odd's own Run commands, Browse the web and given folders; its write grant works at Draft, each change held by the gateway",
   onMac,
   async () => {
     await L.addConnector({
@@ -175,8 +175,8 @@ test(
     const allowed = listAfter(run.args, '--allowedTools');
     assert.ok(allowed.includes(`Edit(${L.rulePath(w)}/**)`), allowed.join(' '));
     assert.equal(run.env.CEILING, 'draft');
-    assert.ok(allowed.includes('mcp__notes__read_note'), allowed.join(' '));
-    assert.ok(!allowed.some((a) => a === 'mcp__notes' || a === 'mcp__notes__write_note'));
+    // Every tool is listed: the gateway holds each change for the owner's yes.
+    assert.ok(allowed.includes('mcp__notes'), allowed.join(' '));
   }
 );
 

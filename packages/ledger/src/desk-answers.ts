@@ -51,8 +51,8 @@ export type TaskEffect = Extract<
 
 export type AskAnswer = {
   /**
-   * A hire, a reply, a filter or a folder is approved by doing it (`approveHire`,
-   * `reply/`, `filter/`, `folder/`), never by a bare yes: `by` is what the
+   * A hire, a reply, a filter, a folder or a call is approved by doing it
+   * (`approveHire`, `reply/`, `filter/`, `folder/`, `call/`), never by a bare yes: `by` is what the
    * office answers a bare yes with. Then `then` runs.
    */
   approve: readonly AskEffect[] | { by: string; then: readonly AskEffect[] };
@@ -112,6 +112,11 @@ export const OWNER_ANSWERS = {
     },
     folder: {
       approve: { by: 'Give the folder from its card on the desk', then: ['give_folder'] },
+      deny: NO,
+      iterate: REWORK
+    },
+    call: {
+      approve: { by: 'Approve the call from its card on the desk', then: ['carry_out'] },
       deny: NO,
       iterate: REWORK
     }

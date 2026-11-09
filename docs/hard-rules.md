@@ -31,8 +31,11 @@ Sending, posting and scheduling cannot be taken back, and they happen in the own
 name. Odds draft freely. Approval covers one action, never the next one. The
 one standing yes is a write grant: the owner connects a tool at write level for one
 Odd and raises that Odd to Act, and from then it uses that tool's
-tools without asking each time (decided 2026-10-30). Revoking the grant
-or lowering the level ends it at the next run. A yes counts only from the
+tools without asking each time (decided 2026-10-30). At Draft a write grant
+is no standing yes: the gateway holds each call that changes something as
+that exact call on the owner's desk, and the office makes it only on their
+yes (decided 2026-11-07). Revoking the grant or lowering the level ends it at
+the next run. A yes counts only from the
 owner's own page: the office refuses an action any other site sends it
 (decided 2026-11-04).
 

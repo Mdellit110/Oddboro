@@ -2,6 +2,7 @@
 // no default, so a new kind of follow-up fails the type check here until it
 // says what its run is told.
 import {
+  callResultText,
   FOLDER_SAID,
   goalWhen,
   home,
@@ -195,6 +196,12 @@ function askLinesOf(a?: AskRow): string[] {
           ? [
               `- The folder you asked for: ${shownFolder(a.folder.path)} (${FOLDER_SAID[a.folder.level]})`
             ]
+          : []),
+        ...(a.call
+          ? [
+              `- The call: ${a.call.tool} on ${a.call.connector}, with ${JSON.stringify(a.call.arguments)}`,
+              ...(a.call.result ? [`- What it returned: ${callResultText(a.call.result)}`] : [])
+            ]
           : [])
       ]
     : [];
@@ -232,6 +239,16 @@ function carryOutBrief(f: FollowUpRow, a: AskRow | undefined, also: AskRow[]): s
       '1. Check the tool answers: one small read.',
       '2. If work was waiting on this access, do it now.',
       '3. If nothing was waiting, stop there.'
+    ];
+  if (a?.call)
+    return [
+      `{owner} said yes to your call #${a.id}, and the office made it for you. Do not make it again.`,
+      '',
+      ...askLines,
+      '',
+      '1. Carry on with the work that waited on it, using what it returned.',
+      '2. If it failed, say so plainly and what you would try instead. Do not call it again without a reason {owner} would want.',
+      '3. If nothing more waited on it, stop there.'
     ];
   return [
     `{owner} approved your ask #${a?.id}. Carry it out now.`,

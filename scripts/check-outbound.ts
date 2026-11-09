@@ -6,7 +6,8 @@
 //
 // It counts, with comments taken out: `fetch(`, `navigator.sendBeacon(`, the
 // connector transports, `WebSocket`, `EventSource` and `XMLHttpRequest` as
-// each is made, `Sentry.init(`, and each function and class in `NET_MODULES`
+// each is made, the AWS SDK's clients the office signs in with as each is made
+// (their sends go through a variable), `Sentry.init(`, and each function and class in `NET_MODULES`
 // (those that open a connection from Node's http, https, http2, tls and net
 // modules, every lookup in `dns` and `dns/promises`, and undici's `request`,
 // `fetch`, `stream`, `pipeline`, `connect`, `upgrade`, `Client` and `Pool`)
@@ -31,7 +32,7 @@ const DESKTOP = /^apps\/desktop\/src-tauri\/src\/.+\.rs$/;
 
 // `fetch(` not after a dot or a name, so `globalThis.fetch(` counts once.
 const TS_CALLS =
-  /(?<![.\w$])fetch\s*\(|\b(?:globalThis|window|self)\.fetch\s*\(|\bnavigator\.sendBeacon\s*\(|\bnew\s+(?:StreamableHTTPClientTransport|SSEClientTransport|WebSocket|EventSource|XMLHttpRequest)\s*\(|\bSentry\.init\s*\(/
+  /(?<![.\w$])fetch\s*\(|\b(?:globalThis|window|self)\.fetch\s*\(|\bnavigator\.sendBeacon\s*\(|\bnew\s+(?:StreamableHTTPClientTransport|SSEClientTransport|WebSocket|EventSource|XMLHttpRequest)\s*\(|\bnew\s+(?:SSOOIDCClient|SSOClient|SecretsManagerClient)\s*\(|\bSentry\.init\s*\(/
     .source;
 const RS_CALLS = /\bsentry::init\(|\breqwest::|\.updater_builder\(|\.updater\s*\(/g;
 

@@ -33,6 +33,7 @@ process.env.HOME = HOME;
 after(() => rmSync(HOME, { recursive: true, force: true }));
 const {
   DECISIONS,
+  approveCall,
   approveFilter,
   approveReply,
   ask: askRow,
@@ -184,6 +185,16 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
   folder: {
     approve: {
       cell: { by: 'Give the folder from its card on the desk', then: ['give_folder'] },
+      onThread: ['carry_out:ada'],
+      onNone: ['carry_out:ada']
+    },
+    deny: NO,
+    iterate: REWORK
+  },
+  // The office made the call with the yes, so the Odd carries on with what it returned.
+  call: {
+    approve: {
+      cell: { by: 'Approve the call from its card on the desk', then: ['carry_out'] },
       onThread: ['carry_out:ada'],
       onNone: ['carry_out:ada']
     },
@@ -355,6 +366,18 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       threadId
     });
     return { id: ask.id };
+  },
+  call: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    const { ask } = await raiseAsk('ada', {
+      kind: 'call',
+      title: 'Use capture in Notes',
+      why: 'w',
+      ifApproved: 'i',
+      call: { connector: 'notes', tool: 'capture', arguments: { n: ++raised } },
+      threadId
+    });
+    return { id: ask.id };
   }
 };
 /** The owner's decision, through the function the office answers each with. */
@@ -371,6 +394,8 @@ async function answer(
     await approveReply(id, { ...asked.reply, sent: { action: 'send', at, gmailId: 'g' } });
   else if (decision === 'approve' && asked?.filter)
     await approveFilter(id, { ...asked.filter, created: { at, gmailId: 'g', tidied: 0 } });
+  else if (decision === 'approve' && asked?.call)
+    await approveCall(id, { ...asked.call, result: { ok: true, text: 'done', at } });
   else if (decision === 'approve' && asked?.folder) {
     const done = await giveFolder(id, asked.folder.path, asked.folder.level, reason);
     assert.ok('given' in done, JSON.stringify(done));
@@ -423,7 +448,8 @@ const SILENT_OFF_A_THREAD: readonly (readonly [AskKind, Decision])[] = [
   ['goal', 'deny'],
   ['reply', 'deny'],
   ['filter', 'deny'],
-  ['folder', 'deny']
+  ['folder', 'deny'],
+  ['call', 'deny']
 ];
 const namesNew1715 = (kind: AskKind, decision: Decision) =>
   effectsOf(cellOf(kind, decision)).some((e) => typeof e === 'object' && e.none === 'NEW-1715');

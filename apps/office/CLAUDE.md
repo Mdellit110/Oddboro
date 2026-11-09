@@ -77,7 +77,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
 6. Two full-height panels flank the floor (`src/lib/ui/SidePanel.svelte`).
    Each resizes by dragging its inner edge (or the arrow keys on it), and
    remembers its width per viewer. The start side is the office plate (name,
-   the clock, Setup, and the Desk, Goals, Lessons, Ledger, Hire and Office
+   the clock, Setup, and the Desk, Goals, Lessons, Ledger, Services, Hire and Office
    buttons), which opens into a bar of windows
    (`src/lib/ui/windows.svelte.ts`): the Desk, the Goals, the Lessons, the
    Ledger, each hire and each open file is a tab. D opens the Desk. Every
@@ -211,8 +211,30 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    work", `via` on the ask or task), and the colleague's name opens their
    chat; the item still belongs to the lead.
    A task's steps can carry an action: a hosted server's sign-in, a secret that goes in
-   the keychain (`src/lib/server/keychain.ts`), a tool list to confirm, or a
-   choice. Any ticked step can be undone (`untickStep`): a checkbox unticks, and an action step has Undo, which opens its action again (a wrong key gets pasted again). A bare key saved for an `Authorization` header goes
+   the keychain (`src/lib/server/keychain.ts`), AWS's sign-in, a tool list to confirm, or a
+   choice. AWS is three tools the office connects itself (`src/lib/server/aws.ts`,
+   the step in `src/lib/ui/AwsSignIn.svelte`), one desk step each: AWS
+   Secrets Manager (`aws-secrets`), AWS read only (`aws-read`) and AWS builder
+   (`aws-build`). The owner signs in to their IAM Identity Center once for all
+   three, on AWS's own page (a device sign-in; where to sign in and the tokens
+   go in the keychain as `aws`/`sso` and renew until the access portal session
+   ends), and each tool's step then picks one role and its Region
+   (`chooseAwsRole`), which connects it (`confirmTools`). Secrets Manager's
+   role is the office's: the office answers that tool itself, in this process
+   (`secretNamesClient` in `upstream`), with one tool that lists names and
+   descriptions and never a value. Read only and builder run AWS's hosted MCP
+   Server behind `mcp-proxy-for-aws-cli` (`proxyArgs`, which needs uv), on
+   that role's short-lived credentials, which `upstream` fetches when the
+   gateway first connects; picking the role first tries a value read with it
+   and refuses when AWS answers with one, dropping it unread. Read only's
+   `readsByRole` lets a Read only grant reach all its tools, since its role is
+   the boundary. Each step's text links to its guide on the site (`AWS_GUIDES`
+   and `siteLink` in `src/lib/site.ts`). Once Secrets Manager is connected, a
+   key step on any tool can name an AWS secret instead of a pasted key
+   (`AwsSecretPick.svelte`, the connector's `fromAws`): the page sees names and
+   descriptions only, and `toolKeys` reads the value with the office's role
+   whenever `upstream` connects. A run holds back the AWS tools, and any tool
+   keyed from AWS, once the AWS sign-in ended (`awsReady`). Any ticked step can be undone (`untickStep`): a checkbox unticks, and an action step has Undo, which opens its action again (a wrong key gets pasted again). A bare key saved for an `Authorization` header goes
    out as `Bearer <key>` (`headerSecret`); a value with a scheme goes as it is. Steps without one tick by hand, as a checklist: only a step with an action, and
    the sign-in's step that ticks itself (its `oauth:` key), holds up Mark done (`stepsToGo` in
    `src/lib/ui/task-steps.ts`). Ticking keeps the task open: the drawer opens an item only
@@ -404,7 +426,16 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Forms dialog on Windows, zenity or kdialog on Linux), one at a time; a
    cancel picks nothing, and where none can open the page says why and keeps
    the typed path. A picked folder starts at Can read and goes through the
-   same PATCH and `checkFolder` as a typed one. Each switch and folder goes through
+   same PATCH and `checkFolder` as a typed one. Each service there has
+   Rename, and an AWS tool already connected has Change role or Region
+   (`ServiceActions.svelte`, `/api/services/[id]`), which puts its AWS step
+   on the desk again from the office (`changeAwsTask`) and opens it. Under a
+   grant the Odd's level does not allow, a line says so, with one click that
+   raises the level. The plate's Services window (`ServicesPanel.svelte`,
+   `services()` in the ledger) lists every service an Odd holds or that is
+   connected, with each Odd and its grant; a click on an Odd opens its card.
+   The line saying what an Odd is doing names an outside tool's service by
+   its name (`serviceNames`, sent with the office state), not its id. Each switch and folder goes through
    the staff PATCH, `setOwnTool` or `setFolder` in the ledger's `office.ts`,
    which records a Ledger line, gets no 409 and takes effect on the next run;
    a change that opens or closes the internet to the Odd's commands says so
@@ -692,13 +723,15 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    reading the owner's edit is reading. It gets no skills, no
    plugins, none of the owner's own CLAUDE.md files, no Claude Code
    auto-memory, and of the office process's own environment only the names
-   `RUN_ENV_ALLOW` lists (`runEnv` in `run-env-allow.ts`; no `GIT_` variable
-   among them). It gets the office's own MCP server (`packages/ledger/src/mcp.ts`) with
+   `RUN_ENV_ALLOW` lists (`runEnv` in `run-env-allow.ts`; no `GIT_` or `AWS_`
+   variable among them, since a tool server runs outside the sandbox and could
+   sign in as the owner). It gets the office's own MCP server (`packages/ledger/src/mcp.ts`) with
    only the office tools the owner ticked under "In the office" on the Settings tab,
    and whatever outside access the owner granted: servers at read (the tools
    the server marks as only reading, less any whose name says it changes
    something: `readsOnly` in `packages/ledger/src/read-only.ts`) or write
-   (every tool, only while the Odd holds Act). Every outside tool reaches the
+   (every tool, from Draft; at Draft each call that changes something waits
+   for the owner's yes, below). Every outside tool reaches the
    run through the office's gateway (`src/lib/server/gateway.ts`, at
    `/api/gateway/<connector>`): the run gets the office's address and a
    token that lives as long as the run, never the server's address, key or
@@ -707,7 +740,18 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    may have, `outsideToolEnv` in `run-env-allow.ts`, and its own secrets),
    lists only the tools the grant reaches, refuses any other
    call, and takes a tool that no longer passes `readsOnly` off the
-   connector's stored list with a Ledger line (`narrowReadTools`). The run's
+   connector's stored list with a Ledger line (`narrowReadTools`). A write
+   grant at Draft (`writesWait`, either the Odd's own level or a run capped
+   there) lists every tool, passes reads on, and holds each call that does
+   not pass `readsOnly` (or `readsByRole`) as a `call` ask on the desk
+   (`raiseCall`), placed as the run's own asks are (`CallPlace`: its key,
+   thread, hand-off and `via`); the same call still open is not raised twice,
+   and a lesson run, with no place, is refused one. The run hears that nothing
+   changed yet. The desk shows the tool and its exact inputs, with Make this
+   call: `/api/asks/[id]/call` makes that call itself (`makeCall`, once per
+   ask even on a second click), then `approveCall` keeps the result and
+   starts the Odd's `carry_out` run, which carries on with what it returned.
+   A service the office cannot reach leaves the ask open. The run's
    tool still gets its own per-tool allow list, so either one alone holds. Which outside tools a run gets comes from `capabilities()` in
    `packages/ledger/src/capabilities.ts`, which also says why a granted one is
    held back (above the Odd's level, still connecting). The prompt's "What you
@@ -1182,6 +1226,8 @@ sends every action as JSON, body or not.
 | `src/lib/server/`                 | Staff runs, office runs, looks, the job clock, events, keychain. Where to start a change there: [CLAUDE.md](src/lib/server/CLAUDE.md) |
 | `src/lib/server/profile.ts`       | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                                |
 | `src/lib/server/sandbox.ts`       | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the refusal line  |
+| `src/lib/server/aws.ts`           | AWS: the office's one sign-in, each AWS tool's role and the read check, the names-only Secrets Manager tool, and keys from AWS        |
+| `src/lib/site.ts`                 | Links to the public site's guides (`siteLink`): `localhost:4501` under `npm run dev`, else oddboro.com, or `ODDBORO_SITE_URL`         |
 | `src/routes/api/`                 | One folder per thing the page reads or changes                                                                                        |
 | `src/lib/server/office-design.ts` | Drawing an office from the owner's words, and where Odds move to                                                                      |
 | `src/lib/server/design-job.ts`    | The drawing as a job on the server, which pages follow                                                                                |
@@ -1248,8 +1294,8 @@ sends every action as JSON, body or not.
 - Never show demo numbers as real ones. The card's back shows only measured
   usage.
 - A tool connects at read or write: read gets the tools its server marks as
-  only reading (`readsOnly`), write gets every tool, and only while the Odd
-  holds Act.
+  only reading (`readsOnly`), write gets every tool from Draft, and at Draft
+  each change waits for the owner's yes.
 - A headless Odd cannot reuse Claude Code's own MCP sign-ins (it reports
   `needs-auth`). That is why the office runs OAuth itself.
 - Charts use LayerChart. Its tooltip reads `--color-surface-*`; set them from

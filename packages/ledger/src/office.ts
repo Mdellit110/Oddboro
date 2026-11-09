@@ -78,6 +78,7 @@ import {
   type GoogleProduct,
   type HireProposal,
   type Outcome,
+  type HeldCall,
   type ReplyDraft,
   type LedgerKind,
   type RunTrigger,
@@ -104,6 +105,7 @@ import { MANAGER_ROLE } from './managers.ts';
 import { currentPlatform } from './platform.ts';
 import {
   GRANT_LABEL,
+  grantWorks,
   LEVEL_LABEL,
   levelAtMost,
   type FolderAccess,
@@ -980,8 +982,10 @@ export async function raiseAsk(
     filter?: GmailFilter;
     /** A folder ask's folder (`ask_for_folder`). */
     folder?: FolderRequest;
-    /** `goal`, `plan`, `reply`, `filter` and `folder` say so; the rest follow from access or hire. */
-    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'folder';
+    /** A call ask's held call, from the gateway (`holdCall` in the office's gateway.ts). */
+    call?: HeldCall;
+    /** `goal`, `plan`, `reply`, `filter`, `folder` and `call` say so; the rest follow from access or hire. */
+    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'call';
     revises?: number;
     /** The colleague whose handed-back work the lead raised this from (`VIA`). */
     via?: string;
@@ -1224,6 +1228,64 @@ export async function approveFilter(id: number, filter: GmailFilter): Promise<bo
   return decide(id, 'approve', null, { filter });
 }
 
+/**
+ * The office made a call ask's held call on the owner's yes: keep what came
+ * back (`call.result`) and approve the ask, which starts the Odd's carry-out
+ * run with the result. Returns false when the ask was no longer open.
+ */
+export async function approveCall(id: number, call: HeldCall): Promise<boolean> {
+  if (!call.result) throw new Error('A call is approved only once the office made it');
+  return decide(id, 'approve', null, { call });
+}
+
+/** Where a held call lands: the run's Odd, and what its own asks carry. */
+export type CallPlace = {
+  staffId: string;
+  /** The run's key, which a thread it is raised on keeps (`raiseAsk`). */
+  run: string;
+  handOffId?: number;
+  threadId?: number;
+  via?: string;
+};
+
+/**
+ * An Odd at Draft called a tool that changes something: the gateway holds
+ * the call and it goes on the desk as a `call` ask, showing the exact call.
+ * The same call still open is not raised twice: the Odd hears the one there.
+ */
+export async function raiseCall(
+  place: CallPlace,
+  call: HeldCall,
+  service: string
+): Promise<{ ask: AskRow; already: boolean }> {
+  const same = (r: AskRow) =>
+    r.call?.connector === call.connector &&
+    r.call.tool === call.tool &&
+    JSON.stringify(r.call.arguments) === JSON.stringify(call.arguments);
+  const open = await db
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, place.staffId), eq(asks.kind, 'call'), eq(asks.status, 'open')));
+  const there = open.find(same);
+  if (there) return { ask: there, already: true };
+  const { ask } = await raiseAsk(place.staffId, {
+    kind: 'call',
+    title: `Use ${call.tool} in ${service}`,
+    why: `Called while working at Drafts for your yes, so the office held it for you.`,
+    ifApproved: `The office makes this exact call to ${service}, and the work carries on with what it returns.`,
+    call,
+    handOffId: place.handOffId,
+    threadId: place.threadId,
+    via: place.via,
+    run: place.run
+  });
+  return { ask, already: false };
+}
+
+/** What a made call returned, cut to fit a ledger line or a brief. */
+export const callResultText = (r: NonNullable<HeldCall['result']>, max = 4000): string =>
+  `${r.ok ? '' : 'The tool said it failed: '}${r.text.length > max ? `${r.text.slice(0, max)}…` : r.text}`;
+
 /** Why the owner's Give access on a folder ask gave nothing, with the status the route answers. */
 export type FolderNotGiven = { refused: string; status: 400 | 404 | 409 };
 
@@ -1279,6 +1341,7 @@ async function decide(
     reportWhenDone?: boolean;
     reply?: ReplyDraft;
     filter?: GmailFilter;
+    call?: HeldCall;
     folder?: FolderRequest;
   }
 ): Promise<boolean> {
@@ -1293,6 +1356,9 @@ async function decide(
     // Only the office's Create filter approves a filter, once Gmail made it.
     if (decision === 'approve' && raised?.kind === 'filter' && !o.filter)
       throw new Error('Create the filter from its card on the desk');
+    // Only the office's own call approves a held call, once it made it.
+    if (decision === 'approve' && raised?.kind === 'call' && !o.call)
+      throw new Error('Approve the call from its card on the desk');
     // Only the office's Give access approves a folder ask, giving the folder with it.
     if (decision === 'approve' && raised?.kind === 'folder' && !o.folder?.given)
       throw new Error('Give the folder from its card on the desk');
@@ -1308,6 +1374,7 @@ async function decide(
         decidedAt: at,
         ...(o.reply ? { reply: o.reply } : {}),
         ...(o.filter ? { filter: o.filter } : {}),
+        ...(o.call ? { call: o.call } : {}),
         ...(o.folder ? { folder: o.folder } : {})
       })
       .where(and(eq(asks.id, id), eq(asks.status, 'open')))
@@ -1349,6 +1416,7 @@ async function decide(
   if (!ask) return false;
   const sent = decision === 'approve' && ask.reply?.sent ? ask.reply : undefined;
   const made = decision === 'approve' && ask.filter?.created ? ask.filter : undefined;
+  const called = decision === 'approve' && ask.call?.result ? ask.call.result : undefined;
   const gave = decision === 'approve' ? ask.folder?.given : undefined;
   const verb = sent
     ? replyDone(sent)
@@ -1361,8 +1429,10 @@ async function decide(
       ? `Created a Gmail filter: ${filterDone(made)}`
       : gave
         ? gaveFolder((await staffer(ask.staffId))?.name ?? ask.staffId, gave.path, gave.level)
-        : `${verb}: ${ask.title}`,
-    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}Asked by ${ask.staffId}. ${ask.why}${
+        : called
+          ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
+          : `${verb}: ${ask.title}`,
+    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}${called ? `It returned: ${callResultText(called, 600)} ` : ''}Asked by ${ask.staffId}. ${ask.why}${
       twins.length
         ? ` This also answers ${twins.map((t) => `#${t.id}`).join(', ')}, the same ask from another of ${ask.staffId}'s runs.`
         : ''
@@ -1867,7 +1937,7 @@ export async function grantAccess(
   if (!who || !named) throw new Error('No such Odd or connector');
   if (req.level === 'draft')
     throw new Error(`${named.name} connects to read, or to read and write`);
-  if (!levelAtMost(req.level, who.permission))
+  if (!grantWorks(req.level, who.permission))
     throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${req.level}`);
   if (req.another && named.config.google !== req.another)
     throw new Error(`Only Gmail and Google Drive take another account`);
@@ -1945,10 +2015,115 @@ export async function reconnectTask(
   return { task, already: false };
 }
 
+/**
+ * The owner wants an AWS tool on another role or Region: its one desk step
+ * goes on the desk again, from the office, starting on what it uses now.
+ * Picking connects it again. A tool has one open at a time.
+ */
+export async function changeAwsTask(connectorId: string): Promise<TaskRow> {
+  const conn = await connector(connectorId);
+  if (!conn || !isAws(conn.id)) throw new Error('Only an AWS tool has a role and Region to change');
+  const open = await db.select().from(tasks).where(eq(tasks.status, 'open'));
+  const waiting = open.find((t) =>
+    t.steps.some((st) => st.action?.kind === 'aws' && st.action.connector === conn.id)
+  );
+  if (waiting) return waiting;
+  return giveTask(null, {
+    title: `Change the role or Region for ${conn.name}`,
+    why: `You asked to change the AWS role or Region ${conn.name} uses.`,
+    steps: connectSteps(conn, true)
+  });
+}
+
+/** The longest name the owner can give a service. */
+export const SERVICE_NAME_MAX = 60;
+
+/**
+ * The owner names a service, such as Open Brain for a server they added by
+ * its address. Odds read the new name too, since every run reads the row.
+ */
+export async function renameConnector(id: string, name: string): Promise<void> {
+  const c = await connector(id);
+  if (!c) throw new Error('No such service');
+  const named = name.trim().replace(/\s+/g, ' ');
+  if (!named || named.length > SERVICE_NAME_MAX)
+    throw new Error(`Give it a name of 1 to ${SERVICE_NAME_MAX} characters.`);
+  if (named === c.name) return;
+  await db.update(connectors).set({ name: named }).where(eq(connectors.id, id));
+  await record({ kind: 'access', actor: 'owner', title: `Renamed ${c.name} to ${named}` });
+}
+
+/** Each service's name by its id, for the lines that say what an Odd is doing. */
+export async function serviceNames(): Promise<Record<string, string>> {
+  const rows = await db.select({ id: connectors.id, name: connectors.name }).from(connectors);
+  return Object.fromEntries(rows.map((r) => [r.id, r.name]));
+}
+
+/** A service in the office and every Odd that holds it, for the owner's Services window. */
+export type OfficeService = {
+  id: string;
+  name: string;
+  description: string;
+  ready: boolean;
+  aws: boolean;
+  odds: { id: string; name: string; level: Level }[];
+};
+
+/** Every service an Odd holds or that is connected, by name, with who holds it. */
+export async function services(): Promise<OfficeService[]> {
+  const held = await db
+    .select({
+      connectorId: grants.connectorId,
+      level: grants.level,
+      id: staff.id,
+      name: staff.name
+    })
+    .from(grants)
+    .innerJoin(staff, eq(grants.staffId, staff.id))
+    .orderBy(asc(staff.name));
+  return (await catalog())
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      ready: !!c.readyAt,
+      aws: isAws(c.id),
+      odds: held
+        .filter((h) => h.connectorId === c.id)
+        .map((h) => ({ id: h.id, name: h.name, level: h.level }))
+    }))
+    .filter((s) => s.ready || s.odds.length);
+}
+
+/**
+ * The AWS tools, by what the owner wants: their secrets' names (and the
+ * office's keys), reading their account, or building in it. The office signs
+ * in to AWS itself, once for all three (the office's `aws.ts`).
+ */
+export const AWS_SECRETS_ID = 'aws-secrets';
+export const AWS_READ_ID = 'aws-read';
+export const AWS_BUILD_ID = 'aws-build';
+export const AWS_IDS: readonly string[] = [AWS_SECRETS_ID, AWS_READ_ID, AWS_BUILD_ID];
+export const isAws = (id: string): boolean => AWS_IDS.includes(id);
+/** Where the one AWS sign-in sits in the secret store. */
+export const AWS_SIGN_IN = { id: 'aws', name: 'sso' } as const;
+
+const AWS_STEP: Record<string, string> = {
+  [AWS_SECRETS_ID]:
+    'Sign in to AWS, then pick the role the office reads your secrets with. Your Odds see secret names only, never their values.',
+  [AWS_READ_ID]:
+    'Sign in to AWS, then pick the role your Odds read AWS with. The office checks that it cannot read a secret value.',
+  [AWS_BUILD_ID]:
+    'Sign in to AWS, then pick the role your Odds build in AWS with. The office checks that it cannot read a secret value.'
+};
+
 /** The steps that connect a tool. `again` gives them even when it looks connected. */
 function connectSteps(conn: ConnectorRow, again = false): Step[] {
   if (conn.readyAt && !again) return [];
   const key = `oauth:${conn.id}`;
+  // One step: picking the role connects the tool too.
+  if (isAws(conn.id))
+    return [{ text: AWS_STEP[conn.id], done: false, action: { kind: 'aws', connector: conn.id } }];
   return [
     ...(conn.config.oauth
       ? [
@@ -2250,6 +2425,7 @@ type GoogleTold = boolean | { kept: string[] };
 async function forgetConnector(id: string): Promise<{ forgot: boolean; googleTold?: GoogleTold }> {
   const c = await connector(id);
   if (!c) return { forgot: false };
+  if (isAws(id)) return { forgot: await forgetAws(c) };
   const product = c.config.google;
   let googleTold: GoogleTold | undefined;
   if (c.config.oauth === 'google' && signedIn(id)) {
@@ -2270,6 +2446,24 @@ async function forgetConnector(id: string): Promise<{ forgot: boolean; googleTol
       .where(eq(connectors.id, id));
   }
   return { forgot: removed.length > 0, googleTold };
+}
+
+/**
+ * An AWS tool no Odd holds drops its role. Secrets Manager keeps its role
+ * while another tool's key comes from AWS, since the office reads those keys
+ * with it. The one sign-in goes once no AWS tool has a role.
+ */
+async function forgetAws(c: ConnectorRow): Promise<boolean> {
+  const all = await db.select().from(connectors);
+  const keysFromAws = all.some((k) => Object.keys(k.config.fromAws ?? {}).length);
+  if (!c.config.aws || (c.id === AWS_SECRETS_ID && keysFromAws)) return false;
+  await db
+    .update(connectors)
+    .set({ config: { ...c.config, aws: undefined }, readyAt: null })
+    .where(eq(connectors.id, c.id));
+  if (!all.some((k) => k.id !== c.id && isAws(k.id) && k.config.aws))
+    deleteSecret(AWS_SIGN_IN.id, AWS_SIGN_IN.name);
+  return true;
 }
 
 export async function connectorReady(
@@ -2299,7 +2493,7 @@ export async function narrowReadTools(id: string, gone: string[]): Promise<void>
     kind: 'access',
     actor: 'office',
     title: `${GRANT_LABEL.read} for ${c.name} no longer reaches ${gone.join(', ')}`,
-    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. ${GRANT_LABEL.act} reaches ${gone.length === 1 ? 'it' : 'them'}, at ${LEVEL_LABEL.act}.`
+    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. ${GRANT_LABEL.act} reaches ${gone.length === 1 ? 'it' : 'them'}: at ${LEVEL_LABEL.draft} each use waits for your yes, and at ${LEVEL_LABEL.act} it goes.`
   });
 }
 
@@ -2317,7 +2511,7 @@ export async function grantsFor(
 /**
  * Change a grant's level in place: Read only or Read and write. The tool stays
  * connected and signed in, with no new steps, and the change reaches the
- * Odd's next run. Never above the Odd's own level.
+ * Odd's next run. Write needs the Draft level or higher (`grantWorks`).
  */
 export async function setGrantLevel(
   staffId: string,
@@ -2327,7 +2521,7 @@ export async function setGrantLevel(
   const who = await staffer(staffId);
   const conn = await connector(connectorId);
   if (!who || !conn) throw new Error('No such Odd or tool');
-  if (!levelAtMost(level, who.permission))
+  if (!grantWorks(level, who.permission))
     throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${level}`);
   const [changed] = await db
     .update(grants)

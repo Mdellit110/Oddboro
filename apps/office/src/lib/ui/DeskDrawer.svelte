@@ -3,11 +3,14 @@
   import Pixel from './Pixel.svelte';
   import Markdown from './Markdown.svelte';
   import Attachments from './Attachments.svelte';
+  import AwsSignIn from './AwsSignIn.svelte';
+  import AwsSecretPick from './AwsSecretPick.svelte';
   import SelectToChat from './SelectToChat.svelte';
   import ReplyReview from './ReplyReview.svelte';
   import FilterReview from './FilterReview.svelte';
   import FolderAsk from './FolderAsk.svelte';
   import { call } from './api.ts';
+  import { AWS_GUIDES, siteLink } from '../site.ts';
   import { ago, when } from './format.ts';
   import { openFile, wins } from './windows.svelte.ts';
   import { chatAbout, replyAbout, showInChat } from './chat-about.svelte.ts';
@@ -191,6 +194,14 @@
       if (r.task) made = r.task;
       show(r.task ? `task-${r.task.id}` : undefined);
     });
+  /** A held call: the office makes that exact call, then the Odd carries on with what came back. */
+  const makeCall = (a: AskRow) =>
+    act(async () => {
+      await call(`/api/asks/${a.id}/call`, {});
+      show(undefined);
+    });
+  /** A held call's inputs, as the tool takes them, for the owner to read. */
+  const inputs = (args: Record<string, unknown>) => JSON.stringify(args, null, 2);
   /** Give the folder as it stands on the card: the server gives it, then approves the ask. */
   const giveFolder = (a: AskRow) =>
     act(async () => {
@@ -522,6 +533,24 @@
                 hire window.
               </p>
             </div>
+          {:else if a.call}
+            {@const c = a.call}
+            <div>
+              <dt class="text-xs text-muted">The call, exactly as the office makes it</dt>
+              <dd class="mt-1 flex flex-col gap-1 rounded-lg bg-raise px-2.5 py-2 text-xs">
+                <div><span class="text-muted">Tool:</span> {c.tool}</div>
+                <div class="text-muted">Inputs:</div>
+                <pre
+                  class="max-h-72 overflow-auto rounded-md bg-night/50 px-2 py-1.5 font-mono text-[11px] whitespace-pre-wrap">{inputs(
+                    c.arguments
+                  )}</pre>
+              </dd>
+              <p class="mt-1.5 text-[11px] text-faint">
+                Nothing has changed yet. Approve, and the office makes this call once, then {who(
+                  a.staffId
+                )?.name ?? 'the Odd'} carries on with what it returns.
+              </p>
+            </div>
           {:else if a.folder}
             <FolderAsk
               name={who(a.staffId)?.name ?? 'the Odd'}
@@ -613,16 +642,20 @@
             <button
               class="flex-1 rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
               disabled={busy || unsaved || (a.kind === 'plan' && !picked(a))}
-              onclick={() => decide(a, 'approve')}
+              onclick={() => (a.kind === 'call' ? makeCall(a) : decide(a, 'approve'))}
               >{a.kind === 'goal'
                 ? 'Set the goal'
-                : a.access
-                  ? 'Connect'
-                  : a.kind === 'window'
-                    ? 'Let it carry on'
-                    : a.plan && picked(a) < a.plan.items.length
-                      ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                      : 'Approve'}</button
+                : a.kind === 'call'
+                  ? busy
+                    ? 'Making the call'
+                    : 'Make this call'
+                  : a.access
+                    ? 'Connect'
+                    : a.kind === 'window'
+                      ? 'Let it carry on'
+                      : a.plan && picked(a) < a.plan.items.length
+                        ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                        : 'Approve'}</button
             >
           {/if}
         </div>
@@ -667,12 +700,26 @@
                       onchange={() => step(t, index, { op: s.done ? 'untick' : 'tick' })}
                     />
                   {/if}
-                  <Markdown
-                    text={stepText(s.text)}
-                    staff={t.staffId ?? undefined}
-                    copyCode
-                    class="min-w-0 flex-1 {s.done ? 'line-through' : ''}"
-                  />
+                  <div class="min-w-0 flex-1">
+                    <Markdown
+                      text={stepText(s.text)}
+                      staff={t.staffId ?? undefined}
+                      copyCode
+                      class={s.done ? 'line-through' : ''}
+                    />
+                    {#if s.action?.kind === 'aws' && !s.done && AWS_GUIDES[s.action.connector]}
+                      {@const guide = AWS_GUIDES[s.action.connector]}
+                      <p class="mt-1 leading-relaxed">
+                        New to this?
+                        <a
+                          class="text-sea underline hover:text-ink"
+                          href={siteLink(guide.path)}
+                          target="_blank"
+                          rel="noopener">{guide.label}, step by step</a
+                        >: the role, and where to find each of these.
+                      </p>
+                    {/if}
+                  </div>
                   {#if s.done && !tickable(s)}
                     <button
                       class="ms-auto shrink-0 text-xs text-muted underline hover:text-ink disabled:opacity-40"
@@ -687,6 +734,12 @@
                     disabled={busy}
                     onclick={() => hostedSignIn(t, index)}>Sign in</button
                   >
+                {:else if s.action?.kind === 'aws'}
+                  {#if s.done}
+                    {#if s.answer}<p class="mt-1.5 text-xs text-muted">{s.answer}</p>{/if}
+                  {:else}
+                    <AwsSignIn taskId={t.id} {index} connector={s.action.connector} />
+                  {/if}
                 {:else if s.action?.kind === 'secret' && !s.done}
                   <div class="mt-2 flex gap-2">
                     <input
@@ -701,6 +754,9 @@
                       onclick={() => saveSecret(t, index)}>Save</button
                     >
                   </div>
+                  <AwsSecretPick taskId={t.id} {index} />
+                {:else if s.action?.kind === 'secret' && s.answer}
+                  <p class="mt-1.5 text-xs text-muted">{s.answer}</p>
                 {:else if s.action?.kind === 'tools' && !s.done}
                   {#if !toolList[index]}
                     <button

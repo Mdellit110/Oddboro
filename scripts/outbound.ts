@@ -25,6 +25,14 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner adding that connector, and granting the Odd it at Read only or Read and write.'
   },
   {
+    file: 'apps/office/src/lib/server/aws.ts',
+    calls: 5,
+    to: "AWS, in the Regions the owner named: IAM Identity Center's sign-in and role lookup, and Secrets Manager.",
+    sends:
+      "The sign-in's device request and its token, the account and role the owner picked, the names of the owner's secrets, and each secret an AWS tool's key is read from.",
+    yes: 'The owner signing in to AWS, choosing the role on the desk, and picking a key from AWS.'
+  },
+  {
     file: 'apps/office/src/lib/server/address.ts',
     calls: 6,
     to: "Caddy's admin and the office's own address on this computer, GitHub for Caddy's release and checksums, and the name server this computer uses, for the office's address.",

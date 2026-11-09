@@ -93,7 +93,9 @@ export type AccountRow = typeof accounts.$inferSelect;
  * `filter` is one Gmail filter an Odd proposes (`asks.filter`): the owner may
  * change it, then the office creates it in Gmail. `folder` is a folder on this
  * computer an Odd asks for (`asks.folder`): the owner may narrow it, then the
- * office gives it (`setFolder`).
+ * office gives it (`setFolder`). `call` is one call to an outside tool that
+ * changes something, held by the gateway for an Odd at Draft (`asks.call`):
+ * on the owner's yes the office makes that exact call.
  */
 export const ASK_KINDS = [
   'approval',
@@ -105,7 +107,8 @@ export const ASK_KINDS = [
   'window',
   'reply',
   'filter',
-  'folder'
+  'folder',
+  'call'
 ] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
 /** `revise` means the owner sent it back to be reworked. */
@@ -148,6 +151,19 @@ export type ReplyDraft = {
   account?: string;
   /** Set once Gmail sent it or saved it as a draft. */
   sent?: { action: 'send' | 'draft'; at: string; gmailId: string };
+};
+/**
+ * One call to an outside tool an Odd at Draft made, held for the owner's yes:
+ * the tool, by its connector and its own name, and the exact arguments. The
+ * office makes this call, and no other, once the owner approves, and keeps
+ * what came back in `result`.
+ */
+export type HeldCall = {
+  connector: string;
+  tool: string;
+  arguments: Record<string, unknown>;
+  /** Set once the office made the call: whether the tool took it, and its words. */
+  result?: { ok: boolean; text: string; at: string };
 };
 /** A proposed hire. Approving it opens the hire window filled in with this. */
 export type HireProposal = {
@@ -282,6 +298,8 @@ export const asks = pgTable('asks', {
   filter: jsonb().$type<GmailFilter>(),
   /** A folder ask's folder and level. */
   folder: jsonb().$type<FolderRequest>(),
+  /** A call ask's held call to an outside tool. */
+  call: jsonb().$type<HeldCall>(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
@@ -306,6 +324,7 @@ export const asks = pgTable('asks', {
 export type StepAction =
   | { kind: 'secret'; connector: string; name: string }
   | { kind: 'oauth'; connector: string }
+  | { kind: 'aws'; connector: string }
   | { kind: 'choice'; options: string[] }
   | { kind: 'tools'; connector: string };
 /** Steps that share a `key` tick together, e.g. the two steps of one sign-in. */
@@ -511,6 +530,19 @@ export type ConnectorConfig = {
    * with New Altitude's own Google client (oauth.ts).
    */
   oauth?: boolean | 'google';
+  /** One of the AWS tools: the role it uses from the office's one AWS sign-in (`AWS_SIGN_IN`). */
+  aws?: AwsConfig;
+  /**
+   * Every tool only reads, because the service's own permissions allow
+   * nothing else (AWS read only's role), so a Read only grant reaches them all.
+   */
+  readsByRole?: boolean;
+  /**
+   * Environment variables or headers whose value the office fetches from the
+   * owner's AWS Secrets Manager when a run first uses the tool, in place of a
+   * pasted one: the secret's name, and a key when the secret holds JSON.
+   */
+  fromAws?: Record<string, AwsSecretRef>;
   /** Which Google product a Google connector serves. The office looks a Google connector up by this, never by its id. */
   google?: GoogleProduct;
   /** The Google account a Google connector is signed in to, once its sign-in landed. */
@@ -518,6 +550,16 @@ export type ConnectorConfig = {
 };
 /** The Google products the office serves itself. One connector is one account of one product. */
 export type GoogleProduct = 'gmail' | 'drive';
+
+/** The role an AWS tool uses, and where. None of it is secret. */
+export type AwsConfig = {
+  accountId: string;
+  role: string;
+  /** The Region the owner's secrets or work are in. */
+  region: string;
+};
+
+export type AwsSecretRef = { secret: string; key?: string };
 
 export const connectors = pgTable('connectors', {
   id: text().primaryKey(),

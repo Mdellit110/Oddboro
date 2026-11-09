@@ -5,6 +5,7 @@ import {
   MAC,
   roomNamesFor,
   roster,
+  serviceNames,
   switchedOffIn,
   unreadPokes,
   welcomed,
@@ -35,6 +36,8 @@ export const load: PageServerLoad = async () => {
     messages: await unreadPokes(),
     // So the first paint already keeps a lead waiting on a colleague at its desk.
     threads: heldThreads(await goalThreads()),
+    /** Each service's name by its id, for the lines saying what an Odd is doing. */
+    services: await serviceNames(),
     zone: zone(),
     /** What the header calls this computer. */
     computer: MAC ? 'Your Mac' : 'Your computer',

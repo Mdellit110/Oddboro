@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
+  AWS_SECRETS_ID,
   connector,
   connectorReady,
   readsOnly,
@@ -17,7 +18,7 @@ import {
   type ConnectorRow,
   type GoogleProduct
 } from '@oddboro/ledger';
-import { getSecret, headerSecret } from './keychain.ts';
+import { secretNamesClient, toolKeys } from './aws.ts';
 import { driveServer } from './google/drive.ts';
 import { gmailServer } from './google/gmail.ts';
 import { bearer, startSignIn } from './oauth.ts';
@@ -30,16 +31,18 @@ export type ToolInfo = { name: string; description: string; readOnly: boolean };
  * office. `open` leaves the sign-in out, to see whether it needs one.
  */
 export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
+  if (c.kind === 'builtin') return builtin(c);
+  // AWS Secrets Manager's names come from the office itself, never a server.
+  if (c.id === AWS_SECRETS_ID) return secretNamesClient();
+  const { env, headers } = await toolKeys(c);
   let transport: StdioClientTransport | StreamableHTTPClientTransport;
   switch (c.kind) {
-    case 'builtin':
-      return builtin(c);
     case 'http':
       // A hosted connector is saved with its address (registry.ts).
       transport = new StreamableHTTPClientTransport(new URL(c.config.url!), {
         requestInit: {
           headers: {
-            ...Object.fromEntries((c.config.headers ?? []).map((n) => [n, headerSecret(c.id, n)])),
+            ...headers,
             ...(c.config.oauth && !open ? { Authorization: `Bearer ${await bearer(c.id)}` } : {})
           }
         }
@@ -49,11 +52,10 @@ export async function upstream(c: ConnectorRow, open = false): Promise<Client> {
       transport = new StdioClientTransport({
         ...toolCommand(c.config.command!, c.config.args ?? []),
         // Only what a run may have of the office's environment, as when the
-        // run's own tool started the server, and the connector's own secrets.
-        env: {
-          ...outsideToolEnv(),
-          ...Object.fromEntries((c.config.secrets ?? []).map((n) => [n, getSecret(c.id, n) ?? '']))
-        },
+        // run's own tool started the server, and the connector's own keys. No
+        // `AWS_` setting of the owner's is listed: a tool server runs outside
+        // the sandbox and could sign in as the owner.
+        env: { ...outsideToolEnv(), ...env },
         stderr: 'ignore'
       });
       break;
@@ -107,7 +109,7 @@ export async function listTools(id: string, open = false): Promise<ToolInfo[]> {
     return tools.map((t) => ({
       name: t.name,
       description: t.description ?? '',
-      readOnly: readsOnly(t)
+      readOnly: !!c.config.readsByRole || readsOnly(t)
     }));
   } finally {
     await client.close();

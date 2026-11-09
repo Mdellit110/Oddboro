@@ -1,6 +1,6 @@
 // A grant's level changes in place, both ways: the tool stays connected and
-// signed in, nothing goes on the desk, and the Ledger says so once. Never
-// above the Odd's own level. Run with `npm test -w @oddboro/ledger`.
+// signed in, nothing goes on the desk, and the Ledger says so once. Write
+// needs the Draft level or higher. Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { and, eq } from 'drizzle-orm';
@@ -11,7 +11,7 @@ import { db } from './pglite.ts';
 process.env.OLLAMA_URL = 'http://127.0.0.1:9';
 const { setGrantLevel } = await import('../src/office.ts');
 
-const odd = (id: string, name: string, permission: 'read' | 'act') => ({
+const odd = (id: string, name: string, permission: 'read' | 'draft' | 'act') => ({
   id,
   name,
   role: 'Tester',
@@ -21,11 +21,14 @@ const odd = (id: string, name: string, permission: 'read' | 'act') => ({
   permission,
   desk: `You are ${name}.`
 });
-await db.insert(staff).values([odd('ada', 'Ada', 'act'), odd('bo', 'Bo', 'read')]);
+await db
+  .insert(staff)
+  .values([odd('ada', 'Ada', 'act'), odd('bo', 'Bo', 'read'), odd('cy', 'Cy', 'draft')]);
 await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
 await db.insert(grants).values([
   { staffId: 'ada', connectorId: 'gmail', level: 'read' },
-  { staffId: 'bo', connectorId: 'gmail', level: 'read' }
+  { staffId: 'bo', connectorId: 'gmail', level: 'read' },
+  { staffId: 'cy', connectorId: 'gmail', level: 'read' }
 ]);
 const levelOf = async (who: string) =>
   (
@@ -53,7 +56,9 @@ test('read to write and back, in place, with one Ledger line each and nothing on
   assert.deepEqual(after.readyAt, connectedAt, 'still connected');
 });
 
-test("never above the Odd's own level", async () => {
+test('write needs the Draft level or higher', async () => {
   await assert.rejects(() => setGrantLevel('bo', 'gmail', 'act'), /holds read/);
   assert.equal(await levelOf('bo'), 'read');
+  await setGrantLevel('cy', 'gmail', 'act');
+  assert.equal(await levelOf('cy'), 'act', 'at Draft, each change then waits for the yes');
 });

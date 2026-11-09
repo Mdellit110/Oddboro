@@ -43,6 +43,21 @@ const briefOf = (
   rows: { t?: typeof task; g?: GoalRow } = { t: task, g: goal }
 ) => followUpBrief(followUp(kind), ask, report, rows.t, rows.g);
 
+test('a call the office made tells the Odd not to make it again, with what came back', () => {
+  const lines = followUpBrief(followUp('carry_out'), {
+    ...ask,
+    kind: 'call',
+    call: {
+      connector: 'notes',
+      tool: 'capture',
+      arguments: { text: 'a thought' },
+      result: { ok: true, text: 'captured', at: '2026-11-09T00:00:00.000Z' }
+    }
+  });
+  assert.match(lines[0], /the office made it for you\. Do not make it again\./);
+  assert.ok(lines.includes('- What it returned: captured'));
+});
+
 test('every follow-up kind gets its own brief, and feedback gets the feedback brief, as do a hand-off with no hand-off row, a goal with no goal and a task_done with no task', () => {
   // A hand-off, a hand-back and an edit are briefed before this when their row is there.
   const feedbackKinds: FollowUpKind[] = ['feedback', 'hand_off', 'handed_back', 'edited'];

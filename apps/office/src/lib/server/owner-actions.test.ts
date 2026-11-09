@@ -169,6 +169,13 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
       })
     );
   },
+  'POST /api/asks/[id]/call': async (send) => {
+    const id = await asked({
+      kind: 'call',
+      call: { connector: 'gmail', tool: 'get_thread', arguments: { thread_id: 't-1' } }
+    });
+    await withGmail(() => send({ params: { id: String(id) } }));
+  },
   'POST /api/asks/[id]/filter': async (send) => {
     const criteria = { from: 'news@shop.example.com' };
     const action = { skipInbox: true };
@@ -294,6 +301,13 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
   'PUT /api/staff/[id]/look': (send) => {
     const l = look();
     return send({ params: { id: 'sam' }, body: { look: l.look, portraitPx: l.portraitPx } });
+  },
+  'PATCH /api/services/[id]': async (send) => {
+    await grant('paige', 'https://renamed.example.org/mcp');
+    const [c] = await L.pg<
+      { id: string }[]
+    >`select id from connectors where id like 'renamed-example-org%'`;
+    await send({ params: { id: c.id }, body: { name: 'Open Brain' } });
   },
   'POST /api/tasks/[id]': async (send) => {
     const t = await L.giveTask('lead', { title: 'Sign the form', why: 'w', steps: ['Sign it'] });

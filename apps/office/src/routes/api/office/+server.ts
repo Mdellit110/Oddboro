@@ -1,7 +1,8 @@
 // Everything the page shows that can change: the staff with the guesses each
 // has waiting, the owner's desk, who is
 // working and on what, the names the owner gave the rooms, what the owner switched off,
-// the pokes that landed and wait unread, and the threads a colleague holds for its lead.
+// the pokes that landed and wait unread, the threads a colleague holds for its lead,
+// and each service's name.
 // The page fetches it once, then
 // again on each change event.
 import { json } from '@sveltejs/kit';
@@ -11,6 +12,7 @@ import {
   guessesWaiting,
   roomNamesFor,
   roster,
+  serviceNames,
   switchedOffIn,
   unreadPokes
 } from '@oddboro/ledger';
@@ -32,6 +34,7 @@ export const GET: RequestHandler = async () => {
     roomNames: await roomNamesFor(office),
     switchedOff: await switchedOffIn(office),
     messages: await unreadPokes(),
-    threads: heldThreads(await goalThreads())
+    threads: heldThreads(await goalThreads()),
+    services: await serviceNames()
   });
 };
