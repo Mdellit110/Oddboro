@@ -112,6 +112,12 @@ test("each tool's launch gives a shell exactly when commandsHow says and the off
   /** A Codex run's `-c` value for `key`. */
   const codexSet = (args: string[], key: string) =>
     args.find((a, i) => args[i - 1] === '-c' && a.startsWith(`${key}=`))?.slice(key.length + 1);
+  // A Mac's row gives Claude Code a shell, so the run makes its temp folder
+  // under /private/tmp (`sandboxPaths`), and only a real Mac can make that.
+  // That row runs on a Mac alone, which CI's Mac leg covers.
+  const systems = (['darwin', 'linux', 'win32'] as const).filter(
+    (p) => p !== 'darwin' || process.platform === 'darwin'
+  );
   // Every Odd here has Run commands stored on, so only its tool decides.
   for (const [id, agent] of [
     ['bo', 'claude'],
@@ -119,7 +125,7 @@ test("each tool's launch gives a shell exactly when commandsHow says and the off
     ['cole', 'codex']
   ] as const) {
     await setOwn(id, { commands: true });
-    for (const platform of ['darwin', 'linux', 'win32'] as const) {
+    for (const platform of systems) {
       const on = `${agent} on ${platform}`;
       assert.ok(L.AGENT_PLATFORMS[agent].runs.includes(platform), on);
       const chat = () => chatOf(id);

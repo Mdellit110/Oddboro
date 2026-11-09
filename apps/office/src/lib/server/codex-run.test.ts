@@ -35,6 +35,7 @@ import {
   gave,
   goal,
   odd,
+  onPlatform,
   ownerData,
   ownerHome,
   plain,
@@ -171,26 +172,33 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
   assert.equal(run.servers?.files.enabled_tools, undefined);
 });
 
-test("a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network", () =>
-  // An empty home, so this Mac's own developer tool folders are not read.
-  ownerHome(async () => {
-    const run = await chatOf('cody');
-    assert.ok(run.system.includes(`data folder: ${ownerData}`), run.system);
-    assert.deepEqual(run.permissions?.network, { enabled: false });
-    assert.deepEqual(plainPaths(run.permissions?.filesystem ?? {}), {
-      ':root': 'deny',
-      ':minimal': 'read',
-      ':slash_tmp': 'deny',
-      '/Library/Developer/CommandLineTools': 'read',
-      '/private/var/db/xcode_select_link': 'read',
-      '<home>/Applications/Xcode.app/Contents/Developer': 'read',
-      '/System/Library/OpenSSL/openssl.cnf': 'read',
-      '<home>/data': 'read',
-      '<home>/staff/cody': 'write',
-      '<home>/codex-tmp/<id>': 'write',
-      ...shut('<home>/staff/cody')
-    });
-  }));
+// One test per system, faked, so a Mac proves both: only Linux reads Codex's
+// own install (`codexInstall`), the folder of the codex first on PATH, which
+// here is the stand-in's bin folder.
+for (const platform of ['darwin', 'linux'] as const)
+  test(`on ${platform}, a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network`, () =>
+    // An empty home, so this Mac's own developer tool folders are not read.
+    ownerHome(() =>
+      onPlatform(platform, async () => {
+        const run = await chatOf('cody');
+        assert.ok(run.system.includes(`data folder: ${ownerData}`), run.system);
+        assert.deepEqual(run.permissions?.network, { enabled: false });
+        assert.deepEqual(plainPaths(run.permissions?.filesystem ?? {}), {
+          ':root': 'deny',
+          ':minimal': 'read',
+          ':slash_tmp': 'deny',
+          '/Library/Developer/CommandLineTools': 'read',
+          '/private/var/db/xcode_select_link': 'read',
+          '<home>/Applications/Xcode.app/Contents/Developer': 'read',
+          '/System/Library/OpenSSL/openssl.cnf': 'read',
+          ...(platform === 'linux' ? { '<home>/bin': 'read' } : {}),
+          '<home>/data': 'read',
+          '<home>/staff/cody': 'write',
+          '<home>/codex-tmp/<id>': 'write',
+          ...shut('<home>/staff/cody')
+        });
+      })
+    ));
 
 test("with Run commands on, Codex's commands stay off the internet, Browse the web or not", async () => {
   const owner = await L.ownerName();

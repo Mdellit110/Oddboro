@@ -14,6 +14,7 @@ import {
   L,
   currentOffice,
   goal,
+  onPlatform,
   ownerHome,
   request,
   secrets,
@@ -264,8 +265,10 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
     const on = !(await L.staffer('sam'))!.tools.includes(tool);
     await send({ params: { id: 'sam' }, body: { tool, on } });
   },
+  // Claude Code follows Run commands on a Mac only (`commandsHow`), so this
+  // row fakes one to reach the switch on any computer.
   'PATCH /api/staff/[id]#commands': (send) =>
-    send({ params: { id: 'paige' }, body: { commands: true } }),
+    onPlatform('darwin', () => send({ params: { id: 'paige' }, body: { commands: true } })),
   'PATCH /api/staff/[id]#web': (send) => send({ params: { id: 'sam' }, body: { web: true } }),
   'PATCH /api/staff/[id]#folder': (send) =>
     ownerHome(async (home) => {
