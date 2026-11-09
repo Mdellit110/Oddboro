@@ -322,7 +322,7 @@ type StoredState = {
   /** The owner clicked Remove on `has` first. */
   removed?: true;
   asked: string;
-  ask?: 'secrets' | 'covered';
+  ask?: 'secrets' | 'covered' | 'nested';
   give?: 'secrets' | 'nested';
 };
 const STORED_STATES: StoredState[] = [
@@ -348,9 +348,25 @@ const STORED_STATES: StoredState[] = [
     give: 'nested'
   },
   {
-    state: 'a folder holding a dropped child can be had',
+    state: 'a folder holding an ordinary stored folder is still refused nested',
+    has: 'proj/pkg',
+    asked: 'proj',
+    ask: 'nested',
+    give: 'nested'
+  },
+  {
+    state: 'a folder holding a dropped child is refused nested',
     has: 'proj/pkg',
     store: 'proj/pkg/.kube',
+    asked: 'proj',
+    ask: 'nested',
+    give: 'nested'
+  },
+  {
+    state: 'a folder that held a dropped child can be had after Remove',
+    has: 'proj/pkg',
+    store: 'proj/pkg/.kube',
+    removed: true,
     asked: 'proj'
   },
   {
@@ -363,7 +379,7 @@ const STORED_STATES: StoredState[] = [
 ];
 
 test(
-  "a stored folder no run gets is no folder the Odd has, for its asks and the owner's gives",
+  "a stored folder no run gets counts only against a folder that would hold it, for an Odd's asks and the owner's gives",
   { skip: TEMP_IN_APPDATA },
   async (t) => {
     const c = await theo('k-stored');
