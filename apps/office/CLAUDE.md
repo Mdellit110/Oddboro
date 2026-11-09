@@ -74,9 +74,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
 6. Two full-height panels flank the floor (`src/lib/ui/SidePanel.svelte`).
    Each resizes by dragging its inner edge (or the arrow keys on it), and
    remembers its width per viewer. Where the two overlap, the end one paints
-   over the start one, except while the start one's front window is a file
-   or a report the owner opened after they last picked an Odd (`onTop`,
-   `raised` in `windows.svelte.ts`). The start side is the office plate (name,
+   over the start one, but a file or a report in the start one's front window
+   can sit on top: the one the owner opened last sits on top, picking an Odd
+   puts that Odd on top, and closing the Odd or clicking the window's tab
+   brings the window back on top (`onTop`, `raised` in `windows.svelte.ts`).
+   The start side is the office plate (name,
    the clock, Setup, and the Desk, Goals, Lessons, Ledger, Services, Hire and Office
    buttons), which opens into a bar of windows
    (`src/lib/ui/windows.svelte.ts`): the Desk, the Goals, the Lessons, the
