@@ -513,19 +513,30 @@ const turnedOn = (name: string, on: readonly OwnSwitch[]) =>
   `Let ${name} ${switchesSaid(on).toLowerCase()}`;
 
 /**
- * Secret stores, by name, each with how it is found outside the home, where
- * none sits at a known place (`holdsStoreOutside`). In the home a name is
- * enough. Outside it an empty list means the name alone. A list names what
- * only the store holds, for a name a project may use for its own files
- * (`.claude`, `.codex`, `.docker`, `.kube`, `.config`) or an ordinary word
- * (`Library`, `AppData`): a sign-in, a tool's history or a cluster's keys, or
- * a Mac user's keychain and cookies, which `/Library` has none of, so that
- * system folder stays a warning.
+ * Secret stores, by name, each with how it is found anywhere but the top of
+ * the home, where the name alone is enough (`inOrHoldsStore`). An empty list
+ * means the name alone everywhere. A list names what only the store holds, for
+ * a name a project may use for its own files (`.ssh`, `.aws`, `.gnupg`,
+ * `.claude`, `.codex`, `.docker`, `.kube`, `.config`) or an ordinary word
+ * (`Library`, `AppData`): a key, a sign-in, a tool's history or a cluster's
+ * keys, or a Mac user's keychain and cookies, which `/Library` has none of, so
+ * that system folder stays a warning. `.ssh` and `.aws` leave out `config`
+ * on purpose, since a project may well hold one. So a `.ssh` with only
+ * custom-named keys and no `known_hosts` is given, unless it is the home's own.
  */
 export const STORE_MARKS: Record<string, string[]> = {
-  '.ssh': [],
-  '.aws': [],
-  '.gnupg': [],
+  '.ssh': [
+    'id_rsa',
+    'id_ecdsa',
+    'id_ecdsa_sk',
+    'id_ed25519',
+    'id_ed25519_sk',
+    'id_dsa',
+    'authorized_keys',
+    'known_hosts'
+  ],
+  '.aws': ['credentials', 'sso', 'cli/cache'],
+  '.gnupg': ['private-keys-v1.d', 'secring.gpg', 'pubring.kbx'],
   '.config': ['gcloud', 'gh/hosts.yml'],
   Library: ['Keychains/login.keychain-db', 'Cookies'],
   AppData: ['Roaming', 'Local'],
@@ -576,11 +587,12 @@ function marksStore(p: string): boolean {
 }
 
 /**
- * Whether `p`, outside the home, is in a secret store or holds one at its
- * top (`STORE_MARKS`). Deeper folders are not looked at, so giving one is
- * never a walk of a whole drive.
+ * Whether `p` is in a secret store or holds one directly (`STORE_MARKS`).
+ * Folders deeper than one level down are not looked at, so giving one is
+ * never a walk of a whole drive, and a store renamed to another folder name
+ * cannot be found at all.
  */
-function holdsStoreOutside(p: string): boolean {
+function inOrHoldsStore(p: string): boolean {
   for (let at = p; dirname(at) !== at; at = dirname(at)) if (marksStore(at)) return true;
   return Object.keys(STORE_MARKS).some((name) => marksStore(join(p, name)));
 }
@@ -653,13 +665,14 @@ export function shownFolder(path: string): string {
 }
 
 /**
- * Whether the folder at `path`, by its real path, is a secret store
- * (`SECRET_STORES`) or the office's own accounts folder, where each tool's
- * sign-ins live (`accountsHome`), sits in one or holds one, and outside the
- * home the same by what it holds (`holdsStoreOutside`). `checkFolder` refuses
- * such a folder as it is given, and `ownTools` leaves out one stored before
- * its store was listed, or written past `setFolder`, so no run is given it.
- * By real path, so on a disk that ignores case `~/.SSH` is `~/.ssh`.
+ * Whether the folder at `path`, by its real path, is a secret store at the
+ * top of the home (`SECRET_STORES`, by name) or the office's own accounts
+ * folder, where each tool's sign-ins live (`accountsHome`), sits in one or
+ * holds one, or anywhere else is, sits in or directly holds a store found by
+ * what it holds (`inOrHoldsStore`). `checkFolder` refuses such a folder as it
+ * is given, and `ownTools` leaves out one stored before its store was listed,
+ * or written past `setFolder`, so no run is given it. By real path, so on a
+ * disk that ignores case `~/.SSH` is `~/.ssh`.
  */
 export function touchesSecretStore(path: string): boolean {
   const p = real(path);
@@ -668,7 +681,7 @@ export function touchesSecretStore(path: string): boolean {
     const store = real(s);
     return within(p, store) || within(store, p);
   });
-  return known || (!within(p, h) && holdsStoreOutside(p));
+  return known || inOrHoldsStore(p);
 }
 
 /**

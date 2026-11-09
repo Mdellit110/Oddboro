@@ -566,6 +566,7 @@ test(
     const R = O.FOLDER_REFUSED;
     const keys = outside('keys');
     mkdirSync(join(keys, '.ssh'));
+    writeFileSync(join(keys, '.ssh', 'id_ed25519'), '');
     assert.deepEqual(O.checkFolder(keys, true), { refused: R.secrets });
     assert.deepEqual(O.checkFolder(join(keys, '.ssh'), true), { refused: R.secrets });
 
@@ -593,6 +594,7 @@ test(
     // Deeper than one level is not looked at: the site's page says so.
     const deep = outside('deep');
     mkdirSync(join(deep, 'backup', '.ssh'), { recursive: true });
+    writeFileSync(join(deep, 'backup', '.ssh', 'id_ed25519'), '');
     assert.deepEqual(O.checkFolder(deep, true), { real: deep });
   }
 );
