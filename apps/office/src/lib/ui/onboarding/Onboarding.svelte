@@ -33,40 +33,24 @@
   import { AgentTools } from '../agent-tools.svelte.ts';
   import { call, follow } from '../api.ts';
   import AiCard from './AiCard.svelte';
-  import { diagnostics } from '../diagnostics.svelte.ts';
   import AccountCard from './AccountCard.svelte';
-  import DiagnosticsCard from './DiagnosticsCard.svelte';
   import MacCard, { type Setup } from './MacCard.svelte';
   import ManagerCard, { type Custom, type Preset } from './ManagerCard.svelte';
   import type { Built } from '../OddParts.svelte';
   import SpaceCard from './SpaceCard.svelte';
+  import { STEPS, TITLE, type Step } from './steps.ts';
   import { selectOnFocus } from '../select-on-focus.ts';
 
-  // A new owner's first visit, over the live floor: eight cards (seven when
-  // the office has nowhere to send reports), one of them an optional sign-in
-  // to New Altitude, the same on a Mac, Linux and Windows (hard rule 14), then
-  // the office going up on their lot and their manager arriving by bus. The slow parts
+  // A new owner's first visit, over the live floor: seven cards, one of them
+  // an optional sign-in to New Altitude, the same on a Mac, Linux and Windows
+  // (hard rule 14), then the office going up on their lot and their manager
+  // arriving by bus. The slow parts
   // start the moment their inputs exist: the office draws from when the owner
   // leaves "Your space", and a described manager from when they leave theirs.
   // So Open the office starts the show at once instead of a wait.
   type Props = { stage: Stage; sample?: World };
   let { stage, sample }: Props = $props();
 
-  const STEPS = ['mac', 'you', 'ai', 'manager', 'space', 'account', 'diagnostics', 'go'] as const;
-  type Step = (typeof STEPS)[number];
-  const TITLE: Record<Step, string> = {
-    mac: 'Your computer',
-    you: 'You',
-    ai: 'Your AI',
-    manager: 'Your office manager',
-    space: 'Your space',
-    account: 'New Altitude',
-    diagnostics: 'Help improve Oddboro',
-    go: 'Open the office'
-  };
-  const steps = $derived<readonly Step[]>(
-    diagnostics.possible ? STEPS : STEPS.filter((s) => s !== 'diagnostics')
-  );
   let step = $state<Step>('mac');
   let backward = $state(false);
 
@@ -74,11 +58,11 @@
   const agentTools = new AgentTools();
 
   function go(to: Step) {
-    backward = steps.indexOf(to) < steps.indexOf(step);
+    backward = STEPS.indexOf(to) < STEPS.indexOf(step);
     step = to;
   }
-  const next = () => go(steps[Math.min(steps.length - 1, steps.indexOf(step) + 1)]);
-  const back = () => go(steps[Math.max(0, steps.indexOf(step) - 1)]);
+  const next = () => go(STEPS[Math.min(STEPS.length - 1, STEPS.indexOf(step) + 1)]);
+  const back = () => go(STEPS[Math.max(0, STEPS.indexOf(step) - 1)]);
 
   // You
   // The Mac's name waits in the field as a suggestion. The lot reads "Your Lot"
@@ -495,8 +479,6 @@
             />
           {:else if step === 'account'}
             <AccountCard onnext={next} onback={back} />
-          {:else if step === 'diagnostics'}
-            <DiagnosticsCard onnext={next} onback={back} />
           {:else}
             <dl class="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt class="text-muted">You</dt>
