@@ -203,7 +203,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Folders tab does and gives it in the transaction that approves the ask,
    with one Ledger line in the Settings tab's words, and the `carry_out` run
    that answer starts reaches it. A refusal leaves it open and shows the
-   Folders tab's line. Plain Approve refuses a folder ask. An item a lead raised from a colleague's
+   Folders tab's line. Plain Approve refuses a folder ask. A `switch` ask (an
+   Odd's `ask_for_switch`) takes Turn on, which approves it and turns Run
+   commands, Browse the web or both on for that Odd in one step, as the
+   Settings tab does. An item a lead raised from a colleague's
    handed-back work says so on its sender line ("Marshall, from Paige's
    work", `via` on the ask or task), and the colleague's name opens their
    chat; the item still belongs to the lead.
@@ -471,8 +474,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    access. `setFolder` refuses one inside or holding
    a folder the Odd already has ("That folder is inside one this Odd already
    has, or holds one."); the line shows under the field. An Odd asks for a
-   folder with `ask_for_folder` (item 7), never with steps for this tab: a
-   rule in `house.ts` says so for folders and both switches. The
+   folder with `ask_for_folder` (item 7), and for Run commands or Browse the
+   web with `ask_for_switch`, never with steps for this tab: a rule in
+   `house.ts` says so. The
    list reads the profile's folders, each with the home folder written `~`
    (`shown`), so it loads nothing of its own and the staff route has no GET;
    a level change or Remove sends the path as stored. `run()` takes the
@@ -856,9 +860,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     `src/lib/ui/PixelDrawing.svelte` paints a bust pixel by pixel beside the
     stage and the time. Step three picks the level and the tool its runs go
     through ("Runs on", Claude Code unless the owner picks another, item 9).
-    Hiring grants no tools. The Odd tells the owner,
-    in its reply, to switch on Run commands or Browse the web in its Settings tab,
-    under Office; outside tools come through `ask_for_access`. A first job reports to the owner's desk unless they
+    Hiring grants no tools. The Odd asks for Run commands or Browse the web
+    with `ask_for_switch` when a job needs one, and for outside tools with
+    `ask_for_access`. A first job reports to the owner's desk unless they
     untick it; a proposal can say either way. "Draft it" drafts the job
     description. Both run as the office (`src/lib/server/office-run.ts`),
     never as an Odd, so a new office can hire its first. An office run goes
