@@ -1528,16 +1528,16 @@ async function decide(
       throw new Error('Say yes or no: the office raised this, so nobody reworks it');
     // Only the office's send or save approves a reply, once Gmail took it.
     if (decision === 'approve' && raised?.kind === 'reply' && !o.reply)
-      throw new Error('Send the reply, or save it to Gmail drafts');
+      throw new Error(OWNER_ANSWERS.ask.reply.approve.by);
     // Only the office's Create filter approves a filter, once Gmail made it.
     if (decision === 'approve' && raised?.kind === 'filter' && !o.filter)
-      throw new Error('Create the filter from its card on the desk');
+      throw new Error(OWNER_ANSWERS.ask.filter.approve.by);
     // Only the office's own call approves a held call, once it made it.
     if (decision === 'approve' && raised?.kind === 'call' && !o.call)
-      throw new Error('Approve the call from its card on the desk');
+      throw new Error(OWNER_ANSWERS.ask.call.approve.by);
     // Only the office's Give access approves a folder ask, giving the folder with it.
     if (decision === 'approve' && raised?.kind === 'folder' && !o.folder?.given)
-      throw new Error('Give the folder from its card on the desk');
+      throw new Error(OWNER_ANSWERS.ask.folder.approve.by);
   }
   const status = decision === 'approve' ? 'approved' : decision === 'deny' ? 'denied' : 'revise';
   const at = new Date();
