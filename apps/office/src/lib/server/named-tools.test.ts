@@ -53,13 +53,26 @@ const NAMES_UNHELD: Record<string, readonly string[]> = {
 
 // Only the fields a brief reads are filled in; the rest of each row stays out.
 const asked = { id: 7, title: 'Send it', why: 'Because', ifApproved: 'It goes' };
-/** Every ask a brief words apart: by its kind, its answer, and whether it got access or plans a hire. */
+/** Every ask a brief words apart: by its kind, its answer, whether it got access or plans a hire, and what the owner gave or the office called. */
 const ASKS = [
   { ...asked, kind: 'approval', status: 'approved' },
   { ...asked, kind: 'access', status: 'approved', access: {} },
   { ...asked, kind: 'hire', status: 'approved' },
   { ...asked, kind: 'plan', status: 'approved', plan: { items: [{ kind: 'hire' }] } },
-  { ...asked, kind: 'plan', status: 'denied', plan: { items: [] } }
+  { ...asked, kind: 'plan', status: 'denied', plan: { items: [] } },
+  {
+    ...asked,
+    kind: 'folder',
+    status: 'approved',
+    folder: { path: '/work/taxes', level: 'write', given: { path: '/work/taxes', level: 'read' } }
+  },
+  { ...asked, kind: 'switch', status: 'approved', switches: ['commands', 'web'] },
+  {
+    ...asked,
+    kind: 'call',
+    status: 'approved',
+    call: { connector: 'mail', tool: 'send_message', arguments: { to: 'a' } }
+  }
 ] as unknown as AskRow[];
 const report = { id: 3, title: 'Weekly', body: 'All well' } as ReportRow;
 const task = {
