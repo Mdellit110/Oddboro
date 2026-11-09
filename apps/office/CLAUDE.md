@@ -1113,7 +1113,7 @@ or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
 every run. Next waits until the picked tool is signed in), the Office Manager (`ManagerCard`: four ready-made ones from
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
 owner carries on), the space (`SpaceCard`: Quick is Main Street, the default; Custom (1-2 minutes) is
-a description or a chip, and starts the design job), Help fix Oddboro
+a description or a chip, and starts the design job), Help improve Oddboro
 (`DiagnosticsCard`, only when the office has somewhere to send reports: Send
 reports or Don't send, each kept at once; Next works without an answer, and the
 Desk asks once the office is open), and Open the office. `POST /api/onboarding` keeps the time zone, finishes the

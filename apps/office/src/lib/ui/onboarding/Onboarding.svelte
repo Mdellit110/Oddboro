@@ -59,7 +59,7 @@
     ai: 'Your AI',
     manager: 'Your office manager',
     space: 'Your space',
-    diagnostics: 'Help fix Oddboro',
+    diagnostics: 'Help improve Oddboro',
     go: 'Open the office'
   };
   const steps = $derived<readonly Step[]>(

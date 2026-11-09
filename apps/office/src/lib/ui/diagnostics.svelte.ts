@@ -14,7 +14,7 @@ export const diagnostics = $state<{ possible: boolean; answer: Answer }>({
  * the Setup switch both say it, so the two cannot drift apart.
  */
 export const NEVER_CARRIED =
-  "Reports never carry your chats, your Odds' work, your files, your family's details or your name. An error's message is included only when it comes from Oddboro's code.";
+  "Never your chats, files, Odds' work, family details or name. Error text only in fixed forms, never your words.";
 
 /** Keep the owner's answer in the office, then show it here. Throws with the server's message. */
 export async function answerDiagnostics(answer: 'yes' | 'no'): Promise<void> {
