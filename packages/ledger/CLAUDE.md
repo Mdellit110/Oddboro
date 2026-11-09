@@ -75,9 +75,8 @@ the server never depends on reading it.
 test that runs past 15 seconds (`--test-timeout=15000`), or 45 seconds for the
 one test that sets its own limit (the three-server `propose_filter` test in
 `test/filters.test.ts`, 15 seconds per server), so a hang fails the suite
-instead of stalling it. Of the others, the slowest takes under a second alone and
-about 5 seconds with three suites running at once, so the cap leaves a busy Mac
-three times that. A hang holds the database, so every later test in its file
+instead of stalling it. Of the others, the slowest stays under the cap with every
+suite running at once, so a busy Mac has room. A hang holds the database, so every later test in its file
 waits out the cap too: keep it no higher than it needs to be. It covers the update
 window, the hold, the install decision, a poke's grace, whether a
 lesson's quote is the owner's own words, who a lesson is for, which follow-up
@@ -272,8 +271,8 @@ hand-off or number, which ledger tests and the office's format test share.
   and one that holds or sits in a secret store (`SECRET_STORES`, which the
   office's `unreadable` also reads; at the home's top by name, and anywhere
   else, in the home or outside it, the same list (`STORE_MARKS`), by name, or
-  for a name a project or an ordinary folder may share by what only the store
-  holds, in the folder, the folders above it and one level down, and no
+  for a name a project or an ordinary folder may share by what marks the real
+  store, in the folder, the folders above it and one level down, and no
   deeper; a store under another name is not found, and a `.ssh` with only
   custom-named keys and no `known_hosts` is given below the home's top), the
   office's home or its code, and one
