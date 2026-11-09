@@ -129,6 +129,10 @@ for (const [row, text, html] of [
     'a thread number past what a thread can have stays text',
     '/Users/x/.oddboro/threads/99999999999/vera/a.md'
   ],
+  [
+    'a thread number with leading zeros stays text, so it never reads another thread',
+    '/Users/x/.oddboro/threads/007/vera/a.md'
+  ],
   ['a full path that is only a thread folder stays text', '/Users/x/.oddboro/threads/1/a.md'],
   ['a path without a home stays as it is', '.oddboro/staff/vera/sims/a/index.html']
 ] as readonly (readonly [string, string, string?])[])

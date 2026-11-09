@@ -1,7 +1,7 @@
 // The Storage tab's list of an Odd's folder (`listStorage` and its route).
 // Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, test } from 'node:test';
@@ -197,6 +197,22 @@ test('a thread folder or a part that is a link is neither listed nor followed, a
   assert.equal(capped, false);
 });
 
+test('the folder of threads being a link lists no shared work', async () => {
+  const id = await newOdd();
+  const t = await thread('Behind a link', id);
+  put(join(L.threadPart(t, id), 'kept.md'));
+  const threads = L.home('threads');
+  const aside = join(outside, 'threads-aside');
+  renameSync(threads, aside);
+  symlinkSync(aside, threads);
+  try {
+    assert.deepEqual((await oddStorage(id)).work, []);
+  } finally {
+    rmSync(threads);
+    renameSync(aside, threads);
+  }
+});
+
 test('hidden and instruction files in a part are not listed, and a part with nothing shown is left out', async () => {
   const id = await newOdd();
   const shown = await thread('Has a file', id);
@@ -232,7 +248,7 @@ test('a folder with no thread, a part of a thread the Odd is off and an odd fold
   const left = await thread('Left it', colleague);
   for (const n of [1, 2, 3]) put(join(L.threadPart(left, id), `left-${n}.md`));
   // Names a thread's folder never has.
-  put(join(L.home('threads', '007', id), 'zeros.md'));
+  put(join(L.home('threads', `00${on}`, id), 'zeros.md'));
   put(join(L.home('threads', 'notes', id), 'words.md'));
   put(join(L.home('threads', '99999999999', id), 'big.md'));
 
@@ -263,6 +279,21 @@ test("the cap covers an Odd's own entries and its shared work together, and says
   const full = await oddStorage(id, 2);
   assert.equal(full.capped, true);
   assert.deepEqual(full.work, []);
+});
+
+test('the cap counts down across parts, so a later part gets only what is left', async () => {
+  const id = await newOdd();
+  const older = await thread('Older', id);
+  const newer = await thread('Newer', id);
+  for (const t of [older, newer])
+    for (const name of ['one.md', 'two.md']) put(join(L.threadPart(t, id), name));
+
+  const { work, capped } = await oddStorage(id, 3);
+  assert.equal(capped, true);
+  assert.deepEqual(work.map(files), [
+    [`threads/${newer}/${id}/one.md`, `threads/${newer}/${id}/two.md`],
+    [`threads/${older}/${id}/one.md`]
+  ]);
 });
 
 test('an Odd with an empty own folder and one thread gets its shared work', async () => {

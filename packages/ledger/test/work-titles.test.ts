@@ -78,6 +78,8 @@ test('an Odd taken off a goal with no hand-off loses the title, as workFile lose
   assert.equal(await isOnThread('rex', id), false);
 });
 
-test('no ids asks nothing and finds nothing', async () => {
+test('no ids asks nothing and finds nothing', async (t) => {
+  const select = t.mock.method(db, 'select');
   assert.deepEqual([...(await workTitles('vera', []))], []);
+  assert.equal(select.mock.callCount(), 0);
 });
