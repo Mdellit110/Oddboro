@@ -50,6 +50,10 @@ test('the Sentry build plugin never reports the build and uploads only with a to
   for (const options of [without, withToken]) {
     assert.equal(options.telemetry, false);
     assert.equal(options.release.inject, false);
+    // No release is made, so nothing touches one.
+    assert.equal(options.release.create, false);
+    assert.equal(options.release.finalize, false);
+    assert.equal(options.release.setCommits, false);
   }
   assert.equal(without.autoUploadSourceMaps, false);
   assert.equal(withToken.autoUploadSourceMaps, true);

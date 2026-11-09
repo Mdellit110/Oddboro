@@ -37,8 +37,10 @@ export function buildOptions(env: NodeJS.ProcessEnv) {
     telemetry: false,
     autoUploadSourceMaps: !!env.SENTRY_AUTH_TOKEN,
     // Maps match by debug id. Injecting a release would stamp the page with
-    // the git hash, which matches no server release (oddboro@<version>).
-    release: { create: false, inject: false },
+    // the git hash, which matches no server release (oddboro@<version>). With
+    // no release made, nothing may finalize it or set its commits either:
+    // each would ask Sentry for a release that is not there (404).
+    release: { create: false, finalize: false, setCommits: false as const, inject: false },
     sourcemaps: {
       rewriteSources: (source: string, _map: unknown, context?: { mapDir: string }) =>
         context ? mapSource(source, context.mapDir) : source
