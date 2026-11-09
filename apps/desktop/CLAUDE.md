@@ -252,7 +252,13 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   `node_modules/@oddboro/`, with their files beside them. Packages' test
   folders (`__screenshots__`, `__tests__`) and every source map stay out, and a staged path
   longer than 180 characters fails the stage: the Windows installer's
-  builder stops at 260, and GitHub's runner puts the stage 60 deep. It fetches the Node
+  builder stops at 260, and GitHub's runner puts the stage 60 deep. Sentry's
+  build tools stay out too: peer packages (Vite and SvelteKit, with Rolldown
+  and Lightning CSS), and `BUILD_ONLY` (Sentry's bundler plugins, the oxc
+  parser and the `sentry` CLI). Native code fails the stage unless `NATIVE`
+  names it (the keyring), and on a Mac unless it carries a Developer ID
+  signature with a secure timestamp, since the release signs only the shell
+  and Node and Apple's notary refuses anything else unsigned. It fetches the Node
   binary for this machine's Node version, system and chip, and checks it
   against nodejs.org's sums (Windows's comes as a zip, unpacked with
   Windows's own `tar`). `--smoke` starts the stage on port 4590 with a
