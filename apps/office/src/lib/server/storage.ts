@@ -14,7 +14,7 @@ import { INSTRUCTIONS, threadsWithPart } from './files.ts';
 
 /** The most entries the tab lists. */
 export const STORAGE_CAP = 5000;
-/** The office's own files at the top of an Odd's folder: its chat log and its run session. */
+/** The office's own files, hidden at the top of an Odd's folder and at the top of a thread part: its chat log and its run session. */
 const OFFICE_FILES = ['chat.jsonl', 'session.json'];
 
 export type StoredEntry = {

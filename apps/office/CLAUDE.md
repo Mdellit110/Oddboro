@@ -77,7 +77,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    over the start one, but a file or a report in the start one's front window
    can sit on top: the one the owner opened last sits on top, picking an Odd
    puts that Odd on top, and closing the Odd or clicking the window's tab
-   brings the window back on top (`onTop`, `raised` in `windows.svelte.ts`).
+   brings the window back on top (`raised` in `windows.svelte.ts`, passed to
+   `SidePanel.svelte` as `onTop` in `+page.svelte`).
    The start side is the office plate (name,
    the clock, Setup, and the Desk, Goals, Lessons, Ledger, Services, Hire and Office
    buttons), which opens into a bar of windows

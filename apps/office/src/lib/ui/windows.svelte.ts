@@ -29,7 +29,10 @@ export const wins = $state<{
   active?: string;
   /** False when the owner folded the panel away: the windows stay open behind it. */
   shown: boolean;
-  /** True when the owner last opened a window, false when they last picked an Odd. */
+  /**
+   * True when an open file or report should sit above the Odd's panel. Opening a window,
+   * clicking its tab and closing the Odd's panel set it; picking an Odd clears it.
+   */
   raised: boolean;
   /** A window's own words for its tab, e.g. the name of the person being hired. */
   titles: Record<string, string>;
