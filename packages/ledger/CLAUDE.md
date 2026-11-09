@@ -287,7 +287,9 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   takes too), and `ask_for_folder` refuses it (`FOLDER_REFUSED.broad`).
   `setFolder()` finds a folder the Odd has by that real
   path, so a level change replaces it, and refuses a new one inside or
-  holding another the Odd has (`FOLDER_REFUSED.nested`); taking one back is
+  holding another the Odd has (`FOLDER_REFUSED.nested`), not counting a stored
+  folder no run gets (`touchesSecretStore()`), which `folderAskRefused` leaves
+  out too, so the owner can give a clean folder inside one; taking one back is
   never refused. `test/own-tools.test.ts` holds `checkFolder`, and
   `test/store-states.ts` is the table of a secret store's states that
   `test/store-states.test.ts`, `test/folder-asks.test.ts` and the office's

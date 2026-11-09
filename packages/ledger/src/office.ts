@@ -412,6 +412,8 @@ export async function setOwnTool(
  * when its real path is (`real`), so a level change replaces it, even one
  * stored in another case. A new folder inside or holding one the Odd already
  * has is refused (`FOLDER_REFUSED.nested`): one would carry two levels. A
+ * stored folder no run gets (`touchesSecretStore`) carries none, so it is not
+ * one the Odd has here, and the owner can give a clean folder inside it. A
  * whole drive or system files comes back as a `warning` and changes nothing
  * until the owner accepts it (`accept`). Takes effect on the next run.
  */
@@ -450,7 +452,7 @@ async function changeFolder(
   const write = access === 'write';
   if (access === null ? !had : had?.write === write) return;
   const rest = before.folders.filter((f) => !same(f));
-  if (access !== null && rest.some((f) => within(at, real(f.path)) || within(real(f.path), at)))
+  if (access !== null && rest.some((f) => !touchesSecretStore(f.path) && nests(at, f)))
     return { refused: FOLDER_REFUSED.nested };
   const folders = access === null ? rest : [...rest, { path, write }];
   await q.update(staff).set({ folders }).where(eq(staff.id, id));
@@ -466,11 +468,17 @@ async function changeFolder(
 const gaveFolder = (name: string, path: string, access: FolderAccess) =>
   `Let ${name} ${access === 'write' ? 'read and change' : 'read'} ${shownFolder(path)}`;
 
+/** Whether `at` (a real path) sits inside the stored folder `f`, or holds it. */
+const nests = (at: string, f: { path: string }) =>
+  within(at, real(f.path)) || within(real(f.path), at);
+
 /**
  * Why an Odd may not ask for `path` (a real path from `checkFolder`) at
  * `level`, or nothing when it may: it has that folder, or one holding it,
  * at that level or above; or the owner could not give it, since it sits
- * inside or holds another folder the Odd has (`setFolder`).
+ * inside or holds another folder the Odd has (`setFolder`). A stored folder
+ * no run gets (`touchesSecretStore`) is not one it has, so the Odd is never
+ * told it has a folder it does not get.
  */
 export function folderAskRefused(
   who: Pick<StaffRow, 'folders'>,
@@ -478,12 +486,11 @@ export function folderAskRefused(
   level: FolderAccess
 ): string | undefined {
   const at = real(path);
-  const covers = who.folders.find((f) => within(at, real(f.path)) && (f.write || level === 'read'));
+  const held = who.folders.filter((f) => !touchesSecretStore(f.path));
+  const covers = held.find((f) => within(at, real(f.path)) && (f.write || level === 'read'));
   if (covers)
     return `You already have ${shownFolder(covers.path)} (${covers.write ? 'read and change' : 'read only'}), which covers it.`;
-  const other = (f: { path: string }) => real(f.path) !== at;
-  if (who.folders.some((f) => other(f) && (within(at, real(f.path)) || within(real(f.path), at))))
-    return FOLDER_REFUSED.nested;
+  if (held.some((f) => real(f.path) !== at && nests(at, f))) return FOLDER_REFUSED.nested;
 }
 
 /**

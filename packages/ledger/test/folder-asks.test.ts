@@ -5,7 +5,7 @@
 // Settings tab, and only then approves the ask. Two runs asking for one folder
 // are twins, as access asks are. Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, beforeEach, test } from 'node:test';
@@ -309,3 +309,109 @@ for (const where of ['in the home', 'outside the home'] as const)
         });
     }
   );
+
+/**
+ * A stored folder and what is asked for beside it, under the row's own folder.
+ * `store`, when set, is the folder holding keys that keeps a run from `has`.
+ * `ask` and `give` are the refusals, left out when the Odd can have the folder.
+ */
+type StoredState = {
+  state: string;
+  has: string;
+  store?: string;
+  /** The owner clicked Remove on `has` first. */
+  removed?: true;
+  asked: string;
+  ask?: 'secrets' | 'covered';
+  give?: 'secrets' | 'nested';
+};
+const STORED_STATES: StoredState[] = [
+  {
+    state: 'a clean subfolder of a folder dropped for holding a store can be had',
+    has: 'proj',
+    store: 'proj/.kube',
+    asked: 'proj/src'
+  },
+  {
+    state: 'the dropped folder itself is still refused for holding keys',
+    has: 'proj',
+    store: 'proj/.kube',
+    asked: 'proj',
+    ask: 'secrets',
+    give: 'secrets'
+  },
+  {
+    state: 'a subfolder of an ordinary stored folder is still covered, and still refused nested',
+    has: 'proj',
+    asked: 'proj/src',
+    ask: 'covered',
+    give: 'nested'
+  },
+  {
+    state: 'a folder holding a dropped child can be had',
+    has: 'proj/pkg',
+    store: 'proj/pkg/.kube',
+    asked: 'proj'
+  },
+  {
+    state: 'a clean subfolder of a dropped folder can be had after Remove, as before',
+    has: 'proj',
+    store: 'proj/.kube',
+    removed: true,
+    asked: 'proj/src'
+  }
+];
+
+test(
+  "a stored folder no run gets is no folder the Odd has, for its asks and the owner's gives",
+  { skip: TEMP_IN_APPDATA },
+  async (t) => {
+    const c = await theo('k-stored');
+    for (const [i, s] of STORED_STATES.entries()) {
+      const at = (p: string) => folder(`stored-${i}`, p);
+      const asked = at(s.asked);
+      const refusal = {
+        secrets: O.FOLDER_REFUSED.secrets,
+        nested: O.FOLDER_REFUSED.nested,
+        covered: `You already have ${O.shownFolder(at(s.has))}`
+      };
+      const place = async () => {
+        if (s.store) writeFileSync(join(at(s.store), 'config'), '');
+        await sql`delete from asks`;
+        await db
+          .update(staff)
+          .set({ folders: [{ path: at(s.has), write: false }] })
+          .where(eq(staff.id, 'theo'));
+        if (s.removed) {
+          await O.setFolder('theo', at(s.has), null);
+          assert.deepEqual(await folders(), []);
+        }
+      };
+      await t.test(`${s.state}: as an ask`, async () => {
+        await place();
+        const r = await call(c, { path: asked, level: 'read', why: 'w' });
+        if (s.ask) {
+          assert.ok(r.error && r.text.includes(refusal[s.ask]), r.text);
+          assert.deepEqual(await folderAsks(), []);
+        } else {
+          assert.ok(!r.error, r.text);
+          const [a] = await folderAsks();
+          assert.deepEqual(await O.giveFolder(a.id, asked, 'read'), {
+            given: { path: asked, level: 'read' }
+          });
+        }
+      });
+      await t.test(`${s.state}: as the owner's give`, async () => {
+        await place();
+        const done = await O.setFolder('theo', asked, 'read');
+        if (s.give) {
+          assert.deepEqual(done, { refused: refusal[s.give] });
+          assert.deepEqual(await folders(), [{ path: at(s.has), write: false }]);
+        } else {
+          assert.equal(done, undefined);
+          assert.ok((await folders()).some((f) => f.path === asked));
+        }
+      });
+    }
+  }
+);
