@@ -765,3 +765,11 @@ Each line says what to do when its trigger comes.
   reads could make it do, and which wall stops each.
 - When a test fixture is copied a third time: move it into one shared test
   helper that every copy's tests import.
+- When a feature changes `office.ts` or `mcp.ts` substantially (it adds to or
+  rewrites a group of functions, not a line or two): first move the piece it
+  touches into a module of its own, then make the change there. Do not split
+  either file in one go while pull requests are open.
+- When adding an AI tool makes a branch on a tool's name repeat, such as one
+  more `agent === 'grok'`: first fold that branch into a per-tool table, a
+  `Record<Agent, ...>` as `AGENT_FILES` is, so the next tool fails check-types
+  until it has a row.

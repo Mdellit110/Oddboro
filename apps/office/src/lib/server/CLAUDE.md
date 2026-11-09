@@ -68,3 +68,7 @@ Each line says what to do when its trigger comes.
 - Before any change to what Odds are told (`house.ts`, a run's brief, or the
   lines in the ledger's `capabilities.ts`): add snapshot tests of each kind of
   run's prompt, so the change shows as a diff in review.
+- When a feature changes `staff.ts` substantially (it adds to or rewrites a
+  group of functions, not a line or two): first move the piece it touches into
+  a module of its own, then make the change there. Do not split the file in
+  one go while pull requests are open.

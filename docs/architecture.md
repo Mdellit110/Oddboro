@@ -68,11 +68,14 @@ Each entry says where to start, then what fails when a place is missed. Where
 nothing fails, it says so: name that place in the pull request.
 
 Planned work starts where a "Later" line says, not here: the "Later" sections
-of `packages/ledger/CLAUDE.md`, `apps/office/src/lib/server/CLAUDE.md` and
-`apps/desktop/CLAUDE.md` say what comes first for a run timeline (one row per
-run), Stop for a run, Claude Code's launch, a new office tool or AI tool, and
-a release smoke test. The page pass is the last line of "Rules for this app"
-in `apps/office/CLAUDE.md`.
+of `packages/ledger/CLAUDE.md`, `apps/office/src/lib/server/CLAUDE.md`,
+`apps/desktop/CLAUDE.md`, `scripts/CLAUDE.md` and `docs/CLAUDE.md` say what
+comes first for a run timeline (one row per run), Stop for a run, Claude
+Code's launch, a new office tool or AI tool, a release smoke test, splitting a
+big file, the size guard and a long guide file. The page pass is the last line
+of "Rules for this app" in `apps/office/CLAUDE.md`. Whoever does a "Later" item
+deletes its line, and whoever finds this page wrong fixes it in the same
+change.
 
 - **An ask kind.** Start at `ASK_KINDS` in `packages/ledger/src/schema.ts`.
   Check-types fails at `OWNER_ANSWERS.ask` in
