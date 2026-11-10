@@ -715,7 +715,8 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   - To add an office tool, start at its row in `OFFICE_TOOLS` in
     `src/tools.ts`; a tool registered beside it goes in `RIDES_WITH`. When
     it is offered (`withGmail`, `inChat`, `notToManager`) is a field on its
-    row, which `offered()` in `mcp.ts` and the tests read.
+    row, which `isOffered` in `src/tools.ts` reads for the tool server
+    (`offered()` in `mcp.ts`) and the office's `named-tools.test.ts`.
   - To add an owner control on an Odd's card (a key the staff PATCH route
     reads), start at `STAFF_PATCH_KEYS` in `src/grantable.ts`; the type
     check fails until `PATCH_KEY` classes it as a grant's control, a run

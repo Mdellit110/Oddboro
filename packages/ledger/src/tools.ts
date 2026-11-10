@@ -221,6 +221,31 @@ export const isGrantable = (id: string): id is OfficeToolId => GRANTABLE.has(id)
 export const hasTool = (granted: readonly string[], id: string) =>
   OFFICE_TOOLS.some((t) => t.id === id && (t.always || granted.includes(id)));
 
+/** What about a run decides which office tools it is offered, beyond what its Odd holds. */
+export type ToolRun = {
+  /** The Odd holds Gmail, at any level. */
+  gmail: boolean;
+  /** A chat, where the office sets the owner's words (`OWNER_SAID`). */
+  chat: boolean;
+  /** The Odd is the Office Manager. */
+  manager: boolean;
+};
+
+/**
+ * Whether `run` is offered the office tool `id`: its Odd, holding `granted`,
+ * has it (`hasTool`), and each condition the tool's row sets holds
+ * (`withGmail`, `inChat`, `notToManager`). The tool server registers by it.
+ */
+export const isOffered = (granted: readonly string[], id: string, run: ToolRun): boolean => {
+  const row = OFFICE_TOOLS.find((t) => t.id === id);
+  return (
+    hasTool(granted, id) &&
+    (!row?.withGmail || run.gmail) &&
+    (!row?.inChat || run.chat) &&
+    (!row?.notToManager || !run.manager)
+  );
+};
+
 /** A task step the owner ticks by hand: one with no control, or a sign-in. */
 export const tickable = (s: Step) => !s.action || s.action.kind === 'oauth';
 

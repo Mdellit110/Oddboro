@@ -131,9 +131,10 @@ import {
   GRANTABLE_TOOLS,
   hasTool,
   isGrantable,
-  OFFICE_TOOLS,
+  isOffered,
   type OfficeToolId,
-  type RIDES_WITH
+  type RIDES_WITH,
+  type ToolRun
 } from './tools.ts';
 import { home } from './home.ts';
 
@@ -158,20 +159,17 @@ const OWNER_SAID = process.env.OWNER_SAID || undefined;
 const mailboxes = (await grantsFor(ME))
   .filter((g) => g.connector.config.google === 'gmail')
   .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
-/**
- * Whether this run is offered `tool`: the Odd holds it, and each condition its
- * row in OFFICE_TOOLS sets holds (`withGmail`, `inChat`, `notToManager`). A
- * tool with a condition is registered behind this, never behind a rule of its own.
- */
-const offered = (tool: OfficeToolId) => {
-  const row = OFFICE_TOOLS.find((t) => t.id === tool);
-  return (
-    has(tool) &&
-    (!row?.withGmail || mailboxes.length > 0) &&
-    (!row?.inChat || OWNER_SAID !== undefined) &&
-    (!row?.notToManager || me.role !== MANAGER_ROLE)
-  );
+/** This run, as the office tools' row conditions read it. */
+const RUN: ToolRun = {
+  gmail: mailboxes.length > 0,
+  chat: OWNER_SAID !== undefined,
+  manager: me.role === MANAGER_ROLE
 };
+/**
+ * Whether this run is offered `tool` (`isOffered`). A tool with a condition is
+ * registered behind this, never behind a rule of its own.
+ */
+const offered = (tool: OfficeToolId) => isOffered(me.tools, tool, RUN);
 /**
  * The owner's note a follow-up carries out: their reason on an ask, what to
  * change, or their note on a task. Lessons may quote it; it is no go-ahead.
