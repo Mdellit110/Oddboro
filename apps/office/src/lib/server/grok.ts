@@ -6,8 +6,12 @@
 // Grok home (GROK_HOME), never the owner's ~/.grok. The office never edits that
 // home's config.toml, which belongs to the sign-in: it switches Grok's reading
 // of other tools' setups (Claude's, Cursor's) off through the environment,
-// which beats config.toml. Files are held by a sandbox profile the kernel
-// enforces, built on `strict`: it reads the Odd's folder (the run's cwd),
+// which beats config.toml. The office carries a Grok Odd's files on every
+// system (`FILES_VIA_OFFICE`): Grok's own file tools are never given, and the
+// office's file tools (files-server.ts in the ledger) are its only way to
+// files, so a change to Grok's own tools cannot widen what an Odd reads. Under
+// them, on a Mac and on Linux, a sandbox profile the kernel enforces holds the
+// whole run as a second wall, built on `strict`: it reads the Odd's folder (the run's cwd),
 // node and the tool server's code, Grok's home and the system folders Grok
 // needs to start. It writes the Odd's folder, Grok's own temp folder and
 // Grok's sessions folder, which holds every Grok Odd's sessions. It adds the
@@ -20,20 +24,26 @@
 // profile that cannot apply stops Grok from starting, so a run is never left
 // unconfined. The profile holds the whole grok process, its own sign-in
 // renewal included, so the office renews the sign-in before a run that could
-// outlast it (`grokSignedOut`).
+// outlast it (`grokSignedOut`). Where the Mac's Docker socket is a link, the
+// run gets a home of its own so Grok's sandbox can start (`runHome`).
+// Windows has no Grok sandbox, so there the office's tools are the wall.
 import { execFile, spawn } from 'node:child_process';
 import {
   accessSync,
   chmodSync,
   constants,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
-  rmSync
+  renameSync,
+  rmSync,
+  symlinkSync
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
   accountsHome,
   CODE,
@@ -46,7 +56,6 @@ import {
 import { andBelow, denyRules, instructionPaths } from './files.ts';
 import { mcpGrant, NOT_SIGNED_IN, replace, sweep, vendorEnv, type RunImage } from './launch.ts';
 import { onPath } from './on-path.ts';
-import { GROK_FILE_TOOLS } from '../staff/work.ts';
 
 /**
  * One account's Grok home (`toolHome`) and what Grok keeps in it: its
@@ -54,9 +63,10 @@ import { GROK_FILE_TOOLS } from '../staff/work.ts';
  * --mcp-config), its own temp folder (so it needs none of the temp folders
  * every app shares, `SHUT`), the sign-in (per xAI account, its tokens, its
  * `email` and when they run out, `expires_at`; Sign out from the page
- * removes it), and the leader socket every grok outside a run talks to
+ * removes it), the leader socket every grok outside a run talks to
  * (Grok's default is ~/.grok/leader.sock, the owner's own Grok, whatever
- * GROK_HOME says).
+ * GROK_HOME says), and the home folder a run gets when the Mac's Docker
+ * socket is a link (`runHome`).
  */
 export function grokHome(account: string = OFFICE_ACCOUNT) {
   const dir = toolHome('grok', account);
@@ -67,7 +77,8 @@ export function grokHome(account: string = OFFICE_ACCOUNT) {
     runs: join(dir, 'runs'),
     temp: join(dir, 'tmp'),
     auth: join(dir, 'auth.json'),
-    leader: join(dir, 'leader.sock')
+    leader: join(dir, 'leader.sock'),
+    home: join(dir, 'home')
   };
 }
 type GrokHome = ReturnType<typeof grokHome>;
@@ -143,22 +154,11 @@ const STRICT_READS = [
  * Everything the kernel may let a Grok run read besides the Odd's own
  * folders, which the Odd itself may not: Grok's home (the sign-in, every
  * Odd's sessions, each run's agent file), the tool server's code, and what
- * `strict` reads. Grok's read_file, list_dir and grep need no approval under
- * dontAsk, so these deny rules, on each folder and everything in it, keep the
- * Odd's own reads to its folders.
+ * `strict` reads. A run has no file tool of Grok's own, so these deny rules,
+ * on each folder and everything in it, are a further wall should Grok ever
+ * give it one.
  */
 const UNREADABLE = () => [...GROK_HOMES(), ...SERVER_CODE, ...STRICT_READS];
-
-/**
- * The folders ripgrep runs from when it is on PATH: the folder PATH names and,
- * for a link, the folder it points into. Grok's grep runs ripgrep inside the
- * sandbox, so the kernel must read them, and Read deny rules keep the Odd's
- * own tools out of them. With none, grep cannot run, so a run does not get it.
- */
-function ripgrep(): string[] {
-  const rg = onPath('rg');
-  return rg ? [...new Set([dirname(rg), dirname(realpathSync(rg))])] : [];
-}
 
 /**
  * Every compatibility cell Grok has an environment variable for, switched
@@ -319,6 +319,65 @@ function agentFile(h: GrokHome, key: string, servers: Record<string, unknown>): 
   return file;
 }
 
+/** The Docker socket every Grok sandbox denies, which OrbStack, Colima and Rancher Desktop make a link. */
+const DOCKER_SOCKET = '/var/run/docker.sock';
+
+/**
+ * The home folder (HOME) a sandboxed Grok run gets, or none to keep the
+ * owner's. Grok denies a fixed list of container sockets in every sandbox,
+ * and refuses to start when one is a link to a path not on that list: on a
+ * Mac with OrbStack, `/var/run/docker.sock` leads to
+ * `~/.orbstack/run/docker.sock`, so every Grok run failed (issue #52, Grok
+ * 1.0.77). The list's `~/.docker/run/docker.sock` follows HOME (measured). So
+ * when the socket is a link, the run's home is a folder in Grok's home whose
+ * `.docker/run` leads to the folder the link leads to: the link's target is
+ * then on Grok's list, Grok starts, and its sandbox still denies the socket.
+ * The owner's own `~/.docker` is never touched. A target not named
+ * `docker.sock` cannot go on the list this way, so that run keeps the owner's
+ * home and Grok's own refusal.
+ */
+export function runHome(h: GrokHome, socket = DOCKER_SOCKET): string | undefined {
+  let target: string;
+  try {
+    if (!lstatSync(socket).isSymbolicLink()) return undefined;
+    target = resolve(dirname(socket), readlinkSync(socket));
+  } catch {
+    // No socket: nothing for Grok to refuse.
+    return undefined;
+  }
+  if (basename(target) !== 'docker.sock') return undefined;
+  const link = join(h.home, '.docker', 'run');
+  mkdirSync(dirname(link), { recursive: true, mode: 0o700 });
+  let now: string | undefined;
+  try {
+    now = readlinkSync(link);
+  } catch {
+    // No link yet.
+  }
+  if (now !== dirname(target)) {
+    // Made beside it and renamed over it, so a run starting meanwhile never finds it missing.
+    const next = `${link}.${process.pid}`;
+    rmSync(next, { force: true });
+    symlinkSync(dirname(target), next);
+    renameSync(next, link);
+  }
+  return h.home;
+}
+
+/**
+ * The run's servers, each the office starts with the owner's home, since a
+ * tool server finds the office's own folders and the keychain through HOME,
+ * which a Grok run may move (`runHome`).
+ */
+function ownersHome(servers: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(servers).map(([name, s]) => {
+      const server = s as { command?: unknown; env?: Record<string, string> };
+      return [name, server.command ? { ...server, env: { ...server.env, HOME: homedir() } } : s];
+    })
+  );
+}
+
 /**
  * Get a Grok run ready: its home, its sandbox profile and agent file, and the
  * arguments and environment to start `grok` with. `done` removes what only
@@ -328,56 +387,50 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
   const h = grokHome(r.account);
   grokHomeReady(h);
   const sandbox = r.part ? `run-${r.key}` : `odd-${r.staffId}`;
-  const rg = ripgrep();
-  setProfile(h, sandbox, {
-    readOnly: [...SERVER_CODE, ...rg, ...r.reads],
-    // `strict` already writes the cwd, the Odd's own folder.
-    readWrite: [h.temp, ...r.writes.filter((w) => w !== r.dir)],
-    deny: [...instructionPaths(r.writes), ...SHUT].flatMap(andBelow)
-  });
-  const agent = agentFile(h, r.key, r.servers);
+  // Grok has no sandbox on Windows: the office's file tools are the wall there.
+  const kernel = process.platform !== 'win32';
+  if (kernel)
+    setProfile(h, sandbox, {
+      // The office's file server runs inside the sandbox, so the kernel reads and writes what it may.
+      readOnly: [...SERVER_CODE, ...r.reads],
+      // `strict` already writes the cwd, the Odd's own folder.
+      readWrite: [h.temp, ...r.writes.filter((w) => w !== r.dir)],
+      deny: [...instructionPaths(r.writes), ...SHUT].flatMap(andBelow)
+    });
+  const agent = agentFile(h, r.key, ownersHome(r.servers));
   const model = r.model ?? process.env.OFFICE_GROK_MODEL;
   const args = [
     messageArg(r.message, r.images),
     '--output-format',
     'streaming-messages-json',
     '--include-partial-messages',
-    '--sandbox',
-    sandbox,
+    ...(kernel ? ['--sandbox', sandbox] : []),
     '--agent',
     agent,
     '--permission-mode',
     'dontAsk',
     '--no-subagents',
     '--no-auto-update',
-    // The five file tools a Claude Code run gets, grep only where ripgrep is,
-    // and Grok's web tools with Browse the web on. Grok keeps its MCP tools
-    // (search_tool, use_tool) beside them, and no image tool. Never a shell:
-    // its launch refuses a run with commands (`LAUNCHES.grok` in cli.ts), since
-    // Grok's sandbox keeps a command off the network on Linux only.
-    // An office run gets read_file alone, in a folder of its own with nothing
-    // in it. Grok has no "no tools": an empty list gave a 1.0.62 run every
-    // tool, its shell too, which dontAsk refused, and a refused call ended the
-    // turn before the answer (seen 2026-11-05).
+    // No file tool of Grok's own: the office's (its `files` MCP server) are
+    // the way to files. Grok's web tools with Browse the web on, its MCP tools
+    // (search_tool, use_tool), and no image tool. Never a shell: its launch
+    // refuses a run with commands (`LAUNCHES.grok` in cli.ts), since Grok's
+    // sandbox keeps a command off the network on Linux only. Grok has no "no
+    // tools": an empty list gave a 1.0.62 run every tool, its shell too, which
+    // dontAsk refused, and a refused call ended the turn before the answer
+    // (seen 2026-11-05). So every run gets todo_write, which touches no file.
     '--tools',
-    r.bare
-      ? 'read_file'
-      : [
-          ...Object.keys(GROK_FILE_TOOLS).filter((tool) => tool !== 'grep' || rg.length),
-          ...(r.web ? ['web_search', 'web_fetch'] : [])
-        ].join(','),
+    ['todo_write', ...(r.web && !r.bare ? ['web_search', 'web_fetch'] : [])].join(','),
     ...(r.effort ? [`--reasoning-effort=${r.effort}`] : []),
-    ...[...UNREADABLE(), ...rg]
+    ...UNREADABLE()
       .flatMap((p) => denyRules(['Read'], p))
       .flatMap((rule) => ['--deny', rule]),
-    // The kernel lets a run write Grok's sessions folder, every Grok Odd's
-    // sessions, and dontAsk alone would refuse it: these rules hold it too.
+    // Further walls should Grok ever give a run a file tool of its own: dontAsk
+    // refuses every edit no rule allows, and these deny Grok's home, whose
+    // sessions folder the kernel lets a run write, and the instruction files.
     ...[...GROK_HOMES(), ...r.deniedEdits]
       .flatMap((p) => denyRules(EDITS, p))
       .flatMap((rule) => ['--deny', rule]),
-    ...r.writes
-      .flatMap((w) => EDITS.map((tool) => `${tool}(${w}/**)`))
-      .flatMap((rule) => ['--allow', rule]),
     ...r.allowed.map(mcpRule).flatMap((rule) => ['--allow', rule]),
     ...(model ? ['-m', model] : []),
     `--rules=${r.system}`,
@@ -385,6 +438,8 @@ export function grokLaunch(r: GrokRun): GrokLaunch {
   ];
   // web_fetch is off in every other grok the office starts (`grokEnv`).
   const env = r.web ? { ...grokEnv(h), GROK_WEB_FETCH: '1' } : grokEnv(h);
+  const runsIn = kernel ? runHome(h) : undefined;
+  if (runsIn) env.HOME = runsIn;
   return { args, env, done: () => rmSync(agent, { force: true }) };
 }
 
@@ -434,7 +489,12 @@ export function grokUpdate(): { args: string[]; env: NodeJS.ProcessEnv } {
 export function grokCommand(): string | undefined {
   const found = onPath('grok');
   if (found) return found;
-  const installed = join(homedir(), '.grok', 'bin', 'grok');
+  const installed = join(
+    homedir(),
+    '.grok',
+    'bin',
+    process.platform === 'win32' ? 'grok.exe' : 'grok'
+  );
   try {
     accessSync(installed, constants.X_OK);
     return installed;

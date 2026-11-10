@@ -22,11 +22,12 @@ import {
 } from 'drizzle-orm';
 import { existsSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, sep } from 'node:path';
 import { alias } from 'drizzle-orm/pg-core';
 import { db, sql as pg } from './db.ts';
-import { deleteSecret } from './secrets.ts';
+import { deleteSecret, getSecret } from './secrets.ts';
 import { embed } from './embed.ts';
+import { fixedError } from './errors.ts';
 import { chatSession, CODE, home } from './home.ts';
 import {
   answeredAll,
@@ -70,11 +71,16 @@ import {
   followUps,
   goals,
   type AccessRequest,
+  type AskKind,
+  type FolderRequest,
   type FollowUpKind,
   type GoalDraft,
   type GoalPlan,
+  type GoogleProduct,
   type HireProposal,
   type Outcome,
+  type HeldCall,
+  type ReplyDraft,
   type LedgerKind,
   type RunTrigger,
   type Schedule,
@@ -83,6 +89,7 @@ import {
 } from './schema.ts';
 import {
   AGENT_NAMES,
+  commandsHow,
   commandsOnline,
   EFFORT_NAMES,
   EFFORT_ORDER,
@@ -96,10 +103,20 @@ import {
 } from './agents.ts';
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
-import { levelAtMost, type Level } from './access-words.ts';
+import {
+  grantWorks,
+  levelAtMost,
+  SWITCH_NAMES,
+  switchesSaid,
+  type FolderAccess,
+  type Level,
+  type OwnSwitch
+} from './access-words.ts';
+import { filterWords, sameCriteria, type GmailFilter } from './filter-words.ts';
 import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
+import type { PersonaLink } from './personas.ts';
 
 export type StaffRow = typeof staff.$inferSelect;
 export type AskRow = typeof asks.$inferSelect;
@@ -250,7 +267,6 @@ export async function setTool(id: string, tool: string, on: boolean): Promise<vo
   });
 }
 
-/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
 /**
  * Set how hard an Odd's runs think, from the levels its tool takes
  * (`EFFORTS`). The Office Manager never goes below Medium. Takes effect on its
@@ -314,6 +330,7 @@ export async function setModel(
   });
 }
 
+/** Only the owner switches Run commands or Browse the web. Takes effect on the staffer's next run. */
 export async function setOwnTool(
   id: string,
   which: 'commands' | 'web',
@@ -355,9 +372,24 @@ export async function setOwnTool(
 export async function setFolder(
   id: string,
   path: string,
-  access: 'read' | 'write' | null
+  access: FolderAccess | null
 ): Promise<{ refused: string } | undefined> {
-  const before = await staffer(id);
+  const done = await changeFolder(db, id, path, access);
+  if (!done || 'refused' in done) return done;
+  await record({ kind: 'access', actor: 'owner', title: done.title });
+}
+
+/**
+ * The change `setFolder` makes, in `q`, with the ledger title it is written
+ * under. Nothing when the Odd is gone or already has the folder so.
+ */
+async function changeFolder(
+  q: Db,
+  id: string,
+  path: string,
+  access: FolderAccess | null
+): Promise<{ refused: string } | { title: string } | undefined> {
+  const before = await staffer(id, q);
   if (!before) return;
   const at = real(path);
   const same = (f: { path: string }) => real(f.path) === at;
@@ -368,17 +400,64 @@ export async function setFolder(
   if (access !== null && rest.some((f) => within(at, real(f.path)) || within(real(f.path), at)))
     return { refused: FOLDER_REFUSED.nested };
   const folders = access === null ? rest : [...rest, { path, write }];
-  await db.update(staff).set({ folders }).where(eq(staff.id, id));
-  const shown = shownFolder(path);
-  await record({
-    kind: 'access',
-    actor: 'owner',
+  await q.update(staff).set({ folders }).where(eq(staff.id, id));
+  return {
     title:
       access === null
-        ? `Took ${shown} from ${before.name}`
-        : `Let ${before.name} ${write ? 'read and change' : 'read'} ${shown}`
-  });
+        ? `Took ${shownFolder(path)} from ${before.name}`
+        : gaveFolder(before.name, path, access)
+  };
 }
+
+/** The ledger's words for giving a folder: "Let Theo read ~/Taxes". */
+const gaveFolder = (name: string, path: string, access: FolderAccess) =>
+  `Let ${name} ${access === 'write' ? 'read and change' : 'read'} ${shownFolder(path)}`;
+
+/**
+ * Why an Odd may not ask for `path` (a real path from `checkFolder`) at
+ * `level`, or nothing when it may: it has that folder, or one holding it,
+ * at that level or above; or the owner could not give it, since it sits
+ * inside or holds another folder the Odd has (`setFolder`).
+ */
+export function folderAskRefused(
+  who: Pick<StaffRow, 'folders'>,
+  path: string,
+  level: FolderAccess
+): string | undefined {
+  const at = real(path);
+  const covers = who.folders.find((f) => within(at, real(f.path)) && (f.write || level === 'read'));
+  if (covers)
+    return `You already have ${shownFolder(covers.path)} (${covers.write ? 'read and change' : 'read only'}), which covers it.`;
+  const other = (f: { path: string }) => real(f.path) !== at;
+  if (who.folders.some((f) => other(f) && (within(at, real(f.path)) || within(real(f.path), at))))
+    return FOLDER_REFUSED.nested;
+}
+
+/**
+ * Why an Odd may not ask for `wanted`, or nothing when it may: each is on
+ * already, or its tool on this system never runs commands (`commandsHow`), in
+ * the Settings tab's words. One already on is left out of the ask
+ * (`switchesOff`), so only all of them on refuses.
+ */
+export function switchAskRefused(
+  who: Pick<StaffRow, 'agent' | 'commands' | 'web'>,
+  wanted: readonly OwnSwitch[]
+): string | undefined {
+  const how = commandsHow(who.agent, process.platform);
+  if (wanted.includes('commands') && how.state === 'never')
+    return `${SWITCH_NAMES.commands} is not open to an Odd on ${AGENT_NAMES[who.agent]} here: ${how.why}`;
+  if (!switchesOff(who, wanted).length) return `You already have ${switchesSaid(wanted)} on.`;
+}
+
+/** The switches in `wanted` that are off for this Odd. */
+export const switchesOff = (
+  who: Pick<StaffRow, 'commands' | 'web'>,
+  wanted: readonly OwnSwitch[]
+): OwnSwitch[] => wanted.filter((s) => !who[s]);
+
+/** The ledger's words for turning switches on: "Let Theo run commands and browse the web". */
+const turnedOn = (name: string, on: readonly OwnSwitch[]) =>
+  `Let ${name} ${switchesSaid(on).toLowerCase()}`;
 
 /**
  * Secret stores in the home folder, by name: keys, sign-ins and settings,
@@ -409,8 +488,86 @@ export const FOLDER_REFUSED = {
   secrets: 'That folder holds your keys or sign-ins.',
   code: "That folder holds Oddboro's own code.",
   nested: 'That folder is inside one this Odd already has, or holds one.',
+  /** What an Odd reads when it asks for a whole drive or system files: only the owner may give one. */
+  broad: 'That folder is a whole drive or holds system files. Ask for a narrower one.',
   glob: (char: string) => `That folder's path has a character an Odd's tool can't take: ${char}`
 } as const;
+
+/**
+ * What the owner reads before giving a whole drive or system files
+ * (`broadFolder`), with Accept and Cancel. Only their Accept gives it.
+ */
+export const FOLDER_WARNING =
+  "This folder is a whole drive or holds system files, so an Odd could reach everything inside it. We don't recommend giving it.";
+
+/**
+ * Secret stores found by what they hold, for a folder outside the home, where
+ * no store sits at a known place: by name, and for a coding tool's home, a
+ * file only its sign-in or history leaves, since a project keeps its own
+ * `.claude` or `.codex` of settings. An empty list means the name alone.
+ */
+const STORE_MARKS: Record<string, string[]> = {
+  '.ssh': [],
+  '.aws': [],
+  '.gnupg': [],
+  '.google_workspace_mcp': [],
+  '.claude': ['.credentials.json', 'history.jsonl', 'projects'],
+  '.codex': ['auth.json', 'sessions'],
+  '.grok': ['auth.json', 'sessions'],
+  '.gemini': ['oauth_creds.json', 'google_accounts.json']
+};
+
+/** Whether `p` is a secret store by `STORE_MARKS`. */
+function marksStore(p: string): boolean {
+  const marks = STORE_MARKS[basename(p).toLowerCase()];
+  return !!marks && existsSync(p) && (!marks.length || marks.some((m) => existsSync(join(p, m))));
+}
+
+/**
+ * Whether `p`, outside the home, is in a secret store or holds one at its
+ * top (`STORE_MARKS`). Deeper folders are not looked at, so giving one is
+ * never a walk of a whole drive.
+ */
+function holdsStoreOutside(p: string): boolean {
+  for (let at = p; dirname(at) !== at; at = dirname(at)) if (marksStore(at)) return true;
+  return Object.keys(STORE_MARKS).some((name) => marksStore(join(p, name)));
+}
+
+/** The system's own folders on each system, by real path where one exists. */
+function systemFolders(): string[] {
+  const env = process.env;
+  const list =
+    process.platform === 'win32'
+      ? [
+          env.SystemRoot ?? 'C:\\Windows',
+          env.ProgramFiles ?? 'C:\\Program Files',
+          env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)',
+          env.ProgramData ?? 'C:\\ProgramData'
+        ]
+      : process.platform === 'darwin'
+        ? ['/System', '/Library', '/Applications', '/usr', '/bin', '/sbin', '/private', '/dev']
+        : [
+            ...['/etc', '/usr', '/bin', '/sbin', '/lib', '/lib32', '/lib64', '/boot'],
+            ...['/var', '/proc', '/sys', '/dev', '/run', '/root', '/tmp']
+          ];
+  return list.map(real);
+}
+
+/**
+ * Whether `p` (a real path) is a whole drive or volume, or is in or holds the
+ * system's own folders: what the owner is warned about before giving
+ * (`FOLDER_WARNING`), and an Odd may not ask for. A folder in the home is
+ * never one, wherever the home sits.
+ */
+export function broadFolder(p: string): boolean {
+  if (within(p, real(homedir()))) return false;
+  const up = dirname(p);
+  const root =
+    up === p ||
+    ['/Volumes', '/mnt', '/media'].includes(up) ||
+    ['/media', '/run/media'].includes(dirname(up));
+  return root || systemFolders().some((s) => within(p, s) || within(s, p));
+}
 
 /**
  * The characters Codex 0.166 refuses in a folder's path, since it reads them
@@ -445,28 +602,36 @@ export function shownFolder(path: string): string {
 
 /**
  * Whether `path`, as the owner typed it, may be given to an Odd, and its real
- * path when it may. A folder inside the home that holds or sits in none of
- * the secret stores (`SECRET_STORES`), the office's own home or Oddboro's
- * code: a deny inside a folder a run reads is not held by every tool, so a
- * folder that holds one is refused at the door. A real path with a character
- * Codex cannot take (`GLOB`) is refused too, by the real path, since that is
- * what a run is given. Only the folder route calls this, so a folder given
- * before that rule is not checked again.
+ * path when it may. Any folder on the computer but the home itself, and one
+ * that holds or sits in a secret store (`SECRET_STORES` in the home, and
+ * outside it `holdsStoreOutside`), the office's own home or Oddboro's code:
+ * those would let an Odd past the office's walls, so no Accept gives them. A
+ * deny inside a folder a run reads is not held by every tool, so a folder
+ * that holds one is refused at the door. A real path with a character Codex
+ * cannot take (`GLOB`) is refused too, by the real path, since that is what a
+ * run is given. A whole drive or system files (`broadFolder`) comes back as
+ * a `warning` until the owner accepts it (`accept`). Only the folder routes
+ * call this, so a folder given before a rule is not checked again.
  */
-export function checkFolder(path: string): { real: string } | { refused: string } {
+export function checkFolder(
+  path: string,
+  accept = false
+): { real: string } | { refused: string } | { warning: string } {
   const typed = path.trim();
   const expanded = /^~(?=$|[\\/])/.test(typed) ? join(homedir(), typed.slice(1)) : typed;
   if (!isAbsolute(expanded) || !existsSync(expanded)) return { refused: FOLDER_REFUSED.missing };
   const p = real(expanded);
   if (!statSync(p).isDirectory()) return { refused: FOLDER_REFUSED.missing };
   const h = real(homedir());
-  if (p === h || !within(p, h)) return { refused: FOLDER_REFUSED.home };
+  if (p === h) return { refused: FOLDER_REFUSED.home };
   const either = (q: string) => within(p, q) || within(q, p);
   if ([...SECRET_STORES.map((s) => real(join(h, s))), real(home())].some(either))
     return { refused: FOLDER_REFUSED.secrets };
+  if (!within(p, h) && holdsStoreOutside(p)) return { refused: FOLDER_REFUSED.secrets };
   if (either(real(CODE))) return { refused: FOLDER_REFUSED.code };
   const glob = GLOB.exec(p)?.[0];
   if (glob) return { refused: FOLDER_REFUSED.glob(glob) };
+  if (!accept && broadFolder(p)) return { warning: FOLDER_WARNING };
   return { real: p };
 }
 
@@ -484,6 +649,12 @@ export type Hire = Pick<
   newParts?: DrawnPart[];
   /** The coding tool its runs go through, stored before its first run. Claude Code when left out. */
   agent?: Agent;
+  /** The account it signs in with on that tool, its model, and how hard it thinks. The office's when left out. */
+  account?: string | null;
+  model?: string | null;
+  effort?: Effort | null;
+  /** The New Altitude persona it was installed from. */
+  package?: PersonaLink;
 };
 
 /** Current staff whose generated look matches this one, other than `except`. */
@@ -526,7 +697,9 @@ export async function setLook(
   newParts?: DrawnPart[]
 ): Promise<void> {
   const who = await staffer(id);
-  if (!who) throw new Error('No such Odd');
+  if (!who) throw fixedError('No such Odd');
+  if (who.package)
+    throw new Error(`${who.name}'s look comes from New Altitude and cannot be redrawn.`);
   const twin = await lookTaken(look, id);
   if (twin) throw new Error(`${twin.name} already looks exactly like that`);
   await saveParts(newParts, id);
@@ -654,6 +827,214 @@ export async function precedent(text: string, limit = 3): Promise<LedgerRow[]> {
 
 // Asks
 
+/**
+ * Something an Odd tried to put on the owner's desk that is there already, or
+ * an email that already has its reply. The tool server returns the message as
+ * a tool error the Odd reads.
+ */
+export class AlreadyOnDesk extends Error {}
+
+/** Two titles as the desk compares them: case and spacing ignored. */
+const sameTitle = (a: string, b: string) => {
+  const plain = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+  return plain(a) === plain(b);
+};
+
+/**
+ * Lines up an Odd's raises until this transaction ends. Each run has its own
+ * tool server process, so two runs raising the same thing at once would both
+ * find the desk clear; with the lock the second sees the first.
+ */
+async function lockDesk(tx: Tx, staffId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`desk:${staffId}`}))`);
+}
+
+/**
+ * Refuses an item whose title matches an ask or task the Odd already has open.
+ * The ask it `revises` does not count: that is how an Odd changes one.
+ */
+async function refuseRepeat(
+  tx: Tx,
+  staffId: string,
+  title: string,
+  revises?: number
+): Promise<void> {
+  const mine = and(eq(asks.staffId, staffId), eq(asks.status, 'open'));
+  const openAsks = await tx.select({ id: asks.id, title: asks.title }).from(asks).where(mine);
+  const ask = openAsks.find((a) => a.id !== revises && sameTitle(a.title, title));
+  if (ask)
+    throw new AlreadyOnDesk(
+      `Your ask #${ask.id}, "${ask.title}", is already there. To change it, raise it again with revises: ${ask.id}. Never raise the same thing twice.`
+    );
+  const openTasks = await tx
+    .select({ id: tasks.id, title: tasks.title })
+    .from(tasks)
+    .where(and(eq(tasks.staffId, staffId), eq(tasks.status, 'open')));
+  const task = openTasks.find((t) => sameTitle(t.title, title));
+  if (task)
+    throw new AlreadyOnDesk(
+      `Your task #${task.id}, "${task.title}", is already there. Never give the same thing twice.`
+    );
+}
+
+/**
+ * Whether two replies or filters go through the same Gmail account. Thread
+ * and message ids are each mailbox's own, so one in another account is
+ * another email.
+ */
+const sameMailbox = (a: { connector?: string }, b: { connector?: string }) =>
+  (a.connector ?? null) === (b.connector ?? null);
+
+/** Whether two replies answer the same email: the same account, and the same Gmail thread, or with none, the same people and subject. */
+function sameEmail(a: ReplyDraft, b: ReplyDraft): boolean {
+  if (!sameMailbox(a, b)) return false;
+  if (a.gmailThreadId || b.gmailThreadId) return a.gmailThreadId === b.gmailThreadId;
+  const people = (r: ReplyDraft) =>
+    r.to
+      .map((t) => t.toLowerCase().trim())
+      .sort()
+      .join(',');
+  return people(a) === people(b) && sameTitle(a.subject, b.subject);
+}
+
+/**
+ * Refuses a second reply to one email: one still open (unless this revises
+ * it), or one the owner already sent or saved for the same message.
+ */
+async function refuseSecondReply(
+  tx: Tx,
+  staffId: string,
+  reply: ReplyDraft,
+  revises?: number
+): Promise<void> {
+  const replies = await tx
+    .select()
+    .from(asks)
+    .where(
+      and(
+        eq(asks.staffId, staffId),
+        eq(asks.kind, 'reply'),
+        inArray(asks.status, ['open', 'approved'])
+      )
+    );
+  const open = replies.find(
+    (r) => r.status === 'open' && r.id !== revises && r.reply && sameEmail(r.reply, reply)
+  );
+  if (open)
+    throw new AlreadyOnDesk(
+      `Your reply #${open.id} to this email is already there. To change it, call propose_reply again with revises: ${open.id}.`
+    );
+  const done =
+    reply.inReplyTo &&
+    replies.find(
+      (r) => r.reply?.sent && r.reply.inReplyTo === reply.inReplyTo && sameMailbox(r.reply, reply)
+    );
+  if (done)
+    throw new AlreadyOnDesk(
+      `That email already has a reply: your reply #${done.id} was ${done.reply?.sent?.action === 'draft' ? 'saved to Gmail drafts' : 'sent'}. Do not propose another.`
+    );
+}
+
+/**
+ * Refuses a second filter for the same mail: one still open (unless this
+ * revises it), or one the owner already created from this Odd.
+ */
+async function refuseSecondFilter(
+  tx: Tx,
+  staffId: string,
+  filter: GmailFilter,
+  revises?: number
+): Promise<void> {
+  const filters = await tx
+    .select()
+    .from(asks)
+    .where(
+      and(
+        eq(asks.staffId, staffId),
+        eq(asks.kind, 'filter'),
+        inArray(asks.status, ['open', 'approved'])
+      )
+    );
+  const same = (r: AskRow) =>
+    !!r.filter && sameMailbox(r.filter, filter) && sameCriteria(r.filter.criteria, filter.criteria);
+  const open = filters.find((r) => r.status === 'open' && r.id !== revises && same(r));
+  if (open)
+    throw new AlreadyOnDesk(
+      `Your filter #${open.id} for this mail is already there. To change it, call propose_filter again with revises: ${open.id}.`
+    );
+  const made = filters.find((r) => r.filter?.created && same(r));
+  if (made)
+    throw new AlreadyOnDesk(
+      `That filter already exists: your filter #${made.id} was created in Gmail. Do not propose it again.`
+    );
+}
+
+/** Where an ask's answer goes back to: its hand-off, its thread, or neither. */
+const samePlace = (
+  a: { handOffId?: number | null; threadId?: number | null },
+  b: { handOffId?: number | null; threadId?: number | null }
+) =>
+  (a.handOffId ?? null) === (b.handOffId ?? null) && (a.threadId ?? null) === (b.threadId ?? null);
+
+/**
+ * Refuses a folder ask that repeats one this Odd has open for the same place:
+ * the same folder, at the same level or higher (unless this revises it). One
+ * from another place, such as a hand-off, is its twin instead (`asksNoMore`),
+ * so the owner's answer goes back to both.
+ */
+async function refuseSecondFolder(
+  tx: Tx,
+  staffId: string,
+  ask: {
+    folder: FolderRequest;
+    handOffId?: number;
+    threadId?: number;
+    revises?: number;
+  }
+): Promise<void> {
+  const open = await tx
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, staffId), eq(asks.kind, 'folder'), eq(asks.status, 'open')));
+  const same = open.find(
+    (r) =>
+      r.id !== ask.revises &&
+      !!r.folder &&
+      r.folder.path === ask.folder.path &&
+      (r.folder.level === 'write' || ask.folder.level === 'read') &&
+      samePlace(r, ask)
+  );
+  if (same)
+    throw new AlreadyOnDesk(
+      `Your ask #${same.id} for this folder is already there. To change it, call ask_for_folder again with revises: ${same.id}.`
+    );
+}
+
+/** A switch ask from the same place as an open one that covers it: the open one is the ask. */
+async function refuseSecondSwitch(
+  tx: Tx,
+  staffId: string,
+  ask: { switches: OwnSwitch[]; handOffId?: number; threadId?: number; revises?: number }
+): Promise<void> {
+  const open = await tx
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, staffId), eq(asks.kind, 'switch'), eq(asks.status, 'open')));
+  const same = open.find(
+    (r) =>
+      r.id !== ask.revises &&
+      ask.switches.every((s) => r.switches?.includes(s)) &&
+      samePlace(r, ask)
+  );
+  if (same)
+    throw new AlreadyOnDesk(
+      `Your ask #${same.id} for ${switchesSaid(same.switches ?? [])} is already there. To change it, call ask_for_switch again with revises: ${same.id}.`
+    );
+}
+
+/** The asks an Odd raises in its own words, which may not repeat one already open. Access asks have twins instead (`asksNoMore`). */
+const ONCE_ONLY: AskKind[] = ['approval', 'goal'];
+
 export async function raiseAsk(
   staffId: string,
   a: {
@@ -664,9 +1045,21 @@ export async function raiseAsk(
     hire?: HireProposal;
     goal?: GoalDraft;
     plan?: GoalPlan;
-    /** `goal` and `plan` say so; the rest follow from access or hire. */
-    kind?: 'goal' | 'plan';
+    /** A reply ask's email (`propose_reply`). */
+    reply?: ReplyDraft;
+    /** A filter ask's Gmail filter (`propose_filter`). */
+    filter?: GmailFilter;
+    /** A folder ask's folder (`ask_for_folder`). */
+    folder?: FolderRequest;
+    /** A switch ask's switches (`ask_for_switch`). */
+    switches?: OwnSwitch[];
+    /** A call ask's held call, from the gateway (`holdCall` in the office's gateway.ts). */
+    call?: HeldCall;
+    /** `goal`, `plan`, `reply`, `filter`, `folder`, `switch` and `call` say so; the rest follow from access or hire. */
+    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'switch' | 'call';
     revises?: number;
+    /** The colleague whose handed-back work the lead raised this from (`VIA`). */
+    via?: string;
     /** Raised while working on this hand-off: the owner's answer goes back to it. */
     handOffId?: number;
     /** Raised on this thread: the owner's answer moves it on. A plan ignores it. */
@@ -681,8 +1074,21 @@ export async function raiseAsk(
     run?: string;
   }
 ): Promise<{ ask: AskRow; precedent: LedgerRow[] }> {
-  const { attach, kind, run, ...fields } = a;
+  const { attach, run, ...fields } = a;
+  const kind = a.kind ?? (a.access ? 'access' : a.hire ? 'hire' : 'approval');
   const ask = await db.transaction(async (tx) => {
+    // An Odd's own ask may not repeat one on the desk, a reply may not
+    // answer an email twice, and a filter may not file the same mail twice.
+    // A folder or switch ask may not repeat one from the same place.
+    // Office-raised kinds and access twins are left alone.
+    if (ONCE_ONLY.includes(kind) || a.reply || a.filter || a.folder || a.switches) {
+      await lockDesk(tx, staffId);
+      if (a.reply) await refuseSecondReply(tx, staffId, a.reply, a.revises);
+      else if (a.filter) await refuseSecondFilter(tx, staffId, a.filter, a.revises);
+      else if (a.folder) await refuseSecondFolder(tx, staffId, { ...a, folder: a.folder });
+      else if (a.switches) await refuseSecondSwitch(tx, staffId, { ...a, switches: a.switches });
+      else await refuseRepeat(tx, staffId, a.title, a.revises);
+    }
     // A plan goes on its goal's one thread, whatever run raised it: a chat,
     // the weekly review, or the goal's own planning run. So approving it
     // always brings the goal's lead back there to lead the work.
@@ -693,11 +1099,18 @@ export async function raiseAsk(
       .insert(asks)
       .values({
         staffId,
-        kind: kind ?? (a.access ? 'access' : a.hire ? 'hire' : 'approval'),
         ...fields,
+        kind,
         ...on
       })
       .returning();
+    // A new version the Odd made of its own ask, still open, takes its place
+    // on the desk: the old one closes as replaced, so the owner sees one.
+    if (a.revises)
+      await tx
+        .update(asks)
+        .set({ status: 'revise', reason: 'Replaced by a new version.', decidedAt: new Date() })
+        .where(and(eq(asks.id, a.revises), eq(asks.staffId, staffId), eq(asks.status, 'open')));
     if (row.threadId) {
       // The thread keeps the run's key, so the owner's answer cannot start the
       // hub there while the run that raised it, such as a chat, still goes.
@@ -730,6 +1143,102 @@ export async function asksFor(staffId: string): Promise<AskRow[]> {
 }
 
 export type Decision = 'approve' | 'deny' | 'iterate';
+
+/** The kinds of ask that have twins (`asksNoMore`): an outside tool, a folder, and switches. */
+const TWINNED: AskKind[] = ['access', 'folder', 'switch'];
+
+/**
+ * Whether `later` asks for nothing `first` does not: the same Odd, the same
+ * tool or folder, at the same level or lower. Asks for another Google account
+ * of one product are the same tool. Two runs of one Odd can each find a tool
+ * or a folder missing at once (a hire's first day and its lead's first
+ * hand-off), and each raises its own ask. The owner sees the first alone
+ * (`desk`), and their answer to it answers the twin too (`decide`), each back
+ * where it came from.
+ */
+function asksNoMore(first: AskRow, later: AskRow): boolean {
+  if (first.id === later.id || first.staffId !== later.staffId) return false;
+  if (first.kind === 'access' && later.kind === 'access' && first.access && later.access)
+    return (
+      first.access.another === later.access.another &&
+      (!!first.access.another || first.access.connector === later.access.connector) &&
+      levelAtMost(later.access.level, first.access.level)
+    );
+  if (first.kind === 'folder' && later.kind === 'folder' && first.folder && later.folder)
+    return (
+      first.folder.path === later.folder.path &&
+      (first.folder.level === 'write' || later.folder.level === 'read')
+    );
+  if (first.kind === 'switch' && later.kind === 'switch')
+    return (later.switches ?? []).every((s) => first.switches?.includes(s));
+  return false;
+}
+
+/** Whether two asks of one kind ask for the same tool or folder, whatever the level. */
+const sameWanted = (a: AskRow, b: AskRow) =>
+  a.kind === 'folder'
+    ? a.folder?.path === b.folder?.path
+    : a.kind === 'switch'
+      ? (b.switches ?? []).every((s) => a.switches?.includes(s))
+      : a.access?.connector === b.access?.connector;
+
+/**
+ * The other access or folder asks the owner's one answer settled with `a`:
+ * the same Odd and tool or folder, decided in the same moment, whichever of
+ * them the owner saw.
+ */
+export async function answeredWith(a: AskRow): Promise<AskRow[]> {
+  if (!TWINNED.includes(a.kind) || !a.decidedAt) return [];
+  const rows = await db
+    .select()
+    .from(asks)
+    .where(
+      and(eq(asks.staffId, a.staffId), eq(asks.kind, a.kind), eq(asks.decidedAt, a.decidedAt))
+    );
+  return rows.filter((r) => r.id !== a.id && r.status === a.status && sameWanted(a, r));
+}
+
+/**
+ * Which of the asks one answer settled start a `carry_out`: one for each place
+ * a result must go back to, never one per ask. A hand-off's twin comes first,
+ * then a thread's; a twin on neither starts a run only when no other does.
+ * Two runs of one Odd once each did the same work after one answer, and the
+ * owner got every email reply twice.
+ */
+function carriedOutBy(together: AskRow[]): AskRow[] {
+  const rank = (a: AskRow) => (a.handOffId ? 0 : a.threadId ? 1 : 2);
+  const places = new Set<string>();
+  const runs: AskRow[] = [];
+  for (const a of [...together].sort((x, y) => rank(x) - rank(y) || x.id - y.id)) {
+    const place = a.handOffId
+      ? `hand-off ${a.handOffId}`
+      : a.threadId
+        ? `thread ${a.threadId}`
+        : '';
+    if (places.has(place) || (place === '' && runs.length)) continue;
+    places.add(place);
+    runs.push(a);
+  }
+  return runs;
+}
+
+/** Start the carry-outs for asks one answer settled (`carriedOutBy`). */
+async function carryOutTogether(together: AskRow[]): Promise<void> {
+  for (const a of carriedOutBy(together))
+    await followUp(a.staffId, 'carry_out', { askId: a.id, note: null });
+}
+
+/**
+ * The twins the carry-out of `a` stands for: answered with it, starting no
+ * run of their own. Only the first run told of them does their work, so it
+ * is done once.
+ */
+export async function standsFor(a: AskRow): Promise<AskRow[]> {
+  const together = [a, ...(await answeredWith(a))];
+  const runs = carriedOutBy(together);
+  if (runs[0]?.id !== a.id) return [];
+  return together.filter((x) => !runs.some((r) => r.id === x.id));
+}
 
 /**
  * The owner's decision. Approving an access ask grants it and gives the owner the steps
@@ -772,42 +1281,299 @@ export async function approveAsk(
   return decide(id, 'approve', reason, approval);
 }
 
+/**
+ * The owner sent a reply ask's email, or saved it to Gmail drafts, and Gmail
+ * took it: keep their final version with what Gmail did (`reply.sent`), and
+ * approve the ask, so the answer goes back where it came from. No run follows.
+ * Returns false when the ask was no longer open.
+ */
+export async function approveReply(id: number, reply: ReplyDraft): Promise<boolean> {
+  if (!reply.sent) throw new Error('A reply is approved only once Gmail took it');
+  return decide(id, 'approve', null, { reply });
+}
+
+/**
+ * The owner created a filter ask's Gmail filter, and Gmail took it: keep their
+ * final version with what Gmail did (`filter.created`), and approve the ask,
+ * so the answer goes back where it came from. No run follows. Returns false
+ * when the ask was no longer open.
+ */
+export async function approveFilter(id: number, filter: GmailFilter): Promise<boolean> {
+  if (!filter.created) throw new Error('A filter is approved only once Gmail made it');
+  return decide(id, 'approve', null, { filter });
+}
+
+/**
+ * The office made a call ask's held call on the owner's yes: keep what came
+ * back (`call.result`) and approve the ask, which starts the Odd's carry-out
+ * run with the result. Returns false when the ask was no longer open.
+ */
+export async function approveCall(id: number, call: HeldCall): Promise<boolean> {
+  if (!call.result) throw new Error('A call is approved only once the office made it');
+  return decide(id, 'approve', null, { call });
+}
+
+/** Where a held call lands: the run's Odd, and what its own asks carry. */
+export type CallPlace = {
+  staffId: string;
+  /** The run's key, which a thread it is raised on keeps (`raiseAsk`). */
+  run: string;
+  handOffId?: number;
+  threadId?: number;
+  via?: string;
+};
+
+/**
+ * An Odd at Draft called a tool that changes something: the gateway holds
+ * the call and it goes on the desk as a `call` ask, showing the exact call.
+ * The same call still open is not raised twice: the Odd hears the one there.
+ */
+export async function raiseCall(
+  place: CallPlace,
+  call: HeldCall,
+  service: string
+): Promise<{ ask: AskRow; already: boolean }> {
+  const same = (r: AskRow) =>
+    r.call?.connector === call.connector &&
+    r.call.tool === call.tool &&
+    JSON.stringify(r.call.arguments) === JSON.stringify(call.arguments);
+  const open = await db
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, place.staffId), eq(asks.kind, 'call'), eq(asks.status, 'open')));
+  const there = open.find(same);
+  if (there) return { ask: there, already: true };
+  const { ask } = await raiseAsk(place.staffId, {
+    kind: 'call',
+    title: `Use ${call.tool} in ${service}`,
+    why: `Called while working at Drafts for your yes, so the office held it for you.`,
+    ifApproved: `The office makes this exact call to ${service}, and the work carries on with what it returns.`,
+    call,
+    handOffId: place.handOffId,
+    threadId: place.threadId,
+    via: place.via,
+    run: place.run
+  });
+  return { ask, already: false };
+}
+
+/** What a made call returned, cut to fit a ledger line or a brief. */
+export const callResultText = (r: NonNullable<HeldCall['result']>, max = 4000): string =>
+  `${r.ok ? '' : 'The tool said it failed: '}${r.text.length > max ? `${r.text.slice(0, max)}…` : r.text}`;
+
+/** Why the owner's Give access on a folder ask gave nothing, with the status the route answers. */
+export type FolderNotGiven = { refused: string; status: 400 | 404 | 409 };
+
+/** A folder `setFolder` refused while approving its ask: the approval rolls back. */
+class FolderRefused extends Error {}
+
+/**
+ * Turn on the switches a switch ask asked for, in `tx`, with the yes, or
+ * neither happens. Ones already on stay as they are. Refused when the Odd's
+ * tool on this system never runs commands, as the staff PATCH refuses it,
+ * since the Odd may have moved tools since it asked.
+ */
+async function turnOnSwitches(
+  tx: Tx,
+  a: AskRow
+): Promise<{ before: StaffRow; after: StaffRow; on: OwnSwitch[] } | undefined> {
+  const [before] = await tx.select().from(staff).where(eq(staff.id, a.staffId));
+  if (!before) return;
+  const on = switchesOff(before, a.switches ?? []);
+  if (on.includes('commands') && commandsHow(before.agent, process.platform).state === 'never')
+    throw fixedError(
+      "This Odd's tool cannot run commands here. Move it to another tool on its Settings tab first"
+    );
+  if (!on.length) return { before, after: before, on };
+  const [after] = await tx
+    .update(staff)
+    .set(Object.fromEntries(on.map((s) => [s, true])))
+    .where(eq(staff.id, a.staffId))
+    .returning();
+  return { before, after, on };
+}
+
+/**
+ * The owner gives the folder a folder ask asked for, or a narrower one, at
+ * the level they pick: `path` as typed or picked, checked as the Settings tab
+ * checks it (`checkFolder`). The folder is given (`changeFolder`, as
+ * `setFolder` does) in the transaction that approves the ask, so a refusal
+ * leaves the ask open and the folder as it was. One ledger line, in the
+ * Settings tab's words, and the approval starts the run that carries the ask
+ * out, which finds the folder in its reach. A plain approve is refused
+ * (`decide`). A whole drive or system files, which the owner can type there,
+ * comes back as a `warning` and changes nothing until they accept it.
+ */
+export async function giveFolder(
+  id: number,
+  path: string,
+  level: FolderAccess,
+  reason: string | null = null,
+  accept = false
+): Promise<
+  { given: { path: string; level: FolderAccess } } | { warning: string } | FolderNotGiven
+> {
+  const a = await ask(id);
+  if (!a || a.kind !== 'folder' || !a.folder)
+    return { refused: 'No such folder ask.', status: 404 };
+  if (a.status !== 'open') return { refused: 'You already answered this ask.', status: 409 };
+  const checked = checkFolder(path, accept);
+  if ('refused' in checked) return { refused: checked.refused, status: 400 };
+  if ('warning' in checked) return checked;
+  const given = { path: checked.real, level };
+  try {
+    const done = await decide(id, 'approve', reason, { folder: { ...a.folder, given } });
+    if (!done) return { refused: 'You already answered this ask.', status: 409 };
+  } catch (e) {
+    if (e instanceof FolderRefused) return { refused: e.message, status: 400 };
+    throw e;
+  }
+  return { given };
+}
+
+/** A created filter in one line, for its ledger line and the answer: what it does, and what was tidied. */
+const filterDone = (f: GmailFilter) =>
+  `${filterWords(f)}${f.created?.tidied ? `, and tidied ${f.created.tidied} ${f.created.tidied === 1 ? 'email' : 'emails'}` : ''}`;
+
+/** What a reply ask's ledger line and answer say the owner did with it. */
+const replyDone = (r: ReplyDraft) =>
+  r.sent?.action === 'draft' ? 'Saved to Gmail drafts' : 'Sent';
+
 async function decide(
   id: number,
   decision: Decision,
   reason: string | null,
-  o: Approval & { reportWhenDone?: boolean }
+  o: Approval & {
+    reportWhenDone?: boolean;
+    reply?: ReplyDraft;
+    filter?: GmailFilter;
+    call?: HeldCall;
+    folder?: FolderRequest;
+  }
 ): Promise<boolean> {
-  if (decision === 'iterate') {
-    if (!reason) throw new Error('Say what to change');
+  if (decision === 'iterate' && !reason) throw fixedError('Say what to change');
+  if (decision !== 'deny') {
     const [raised] = await db.select({ kind: asks.kind }).from(asks).where(eq(asks.id, id));
-    if (yesOrNo(raised?.kind))
+    if (decision === 'iterate' && yesOrNo(raised?.kind))
       throw new Error('Say yes or no: the office raised this, so nobody reworks it');
+    // Only the office's send or save approves a reply, once Gmail took it.
+    if (decision === 'approve' && raised?.kind === 'reply' && !o.reply)
+      throw new Error('Send the reply, or save it to Gmail drafts');
+    // Only the office's Create filter approves a filter, once Gmail made it.
+    if (decision === 'approve' && raised?.kind === 'filter' && !o.filter)
+      throw new Error('Create the filter from its card on the desk');
+    // Only the office's own call approves a held call, once it made it.
+    if (decision === 'approve' && raised?.kind === 'call' && !o.call)
+      throw new Error('Approve the call from its card on the desk');
+    // Only the office's Give access approves a folder ask, giving the folder with it.
+    if (decision === 'approve' && raised?.kind === 'folder' && !o.folder?.given)
+      throw new Error('Give the folder from its card on the desk');
   }
   const status = decision === 'approve' ? 'approved' : decision === 'deny' ? 'denied' : 'revise';
-  const ask = await db.transaction(async (tx) => {
+  const at = new Date();
+  const { ask, twins, turned } = await db.transaction(async (tx) => {
     const [claimed] = await tx
       .update(asks)
-      .set({ status, reason: reason || null, decidedAt: new Date() })
+      .set({
+        status,
+        reason: reason || null,
+        decidedAt: at,
+        ...(o.reply ? { reply: o.reply } : {}),
+        ...(o.filter ? { filter: o.filter } : {}),
+        ...(o.call ? { call: o.call } : {}),
+        ...(o.folder ? { folder: o.folder } : {})
+      })
       .where(and(eq(asks.id, id), eq(asks.status, 'open')))
       .returning();
     if (claimed) await o.link?.(claimed, tx);
     if (claimed?.kind === 'hand_offs' && decision === 'approve') await startHeld(tx, claimed);
-    return claimed;
+    // The folder goes to the Odd with the yes, or neither happens.
+    const given = claimed?.kind === 'folder' && decision === 'approve' && o.folder?.given;
+    if (claimed && given) {
+      const changed = await changeFolder(tx, claimed.staffId, given.path, given.level);
+      if (changed && 'refused' in changed) throw new FolderRefused(changed.refused);
+    }
+    // The switches turn on with the yes, or neither happens.
+    const turned =
+      claimed?.kind === 'switch' && decision === 'approve'
+        ? await turnOnSwitches(tx, claimed)
+        : undefined;
+    // A yes or a no answers the twins too, at the same moment (`answeredWith`).
+    // Sending one back leaves them waiting for the new version's answer.
+    const open =
+      claimed && TWINNED.includes(claimed.kind) && decision !== 'iterate'
+        ? await tx
+            .select()
+            .from(asks)
+            .where(
+              and(
+                eq(asks.staffId, claimed.staffId),
+                eq(asks.kind, claimed.kind),
+                eq(asks.status, 'open')
+              )
+            )
+        : [];
+    const ids = open.filter((r) => asksNoMore(claimed!, r)).map((r) => r.id);
+    const answered = ids.length
+      ? await tx
+          .update(asks)
+          .set({ status, reason: reason || null, decidedAt: at })
+          .where(and(inArray(asks.id, ids), eq(asks.status, 'open')))
+          .returning()
+      : [];
+    return { ask: claimed, twins: answered, turned };
   });
   if (!ask) return false;
-  const verb = { approve: 'Approved', deny: 'Denied', iterate: 'Sent back' }[decision];
+  const sent = decision === 'approve' && ask.reply?.sent ? ask.reply : undefined;
+  const made = decision === 'approve' && ask.filter?.created ? ask.filter : undefined;
+  const called = decision === 'approve' && ask.call?.result ? ask.call.result : undefined;
+  const gave = decision === 'approve' ? ask.folder?.given : undefined;
+  const verb = sent
+    ? replyDone(sent)
+    : { approve: 'Approved', deny: 'Denied', iterate: 'Sent back' }[decision];
   await record({
     kind: 'decision',
     actor: 'owner',
-    title: `${verb}: ${ask.title}`,
-    body: `Asked by ${ask.staffId}. ${ask.why}`,
+    // A folder given or a switch turned on from its ask reads as the Settings tab's change does.
+    title: made
+      ? `Created a Gmail filter: ${filterDone(made)}`
+      : gave
+        ? gaveFolder((await staffer(ask.staffId))?.name ?? ask.staffId, gave.path, gave.level)
+        : turned?.on.length
+          ? turnedOn(turned.before.name, turned.on)
+          : called
+            ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
+            : `${verb}: ${ask.title}`,
+    body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}${called ? `It returned: ${callResultText(called, 600)} ` : ''}${turned ? (networkNote(turned.before, turned.after).body ?? '') + ' ' : ''}Asked by ${ask.staffId}. ${ask.why}${
+      twins.length
+        ? ` This also answers ${twins.map((t) => `#${t.id}`).join(', ')}, the same ask from another of ${ask.staffId}'s runs.`
+        : ''
+    }`,
     reason: ask.reason,
     askId: ask.id
   });
   await o.carryOut?.(ask);
-  if (decision === 'approve' && ask.access) await grantAccess(ask.staffId, ask.access, ask.id);
-  else if (decision === 'approve' && ask.kind === 'approval')
+  if (decision === 'approve' && ask.access) {
+    const { task, connector: granted } = await grantAccess(ask.staffId, ask.access, ask.id);
+    // Another Google account is a new connector: the ask and its twins name
+    // it from now on, so finishing the connect task finds them.
+    if (ask.access.another)
+      await db
+        .update(asks)
+        .set({ access: { ...ask.access, connector: granted } })
+        .where(
+          inArray(
+            asks.id,
+            [ask, ...twins].map((a) => a.id)
+          )
+        );
+    // Connected already: the work that waited picks up now. Otherwise finishing
+    // the connect task starts it (`finishTask`).
+    if (!task) await carryOutTogether([ask, ...twins]);
+  } else if (gave || turned)
+    // The folder or the switches are the Odd's now: the work that waited on them picks up.
+    await carryOutTogether([ask, ...twins]);
+  else if (decision === 'approve' && (ask.kind === 'approval' || ask.kind === 'call'))
     await followUp(ask.staffId, 'carry_out', {
       askId: ask.id,
       note: ask.reason,
@@ -821,7 +1587,11 @@ async function decide(
   // with the claim, and a no stops the thread. A yes to the usage window wakes the threads it held.
   else {
     const owner = await ownerName();
-    const said = `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
+    const said = sent
+      ? `${owner} ${sent.sent?.action === 'draft' ? 'saved to Gmail drafts' : 'sent'} "${ask.title}"`
+      : made
+        ? `${owner} created the Gmail filter "${ask.title}" as: ${filterDone(made)}`
+        : `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
     const answer = ask.reason ? `${said}: ${ask.reason}` : `${said}.`;
     if (ask.kind === 'window') {
       // The title asks whether to pause the work or let it carry on, so "approved" would not say which.
@@ -834,11 +1604,12 @@ async function decide(
     } else if (ask.kind === 'hand_offs' && ask.threadId)
       await answerHandOffs({ ...ask, threadId: ask.threadId }, decision === 'approve', answer);
     else
-      await answerLater(
-        { handOffId: ask.handOffId, threadId: ask.threadId, askId: ask.id },
-        decision === 'deny' ? 'failed' : 'done',
-        answer
-      );
+      for (const a of [ask, ...twins])
+        await answerLater(
+          { handOffId: a.handOffId, threadId: a.threadId, askId: a.id },
+          decision === 'deny' ? 'failed' : 'done',
+          answer
+        );
     // A no with a reason may be a lesson: the Odd that asked reads it once. The
     // office raised a window ask, not the Odd named on it, so it has none to learn.
     if (decision === 'deny' && ask.reason && ask.kind !== 'window')
@@ -868,7 +1639,7 @@ async function answerLater(
  */
 export async function replyToReport(id: number, note: string): Promise<ReportRow> {
   const r = await report(id);
-  if (!r) throw new Error('No such report');
+  if (!r) throw fixedError('No such report');
   if (!r.readAt) await readReport(id);
   await record({
     kind: 'decision',
@@ -1237,19 +2008,25 @@ async function titleOf(f: FollowUpRow): Promise<string | undefined> {
 
 /**
  * Grant access, then give the owner whatever steps connecting it still needs.
- * Says whether that put a task on the desk: a tool already connected needs none.
+ * Says whether that put a task on the desk (a tool already connected needs
+ * none), and which connector it granted: with `another`, a new one for one
+ * more Google account, made once the grant can go.
  */
 export async function grantAccess(
   staffId: string,
   req: AccessRequest,
   askId?: number
-): Promise<{ task: boolean }> {
+): Promise<{ task: boolean; connector: string }> {
   const who = await staffer(staffId);
-  const conn = await connector(req.connector);
-  if (!who || !conn) throw new Error('No such Odd or connector');
-  if (req.level === 'draft') throw new Error(`${conn.name} connects to read, or to read and write`);
-  if (!levelAtMost(req.level, who.permission))
+  const named = await connector(req.connector);
+  if (!who || !named) throw fixedError('No such Odd or connector');
+  if (req.level === 'draft')
+    throw new Error(`${named.name} connects to read, or to read and write`);
+  if (!grantWorks(req.level, who.permission))
     throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${req.level}`);
+  if (req.another && named.config.google !== req.another)
+    throw new Error(`Only Gmail and Google Drive take another account`);
+  const conn = req.another ? await addGoogleAccount(req.another) : named;
   await db
     .insert(grants)
     .values({ staffId, connectorId: conn.id, level: req.level, askId })
@@ -1259,14 +2036,20 @@ export async function grantAccess(
     });
   const steps = connectSteps(conn);
   if (steps.length) {
+    // A further Google account not signed in yet reads as one, beside the one already there.
+    const g = conn.config.google;
+    const called =
+      g && conn.id !== GOOGLE[g].id && !conn.config.account
+        ? `another ${conn.name} account`
+        : conn.name;
     await db.insert(tasks).values({
       staffId,
       askId,
-      title: `Connect ${conn.name} for ${who.name}`,
+      title: `Connect ${called} for ${who.name}`,
       why: `${who.name} needs ${conn.name} at ${req.level} level.`,
       steps
     });
-    return { task: true };
+    return { task: true, connector: conn.id };
   }
   // Already connected: the staffer can use it now, and nothing waits on the owner.
   await record({
@@ -1276,8 +2059,8 @@ export async function grantAccess(
     body: `${conn.name} was already connected, so there were no steps for ${await ownerName()}.`,
     askId
   });
-  if (askId) await followUp(staffId, 'carry_out', { askId, note: null });
-  return { task: false };
+  // An ask's carry-out is its caller's to start (`decide`), since one answer may settle twins.
+  return { task: false, connector: conn.id };
 }
 
 /**
@@ -1315,20 +2098,126 @@ export async function reconnectTask(
   const task = await giveTask(staffId, {
     title: `Reconnect ${conn.name} for ${who.name}`,
     why: problem,
-    steps: [...(takesKey ? getKey : []), ...steps]
+    steps: [...(takesKey ? getKey : []), ...steps],
+    byOffice: true
   });
   return { task, already: false, keptOut: !takesKey && getKey.length > 0 };
 }
+
+/**
+ * The owner wants an AWS tool on another role or Region: its one desk step
+ * goes on the desk again, from the office, starting on what it uses now.
+ * Picking connects it again. A tool has one open at a time.
+ */
+export async function changeAwsTask(connectorId: string): Promise<TaskRow> {
+  const conn = await connector(connectorId);
+  if (!conn || !isAws(conn.id)) throw new Error('Only an AWS tool has a role and Region to change');
+  const open = await db.select().from(tasks).where(eq(tasks.status, 'open'));
+  const waiting = open.find((t) =>
+    t.steps.some((st) => st.action?.kind === 'aws' && st.action.connector === conn.id)
+  );
+  if (waiting) return waiting;
+  return giveTask(null, {
+    title: `Change the role or Region for ${conn.name}`,
+    why: `You asked to change the AWS role or Region ${conn.name} uses.`,
+    steps: connectSteps(conn, true)
+  });
+}
+
+/** The longest name the owner can give a service. */
+export const SERVICE_NAME_MAX = 60;
+
+/**
+ * The owner names a service, such as Open Brain for a server they added by
+ * its address. Odds read the new name too, since every run reads the row.
+ */
+export async function renameConnector(id: string, name: string): Promise<void> {
+  const c = await connector(id);
+  if (!c) throw new Error('No such service');
+  const named = name.trim().replace(/\s+/g, ' ');
+  if (!named || named.length > SERVICE_NAME_MAX)
+    throw new Error(`Give it a name of 1 to ${SERVICE_NAME_MAX} characters.`);
+  if (named === c.name) return;
+  await db.update(connectors).set({ name: named }).where(eq(connectors.id, id));
+  await record({ kind: 'access', actor: 'owner', title: `Renamed ${c.name} to ${named}` });
+}
+
+/** Each service's name by its id, for the lines that say what an Odd is doing. */
+export async function serviceNames(): Promise<Record<string, string>> {
+  const rows = await db.select({ id: connectors.id, name: connectors.name }).from(connectors);
+  return Object.fromEntries(rows.map((r) => [r.id, r.name]));
+}
+
+/** A service in the office and every Odd that holds it, for the owner's Services window. */
+export type OfficeService = {
+  id: string;
+  name: string;
+  description: string;
+  ready: boolean;
+  aws: boolean;
+  odds: { id: string; name: string; level: Level }[];
+};
+
+/** Every service an Odd holds or that is connected, by name, with who holds it. */
+export async function services(): Promise<OfficeService[]> {
+  const held = await db
+    .select({
+      connectorId: grants.connectorId,
+      level: grants.level,
+      id: staff.id,
+      name: staff.name
+    })
+    .from(grants)
+    .innerJoin(staff, eq(grants.staffId, staff.id))
+    .orderBy(asc(staff.name));
+  return (await catalog())
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+      ready: !!c.readyAt,
+      aws: isAws(c.id),
+      odds: held
+        .filter((h) => h.connectorId === c.id)
+        .map((h) => ({ id: h.id, name: h.name, level: h.level }))
+    }))
+    .filter((s) => s.ready || s.odds.length);
+}
+
+/**
+ * The AWS tools, by what the owner wants: their secrets' names (and the
+ * office's keys), reading their account, or building in it. The office signs
+ * in to AWS itself, once for all three (the office's `aws.ts`).
+ */
+export const AWS_SECRETS_ID = 'aws-secrets';
+export const AWS_READ_ID = 'aws-read';
+export const AWS_BUILD_ID = 'aws-build';
+export const AWS_IDS: readonly string[] = [AWS_SECRETS_ID, AWS_READ_ID, AWS_BUILD_ID];
+export const isAws = (id: string): boolean => AWS_IDS.includes(id);
+/** Where the one AWS sign-in sits in the secret store. */
+export const AWS_SIGN_IN = { id: 'aws', name: 'sso' } as const;
+
+const AWS_STEP: Record<string, string> = {
+  [AWS_SECRETS_ID]:
+    'Sign in to AWS, then pick the role the office reads your secrets with. Your Odds see secret names only, never their values.',
+  [AWS_READ_ID]:
+    'Sign in to AWS, then pick the role your Odds read AWS with. The office checks that it cannot read a secret value.',
+  [AWS_BUILD_ID]:
+    'Sign in to AWS, then pick the role your Odds build in AWS with. The office checks that it cannot read a secret value.'
+};
 
 /** The steps that connect a tool. `again` gives them even when it looks connected. */
 function connectSteps(conn: ConnectorRow, again = false): Step[] {
   if (conn.readyAt && !again) return [];
   const key = `oauth:${conn.id}`;
+  // One step: picking the role connects the tool too.
+  if (isAws(conn.id))
+    return [{ text: AWS_STEP[conn.id], done: false, action: { kind: 'aws', connector: conn.id } }];
   return [
     ...(conn.config.oauth
       ? [
           {
-            text: `Click Sign in. ${conn.name}'s sign-in page opens in a new tab.`,
+            text: `Click Sign in. ${conn.config.oauth === 'google' ? 'Google' : conn.name}'s sign-in page opens in a new tab.`,
             done: false,
             key,
             action: { kind: 'oauth' as const, connector: conn.id }
@@ -1366,6 +2255,190 @@ export async function catalog(): Promise<ConnectorRow[]> {
 export async function addConnector(c: typeof connectors.$inferInsert): Promise<ConnectorRow> {
   const [row] = await db.insert(connectors).values(c).onConflictDoNothing().returning();
   return row ?? (await connector(c.id))!;
+}
+
+/**
+ * The Google products the office serves itself: the connector each starts
+ * with (migration 0009_google), and its plain name before a sign-in names
+ * the account. A further account of one is a connector of its own
+ * (`addGoogleAccount`). Code looks a Google connector up by
+ * `config.google`, never by its id.
+ */
+export const GOOGLE: Record<GoogleProduct, { id: string; name: string; description: string }> = {
+  gmail: {
+    id: 'gmail',
+    name: 'Gmail',
+    description: "Search, read, label, draft and send mail in the owner's Gmail."
+  },
+  drive: {
+    id: 'google-drive',
+    name: 'Google Drive',
+    description: "Find and read files in the owner's Google Drive, and write Docs and Sheets."
+  }
+};
+
+/** Whether two Google addresses are one account: Google ignores case. */
+const sameAccount = (a: string | undefined, b: string | undefined) =>
+  !!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+/** Every connector of one Google product, or of both, oldest first. */
+export async function googleConnectors(product?: GoogleProduct): Promise<ConnectorRow[]> {
+  const rows = await db
+    .select()
+    .from(connectors)
+    .orderBy(asc(connectors.createdAt), asc(connectors.id));
+  return rows.filter((c) => (product ? c.config.google === product : !!c.config.google));
+}
+
+/**
+ * One more Google account of a product: a new connector, `gmail-2`,
+ * `gmail-3` and so on, named plainly until its sign-in names the account.
+ */
+export async function addGoogleAccount(product: GoogleProduct): Promise<ConnectorRow> {
+  const g = GOOGLE[product];
+  for (;;) {
+    const taken = (await googleConnectors(product)).map((c) => c.id);
+    let n = 2;
+    while (taken.includes(`${g.id}-${n}`)) n++;
+    const [row] = await db
+      .insert(connectors)
+      .values({
+        id: `${g.id}-${n}`,
+        name: g.name,
+        description: g.description,
+        kind: 'builtin',
+        config: { oauth: 'google', google: product }
+      })
+      .onConflictDoNothing()
+      .returning();
+    // Two at once can pick the same number: the second tries the next.
+    if (row) return row;
+  }
+}
+
+/**
+ * The Gmail account a reply or filter goes through: the connector it names,
+ * or, with none named, the first Gmail account its Odd holds.
+ */
+export async function mailboxOf(a: AskRow): Promise<ConnectorRow | undefined> {
+  const named = a.reply?.connector ?? a.filter?.connector;
+  if (named) return connector(named);
+  const held = (await grantsFor(a.staffId)).find((g) => g.connector.config.google === 'gmail');
+  return held?.connector ?? (await googleConnectors('gmail'))[0];
+}
+
+/** Give a connector the name the owner sees. */
+export async function nameConnector(id: string, name: string): Promise<void> {
+  await db.update(connectors).set({ name }).where(eq(connectors.id, id));
+}
+
+/**
+ * Another connector of the same Google product already signed in to this
+ * address, if one is: one account is one connector.
+ */
+export async function googleAccountHeld(
+  id: string,
+  address: string
+): Promise<ConnectorRow | undefined> {
+  const c = await connector(id);
+  if (!c?.config.google) return undefined;
+  return (await googleConnectors(c.config.google)).find(
+    (o) => o.id !== id && sameAccount(o.config.account, address)
+  );
+}
+
+/**
+ * A Google sign-in landed: the connector keeps the address and is named after
+ * it ("Gmail (ada@example.com)"), so the owner and its Odds know whose mail
+ * or files it reaches. Its sign-in step reads as it always does again.
+ */
+export async function signedInAs(id: string, address: string): Promise<void> {
+  const c = await connector(id);
+  if (!c?.config.google) return;
+  await db
+    .update(connectors)
+    .set({
+      name: `${GOOGLE[c.config.google].name} (${address})`,
+      config: { ...c.config, account: address }
+    })
+    .where(eq(connectors.id, id));
+  await sayOnSignIn(id);
+}
+
+/**
+ * Put words before the sign-in step of a connector's open connect tasks, such
+ * as why the last sign-in was not kept. None puts the step back as it was.
+ */
+export async function sayOnSignIn(id: string, words?: string): Promise<void> {
+  const c = await connector(id);
+  if (!c) return;
+  const [plain] = connectSteps(c, true);
+  if (!plain) return;
+  const open = await db.select().from(tasks).where(eq(tasks.status, 'open'));
+  for (const t of open) {
+    const steps = t.steps.map((s) =>
+      s.action?.kind === 'oauth' && s.action.connector === id
+        ? { ...s, text: words ? `${words} ${plain.text}` : plain.text }
+        : s
+    );
+    if (JSON.stringify(steps) !== JSON.stringify(t.steps))
+      await db.update(tasks).set({ steps }).where(eq(tasks.id, t.id));
+  }
+}
+
+/** Whether a connector holds a sign-in in the secret store. */
+function signedIn(id: string): boolean {
+  try {
+    const saved = JSON.parse(getSecret(id, 'oauth') ?? '{}') as { tokens?: unknown };
+    return !!saved.tokens;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The other Google connectors that share this one's grant at Google. Google
+ * ties a sign-in to the account and the office's client, not to the product,
+ * so cancelling Gmail's would end the same account's Drive too. One whose
+ * account is not known counts as shared, to be safe.
+ */
+async function sharesGrant(c: ConnectorRow): Promise<ConnectorRow[]> {
+  return (await googleConnectors()).filter(
+    (o) =>
+      o.id !== c.id &&
+      signedIn(o.id) &&
+      (!c.config.account || !o.config.account || sameAccount(o.config.account, c.config.account))
+  );
+}
+
+/**
+ * Tell Google to cancel a sign-in before the office forgets it, so the
+ * permission is gone from the owner's Google account too, not just from this
+ * computer. Best effort: false when Google could not be told.
+ */
+async function revokeAtGoogle(id: string): Promise<boolean> {
+  let token: string | undefined;
+  try {
+    const saved = JSON.parse(getSecret(id, 'oauth') ?? '{}') as {
+      tokens?: { refresh_token?: string; access_token?: string };
+    };
+    token = saved.tokens?.refresh_token ?? saved.tokens?.access_token;
+  } catch {
+    return false;
+  }
+  if (!token) return true;
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token }),
+      signal: AbortSignal.timeout(10_000)
+    });
+    // 400 means Google no longer knows the token: already cancelled.
+    return res.ok || res.status === 400;
+  } catch {
+    return false;
+  }
 }
 
 /** Change how the office starts a connector, e.g. when a server turns out to need no sign-in. */
@@ -1425,17 +2498,61 @@ export async function reconfigureConnector(
 }
 
 /**
+ * What happened at Google when the office forgot a Google connector: told
+ * (true), could not be told (false), or left alone, since another connector
+ * still uses the same Google account (`kept`, those connectors' names).
+ */
+type GoogleTold = boolean | { kept: string[] };
+
+/**
  * No Odd holds a tool any more: its keys and sign-ins come out of the secret
  * store, so none sit there unused, and it needs connecting again before the
- * next grant uses it. True when there was something to remove.
+ * next grant uses it. True when there was something to remove. A further
+ * Google account (`gmail-2`) leaves the catalog too, since the owner adds
+ * another whenever they want one.
  */
-async function forgetConnector(id: string): Promise<boolean> {
+async function forgetConnector(id: string): Promise<{ forgot: boolean; googleTold?: GoogleTold }> {
   const c = await connector(id);
-  if (!c) return false;
+  if (!c) return { forgot: false };
+  if (isAws(id)) return { forgot: await forgetAws(c) };
+  const product = c.config.google;
+  let googleTold: GoogleTold | undefined;
+  if (c.config.oauth === 'google' && signedIn(id)) {
+    const shared = await sharesGrant(c);
+    googleTold = shared.length ? { kept: shared.map((o) => o.name) } : await revokeAtGoogle(id);
+  }
   const removed = secretNames(c, true).filter((name) => deleteSecret(id, name));
-  if (removed.length)
-    await db.update(connectors).set({ readyAt: null }).where(eq(connectors.id, id));
-  return removed.length > 0;
+  if (product && id !== GOOGLE[product].id) {
+    await db.delete(connectors).where(eq(connectors.id, id));
+    return { forgot: removed.length > 0, googleTold };
+  }
+  if (removed.length) {
+    const config = { ...c.config };
+    delete config.account;
+    await db
+      .update(connectors)
+      .set({ readyAt: null, ...(product ? { name: GOOGLE[product].name, config } : {}) })
+      .where(eq(connectors.id, id));
+  }
+  return { forgot: removed.length > 0, googleTold };
+}
+
+/**
+ * An AWS tool no Odd holds drops its role. Secrets Manager keeps its role
+ * while another tool's key comes from AWS, since the office reads those keys
+ * with it. The one sign-in goes once no AWS tool has a role.
+ */
+async function forgetAws(c: ConnectorRow): Promise<boolean> {
+  const all = await db.select().from(connectors);
+  const keysFromAws = all.some((k) => Object.keys(k.config.fromAws ?? {}).length);
+  if (!c.config.aws || (c.id === AWS_SECRETS_ID && keysFromAws)) return false;
+  await db
+    .update(connectors)
+    .set({ config: { ...c.config, aws: undefined }, readyAt: null })
+    .where(eq(connectors.id, c.id));
+  if (!all.some((k) => k.id !== c.id && isAws(k.id) && k.config.aws))
+    deleteSecret(AWS_SIGN_IN.id, AWS_SIGN_IN.name);
+  return true;
 }
 
 export async function connectorReady(
@@ -1449,6 +2566,26 @@ export async function connectorReady(
     .where(eq(connectors.id, id));
 }
 
+/**
+ * Take tools out of what a Read only grant to a connector reaches, when they
+ * no longer pass `readsOnly`: a connector the owner connected before the rule
+ * held, or a server that changed its marks. Records which ones went and why,
+ * so the owner can see it in the Ledger.
+ */
+export async function narrowReadTools(id: string, gone: string[]): Promise<void> {
+  const c = await connector(id);
+  if (!c || !gone.length) return;
+  const keep = c.readTools.filter((t) => !gone.includes(t));
+  if (keep.length === c.readTools.length) return;
+  await db.update(connectors).set({ readTools: keep }).where(eq(connectors.id, id));
+  await record({
+    kind: 'access',
+    actor: 'office',
+    title: `Read only for ${c.name} no longer reaches ${gone.join(', ')}`,
+    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. Read and write reaches ${gone.length === 1 ? 'it' : 'them'}: at Drafts for your yes each use waits for your yes, and at Acts on its own it goes.`
+  });
+}
+
 export async function grantsFor(
   staffId: string
 ): Promise<(GrantRow & { connector: ConnectorRow })[]> {
@@ -1458,6 +2595,40 @@ export async function grantsFor(
     .innerJoin(connectors, eq(grants.connectorId, connectors.id))
     .where(eq(grants.staffId, staffId));
   return rows.map((r) => ({ ...r.grants, connector: r.connectors }));
+}
+
+/**
+ * Change a grant's level in place: Read only or Read and write. The tool stays
+ * connected and signed in, with no new steps, and the change reaches the
+ * Odd's next run. Write needs the Draft level or higher (`grantWorks`).
+ */
+export async function setGrantLevel(
+  staffId: string,
+  connectorId: string,
+  level: 'read' | 'act'
+): Promise<void> {
+  const who = await staffer(staffId);
+  const conn = await connector(connectorId);
+  if (!who || !conn) throw new Error('No such Odd or tool');
+  if (!grantWorks(level, who.permission))
+    throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${level}`);
+  const [changed] = await db
+    .update(grants)
+    .set({ level })
+    .where(
+      and(
+        eq(grants.staffId, staffId),
+        eq(grants.connectorId, connectorId),
+        sql`${grants.level} <> ${level}`
+      )
+    )
+    .returning();
+  if (!changed) return;
+  await record({
+    kind: 'access',
+    actor: 'owner',
+    title: `${who.name} now has ${conn.name} ${level === 'act' ? 'to read and write' : 'to read only'}`
+  });
 }
 
 export async function revoke(staffId: string, connectorId: string): Promise<void> {
@@ -1472,13 +2643,22 @@ export async function revoke(staffId: string, connectorId: string): Promise<void
     .from(grants)
     .where(eq(grants.connectorId, connectorId))
     .limit(1);
-  const forgot = !held && (await forgetConnector(connectorId));
+  const [c, who] = await Promise.all([connector(connectorId), staffer(staffId)]);
+  const { forgot, googleTold } = held ? { forgot: false } : await forgetConnector(connectorId);
   await record({
     kind: 'access',
     actor: 'owner',
-    title: `Revoked ${connectorId} for ${staffId}`,
+    title: `Revoked ${c?.name ?? connectorId} for ${who?.name ?? staffId}`,
     body: forgot
-      ? "No Odd holds it now, so its saved keys and sign-ins came out of this computer's password store."
+      ? `No Odd holds it now, so its saved keys and sign-ins came out of this computer's password store.${
+          googleTold === true
+            ? ' Google cancelled the sign-in too.'
+            : googleTold === false
+              ? ' Google could not be told, so remove Oddboro at myaccount.google.com/permissions.'
+              : googleTold
+                ? ` Google keeps the sign-in, since ${googleTold.kept.join(' and ')} ${googleTold.kept.length === 1 ? 'uses' : 'use'} the same Google account. It came out of this computer only.`
+                : ''
+        }`
       : undefined
   });
 }
@@ -1498,10 +2678,19 @@ export async function giveTask(
     threadId?: number;
     /** The key of the run giving it, which its thread keeps, as `raiseAsk` says. */
     run?: string;
+    /** The colleague whose handed-back work the lead gave this from (`VIA`). */
+    via?: string;
+    /** The office gives it in the Odd's name (a plan's steps, a reconnect), so it may repeat a title. */
+    byOffice?: true;
   }
 ): Promise<TaskRow> {
   const steps = t.steps.map((s) => (typeof s === 'string' ? { text: s, done: false } : s));
   return db.transaction(async (tx) => {
+    // An Odd's own task may not repeat an item it already has on the desk.
+    if (staffId && !t.byOffice) {
+      await lockDesk(tx, staffId);
+      await refuseRepeat(tx, staffId, t.title);
+    }
     const [row] = await tx
       .insert(tasks)
       .values({
@@ -1510,7 +2699,8 @@ export async function giveTask(
         why: t.why,
         steps,
         handOffId: t.handOffId,
-        threadId: t.threadId
+        threadId: t.threadId,
+        via: t.via
       })
       .returning();
     if (row.threadId) {
@@ -1558,14 +2748,6 @@ export async function task(id: number): Promise<TaskRow | undefined> {
 }
 
 /** Tick a step, or every step sharing its key, and record an answer if the step asked for one. */
-/** Tick every step the owner can tick by hand, in one write: "I did all of these." */
-export async function tickAll(id: number): Promise<void> {
-  const t = await task(id);
-  if (!t) return;
-  const steps = t.steps.map((s) => (tickable(s) ? { ...s, done: true } : s));
-  await db.update(tasks).set({ steps }).where(eq(tasks.id, id));
-}
-
 export async function tickStep(id: number, index: number, answer?: string): Promise<void> {
   const t = await task(id);
   const step = t?.steps[index];
@@ -1639,7 +2821,7 @@ export async function finishTask(id: number, done: boolean, note: string | null)
   // work that was waiting on it.
   const a = t.askId ? await ask(t.askId) : undefined;
   if (a?.kind === 'access') {
-    await followUp(t.staffId, 'carry_out', { askId: a.id, note: null });
+    await carryOutTogether([a, ...(await answeredWith(a))]);
     return;
   }
   // Any other task a staffer gave them: the staffer picks up whatever waited on
@@ -1675,6 +2857,11 @@ export type Desk = {
   reports: ReportRow[];
   /** What the open asks and tasks carry. */
   attachments: AttachmentRow[];
+  /**
+   * Each open folder ask's folder by ask id, the home written `~`
+   * (`shownFolder`), which only the server can work out.
+   */
+  folders: Record<number, string>;
 };
 
 export async function desk(): Promise<Desk> {
@@ -1690,7 +2877,54 @@ export async function desk(): Promise<Desk> {
       .where(or(eq(asks.status, 'open'), eq(tasks.status, 'open')))
       .orderBy(asc(attachments.id))
   ]);
-  return { asks: a, tasks: t, reports: r, attachments: f.map((x) => x.attachments) };
+  // A twin waits behind the first ask it repeats, and the owner's answer to
+  // that one answers it too (`asksNoMore`, `decide`).
+  const shown = a.filter((x) => !a.some((first) => first.id < x.id && asksNoMore(first, x)));
+  return {
+    asks: shown,
+    tasks: t,
+    reports: r,
+    attachments: f.map((x) => x.attachments),
+    folders: Object.fromEntries(
+      shown.flatMap((x) => (x.folder ? [[x.id, shownFolder(x.folder.path)]] : []))
+    )
+  };
+}
+
+/** An ask or task an Odd has open on the owner's desk, as its prompt lists it. */
+export type OnDesk = { kind: 'ask' | 'task'; id: number; title: string };
+
+/**
+ * What an Odd still has open on the owner's desk, newest first: up to `limit`
+ * items, and how many more. A reply shows as "Reply to <subject>".
+ */
+export async function stillOnDesk(
+  staffId: string,
+  limit = 15
+): Promise<{ items: OnDesk[]; more: number }> {
+  const [a, t] = await Promise.all([
+    db
+      .select()
+      .from(asks)
+      .where(and(eq(asks.staffId, staffId), eq(asks.status, 'open'))),
+    db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.staffId, staffId), eq(tasks.status, 'open')))
+  ]);
+  const all = [
+    ...a.map((x) => ({
+      kind: 'ask' as const,
+      id: x.id,
+      title: x.reply ? `Reply to ${x.reply.subject}` : x.title,
+      at: x.createdAt
+    })),
+    ...t.map((x) => ({ kind: 'task' as const, id: x.id, title: x.title, at: x.createdAt }))
+  ].sort((x, y) => y.at.getTime() - x.at.getTime() || y.id - x.id);
+  return {
+    items: all.slice(0, limit).map(({ kind, id, title }) => ({ kind, id, title })),
+    more: Math.max(0, all.length - limit)
+  };
 }
 
 /** Something a staffer put on the owner's desk, as its chat shows it. */
@@ -1864,9 +3098,9 @@ export async function setDescription(
   by: { owner: true; was: string } | { go: GoAhead }
 ): Promise<boolean> {
   const who = await staffer(staffId);
-  if (!who) throw new Error('No such Odd');
+  if (!who) throw fixedError('No such Odd');
   const desk = text.trim();
-  if (!desk) throw new Error('A job description cannot be empty');
+  if (!desk) throw fixedError('A job description cannot be empty');
   if ('owner' in by && by.was.trim() !== who.desk.trim())
     throw new Error(`${who.name}'s job description changed since you opened it. Reopen it to see.`);
   if (desk === who.desk.trim()) return false;
@@ -1885,7 +3119,7 @@ export async function setDescription(
 /** Remove a job that never ran. One that ran stays, paused, so its runs keep their record. */
 export async function deleteJob(id: number): Promise<void> {
   const [ran] = await db.select({ id: runs.id }).from(runs).where(eq(runs.jobId, id)).limit(1);
-  if (ran) throw new Error('This job has run before, so it stays paused to keep its record.');
+  if (ran) throw fixedError('This job has run before, so it stays paused to keep its record.');
   await db.delete(jobs).where(eq(jobs.id, id));
 }
 
@@ -2107,7 +3341,7 @@ export async function finishWelcome(name: string): Promise<void> {
 /** Set the owner's name. */
 export async function setOwnerName(name: string): Promise<void> {
   const n = name.trim().slice(0, 30);
-  if (!n) throw new Error('Say a name');
+  if (!n) throw fixedError('Say a name');
   await db
     .insert(owner)
     .values({ id: 'owner', name: n, updatedAt: new Date() })
@@ -2189,9 +3423,9 @@ const POKE_HORIZON_MS = 7 * 24 * 3_600_000;
 export async function schedulePoke(staffId: string, at: Date, message: string): Promise<PokeRow> {
   const minute = new Date(Math.floor(at.getTime() / 60_000) * 60_000);
   // The minute under way still counts: a poke for it goes out right away.
-  if (minute.getTime() + 60_000 <= Date.now()) throw new Error('That time has passed.');
+  if (minute.getTime() + 60_000 <= Date.now()) throw fixedError('That time has passed.');
   if (minute.getTime() > Date.now() + POKE_HORIZON_MS)
-    throw new Error('A poke can be at most 7 days ahead.');
+    throw fixedError('A poke can be at most 7 days ahead.');
   const [same] = await db
     .select()
     .from(pokes)
@@ -2307,7 +3541,7 @@ export async function renameRoom(
   names: { was: string; start: string }
 ): Promise<string> {
   const next = name.trim().replace(/\s+/g, ' ') || names.start;
-  if (next.length > 40) throw new Error('Keep a room name to 40 characters');
+  if (next.length > 40) throw fixedError('Keep a room name to 40 characters');
   if (next === names.was) return next;
   if (next === names.start)
     await db.delete(roomNames).where(and(eq(roomNames.office, office), eq(roomNames.room, room)));

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { SETTINGS_TAB } from '@oddboro/ledger/access';
   import Pixel from './Pixel.svelte';
   import ChatPanel from './ChatPanel.svelte';
   import { chatRequest, type Delivered } from './chat-about.svelte.ts';
@@ -114,9 +115,10 @@
     },
     {
       id: 'settings',
-      label: 'Settings',
+      // The Odds are told this name, so they say where the owner finds its switches.
+      label: SETTINGS_TAB,
       icon: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
-      tabs: [{ id: 'access', label: 'Settings' }]
+      tabs: [{ id: 'access', label: SETTINGS_TAB }]
     }
   ] as const satisfies readonly {
     id: string;
@@ -131,10 +133,12 @@
   $effect(() => {
     if (group) last[group.id] = tab;
   });
-  /** What waits on a tab: guesses for the owner's Keep. Work in progress shows by the name. */
+  /**
+   * What waits on a tab: guesses for the owner's Keep. Only the tab shows it,
+   * never its group, so a closed group never reads as something to do.
+   * Work in progress shows by the name.
+   */
   const counts: Partial<Record<Tab, number>> = $derived({ lessons: profile.guesses });
-  /** A group's count is its tabs' together. */
-  const groupCount = (g: Group) => g.tabs.reduce((n, t) => n + (counts[t.id] ?? 0), 0);
 
   function onkey(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose();
@@ -215,7 +219,6 @@
   <nav class="groups flex border-b border-hairline text-sm" aria-label="Odd">
     {#each GROUPS as g, i (g.id)}
       {@const on = group?.id === g.id}
-      {@const n = groupCount(g)}
       <button
         class="flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 font-medium whitespace-nowrap transition-colors {i
           ? 'border-s border-hairline'
@@ -236,7 +239,6 @@
           aria-hidden="true"><path d={g.icon} /></svg
         >
         <span class="word">{g.label}</span>
-        {#if n}<span class="text-ember">{n}</span>{/if}
       </button>
     {/each}
   </nav>
@@ -332,6 +334,8 @@
         onend={onchatend}
         visible={tab === 'chat'}
         {onitem}
+        {work}
+        onwork={showWork}
       />
     </div>
   </div>

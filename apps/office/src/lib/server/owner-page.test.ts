@@ -1,5 +1,5 @@
-// Which requests the office answers: `guardOffice`, the server's `handle`, in
-// front of the real routes, over the office's own database (local-db.ts) in a
+// Which requests the office answers: `guardOffice`, the first step of the
+// server's `handle`, in front of the real routes, over the office's own database (local-db.ts) in a
 // throwaway folder on a free port. Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -42,6 +42,7 @@ const { bringUpToDate } = await import('@oddboro/ledger/upgrade');
 await bringUpToDate();
 const L = await import('@oddboro/ledger');
 const { fromOwnerPage, guardOffice } = await import('./owner-page.ts');
+const { closeGateway, openGateway } = await import('./gateway.ts');
 const askRoute = await import('../../routes/api/asks/[id]/+server.ts');
 const updateRoute = await import('../../routes/api/update/+server.ts');
 const openRoute = await import('../../routes/api/files/open/+server.ts');
@@ -122,8 +123,17 @@ async function openAsk(): Promise<{ id: string; status: () => Promise<string | u
   return { id: String(id), status: async () => (await L.ask(id))?.status };
 }
 
-test("the server's handle is the guard, so every route request passes it", () => {
-  assert.equal(hooks.handle, guardOffice);
+test('every route request passes the guard before anything else', async () => {
+  // The server's handle is a sequence, which needs the request store Kit gives each request.
+  const { sender } = await import('./diagnostics-harness.ts');
+  const send = sender(hooks.handle);
+  const refused = await send({
+    route: '/api/ledger',
+    headers: { host: 'rebind.evil.example:4500' }
+  });
+  assert.deepEqual(refused, { status: 403, ran: false });
+  // The same request from the office's own name reaches the route.
+  assert.deepEqual(await send({ route: '/api/ledger' }), { status: 200, ran: true });
 });
 
 test('an approval sent from another site is refused, and the ask stays open', async () => {
@@ -240,6 +250,31 @@ test('the shell reports an update with its token, and nothing else reports one',
     headers: { ...PAGE, 'x-oddboro-update-token': 'wrong-token-for-tests' }
   });
   assert.deepEqual([page.status, page.ran], [403, true]);
+});
+
+test("a run's token reaches its gateway while the run goes, and nothing else", async () => {
+  const notes = {
+    id: 'notes',
+    name: 'Notes',
+    readTools: [],
+    tools: [],
+    config: {}
+  } as unknown as import('@oddboro/ledger').ConnectorRow;
+  const { token } = openGateway([{ connector: notes, level: 'read' }], 60_000);
+  const call = { path: '/api/gateway/notes', body: '{}' };
+  const run = await send(ok, { ...call, headers: { authorization: `Bearer ${token}` } });
+  assert.deepEqual([run.status, run.ran], [200, true]);
+  for (const auth of ['', 'Bearer wrong-token-for-tests', token]) {
+    const r = await send(ok, { ...call, headers: { authorization: auth } });
+    assert.deepEqual([auth, r.status, r.ran], [auth, 403, false]);
+  }
+  // The token opens only the gateway, never another route.
+  const elsewhere = await send(ok, { headers: { authorization: `Bearer ${token}` } });
+  assert.deepEqual([elsewhere.status, elsewhere.ran], [403, false]);
+  // Once the run ends, its token opens nothing.
+  await closeGateway(token);
+  const ended = await send(ok, { ...call, headers: { authorization: `Bearer ${token}` } });
+  assert.deepEqual([ended.status, ended.ran], [403, false]);
 });
 
 test("only the owner's page reaches the route that opens a page", async () => {

@@ -15,10 +15,13 @@
     "./platform": "./src/platform.ts",
     "./secrets": "./src/secrets.ts",
     "./env": "./src/env.ts",
+    "./errors": "./src/errors.ts",
+    "./home": "./src/home.ts",
     "./local-db": "./src/local-db.ts",
     "./upgrade": "./src/upgrade.ts",
     "./update-window": "./src/update-window.ts",
-    "./work-paths": "./src/work-paths.ts"
+    "./work-paths": "./src/work-paths.ts",
+    "./filters": "./src/filter-words.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

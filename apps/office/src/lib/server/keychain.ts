@@ -10,7 +10,11 @@ export { deleteSecret, getSecret, setSecret } from '@oddboro/ledger/secrets';
  * scheme is a bare key, so it gets the Bearer every API we connect to expects.
  */
 export function headerSecret(connector: string, name: string): string {
-  const value = getSecret(connector, name) ?? '';
+  return asHeader(name, getSecret(connector, name) ?? '');
+}
+
+/** A key as the header named `name` carries it. */
+export function asHeader(name: string, value: string): string {
   return name.toLowerCase() === 'authorization' && value && !/\s/.test(value)
     ? `Bearer ${value}`
     : value;

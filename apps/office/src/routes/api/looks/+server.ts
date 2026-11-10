@@ -9,7 +9,7 @@ import type { RequestHandler } from './$types';
 /** The page shrinks a headshot to 512 px before sending it, so this is generous. */
 const PHOTO_MAX = 1_500_000;
 /** Models a drawing may ask for by name, to compare them. The page never sends one. */
-const MODELS = ['claude-opus-5-5', 'claude-fable-5-1'];
+const MODELS = ['claude-opus-5-5', 'claude-fable-5-2', 'claude-fable-5-1'];
 
 export const POST: RequestHandler = async ({ request }) => {
   const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -32,7 +32,9 @@ export const POST: RequestHandler = async ({ request }) => {
         note: text('note', 600) || undefined,
         previous: b.previous ? drawnFrom(b.previous as Record<string, unknown>) : undefined,
         photo: photo ? { mediaType: photo[1], data: photo[2] } : undefined,
-        model: MODELS.includes(text('model', 40)) ? text('model', 40) : undefined
+        model: MODELS.includes(text('model', 40)) ? text('model', 40) : undefined,
+        // The page drops the request to stop the drawing (Build from parts, or Stop).
+        signal: request.signal
       })
     );
   } catch (e) {

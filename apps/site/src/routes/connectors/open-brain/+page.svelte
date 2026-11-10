@@ -4,15 +4,15 @@
   // office's own steps: the Services tab, Takes a key with x-brain-key, then
   // the connect task on the desk. Keep each label in step with the office
   // (AccessTab.svelte, DeskDrawer.svelte, connectSteps in the ledger).
+  import Guide from '#lib/components/Guide.svelte';
   import Meta from '#lib/components/Meta.svelte';
-  import { reveal } from '#lib/motion/index.ts';
+  import type { Part, Trouble } from '#lib/guides/types.ts';
   import { SITE } from '#lib/site.ts';
 
   const REPO = 'https://github.com/NateBJones-Projects/OB1';
-  const GUIDE = `${REPO}/blob/main/docs/01-getting-started.md`;
+  const SETUP = `${REPO}/blob/main/docs/01-getting-started.md`;
 
-  type Step = { text: string; detail?: string; code?: string };
-  const PARTS: { title: string; steps: Step[] }[] = [
+  const PARTS: Part[] = [
     {
       title: 'Add Open Brain to an Odd',
       steps: [
@@ -27,16 +27,16 @@
           text: 'Paste your MCP Server URL into the search box.',
           detail:
             'Use the address that ends in /open-brain-mcp, with no ?key= after it. The key goes in later, somewhere safer.',
-          code: 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/open-brain-mcp'
+          example: 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/open-brain-mcp'
         },
         {
           text: 'Click Connect YOUR_PROJECT_REF.supabase.co, just under the box.'
         },
         { text: 'Click Takes a key.' },
         {
-          text: 'In “The header the key goes in”, delete Authorization and type x-brain-key.',
+          text: 'In “The header the key goes in”, delete Authorization and type this.',
           detail: 'All lowercase, with the dashes.',
-          code: 'x-brain-key'
+          copy: 'x-brain-key'
         },
         {
           text: 'Pick how far the Odd can go.',
@@ -65,15 +65,15 @@
           detail: 'The office reaches your Open Brain and lists its tools.'
         },
         {
-          text: 'Leave the ticks as they are, and click Confirm.',
+          text: 'Click Confirm.',
           detail:
-            'The ticked tools only read. capture_thought, the one that saves, stays unticked, so only a Read and write Odd can use it.'
+            'The list marks the tools Read only reaches: the ones Open Brain marks as only reading. capture_thought, the one that saves, needs Read and write.'
         }
       ]
     }
   ];
 
-  const TROUBLE: { q: string; a: string }[] = [
+  const TROUBLE: Trouble[] = [
     {
       q: 'Connect fails, or says 401.',
       a: 'The header or the key is off. The header must be x-brain-key, exactly. The key must match your MCP Access Key, with no space before or after it. Click Revoke on the service and start again.'
@@ -99,17 +99,13 @@
   path="/connectors/open-brain/"
 />
 
-<article class="mx-auto max-w-3xl px-4 pt-14 pb-24 sm:px-6 lg:px-8">
-  <header use:reveal class="border-hairline border-b pb-8">
-    <p class="text-sea mb-3 text-sm font-semibold tracking-wide uppercase">Connectors</p>
-    <h1 class="font-pixel text-ink text-4xl leading-[1.05] sm:text-5xl">Open Brain</h1>
-    <p class="text-muted mt-5 text-lg leading-relaxed">
-      Give an Odd your Open Brain, and it can search everything you have saved there. Let it, and it
-      saves new thoughts too. It takes about two minutes.
-    </p>
-  </header>
-
-  <section use:reveal class="mt-10">
+<Guide
+  title="Open Brain"
+  lede="Give an Odd your Open Brain, and it can search everything you have saved there. Let it, and it saves new thoughts too. It takes about two minutes."
+  parts={PARTS}
+  trouble={TROUBLE}
+>
+  {#snippet intro()}
     <h2 class="font-pixel text-ink text-2xl">What Open Brain is</h2>
     <p class="text-muted mt-3 leading-relaxed">
       Open Brain is a memory you own. It is a database of your thoughts, notes and ideas that any AI
@@ -123,15 +119,13 @@
       class="text-sea mt-4 inline-flex items-center gap-1.5 font-medium hover:underline"
       >Open Brain on GitHub <span aria-hidden="true">↗</span></a
     >
-  </section>
-
-  <section use:reveal class="bg-raise border-hairline mt-10 rounded-xl border p-5 sm:p-6">
-    <h2 class="font-pixel text-ink text-2xl">Before you start</h2>
+  {/snippet}
+  {#snippet before()}
     <ol class="text-muted mt-4 flex list-decimal flex-col gap-3 ps-5 leading-relaxed">
       <li>
         Build your Open Brain with
         <a
-          href={GUIDE}
+          href={SETUP}
           target="_blank"
           rel="noopener noreferrer"
           class="text-sea font-medium hover:underline">its setup guide</a
@@ -150,65 +144,21 @@
       </li>
       <li>Open {SITE.name}, with the Odd you want to give it to already hired.</li>
     </ol>
-  </section>
-
-  {#each PARTS as part, p (part.title)}
-    <section use:reveal class="mt-12">
-      <h2 class="font-pixel text-ink text-2xl">
-        <span class="text-sea">Part {p + 1}.</span>
-        {part.title}
-      </h2>
-      <ol class="mt-5 flex flex-col gap-4">
-        {#each part.steps as s, i (s.text)}
-          <li class="flex gap-4">
-            <span
-              class="bg-sea text-night font-pixel grid size-8 shrink-0 place-items-center rounded-lg text-sm"
-              aria-hidden="true">{i + 1}</span
-            >
-            <div class="min-w-0 flex-1 pt-1">
-              <p class="text-ink leading-relaxed">{s.text}</p>
-              {#if s.detail}
-                <p class="text-muted mt-1 text-sm leading-relaxed">{s.detail}</p>
-              {/if}
-              {#if s.code}
-                <code
-                  class="bg-raise border-hairline text-sea mt-2 block overflow-x-auto rounded-lg border px-3 py-2 font-mono text-sm break-all"
-                  >{s.code}</code
-                >
-              {/if}
-            </div>
-          </li>
-        {/each}
-      </ol>
-    </section>
-  {/each}
-
-  <section use:reveal class="mt-12">
+  {/snippet}
+  {#snippet after()}
     <h2 class="font-pixel text-ink text-2xl">Try it</h2>
     <p class="text-muted mt-3 leading-relaxed">
       Open a chat with the Odd and ask, “What have I saved about this week?” It searches your Open
       Brain and answers from it.
     </p>
-  </section>
-
-  <section use:reveal class="mt-12">
-    <h2 class="font-pixel text-ink text-2xl">If something goes wrong</h2>
-    <dl class="mt-5 flex flex-col gap-5">
-      {#each TROUBLE as t (t.q)}
-        <div>
-          <dt class="text-ink font-medium">{t.q}</dt>
-          <dd class="text-muted mt-1 leading-relaxed">{t.a}</dd>
-        </div>
-      {/each}
-    </dl>
-    <p class="text-muted mt-8 text-sm leading-relaxed">
+    <p class="text-muted mt-6 text-sm leading-relaxed">
       For problems with Open Brain itself, see
       <a
-        href={GUIDE}
+        href={SETUP}
         target="_blank"
         rel="noopener noreferrer"
         class="text-sea font-medium hover:underline">its setup guide</a
       >.
     </p>
-  </section>
-</article>
+  {/snippet}
+</Guide>

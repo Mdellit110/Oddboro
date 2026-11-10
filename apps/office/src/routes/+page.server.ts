@@ -5,12 +5,15 @@ import {
   MAC,
   roomNamesFor,
   roster,
+  serviceNames,
   switchedOffIn,
   unreadPokes,
   welcomed,
   zone
 } from '@oddboro/ledger';
+import { accountStatus } from '#lib/server/account.ts';
 import { keepAddress } from '#lib/server/address.ts';
+import { diagnosticsState } from '#lib/server/diagnostics.ts';
 import { currentOffice } from '#lib/server/space.ts';
 import { toProfile } from '#lib/server/profile.ts';
 import { heldThreads } from '#lib/staff/thread-tags.ts';
@@ -35,9 +38,13 @@ export const load: PageServerLoad = async () => {
     messages: await unreadPokes(),
     // So the first paint already keeps a lead waiting on a colleague at its desk.
     threads: heldThreads(await goalThreads()),
+    /** Each service's name by its id, for the lines saying what an Odd is doing. */
+    services: await serviceNames(),
     zone: zone(),
     /** What the header calls this computer. */
     computer: MAC ? 'Your Mac' : 'Your computer',
-    welcomed: !first
+    welcomed: !first,
+    diagnostics: diagnosticsState(),
+    account: accountStatus()
   };
 };

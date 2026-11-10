@@ -30,6 +30,7 @@ import {
   chat,
   chatOf,
   codexLaunches,
+  filesOf,
   folder,
   gave,
   goal,
@@ -41,8 +42,9 @@ import {
   withEnv
 } from './office-under-test.ts';
 
-const { mcpServers } = await import('./codex.ts');
+const { mcpServers, GATEWAY_TOKEN } = await import('./codex.ts');
 const { stopGroups } = await import('./launch.ts');
+const { deniedEdits } = await import('./files.ts');
 
 await L.pg`insert into staff ${L.pg([
   { ...odd('cody', 'Cody'), agent: 'codex' },
@@ -98,7 +100,7 @@ const forget = (id: string) => {
   rmSync(L.home('staff', id, 'chat.jsonl'), { force: true });
 };
 
-test("a Codex Odd's first chat starts codex exec with every switch the office sets, its message on stdin", async () => {
+test("a Codex Odd's first chat starts codex exec with every switch the office sets, its message on stdin, and the office's file tools in place of a shell", async () => {
   const run = await chatOf('cody');
   assert.deepEqual(plain(hideSets(run.args)), [
     'exec',
@@ -141,6 +143,9 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
       // Browse the web is off for a new Odd.
       'web_search="disabled"',
       'developer_instructions=<…>',
+      // Run commands is off for a new Odd: no shell, so files go through the office's file tools.
+      'features.shell_tool=false',
+      'features.unified_exec=false',
       'permissions=<…>',
       'default_permissions="odd"',
       'mcp_servers=<…>',
@@ -151,6 +156,19 @@ test("a Codex Odd's first chat starts codex exec with every switch the office se
   ]);
   assert.match(run.system, /You are Cody\./);
   assert.ok(run.message.endsWith('Hello.'), run.message);
+  // The office's file server, under this Node, holds the folders its profile holds, with every tool allowed.
+  const dir = join(folder, 'staff', 'cody');
+  assert.deepEqual(filesOf(run), {
+    command: process.execPath,
+    args: [L.FILES_SERVER],
+    walls: {
+      cwd: dir,
+      reads: [ownerData],
+      writes: [dir],
+      noWrite: deniedEdits({ dir, writes: [dir], granted: [] })
+    }
+  });
+  assert.equal(run.servers?.files.enabled_tools, undefined);
 });
 
 test("a Codex Odd's chat is held by the kernel to its own folder and its own temp folder, reads the owner's data folder it is told of, the developer folder xcode-select picks and node's OpenSSL config, and never reaches an instruction file, /tmp or the network", () =>
@@ -174,18 +192,20 @@ test("a Codex Odd's chat is held by the kernel to its own folder and its own tem
     });
   }));
 
-test("Codex's commands stay off the internet, Browse the web or not", async () => {
+test("with Run commands on, Codex's commands stay off the internet, Browse the web or not", async () => {
   const owner = await L.ownerName();
   const offline = `a shell confined to your folders and ${owner}'s developer tools (read only), with no network`;
-  await L.pg`update staff set web = true where id = 'cole'`;
+  await L.pg`update staff set commands = true, web = true where id = 'cole'`;
   try {
     const on = await chatOf('cole');
+    assert.ok(on.args.includes('features.shell_tool=true'), on.args.join(' '));
     assert.deepEqual(on.permissions?.network, { enabled: false });
     assert.ok(on.system.includes(offline), on.system);
-  } finally {
     await L.pg`update staff set web = false where id = 'cole'`;
+    assert.deepEqual((await chatOf('cole')).permissions?.network, { enabled: false });
+  } finally {
+    await L.pg`update staff set commands = false, web = false where id = 'cole'`;
   }
-  assert.deepEqual((await chatOf('cole')).permissions?.network, { enabled: false });
 });
 
 test("a Codex run reads the developer tool folders that exist and never their credential files, nor a link's folder, nor its file in a secret store or with a glob character in its path", () =>
@@ -404,26 +424,39 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
-test("a Codex Odd is told it has a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not, never that it has no shell", async () => {
+test("a Codex Odd without Run commands is told it has no shell and the owner can switch one on; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;
+  const switchOn = (name: string) =>
+    `${owner} can switch on ${name} in your Settings tab, under Office.`;
   const off = await chatOf('cody');
   assert.ok(
-    off.system.includes(`Your own tools work on files, plus ${shell}, with no network. No web.`),
+    off.system.includes(
+      `Your own tools work on files only. No shell: ${switchOn('Run commands')} No web: ${switchOn('Browse the web')}`
+    ),
     off.system
   );
-  assert.doesNotMatch(off.system, /no shell/);
-  await L.pg`update staff set web = true where id = 'cody'`;
+  assert.doesNotMatch(off.system, /a shell confined/);
+  await L.pg`update staff set commands = true where id = 'cody'`;
   try {
-    const on = await chatOf('cody');
+    const commands = await chatOf('cody');
     assert.ok(
-      on.system.includes(
+      commands.system.includes(
+        `Your own tools work on files, plus ${shell}, with no network. No web: ${switchOn('Browse the web')}`
+      ),
+      commands.system
+    );
+    assert.doesNotMatch(commands.system, /no shell|Run commands in/i);
+    await L.pg`update staff set web = true where id = 'cody'`;
+    const both = await chatOf('cody');
+    assert.ok(
+      both.system.includes(
         `Your own tools work on files, plus ${shell}, with no network, and web search.`
       ),
-      on.system
+      both.system
     );
   } finally {
-    await L.pg`update staff set web = false where id = 'cody'`;
+    await L.pg`update staff set commands = false, web = false where id = 'cody'`;
   }
 });
 
@@ -460,9 +493,15 @@ test('a recorded Codex turn replays as it ran: the floor sees the office call, t
   }
 });
 
-test('whatever a Codex run left running stops when the run ends', async () => {
+test('whatever a Codex run with Run commands left running stops when the run ends', async () => {
   const at = join(folder, 'sleeper.pid');
-  await chatOf('cole', `Leave a sleeper at ${at}`);
+  // Only a shell leaves processes behind, so only a run with one gets a process group of its own.
+  await L.pg`update staff set commands = true where id = 'cole'`;
+  try {
+    await chatOf('cole', `Leave a sleeper at ${at}`);
+  } finally {
+    await L.pg`update staff set commands = false where id = 'cole'`;
+  }
   const pid = Number(readFileSync(at, 'utf8'));
   const alive = () => {
     try {
@@ -594,6 +633,25 @@ test("a Codex run's MCP servers call their tools without asking, a server grante
       enabled_tools: ['search', 'read']
     }
   });
+});
+
+test("a Codex run reads the gateway's token from its environment, never its command line", () => {
+  const servers = mcpServers(
+    {
+      mail: {
+        type: 'http',
+        url: 'http://127.0.0.1:4500/api/gateway/gmail',
+        headers: { Authorization: 'Bearer tok' }
+      }
+    },
+    ['mcp__mail']
+  );
+  assert.deepEqual(servers.mail, {
+    url: 'http://127.0.0.1:4500/api/gateway/gmail',
+    bearer_token_env_var: GATEWAY_TOKEN,
+    default_tools_approval_mode: 'approve'
+  });
+  assert.doesNotMatch(JSON.stringify(servers), /the-run-secret/);
 });
 
 test('no test reached the keychain', () => {

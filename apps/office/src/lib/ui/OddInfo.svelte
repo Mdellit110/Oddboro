@@ -12,7 +12,6 @@
   import JobDescription from './JobDescription.svelte';
   import JobsSection from './JobsSection.svelte';
   import LookStudio from './LookStudio.svelte';
-  import UsageStats from './UsageStats.svelte';
   import WorkSection from './WorkSection.svelte';
   import { call } from './api.ts';
   import type { Work } from '../staff/work.ts';
@@ -111,7 +110,10 @@
   <section aria-label="Stats">
     <h3 class="mb-2 text-xs font-semibold text-ink">Stats</h3>
     <div class="-mx-4">
-      <UsageStats staffId={profile.id} {version} />
+      <!-- Loaded when shown: its charts (layerchart) stay out of the first page. -->
+      {#await import('./UsageStats.svelte') then { default: UsageStats }}
+        <UsageStats staffId={profile.id} {version} />
+      {/await}
     </div>
   </section>
 
@@ -141,11 +143,14 @@
       {/if}
     </div>
     <div class="mt-2 flex gap-1.5">
-      <button
-        class="flex-1 rounded-lg bg-raise px-3 py-2 text-xs text-ink hover:bg-sea/20"
-        aria-expanded={redrawing}
-        onclick={() => (redrawing = !redrawing)}>Redraw look</button
-      >
+      <!-- A persona Odd's look is its package's, the same in every office. -->
+      {#if !profile.persona}
+        <button
+          class="flex-1 rounded-lg bg-raise px-3 py-2 text-xs text-ink hover:bg-sea/20"
+          aria-expanded={redrawing}
+          onclick={() => (redrawing = !redrawing)}>Redraw look</button
+        >
+      {/if}
       <button
         class="flex-1 rounded-lg bg-raise px-3 py-2 text-xs text-ink hover:bg-sea/20"
         onclick={onsend}>Send to a place</button

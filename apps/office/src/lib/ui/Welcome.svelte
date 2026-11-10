@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { modelSection } from '@oddboro/ledger/access';
   import type { Check } from '@oddboro/ledger/checks';
+  import AccountSection from './AccountSection.svelte';
   import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
+  import DiagnosticsSection from './DiagnosticsSection.svelte';
   import OfficeTools from './OfficeTools.svelte';
   import { selectOnFocus } from './select-on-focus.ts';
   import UpdatesSection from './UpdatesSection.svelte';
+  import { shown } from './diagnostics.svelte.ts';
 
   // The office's first screen for a new owner, and its Setup window after:
   // the name staff call them, the office they work in, their first staffer,
@@ -17,8 +21,11 @@
     onhire: () => void;
     onmeet: (id: string) => void;
     ondone: () => void;
+    /** A notification when something new lands on the desk, per viewer. */
+    notify: boolean;
+    onnotify: (on: boolean) => void;
   };
-  let { office, welcomed, ondesign, onhire, onmeet, ondone }: Props = $props();
+  let { office, welcomed, ondesign, onhire, onmeet, ondone, notify, onnotify }: Props = $props();
 
   type Setup = {
     checks: Check[];
@@ -103,6 +110,21 @@
           The office keeps {setup.zoneName}. Run {@render words('`npm run setup`')} to change it.
         </p>
       {/if}
+      <label class="flex items-start gap-2">
+        <input
+          type="checkbox"
+          class="mt-0.5"
+          checked={notify}
+          onchange={(e) => onnotify(e.currentTarget.checked)}
+        />
+        <span class="flex flex-col">
+          <span class="text-xs text-ink">Notify me when something lands on my desk</span>
+          <span class="text-xs text-muted"
+            >A notification on this computer for each new ask, task or report, so you need not keep
+            the office open in front of you.</span
+          >
+        </span>
+      </label>
     </section>
 
     <section class="flex flex-col gap-2">
@@ -158,13 +180,17 @@
       <h3 class="text-xs tracking-[0.16em] text-sea uppercase">4 · Your AI</h3>
       <p class="text-xs text-muted">
         What your office runs on: its Office Manager and every new Odd. Each Odd can move to another
-        tool on its Settings tab.
+        tool on {modelSection('its')}.
       </p>
       <OfficeTools tools={agentTools} />
     </section>
 
     {#if welcomed}
       <UpdatesSection />
+      {#if shown()}
+        <DiagnosticsSection />
+      {/if}
+      <AccountSection />
     {/if}
 
     <section class="flex flex-col gap-2">

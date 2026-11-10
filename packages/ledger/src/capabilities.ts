@@ -11,17 +11,24 @@ import { existsSync } from 'node:fs';
 import {
   FOLDER_SAID,
   GRANT_LABEL,
+  GRANT_NEEDS,
+  grantWorks,
   LEVEL_NAME,
-  levelAtMost,
+  levelRoute,
+  officeSection,
   parseLevel,
+  SWITCH_NAMES,
+  writesWait,
   type Level
 } from './access-words.ts';
 import {
   AGENT_NAMES,
+  commandsHow,
   commandsOnline,
   FETCHES_PAGES,
   runsCommands,
   type Agent,
+  type CommandsHow,
   type GrantedFolder
 } from './agents.ts';
 import { grantsFor, heldReach, type ConnectorRow, type GrantRow, type StaffRow } from './office.ts';
@@ -43,6 +50,8 @@ export type Access = {
 export type OwnTools = {
   /** A shell: the Run commands switch as its tool takes it (`runsCommands`). */
   commands: boolean;
+  /** How Run commands reaches its tool on this system, and the tool here that follows it when its own cannot. */
+  commandsHow: CommandsHow;
   /** The Browse the web switch. */
   web: boolean;
   /** Whether its commands reach the internet (`commandsOnline`). */
@@ -58,6 +67,7 @@ export function ownTools(
 ): OwnTools {
   return {
     commands: runsCommands(who.agent, platform, who.commands),
+    commandsHow: commandsHow(who.agent, platform),
     web: who.web,
     network: commandsOnline(who.agent, platform, who),
     // A folder deleted since the owner gave it reaches no tool.
@@ -89,7 +99,7 @@ export async function capabilities(who: StaffRow): Promise<Capabilities> {
 
 /** One grant as a run finds it: what it reaches, or why it is held back. */
 export function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: Level): Access {
-  const heldBack: HeldBack | undefined = !levelAtMost(g.level, permission)
+  const heldBack: HeldBack | undefined = !grantWorks(g.level, permission)
     ? 'above its level'
     : g.connector.readyAt
       ? undefined
@@ -99,8 +109,10 @@ export function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: 
 
 /**
  * What a run below the Odd's own level can do (a hand-off's, either side, or
- * a hub's pick-up): its level is `ceiling`, and a grant above it that the run
- * still loads comes down to read, since a grant is only read or act. A grant
+ * a hub's pick-up): its level is `ceiling`, and a grant that does not work
+ * there comes down to read, since a grant is only read or act. At a Draft
+ * ceiling a write grant stays, and each change through it waits for the
+ * owner's yes (`writesWait`), as it does for an Odd at Draft. A grant
  * already held back stays as it is. Its own tools stay as they are: a
  * handed-over run keeps the Odd's Run commands, Browse the web and folders,
  * so it can still do the work; only outside tools come down. The run's tools,
@@ -111,14 +123,20 @@ export function capped(caps: Capabilities, ceiling: Level): Capabilities {
     ...caps,
     level: ceiling,
     outside: caps.outside.map((a) =>
-      a.heldBack || levelAtMost(a.level, ceiling) ? a : { ...a, level: 'read' }
+      a.heldBack || grantWorks(a.level, ceiling) ? a : { ...a, level: 'read' }
     )
   };
 }
 
-/** What the Odd reads when this office keeps its commands off the internet (`heldReach`). */
-export const NETWORK_HELD_LINE =
-  'This version of Claude Code refuses to let your commands reach the internet, so they have none.';
+/** What an Odd reads when this office keeps `whose` commands off the internet (`heldReach`). */
+const networkHeld = (whose: string): string =>
+  `This version of Claude Code refuses to let ${whose} commands reach the internet, so they have none.`;
+/** That line as the Odd itself reads it. */
+export const NETWORK_HELD_LINE = networkHeld('your');
+
+/** "your" to the Odd itself, or "Rowan's" when another Odd reads about Rowan. */
+const whoseOf = (about: string | undefined): string =>
+  about === undefined ? 'your' : `${about}'s`;
 
 /**
  * What the Odd's own tools reach, as it is told: `ownToolsLine` for its reach
@@ -126,10 +144,20 @@ export const NETWORK_HELD_LINE =
  * `heldReach`), then `NETWORK_HELD_LINE` only when the hold took away a
  * network it would have had, so an Odd is never told of commands it lacks.
  * The prompt, my_access and office_report all say this, so they agree.
+ * `about` is the Odd's name when another Odd reads it (office_report), so
+ * every sentence names whose tools, folders and card they are.
  */
-export function ownToolsSaid(agent: Agent, own: OwnTools, officeHeld: boolean): string[] {
+export function ownToolsSaid(
+  agent: Agent,
+  own: OwnTools,
+  officeHeld: boolean,
+  about?: string
+): string[] {
   const reach = heldReach(agent, own, officeHeld);
-  return [ownToolsLine(agent, reach), ...(reach.held && own.network ? [NETWORK_HELD_LINE] : [])];
+  return [
+    ownToolsLine(agent, reach, about),
+    ...(reach.held && own.network ? [networkHeld(whoseOf(about))] : [])
+  ];
 }
 
 /**
@@ -188,36 +216,60 @@ export function runsOnLine(agent: Agent): string {
   return `Your runs go through ${AGENT_NAMES[agent]}.`;
 }
 
-/** How many tools a grant reaches, in words: every tool at write, else the read-only ones. */
+/** How many tools a grant reaches, in words: every tool at write, else the Read only ones (`readsOnly`). */
 export function reachOf(a: Access): string {
   const n = a.connector.readTools.length;
   return a.level === 'act' ? 'every tool' : `${n} ${n === 1 ? 'tool' : 'tools'}`;
 }
 
-/** One line per outside tool, in words that suit both the Odd and the Office Manager. */
-export function outsideLines(c: Capabilities, owner: string): string[] {
+/**
+ * One line per outside tool, in words that suit both the Odd and the Office
+ * Manager. `about` is the Odd's name when another Odd reads it
+ * (office_report), so the level's route names whose card it is on.
+ */
+export function outsideLines(c: Capabilities, owner: string, about?: string): string[] {
   return c.outside.map((a) => {
     const what = `${a.connector.name} (${GRANT_LABEL[a.level === 'act' ? 'act' : 'read'].toLowerCase()})`;
     switch (a.heldBack) {
       case 'above its level':
-        return `${what}: held back. It needs the ${LEVEL_NAME[a.level]} level, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises the level.`;
+        return `${what}: held back. It needs the ${LEVEL_NAME[GRANT_NEEDS[a.level === 'act' ? 'act' : 'read']]} level or higher, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${levelRoute(owner, whoseOf(about))}`;
       case 'still connecting':
         return `${what}: held back until ${owner} finishes connecting it.`;
       case 'sign-in ran out':
         return `${what}: held back. Its sign-in ran out, and ${owner} needs to sign in again.`;
       case undefined:
-        return `${what}: ${reachOf(a)}.`;
+        return writesWait(a.level, c.level)
+          ? `${what}: ${reachOf(a)}. ${WRITES_WAIT(owner, about)}`
+          : `${what}: ${reachOf(a)}.`;
     }
   });
 }
+
+/**
+ * How a write grant works at Draft, said to the Odd (or about it, in
+ * office_report): call it as the work needs, and the gateway holds each change.
+ */
+export const WRITES_WAIT = (owner: string, about?: string): string =>
+  about === undefined
+    ? `Each call that changes something waits for ${owner}'s yes: the office puts that exact call on their desk and makes it once they approve, then you carry on with what it returned. Call it once and move on; never call it again to retry, and never say it is done before you hear.`
+    : `Each call ${about} makes that changes something waits for ${owner}'s yes on their desk.`;
 
 /** The Odd's level, said to the Odd. */
 export function levelLine(level: Level, owner: string): string {
   return {
     read: 'Your level is Read: you look and report. You change nothing outside the office.',
-    draft: `Your level is Draft: you prepare things for ${owner}'s yes, drafts included. Nothing you make goes out until they say yes.`,
+    draft: `Your level is Draft: you prepare things for ${owner}'s yes, drafts included. Nothing you make goes out until they say yes. A tool you hold at read and write is yours to call as the work needs, and each call that changes something waits for their yes on its own.`,
     act: `Your level is Act: you do housekeeping inside the office on your own, and use a tool ${owner} connected for you at read and write without asking each time.`
   }[level];
+}
+
+/**
+ * ask_for_access's refusal of a grant above the Odd's level (`held`): where
+ * the owner sets the level, and to say so in the reply, since approving an
+ * ask never changes a level: the owner changes it on the card.
+ */
+export function askAboveLevel(held: Level, asked: 'read' | 'write', owner: string): string {
+  return `You hold ${held}, so you cannot ask for ${asked}. ${levelRoute(owner, 'your')} If this job needs a higher one, say so in your reply.`;
 }
 
 /**
@@ -225,26 +277,47 @@ export function levelLine(level: Level, owner: string): string {
  * shell when the run gets commands, which its tool's sandbox holds to its
  * folders and {owner}'s developer tools, read only, and to the internet only
  * when `network` says so, and the tool's own web search (and page fetch, where
- * it has one) when the owner switched Browse the web on. Gemini's policy
- * allows a write only by its full path. `{owner}` is left for the caller to fill.
+ * it has one) when the owner switched Browse the web on. Each one it lacks
+ * gets a line saying whether {owner} can switch it on, and where (its card's
+ * Settings tab, under Office). Gemini's policy allows a write only by its full path.
+ * `about` names the Odd when another Odd reads the line (`ownToolsSaid`).
+ * `{owner}` is left for the caller to fill.
  */
 export function ownToolsLine(
   agent: Agent,
-  own: Pick<OwnTools, 'commands' | 'web' | 'network'>
+  own: Pick<OwnTools, 'commands' | 'commandsHow' | 'web' | 'network'>,
+  about?: string
 ): string {
-  const shell = `a shell confined to your folders and {owner}'s developer tools (read only), ${own.network ? 'which can reach the internet' : 'with no network'}`;
+  const whose = whoseOf(about);
+  const shell = `a shell confined to ${whose} folders and {owner}'s developer tools (read only), ${own.network ? 'which can reach the internet' : 'with no network'}`;
   const plus = [
     ...(own.commands ? [shell] : []),
     ...(own.web ? [FETCHES_PAGES[agent] ? 'web search and fetch' : 'web search'] : [])
   ];
-  const line = plus.length
-    ? [
-        `Your own tools work on files, plus ${plus.join(', and ')}.`,
-        ...(own.commands ? [] : ['No shell.']),
-        ...(own.web ? [] : ['No web.'])
-      ].join(' ')
-    : 'Your own tools work on files only: no shell and no web.';
-  return agent === 'gemini' ? `${line} Give each file tool the file's full path.` : line;
+  const opens = `${about === undefined ? 'Your' : whose} own tools work on files`;
+  const where = officeSection(whose);
+  const line = [
+    plus.length ? `${opens}, plus ${plus.join(', and ')}.` : `${opens} only.`,
+    ...(own.commands ? [] : [noShell(agent, own.commandsHow, where)]),
+    // Browse the web follows the owner on every tool.
+    ...(own.web ? [] : [`No web: {owner} can switch on ${SWITCH_NAMES.web} in ${where}.`])
+  ].join(' ');
+  // The full-path sentence tells the Gemini Odd itself how to work; a reader of
+  // another Odd's line has its own tool and its own rules.
+  return agent === 'gemini' && about === undefined
+    ? `${line} Give each file tool the file's full path.`
+    : line;
+}
+
+/**
+ * What an Odd without a shell hears: the Run commands switch only when it
+ * reaches its tool on this system (`commandsHow`), so it is never offered a
+ * switch the owner cannot move.
+ */
+function noShell(agent: Agent, how: CommandsHow, where: string): string {
+  return how.state === 'switch'
+    ? `No shell: {owner} can switch on ${SWITCH_NAMES.commands} in ${where}.`
+    : `No shell: ${AGENT_NAMES[agent]} can't run commands here.`;
 }
 
 /** One line per folder the owner gave the Odd: its path and what the Odd may do there. */

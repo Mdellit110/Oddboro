@@ -21,6 +21,10 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(10);
 const BACKOFF: [u64; 3] = [1, 5, 30];
 const MAX_RESTARTS: usize = 5;
 const RESTART_WINDOW: Duration = Duration::from_secs(600);
+// `GaveUp`'s texts say these numbers in words.
+const _: () = assert!(READY_TIMEOUT.as_secs() == 90);
+const _: () = assert!(MAX_RESTARTS == 5);
+const _: () = assert!(RESTART_WINDOW.as_secs() == 600);
 /// A line Node writes to ask for a notification: the prefix, then the title,
 /// a tab, and the text (`apps/office/src/lib/server/notify.ts`).
 const NOTIFY: &str = "oddboro:notify ";
@@ -52,6 +56,44 @@ pub struct Server {
     /// The secret the server checks on the shell's update requests. Empty
     /// when this build does not update itself.
     pub update_token: String,
+    /// Where error reports go, passed as `ODDBORO_DIAGNOSTICS_DSN` so the
+    /// office and the shell agree. None when this build has no address.
+    pub diagnostics_dsn: Option<String>,
+}
+
+/// Why the shell stopped running the office.
+pub enum GaveUp {
+    CouldNotStart(io::Error),
+    NoAnswer,
+    /// `code` is Node's last exit code, when it exited with one.
+    KeptStopping {
+        code: Option<i32>,
+    },
+}
+
+impl GaveUp {
+    /// What the owner is shown. `log_tail` is the end of the office's log.
+    pub fn message(&self, log_tail: &str) -> String {
+        match self {
+            GaveUp::CouldNotStart(e) => format!("Oddboro could not start its server: {e}"),
+            GaveUp::NoAnswer => {
+                format!("The office did not answer within 90 seconds.\n\n{log_tail}")
+            }
+            GaveUp::KeptStopping { .. } => format!(
+                "The office stopped {MAX_RESTARTS} times in 10 minutes, so Oddboro gave up.\n\n{log_tail}"
+            ),
+        }
+    }
+
+    /// What an error report says: a fixed text, never the log, which names
+    /// the owner's home folder and holds the office's own lines.
+    pub fn report(&self) -> &'static str {
+        match self {
+            GaveUp::CouldNotStart(_) => "The office could not start",
+            GaveUp::NoAnswer => "The office did not answer within 90 seconds",
+            GaveUp::KeptStopping { .. } => "The office stopped 5 times in 10 minutes",
+        }
+    }
 }
 
 enum Ready {
@@ -66,9 +108,9 @@ impl Server {
     }
 
     /// Runs Node until the shell quits. Calls `on_ready` each time the server
-    /// answers, the first time and after every restart. Returns the message
-    /// to show the owner when it gives up.
-    pub fn supervise(&self, on_ready: impl Fn()) -> Result<(), String> {
+    /// answers, the first time and after every restart. Returns why when it
+    /// gives up.
+    pub fn supervise(&self, on_ready: impl Fn()) -> Result<(), GaveUp> {
         let mut restarts: VecDeque<Instant> = VecDeque::new();
         loop {
             let mut child = {
@@ -76,14 +118,9 @@ impl Server {
                 if QUITTING.load(SeqCst) {
                     return Ok(());
                 }
-                self.spawn()
-                    .map_err(|e| format!("Oddboro could not start its server: {e}"))?
+                self.spawn().map_err(GaveUp::CouldNotStart)?
             };
             note(&self.log, &format!("started node, pid {}", child.id()));
-            // Hold Node's stdin apart, open until Node is gone: `Child::wait`
-            // closes a stdin it still holds, and the server quits when its
-            // stdin closes.
-            *NODE_STDIN.lock().unwrap_or_else(|e| e.into_inner()) = child.stdin.take();
 
             let status = match wait_ready(&mut child, self.port) {
                 Ready::Answered => {
@@ -94,25 +131,20 @@ impl Server {
                 Ready::TimedOut => {
                     terminate(&mut child);
                     mark_gone();
-                    return Err(format!(
-                        "The office did not answer within 90 seconds.\n\n{}",
-                        self.log_tail()
-                    ));
+                    return Err(GaveUp::NoAnswer);
                 }
             };
             mark_gone();
             if QUITTING.load(SeqCst) {
                 return Ok(());
             }
+            let code = status.as_ref().ok().and_then(ExitStatus::code);
             let status = status.map_or_else(|e| e.to_string(), |s| s.to_string());
             note(&self.log, &format!("node stopped: {status}"));
 
             restarts.retain(|t| t.elapsed() < RESTART_WINDOW);
             if restarts.len() >= MAX_RESTARTS {
-                return Err(format!(
-                    "The office stopped {MAX_RESTARTS} times in 10 minutes, so Oddboro gave up.\n\n{}",
-                    self.log_tail()
-                ));
+                return Err(GaveUp::KeptStopping { code });
             }
             let delay = BACKOFF[restarts.len().min(BACKOFF.len() - 1)];
             restarts.push_back(Instant::now());
@@ -149,12 +181,39 @@ impl Server {
             .envs(
                 (!self.update_token.is_empty())
                     .then_some(("ODDBORO_UPDATE_TOKEN", self.update_token.as_str())),
+            )
+            .envs(
+                self.diagnostics_dsn
+                    .as_deref()
+                    .map(|dsn| ("ODDBORO_DIAGNOSTICS_DSN", dsn)),
+            )
+            // The Desktop OAuth client's secret for Google sign-in, built in
+            // from the release's own secret. Google treats it as not
+            // confidential, but it stays out of the repo.
+            .envs(
+                option_env!("ODDBORO_GOOGLE_CLIENT_SECRET")
+                    .map(|secret| ("ODDBORO_GOOGLE_CLIENT_SECRET", secret)),
+            )
+            // New Altitude's GitHub OAuth App's secret, for servers that sign
+            // in through GitHub, built in the same way.
+            .envs(
+                option_env!("ODDBORO_GITHUB_CLIENT_SECRET")
+                    .map(|secret| ("ODDBORO_GITHUB_CLIENT_SECRET", secret)),
             );
+        // The office keeps its secrets through this shell (`secrets.rs`), over
+        // the two pipes above. Mac only.
+        #[cfg(target_os = "macos")]
+        command.env("ODDBORO_SECRETS", "shell");
         // Node is a console program. Without this, Windows opens a console
         // window for it, and for every program it starts.
         #[cfg(windows)]
         std::os::windows::process::CommandExt::creation_flags(&mut command, CREATE_NO_WINDOW);
         let mut child = command.spawn()?;
+        // Hold Node's stdin apart, open until Node is gone: `Child::wait`
+        // closes a stdin it still holds, and the server quits when its stdin
+        // closes. It is in place before the relay starts, so the first
+        // Keychain answer has somewhere to go.
+        *NODE_STDIN.lock().unwrap_or_else(|e| e.into_inner()) = child.stdin.take();
         if let Some(out) = child.stdout.take() {
             thread::spawn(move || relay(out, log));
         }
@@ -163,7 +222,7 @@ impl Server {
         Ok(child)
     }
 
-    fn log_tail(&self) -> String {
+    pub fn log_tail(&self) -> String {
         format!(
             "The last lines of {}:\n\n{}",
             self.log.display(),
@@ -425,23 +484,66 @@ fn let_sleep() {
     drop(AWAKE.lock().unwrap_or_else(|e| e.into_inner()).take());
 }
 
-/// Node's stdout: a notification request goes to the system as Oddboro's own, a
+/// Where one line of Node's stdout goes.
+#[derive(Debug, PartialEq)]
+enum Route<'a> {
+    /// A request for the Keychain, or anything that may hold a secret.
+    /// Never the log.
+    Secret,
+    /// The owner's Check now.
+    Check,
+    Notify(&'a str, &'a str),
+    Log,
+}
+
+fn route(line: &str) -> Route<'_> {
+    if crate::secrets::private(line) {
+        return Route::Secret;
+    }
+    if line == crate::update::CHECK_LINE {
+        return Route::Check;
+    }
+    match line.strip_prefix(NOTIFY) {
+        Some(ask) => {
+            let (title, text) = ask.split_once('\t').unwrap_or(("Oddboro", ask));
+            Route::Notify(title, text)
+        }
+        None => Route::Log,
+    }
+}
+
+/// Node's stdout: a Keychain request goes to the Keychain, with the answer on
+/// Node's stdin, a notification request to the system as Oddboro's own, a
 /// Check now to the update watcher, everything else to the log.
 fn relay(out: impl Read, mut log: File) {
     for line in BufReader::new(out).lines().map_while(Result::ok) {
-        if line == crate::update::CHECK_LINE {
-            crate::update::check_now();
-            continue;
-        }
-        match line.strip_prefix(NOTIFY) {
-            Some(ask) => {
-                let (title, text) = ask.split_once('\t').unwrap_or(("Oddboro", ask));
-                notify(title, text);
-            }
-            None => {
+        match route(&line) {
+            Route::Secret => match crate::secrets::answer(&line, &crate::secrets::Login) {
+                Some(reply) => to_node(&reply),
+                None => {
+                    let _ = writeln!(
+                        log,
+                        "oddboro: a Keychain request from the office could not be read"
+                    );
+                }
+            },
+            Route::Check => crate::update::check_now(),
+            Route::Notify(title, text) => notify(title, text),
+            Route::Log => {
                 let _ = writeln!(log, "{line}");
             }
         }
+    }
+}
+
+/// One line on Node's stdin, in one write.
+fn to_node(line: &str) {
+    if let Some(stdin) = NODE_STDIN
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_mut()
+    {
+        let _ = stdin.write_all(format!("{line}\n").as_bytes());
     }
 }
 
@@ -518,4 +620,32 @@ fn tail(path: &Path, count: usize) -> String {
         .map(|l| l.chars().take(200).collect())
         .collect();
     lines[lines.len().saturating_sub(count)..].join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_secret_line_never_goes_to_the_log() {
+        for line in [
+            r#"oddboro:secret {"id":1,"op":"set","account":"github:token","value":"ghp_x"}"#,
+            r#"oddboro:secret {"id":2,"op":"set","account":"a:b","val"#,
+            "oddboro:secret not json at all",
+            "oddboro:secret",
+            r#"[vite] reloadoddboro:secret {"id":3,"op":"set","value":"v"}"#,
+        ] {
+            assert_eq!(route(line), Route::Secret, "{line}");
+        }
+    }
+
+    #[test]
+    fn other_lines_go_where_they_did() {
+        assert_eq!(route(crate::update::CHECK_LINE), Route::Check);
+        assert_eq!(
+            route("oddboro:notify Rowan\tThe report is ready"),
+            Route::Notify("Rowan", "The report is ready")
+        );
+        assert_eq!(route("listening on 127.0.0.1:4500"), Route::Log);
+    }
 }

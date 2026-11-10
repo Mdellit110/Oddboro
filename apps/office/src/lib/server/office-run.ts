@@ -9,8 +9,8 @@
 // Grok or Codex it goes through the same launch an Odd's run does (`LAUNCHES`
 // in cli.ts), with that tool's sandbox, in a folder of its own that reads
 // nothing else, writes only itself, has no MCP, no web and no network, and is
-// removed when the run ends, pictures and all. Codex reads files through its
-// commands, so its run keeps its shell, held to that folder.
+// removed when the run ends, pictures and all. Neither has a shell or a tool
+// that reads files: the pictures go in with the message.
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -29,7 +29,7 @@ import {
 } from '@oddboro/ledger';
 import { notePlan, pluginsOff, staffEnv } from './staff.ts';
 import { claudeRunHome, modelArgs, spawnClaude } from './claude.ts';
-import { endedEarly, LAUNCHES } from './cli.ts';
+import { endedEarly, LAUNCHES, stoppedWhy } from './cli.ts';
 import { SIGN_IN_WHERE, stopGroups, type RunImage } from './launch.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { tooOldLine } from './versions.ts';
@@ -50,7 +50,12 @@ type OfficeRunOpts = {
   images?: { mediaType: string; data: string }[];
   /** A Claude model other than the owner's pick. Claude Code only. */
   model?: string;
+  /** Stops the run, such as when the owner leaves a drawing for parts. */
+  signal?: AbortSignal;
 };
+
+/** What an office run says when its signal stopped it. */
+const STOPPED = 'Stopped.';
 
 /** One office run. Prompts name the owner as {owner}, filled in with this install's name. */
 export async function runAsOffice(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
@@ -65,15 +70,22 @@ export async function runAsOffice(message: string, opts: OfficeRunOpts): Promise
 
 /**
  * Said to an office run on Grok or Codex after its own instructions. Claude
- * Code's office run has no tools at all; Grok's has one and Codex keeps its
- * shell, and either one went looking for files or ran a script before it
- * answered, so the answer comes in this one reply instead.
+ * Code's office run has no tools at all; Grok's has one harmless one, and
+ * either tool went looking for files or ran a script before it answered when
+ * it could, so the answer comes in this one reply instead.
  */
 const ONE_REPLY =
   'You have no tools you need here and no files to read: everything is in this message. Answer in this one reply, in the shape it asks for.';
 
 /** Where an office run's refusal sends the owner to sign its tool in: setup, not an Odd's Settings tab. */
 const SIGN_IN_HERE = 'in Setup, under Your AI';
+
+/** Call `stop` once when `signal` aborts, at once if it already has. */
+function onStop(signal: AbortSignal | undefined, stop: () => void): void {
+  if (!signal) return;
+  if (signal.aborted) stop();
+  else signal.addEventListener('abort', stop, { once: true });
+}
 
 /** One office run on Grok or Codex. */
 async function runOn(
@@ -103,7 +115,7 @@ async function runOn(
     writes: [dir],
     granted: [],
     web: false,
-    commands: agent === 'codex',
+    commands: false,
     network: false,
     system: `${opts.system}\n\n${ONE_REPLY}`,
     input: message,
@@ -150,6 +162,10 @@ async function runOn(
       stop();
       finish({ ok: false, text: `No reply after ${opts.timeoutMs / 60_000} minutes.` });
     }, opts.timeoutMs);
+    onStop(opts.signal, () => {
+      stop();
+      finish({ ok: false, text: STOPPED });
+    });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       buffer += chunk;
@@ -193,9 +209,11 @@ async function runOn(
       if (launch.ownGroup) stop();
       finish({
         ok: false,
-        text: `${tool} stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
+        text: stoppedWhy(agent, code, stderr, true)
       });
     });
+    // A run stopped before it read its message closes its input: the stop says so, not this.
+    child.stdin.on('error', () => {});
     child.stdin.end(launch.stdin);
   });
 }
@@ -240,6 +258,10 @@ async function run(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
       child.kill();
       finish({ ok: false, text: `No reply after ${opts.timeoutMs / 60_000} minutes.` });
     }, opts.timeoutMs);
+    onStop(opts.signal, () => {
+      child.kill();
+      finish({ ok: false, text: STOPPED });
+    });
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
       buffer += chunk;
@@ -275,6 +297,7 @@ async function run(message: string, opts: OfficeRunOpts): Promise<OfficeRun> {
         text: `Claude Code stopped (exit ${code}). ${stderr.trim().split('\n').slice(-2).join(' ')}`
       })
     );
+    child.stdin.on('error', () => {});
     child.stdin.end(
       opts.images?.length
         ? `${JSON.stringify({

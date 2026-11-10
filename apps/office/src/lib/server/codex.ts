@@ -6,8 +6,12 @@
 // (CODEX_HOME), never the owner's ~/.codex. Every switch the office sets goes
 // on each run's arguments (`-c`), which beat that home's config.toml; the
 // office writes a config.toml only into a home with none, since once the owner
-// signs in, that file is the sign-in's to keep. A Codex Odd has a shell, held
-// by a permission profile the kernel enforces (Seatbelt on a Mac): it reads
+// signs in, that file is the sign-in's to keep. A Codex Odd reads and changes
+// files through the office's file tools (files-server.ts in the ledger), with
+// Codex's own shell off, so the office holds its folders on every system. With
+// Run commands on (a Mac or Linux, where its sandbox held), it also has a
+// shell, held by a permission profile the kernel enforces (Seatbelt on a Mac,
+// bubblewrap on Linux, which also reads Codex's own install): it reads
 // the system's own folders (`:minimal`), Apple's developer tools (Xcode's
 // too, when the Mac uses it), node's OpenSSL config, the owner's developer
 // tool folders but their credential files (`devReads`), its folder,
@@ -18,12 +22,17 @@
 // web search runs outside the profile, only with Browse the web on. The codex
 // process itself and the MCP servers run outside that profile, so the Codex
 // home, the sign-in and every Codex Odd's sessions stay shut to the model.
+// Without a shell, the profile still holds apply_patch, Codex's one way to
+// write a file itself. On Windows, where Codex's own sandbox opened every
+// Odd's folder to reads (2026-11-06), a run has no shell and Codex's
+// read-only mode, so apply_patch writes nothing.
 import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { home, OFFICE_ACCOUNT, toolHome, type Effort } from '@oddboro/ledger';
 import { andBelow, instructionPaths } from './files.ts';
 import { devReads } from './sandbox.ts';
+import { onPath } from './on-path.ts';
 import {
   mcpGrant,
   NOT_SIGNED_IN,
@@ -144,6 +153,8 @@ type CodexRun = {
   allowed: string[];
   /** The owner's Browse the web switch: Codex's own web search, which works with the network off. */
   web: boolean;
+  /** A shell (Run commands, where Codex's sandbox holds it): without one, files go through the office's file tools only. */
+  commands: boolean;
   /** Whether the run's commands reach the internet (`network` in its profile). */
   network: boolean;
   /** Pictures sent with the message (an office run only), each as `--image=<file>`. */
@@ -231,7 +242,10 @@ function filesystem(r: CodexRun, temp: string): Record<string, string> {
     ':minimal': 'read',
     ':slash_tmp': 'deny',
     ...Object.fromEntries(
-      [...developerReads(), NODE_OPENSSL, ...dev.reads, ...r.reads].map((p) => [p, 'read'])
+      [...developerReads(), NODE_OPENSSL, ...codexInstall(), ...dev.reads, ...r.reads].map((p) => [
+        p,
+        'read'
+      ])
     ),
     // After the reads, so each deny shuts one file in a folder read above.
     ...Object.fromEntries(dev.denies.map((p) => [p, 'deny'])),
@@ -243,6 +257,36 @@ function filesystem(r: CodexRun, temp: string): Record<string, string> {
     ),
     ...(r.edited ? Object.fromEntries(andBelow(r.edited).map((p) => [p, 'read'])) : {})
   };
+}
+
+/** The variable a Codex run reads the gateway's token from (`bearer_token_env_var`). */
+export const GATEWAY_TOKEN = 'ODDBORO_GATEWAY_TOKEN';
+
+/** The gateway's token a run's servers carry, if any: every outside tool shares the run's one token. */
+function gatewayToken(servers: CodexRun['servers']): string | undefined {
+  for (const s of Object.values(servers)) {
+    const auth = (s.headers as Record<string, string> | undefined)?.Authorization;
+    if (auth?.startsWith('Bearer ')) return auth.slice('Bearer '.length);
+  }
+  return undefined;
+}
+
+/**
+ * Codex's own install, which its sandbox reads on Linux: there Codex starts a
+ * copy of itself inside bubblewrap, which failed with "execvp … No such file
+ * or directory" while the profile shut it (0.166.0 on Fedora 45). An npm
+ * install's whole @openai folder, which holds the binary for this machine
+ * beside the package or inside it; any other install's own folder.
+ */
+function codexInstall(): string[] {
+  if (process.platform !== 'linux') return [];
+  const found = onPath('codex');
+  if (!found) return [];
+  const real = realpathSync(found);
+  const npm = real.lastIndexOf(`${sep}node_modules${sep}@openai${sep}`);
+  return [
+    npm === -1 ? dirname(real) : real.slice(0, npm + `${sep}node_modules${sep}@openai`.length)
+  ];
 }
 
 /**
@@ -260,9 +304,18 @@ export function mcpServers(
       const grants = allowed.map(mcpGrant).filter((g) => g.server === name);
       const whole = grants.some((g) => !g.tool);
       const tools = grants.flatMap((g) => (g.tool ? [g.tool] : []));
+      // The gateway's token comes from Codex's environment, never the command
+      // line, where any program could read it. Any other header goes as it is.
+      const { Authorization, ...rest } = (s.headers as Record<string, string> | undefined) ?? {};
+      const fromEnv = Authorization?.startsWith('Bearer ');
+      const headers = fromEnv || !Authorization ? rest : { Authorization, ...rest };
       const server: Record<string, Toml> =
         s.type === 'http'
-          ? { url: s.url as string, http_headers: s.headers as Record<string, string> }
+          ? {
+              url: s.url as string,
+              ...(fromEnv ? { bearer_token_env_var: GATEWAY_TOKEN } : {}),
+              ...(Object.keys(headers).length ? { http_headers: headers } : {})
+            }
           : {
               command: s.command as string,
               args: (s.args as string[] | undefined) ?? [],
@@ -381,10 +434,17 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     ...set('shell_environment_policy.set', shell),
     ...set('web_search', r.web ? 'live' : 'disabled'),
     ...set('developer_instructions', r.system),
-    ...set('permissions', {
-      [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: r.network } }
-    }),
-    ...set('default_permissions', PROFILE),
+    // The shell only with Run commands; the office's file tools are the way to files.
+    ...set('features.shell_tool', r.commands),
+    ...set('features.unified_exec', r.commands),
+    ...(process.platform === 'win32'
+      ? set('sandbox_mode', 'read-only')
+      : [
+          ...set('permissions', {
+            [PROFILE]: { filesystem: filesystem(r, temp), network: { enabled: r.network } }
+          }),
+          ...set('default_permissions', PROFILE)
+        ]),
     ...set('mcp_servers', mcpServers(r.servers, r.allowed)),
     ...(r.effort ? set('model_reasoning_effort', r.effort) : []),
     ...(model ? ['-m', model] : []),
@@ -393,7 +453,12 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   ];
   return {
     args,
-    env: { ...codexEnv(h), TMPDIR: temp },
+    env: {
+      ...codexEnv(h),
+      TMPDIR: temp,
+      // Codex's shell inherits only the core variables, so commands never see it.
+      ...(gatewayToken(r.servers) ? { [GATEWAY_TOKEN]: gatewayToken(r.servers) } : {})
+    },
     stdin: r.input,
     done: () => rmSync(temp, { recursive: true, force: true })
   };

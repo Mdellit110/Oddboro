@@ -18,7 +18,7 @@
     },
     {
       title: 'Read only, or read and write.',
-      text: 'You connect each tool read only, or with write while the Odd holds act. With write, that one Odd uses that one tool without asking. Lower the level and the grant waits. Revoke it and it is gone.'
+      text: 'You connect each tool read only, or with write. At draft, each change it wants to make waits for your yes. At act, that one Odd uses that one tool without asking. Lower the level and the grant waits. Revoke it and it is gone.'
     },
     {
       title: 'Drafts still come to you.',
@@ -50,7 +50,8 @@
     id: 'notes' | 'todo';
     name: string;
     from: string;
-    grants: { id: Level; label: string; does: string }[];
+    /** `asks`: what write does at draft, where each change waits for your yes. */
+    grants: { id: Level; label: string; does: string; asks?: string }[];
   };
   const TOOLS: Tool[] = [
     {
@@ -62,7 +63,8 @@
         {
           id: 'act',
           label: 'Read and write',
-          does: 'Adds and edits notes without asking.'
+          does: 'Adds and edits notes without asking.',
+          asks: 'Asks your yes before each note it adds or edits.'
         }
       ]
     },
@@ -75,13 +77,17 @@
         {
           id: 'act',
           label: 'Read and write',
-          does: 'Adds and ticks off to-dos without asking.'
+          does: 'Adds and ticks off to-dos without asking.',
+          asks: 'Asks your yes before each to-do it adds or ticks off.'
         }
       ]
     }
   ];
 
   const NAME = 'Juno';
+  /** The lowest level a grant works at: write works from draft, where each change waits for your yes. */
+  const needs = (g: Level): Level => (g === 'read' ? 'read' : 'draft');
+  const above = (g: Level) => RANK[needs(g)] > RANK[level];
   let level = $state<Level>('draft');
   let grant = $state<Record<Tool['id'], Level | undefined>>({ notes: 'read', todo: 'read' });
 
@@ -90,8 +96,10 @@
     const lines = [LEVELS.find((l) => l.id === level)!.does];
     for (const t of TOOLS) {
       const g = grant[t.id];
-      if (!g || RANK[g] > RANK[level]) continue;
-      for (const option of t.grants) if (RANK[option.id] <= RANK[g]) lines.push(option.does);
+      if (!g || above(g)) continue;
+      for (const option of t.grants)
+        if (RANK[option.id] <= RANK[g])
+          lines.push(level === 'draft' && option.asks ? option.asks : option.does);
     }
     return lines;
   });
@@ -227,15 +235,15 @@
                 <div class="mt-2 flex gap-1" role="group" aria-label="{t.name} access">
                   {#each t.grants as option (option.id)}
                     {@const on = g === option.id}
-                    {@const above = RANK[option.id] > RANK[level]}
+                    {@const locked = above(option.id)}
                     <button
                       type="button"
                       aria-pressed={on}
-                      disabled={above && !on}
-                      aria-describedby={above && !on ? `lock-${t.id}-${option.id}` : undefined}
+                      disabled={locked && !on}
+                      aria-describedby={locked && !on ? `lock-${t.id}-${option.id}` : undefined}
                       class="flex-1 rounded-md border px-2 py-1.5 text-xs {on
                         ? 'border-sea bg-sea-deep text-ink'
-                        : above
+                        : locked
                           ? OPTION_DISABLED
                           : OPTION_IDLE}"
                       onclick={() => change(() => (grant[t.id] = option.id))}
@@ -245,14 +253,16 @@
                   {/each}
                 </div>
                 {#each t.grants as option (option.id)}
-                  {#if RANK[option.id] > RANK[level] && g !== option.id}
+                  {#if above(option.id) && g !== option.id}
                     <p id="lock-{t.id}-{option.id}" class="text-faint mt-2 text-xs">
-                      {option.label} needs {NAME} at {option.id}.
+                      {option.label} needs {NAME} at {needs(option.id)} or higher.
                     </p>
                   {/if}
                 {/each}
-                {#if RANK[g] > RANK[level]}
-                  <p class="text-ember mt-2 text-xs">Waits until {NAME} is back at {g}.</p>
+                {#if above(g)}
+                  <p class="text-ember mt-2 text-xs">
+                    Waits until {NAME} is back at {needs(g)} or higher.
+                  </p>
                 {/if}
               {:else}
                 <p class="text-muted mt-1.5 text-xs">

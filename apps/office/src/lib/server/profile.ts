@@ -2,7 +2,6 @@
 // reads the disk (folders still there) and this office's held network, and
 // each folder's `~` form reads the home folder, none of which the page can do.
 import {
-  commandsHow,
   effortFor,
   heldReach,
   MANAGER_ROLE,
@@ -24,7 +23,7 @@ import { claudeSettings } from './claude.ts';
  * setup, else `OFFICE_CODEX_MODEL` or `OFFICE_GROK_MODEL`, else the tool's own
  * default, first in its list.
  */
-function officeModel(agent: Agent): string | undefined {
+export function officeModel(agent: Agent): string | undefined {
   if (agent === 'claude')
     return claudeSettings().model === 'sonnet' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
   const set = agent === 'codex' ? process.env.OFFICE_CODEX_MODEL : process.env.OFFICE_GROK_MODEL;
@@ -54,7 +53,6 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     effort: effortFor(r.agent, r.effort, r.role === MANAGER_ROLE, modelFor(r.agent, r.model)),
     tools: r.tools,
     commands: r.commands,
-    commandsHow: commandsHow(r.agent, process.platform),
     web: r.web,
     webLine: webLine(r.agent, process.platform, reach.held),
     folders: r.folders.map((f) => ({ ...f, shown: shownFolder(f.path) })),
@@ -70,6 +68,7 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
             sheet: `/api/staff/${r.id}/look?v=${lookVersion(r.look, r.portraitPx)}`,
             portrait: `/api/staff/${r.id}/portrait?v=${lookVersion(r.look, r.portraitPx)}`
           }
-        : undefined
+        : undefined,
+    ...(r.package ? { persona: r.package } : {})
   };
 }

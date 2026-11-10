@@ -2,13 +2,40 @@
 // `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { agentsOn, EFFORTS, effortFor, MODELS, modelFor, offeredAgent } from '../src/agents.ts';
+import {
+  agentsOn,
+  AGENTS,
+  EFFORTS,
+  effortFor,
+  filesViaOffice,
+  MODELS,
+  modelFor,
+  offeredAgent
+} from '../src/agents.ts';
 
-test('a Windows office offers Claude Code and no other tool', () => {
-  assert.deepEqual(agentsOn('win32'), ['claude']);
-  for (const tool of ['grok', 'codex', 'gemini'])
-    assert.equal(offeredAgent(tool, 'win32'), undefined, tool);
-  assert.equal(offeredAgent('claude', 'win32'), 'claude');
+test('a Mac, Linux and Windows office each offer Claude Code, Grok and Codex, and not Gemini yet', () => {
+  for (const platform of ['darwin', 'linux', 'win32'] as const) {
+    assert.deepEqual(agentsOn(platform), ['claude', 'grok', 'codex'], platform);
+    for (const tool of ['claude', 'grok', 'codex'])
+      assert.equal(offeredAgent(tool, platform), tool, `${tool} on ${platform}`);
+    assert.equal(offeredAgent('gemini', platform), undefined, platform);
+  }
+});
+
+test('the office carries the files of Claude Code, Codex and Grok on every system, and never of Gemini', () => {
+  const want = {
+    claude: { darwin: true, linux: true, win32: true },
+    codex: { darwin: true, linux: true, win32: true },
+    grok: { darwin: true, linux: true, win32: true },
+    gemini: { darwin: false, linux: false, win32: false }
+  };
+  for (const agent of AGENTS)
+    for (const platform of ['darwin', 'linux', 'win32'] as const)
+      assert.equal(
+        filesViaOffice(agent, platform),
+        want[agent][platform],
+        `${agent} on ${platform}`
+      );
 });
 
 test("an Odd's level is its own pick on its tool, Medium when none, the nearest below when its tool lacks it, and never below Medium for the Office Manager", () => {

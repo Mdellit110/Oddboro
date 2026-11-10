@@ -43,9 +43,8 @@ await db
     odd('paige', 'Paige')
   ]);
 // Lena reads Gmail, which Paige lacks.
-await db
-  .insert(connectors)
-  .values({ id: 'gmail', name: 'Gmail', description: 'Gmail', kind: 'http', readyAt: new Date() });
+// Every office has Gmail (0009_google): mark it connected.
+await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
 await db.insert(grants).values({ staffId: 'lead', connectorId: 'gmail', level: 'read' });
 
 const handOffTool = async (c: Client) =>
@@ -407,6 +406,8 @@ test('every office tool refuses a key it does not take, and says which keys it d
   // tell_lead, and a run on that work offers resume_at.
   await db.insert(staff).values({ ...odd('all', 'Ada'), tools: OFFICE_TOOLS.map((t) => t.id) });
   await db.insert(staffGoals).values({ staffId: 'all', goalId: fair.id, part: 'Everything' });
+  // Gmail at any level offers propose_reply.
+  await db.insert(grants).values({ staffId: 'all', connectorId: 'gmail', level: 'read' });
   const reached = new Set<string>();
   const runs: Record<string, string>[] = [chat, { THREAD_ID: String(sale.id) }];
   for (const env of runs) {
@@ -460,4 +461,27 @@ test("the hand_off tool names what each colleague lacks of the lead's tools once
     await db.update(staff).set({ web: false, folders: [] }).where(eq(staff.id, 'lead'));
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test("an Odd that names GitHub's address with a key header gets the catalog's GitHub, which signs in", async () => {
+  const c = await toolServer('jo', { RUN_KEY: 'k-jo-github' });
+  const r = await c.callTool({
+    name: 'ask_for_access',
+    arguments: {
+      connector: 'https://api.githubcopilot.com/mcp/x/repos/readonly',
+      level: 'read',
+      why: 'Read the repositories.',
+      key_header: 'Authorization'
+    }
+  });
+  assert.equal(r.isError, undefined, said(r));
+  const [github] = await db.select().from(connectors).where(eq(connectors.id, 'github'));
+  assert.deepEqual(github?.config, { url: 'https://api.githubcopilot.com/mcp/', oauth: true });
+  const asked = (await raisedBy('jo')).asks.filter((a) => a.kind === 'access');
+  assert.deepEqual(
+    asked.map((a) => a.access?.connector),
+    ['github']
+  );
+  const byAddress = (await db.select().from(connectors)).filter((x) => x.id !== 'github');
+  assert.ok(!byAddress.some((x) => x.config.url?.includes('githubcopilot')));
 });

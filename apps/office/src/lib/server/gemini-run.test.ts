@@ -202,11 +202,14 @@ test("a Gemini Odd's next chat resumes the session its last one started", async 
   assert.deepEqual(next.args.slice(-2), ['--resume', '0a0a0a0a-0000-4000-8000-00000000ce01']);
 });
 
-test('a Gemini Odd is told it has file tools only, each given the full path', async () => {
+test('a Gemini Odd is told it has file tools only, each given the full path, that Gemini runs no commands here, and that the owner can switch on the web', async () => {
+  const owner = await L.ownerName();
   const run = await chatOf('gemma');
-  assert.match(
-    run.system,
-    /Your own tools work on files only: no shell and no web\. Give each file tool the file's full path\./
+  assert.ok(
+    run.system.includes(
+      `Your own tools work on files only. No shell: Gemini can't run commands here. No web: ${owner} can switch on Browse the web in your Settings tab, under Office. Give each file tool the file's full path.`
+    ),
+    run.system
   );
 });
 

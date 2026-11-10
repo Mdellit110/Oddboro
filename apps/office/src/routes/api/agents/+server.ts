@@ -9,6 +9,9 @@
 // why. `drawsLooks` says whether the office's tool, on its model, draws an
 // Odd's look; when it does not, the hire offers building one from parts. Each installed tool says its version, a newer one when its maker has
 // one out, and the oldest the office runs when it is older (versions.ts).
+// Each tool says how it takes Run commands on this system (`commandsHow`), so
+// the hire drawer names that switch only where the owner can move it, and the
+// model an Odd with none of its own runs on it (`officeModel`).
 // PUT picks the office's tool. Installs and sign-ins themselves go to
 // /api/agents/[tool].
 import { error, json } from '@sveltejs/kit';
@@ -16,6 +19,8 @@ import {
   AGENT_NAMES,
   AGENTS,
   agentsOn,
+  commandsHow,
+  type CommandsHow,
   listAccounts,
   notOfferedWhy,
   officeAgent,
@@ -32,6 +37,7 @@ import {
 } from '#lib/server/agent-sign-in.ts';
 import { claudeAccount, claudeSettings } from '#lib/server/claude.ts';
 import { officeDrawsLooks } from '#lib/server/claude.ts';
+import { officeModel } from '#lib/server/profile.ts';
 import { versionState, type VersionState } from '#lib/server/versions.ts';
 import type { RequestHandler } from './$types';
 
@@ -41,6 +47,9 @@ export type AgentTool = {
   name: string;
   installed: boolean;
   signIn?: SignInState;
+  commandsHow: CommandsHow;
+  /** The model an Odd with none of its own runs on this tool, for the Office default card. */
+  officeModel?: string;
 } & VersionState;
 /** A tool this system does not offer yet, with why, for setup's greyed row. */
 export type LaterTool = { id: Agent; name: string; why: string };
@@ -72,6 +81,8 @@ export const GET: RequestHandler = async () => {
           name: AGENT_NAMES[id],
           installed,
           signIn: await stateOf(id),
+          commandsHow: commandsHow(id, platform),
+          officeModel: officeModel(id),
           ...(installed ? await versionState(id) : {})
         };
       })

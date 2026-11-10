@@ -20,11 +20,13 @@ import { test } from 'node:test';
 import {
   chat,
   chatOf,
+  filesOf,
   folder,
   gave,
   L,
   odd,
   onPlatform,
+  onWindows,
   ownerHome,
   runOf,
   setOwn,
@@ -106,7 +108,10 @@ const run = (commands: boolean) => {
 
 // No tool's sign-in check refuses in the office under test, so a launch that
 // got past its refusal would start.
-test("each tool's launch gives a shell exactly when commandsHow says, on every system, and refuses a run it cannot hold", async () => {
+test("each tool's launch gives a shell exactly when commandsHow says and the office's file tools where the office carries its files, on every system, and refuses a run it cannot hold", async () => {
+  /** A Codex run's `-c` value for `key`. */
+  const codexSet = (args: string[], key: string) =>
+    args.find((a, i) => args[i - 1] === '-c' && a.startsWith(`${key}=`))?.slice(key.length + 1);
   // Every Odd here has Run commands stored on, so only its tool decides.
   for (const [id, agent] of [
     ['bo', 'claude'],
@@ -115,23 +120,54 @@ test("each tool's launch gives a shell exactly when commandsHow says, on every s
   ] as const) {
     await setOwn(id, { commands: true });
     for (const platform of ['darwin', 'linux', 'win32'] as const) {
-      if (!L.AGENT_PLATFORMS[agent].runs.includes(platform)) continue;
-      const run = await onPlatform(platform, () => chatOf(id));
+      const on = `${agent} on ${platform}`;
+      assert.ok(L.AGENT_PLATFORMS[agent].runs.includes(platform), on);
+      const chat = () => chatOf(id);
+      const run = await (platform === 'win32' ? onWindows(chat) : onPlatform(platform, chat));
       const shell = L.runsCommands(agent, platform, true);
+      const carried = L.filesViaOffice(agent, platform);
+      // The office's file server, and its tools allowed, exactly where it carries the files.
+      assert.equal(filesOf(run) !== undefined, carried, on);
       const tools = after(run.args, '--tools');
-      if (agent === 'claude')
-        assert.equal(tools.split(',').includes('Bash'), shell, `${agent} on ${platform}`);
-      // Grok's five file tools, never a shell.
-      if (agent === 'grok') assert.equal(tools, 'read_file,list_dir,grep,write,search_replace');
-      // Codex reads files through its shell, held by its permission profile.
-      if (agent === 'codex') assert.ok(shell && run.permissions, `${agent} on ${platform}`);
+      if (agent === 'claude') {
+        // Its own file tools never, since the office carries them on every system.
+        assert.equal(tools, shell ? 'Bash' : '', on);
+        assert.ok(listAfter(run.args, '--allowedTools').includes('mcp__files'), on);
+      }
+      if (agent === 'grok') {
+        assert.ok(!shell, on);
+        // No file tool of its own on any system; todo_write stands in.
+        assert.equal(tools, 'todo_write', on);
+        assert.equal(each(run.args, '--allow').includes('MCPTool(files__*)'), carried, on);
+      }
+      if (agent === 'codex') {
+        // The shell where its sandbox held commands, held by its permission profile; on Windows Codex's read-only mode.
+        assert.equal(codexSet(run.args, 'features.shell_tool'), String(shell), on);
+        assert.equal(codexSet(run.args, 'features.unified_exec'), String(shell), on);
+        assert.equal(shell, platform !== 'win32', on);
+        if (platform === 'win32') {
+          assert.equal(codexSet(run.args, 'sandbox_mode'), '"read-only"', on);
+          assert.equal(run.permissions, undefined, on);
+        } else {
+          assert.equal(codexSet(run.args, 'sandbox_mode'), undefined, on);
+          assert.deepEqual(run.permissions?.network, { enabled: false }, on);
+        }
+      }
     }
   }
   assert.deepEqual(await LAUNCHES.grok(run(true)), { refused: L.COMMANDS_WHY.grok });
   assert.deepEqual(await LAUNCHES.gemini(run(true)), { refused: L.COMMANDS_WHY.gemini });
-  assert.deepEqual(await LAUNCHES.codex(run(false)), {
-    refused: 'Codex reads files through its commands, so it cannot run without them.'
-  });
+  // Codex runs without commands too: no shell, and no process group of its own, since only a shell leaves processes behind.
+  for (const commands of [false, true]) {
+    const launch = await LAUNCHES.codex(run(commands));
+    assert.ok('args' in launch, JSON.stringify(launch));
+    try {
+      assert.equal(codexSet(launch.args, 'features.shell_tool'), String(commands));
+      assert.equal(launch.ownGroup, commands ? true : undefined);
+    } finally {
+      launch.done();
+    }
+  }
 });
 
 test('every developer tool credential file sits in a listed folder, and no listed folder is in or holds a secret store', () => {
@@ -152,7 +188,7 @@ test('every developer tool credential file sits in a listed folder, and no liste
 });
 
 test(
-  "a handed-over run keeps the Odd's own Run commands, Browse the web and given folders; only its outside tools come down to Draft",
+  "a handed-over run keeps the Odd's own Run commands, Browse the web and given folders; its write grant works at Draft, each change held by the gateway",
   onMac,
   async () => {
     await L.addConnector({
@@ -170,13 +206,15 @@ test(
     await setOwn('ava', { commands: true, web: true, folders: [{ path: w, write: true }] });
     const h = await gave('lead', 'ava', { title: 'Handed over' });
     const run = await runOf(h.id);
-    assert.equal(after(run.args, '--tools'), 'Read,Glob,Grep,Write,Edit,Bash,WebSearch,WebFetch');
+    // The office carries its files, so no file tool of its own.
+    assert.equal(after(run.args, '--tools'), 'Bash,WebSearch,WebFetch');
+    assert.ok(filesOf(run)?.walls.writes.includes(w), 'the given folder left the file tools');
     assert.ok(sandboxOf(run), 'the handed-over run lost its sandbox');
     const allowed = listAfter(run.args, '--allowedTools');
     assert.ok(allowed.includes(`Edit(${L.rulePath(w)}/**)`), allowed.join(' '));
     assert.equal(run.env.CEILING, 'draft');
-    assert.ok(allowed.includes('mcp__notes__read_note'), allowed.join(' '));
-    assert.ok(!allowed.some((a) => a === 'mcp__notes' || a === 'mcp__notes__write_note'));
+    // Every tool is listed: the gateway holds each change for the owner's yes.
+    assert.ok(allowed.includes('mcp__notes'), allowed.join(' '));
   }
 );
 
