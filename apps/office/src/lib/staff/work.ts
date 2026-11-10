@@ -77,6 +77,7 @@ export const OFFICE_TOOL_WORDS: Record<string, string> = {
   log_progress: 'Logging progress',
   my_access: 'Checking its access',
   my_asks: 'Checking its asks',
+  my_tasks: 'Checking its tasks',
   my_goals: 'Checking its goals',
   my_jobs: 'Checking its jobs',
   my_pokes: 'Checking its pokes',

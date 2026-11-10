@@ -43,7 +43,7 @@ import {
   type Outcome,
   type ThreadStatus
 } from './schema.ts';
-import type { DeskItem } from './desk-answers.ts';
+import { flat, type DeskItem } from './desk-answers.ts';
 import { sharing } from './sharing.ts';
 import { holdForWindow, WINDOW_RESET, windowWoke } from './usage-window.ts';
 import { THREADS_DIR, workPath } from './work-paths.ts';
@@ -529,6 +529,9 @@ export async function thread(id: number): Promise<ThreadRow | undefined> {
   return row;
 }
 
+/** How many of an Odd's latest threads its list shows, and how many with no goal a chat tells the story of. */
+export const LATEST_WORK = 5;
+
 /** A thread among a hub's latest, as its instructions list it off a thread. */
 export type RecentThread = { id: number; title: string; stage: ThreadStage; goal?: string };
 
@@ -549,7 +552,7 @@ export async function recentThreads(
       and(eq(threads.hubId, hubId), o.told?.length ? notInArray(threads.id, o.told) : undefined)
     )
     .orderBy(desc(threads.id))
-    .limit(o.limit ?? 5);
+    .limit(o.limit ?? LATEST_WORK);
   if (!rows.length) return [];
   const waiting = await waitingOn(
     db,
@@ -608,7 +611,7 @@ export type ThreadOn = {
  * goal it serves, since a goal's one thread is where all its work goes, even
  * before the lead hands that Odd a piece. Never one it leads.
  */
-const worksOn = (staffId: string) =>
+export const worksOn = (staffId: string) =>
   and(
     ne(threads.hubId, staffId),
     or(
@@ -661,7 +664,7 @@ export async function workFile(staffId: string, path: string): Promise<string | 
  * since its chat's tell_lead and the goal work backstop (`goalWork`) read
  * this list, however many errands it was handed since.
  */
-export async function threadsOn(staffId: string, limit = 5): Promise<ThreadOn[]> {
+export async function threadsOn(staffId: string, limit = LATEST_WORK): Promise<ThreadOn[]> {
   const on = (kind: SQL) =>
     db
       .select({
@@ -732,7 +735,6 @@ export async function tellLead(t: {
   said: string;
   words: string;
 }): Promise<{ lead: string } | { problem: string }> {
-  const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
   const words = flat(t.words);
   if (!words || !flat(t.said).includes(words))
     return {
@@ -891,7 +893,7 @@ const STAGE: Record<ThreadStatus, ThreadStage> = {
  * says. The one place "waiting on the owner" is worked out: it is read from
  * the desk, never stored, so it cannot fall behind an answer.
  */
-const stageOf = (status: ThreadStatus, waiting: ThreadWaiting[]): ThreadStage =>
+export const stageOf = (status: ThreadStatus, waiting: ThreadWaiting[]): ThreadStage =>
   waiting.length ? 'waiting_on_you' : STAGE[status];
 
 /**

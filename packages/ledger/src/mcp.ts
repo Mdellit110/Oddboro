@@ -38,9 +38,11 @@ import {
   type GoAhead,
   record,
   roster,
+  tasksFrom,
   waitingPokes,
   type LedgerRow
 } from './office.ts';
+import { askReplaced, SAID_AS, taskSaid } from './desk-answers.ts';
 import {
   allGoals,
   goal,
@@ -597,10 +599,31 @@ tool(
     if (!rows.length) return text('You have raised no asks.');
     return text(
       rows
-        .map(
-          (a) =>
-            `- #${a.id} ${a.status === 'revise' ? 'SENT BACK' : a.status.toUpperCase()}: ${a.title}${a.reason ? ` (${a.status === 'revise' ? 'change' : 'reason'}: ${a.reason})` : a.status === 'open' ? '' : ' (no reason given)'}`
+        .map((a) =>
+          askReplaced(a)
+            ? `- #${a.id} REPLACED: ${a.title}`
+            : `- #${a.id} ${a.status === 'revise' ? 'SENT BACK' : a.status.toUpperCase()}: ${a.title}${a.reason ? ` (${a.status === 'revise' ? 'change' : 'reason'}: ${a.reason})` : a.status === 'open' ? '' : ' (no reason given)'}`
         )
+        .join('\n')
+    );
+  }
+);
+
+tool(
+  'my_tasks',
+  {
+    description: `Each task you gave ${OWNER} and how it ended, with what they said on it.`,
+    inputSchema: {}
+  },
+  async () => {
+    const rows = await tasksFrom(ME);
+    if (!rows.length) return text('You have given no tasks.');
+    return text(
+      rows
+        .map((t) => {
+          const said = t.status === 'open' ? '' : taskSaid(t);
+          return `- #${t.id} ${(t.status === 'open' ? 'open' : SAID_AS[t.status]).toUpperCase()}: ${t.title}${said ? ` (${said})` : ''}`;
+        })
         .join('\n')
     );
   }

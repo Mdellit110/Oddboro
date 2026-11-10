@@ -58,6 +58,26 @@ test('a call the office made tells the Odd not to make it again, with what came 
   assert.ok(lines.includes('- What it returned: captured'));
 });
 
+test("a finished task's run hears only the owner's choice answers", () => {
+  const steps = [
+    {
+      text: 'Paste the key',
+      done: true,
+      answer: 'not-for-the-odd',
+      action: { kind: 'secret', connector: 'c', name: 'n' }
+    },
+    {
+      text: 'Pick a blue',
+      done: true,
+      answer: 'Navy',
+      action: { kind: 'choice', options: ['Navy', 'Teal'] }
+    }
+  ] as TaskRow['steps'];
+  const lines = briefOf('task_done', { t: { row: { ...task.row, steps }, files: [] } });
+  assert.ok(lines.includes('- They answered "Pick a blue" with: Navy'), lines.join('\n'));
+  assert.ok(!lines.join('\n').includes('not-for-the-odd'), lines.join('\n'));
+});
+
 test('a switch the owner turned on tells the Odd its run has it, names what it asked for, and does the work once for a twin ask', () => {
   const asked = { ...ask, kind: 'switch', switches: ['web'] } as AskRow;
   const twin = { ...ask, id: 8 } as AskRow;

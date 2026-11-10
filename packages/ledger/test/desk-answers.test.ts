@@ -17,6 +17,7 @@ import {
   followUps,
   goals,
   grants,
+  ledger,
   staff,
   staffGoals,
   tasks,
@@ -43,8 +44,11 @@ const {
   giveFolder,
   giveTask,
   hire,
-  raiseAsk
+  officeActivity,
+  raiseAsk,
+  tickStep
 } = await import('../src/office.ts');
+const { ownerAnswers } = await import('../src/desk-answers.ts');
 const { approveGoal, approveHire, approvePlan, updateGoal } = await import('../src/goals.ts');
 const { handOff } = await import('../src/hand-offs.ts');
 const { HAND_OFF_LIMIT } = await import('../src/threads.ts');
@@ -557,4 +561,38 @@ test("a done or dropped task, a done task with no Odd, and a goal's pause, met o
       status
     );
   }
+});
+
+test("only a choice step's answer counts as what the owner said", () => {
+  const steps: Step[] = [
+    {
+      text: 'Paste the key',
+      done: true,
+      action: { kind: 'secret', connector: 'c', name: 'n' },
+      answer: 'From AWS: the-secret'
+    },
+    { text: 'Pick one', done: true, action: { kind: 'choice', options: ['Navy'] }, answer: 'Navy' }
+  ];
+  assert.deepEqual(ownerAnswers(steps), [{ step: 'Pick one', answer: 'Navy' }]);
+});
+
+test("the office report says what the owner answered on a finished task, and a finished task's ledger row opens with it", async () => {
+  const since = new Date();
+  const answered = await giveTask('ada', {
+    title: 'Choose a shade',
+    why: 'w'.repeat(600),
+    steps: [{ text: 'Pick one', done: false, action: { kind: 'choice', options: ['Navy'] } }]
+  });
+  await tickStep(answered.id, 0, 'Navy');
+  await finishTask(answered.id, true, null);
+  const silent = await giveTask('ada', { title: 'Sweep the yard', why: 'w', steps: ['Sweep'] });
+  await finishTask(silent.id, true, null);
+
+  const { done } = (await officeActivity(since)).tasksForOwner;
+  assert.equal(done.find((t) => t.title === 'Choose a shade')?.answer, 'Pick one: Navy');
+  const none = done.find((t) => t.title === 'Sweep the yard');
+  assert.ok(none && !('answer' in none), 'a task with nothing said has no answer key');
+
+  const [row] = await db.select().from(ledger).where(eq(ledger.taskId, answered.id));
+  assert.ok(row.body?.startsWith('Pick one Navy'), row.body ?? '');
 });

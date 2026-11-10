@@ -20,7 +20,16 @@ import { db, sql, toolServer } from './tool-server.ts';
 import { oneThreadPerGoal } from './one-thread.ts';
 import { TEMP_IN_APPDATA } from './store-states.ts';
 
-const { connectors, goals, grants, staff, threads } = await import('../src/schema.ts');
+const {
+  asks: asksTable,
+  connectors,
+  goals,
+  grants,
+  staff,
+  tasks: tasksTable,
+  threads
+} = await import('../src/schema.ts');
+const { ASK_REPLACED } = await import('../src/desk-answers.ts');
 const { eq, inArray } = await import('drizzle-orm');
 const { OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
@@ -400,6 +409,63 @@ test('a call with only the keys a tool takes still works, with its optional ones
   assert.equal(await workCount(), before, 'continuing opened new work');
   const asks = await c.callTool({ name: 'my_asks', arguments: {} });
   assert.equal(asks.isError, undefined, said(asks));
+});
+
+test('my_tasks lists each task the Odd gave and how the owner finished it', async () => {
+  await db.insert(staff).values(odd('tasker', 'Tasha'));
+  const given = (title: string) => ({ staffId: 'tasker', title, why: 'w' });
+  await db.insert(tasksTable).values([
+    {
+      ...given('Pick a blue'),
+      status: 'done',
+      doneAt: new Date(),
+      note: 'Thanks.',
+      steps: [
+        {
+          text: 'Pick one',
+          done: true,
+          action: { kind: 'choice', options: ['Navy'] },
+          answer: 'Navy'
+        }
+      ]
+    },
+    { ...given('Sign the form'), status: 'dropped', doneAt: new Date(), steps: [] },
+    {
+      ...given('Sort the post'),
+      steps: [
+        { text: 'Pick one', done: true, action: { kind: 'choice', options: ['A'] }, answer: 'A' }
+      ]
+    }
+  ]);
+  const r = await (
+    await toolServer('tasker', { RUN_KEY: 'k-tasks' })
+  ).callTool({
+    name: 'my_tasks',
+    arguments: {}
+  });
+  assert.equal(r.isError, undefined, said(r));
+  assert.match(said(r), /FINISHED: Pick a blue \(Pick one: Navy Thanks\.\)/);
+  assert.match(said(r), /DROPPED: Sign the form$/m);
+  assert.match(said(r), /OPEN: Sort the post$/m);
+});
+
+test('my_asks says an ask the Odd replaced was replaced, and still says what the owner sent back', async () => {
+  await db.insert(staff).values(odd('asker', 'Asha'));
+  const raised = (title: string) => ({ staffId: 'asker', title, why: 'w', ifApproved: 'i' });
+  await db.insert(asksTable).values([
+    { ...raised('Buy paint'), status: 'revise', reason: ASK_REPLACED, decidedAt: new Date() },
+    { ...raised('Buy brushes'), status: 'revise', reason: 'Fewer.', decidedAt: new Date() }
+  ]);
+  const r = await (
+    await toolServer('asker', { RUN_KEY: 'k-asks' })
+  ).callTool({
+    name: 'my_asks',
+    arguments: {}
+  });
+  assert.equal(r.isError, undefined, said(r));
+  assert.match(said(r), /REPLACED: Buy paint$/m);
+  assert.match(said(r), /SENT BACK: Buy brushes \(change: Fewer\.\)/);
+  assert.ok(!said(r).includes(ASK_REPLACED), said(r));
 });
 
 test('every office tool refuses a key it does not take, and says which keys it does', async () => {

@@ -120,7 +120,10 @@ import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { HIRE_DEFAULTS } from './grantable.ts';
 import {
+  ASK_REPLACED,
+  ownerAnswers,
   OWNER_ANSWERS,
+  taskSaid,
   type AskAnswer,
   type AskEffect,
   type DeskItem,
@@ -1212,7 +1215,7 @@ export async function raiseAsk(
     if (a.revises)
       await tx
         .update(asks)
-        .set({ status: 'revise', reason: 'Replaced by a new version.', decidedAt: new Date() })
+        .set({ status: 'revise', reason: ASK_REPLACED, decidedAt: new Date() })
         .where(and(eq(asks.id, a.revises), eq(asks.staffId, staffId), eq(asks.status, 'open')));
     if (row.threadId) {
       // The thread keeps the run's key, so the owner's answer cannot start the
@@ -2927,14 +2930,13 @@ export async function finishTask(id: number, done: boolean, note: string | null)
     .returning();
   if (!t) return;
   const owner = await ownerName();
-  const answers = t.steps
-    .filter((s) => s.answer && s.action?.kind === 'choice')
-    .map((s) => `${s.text} ${s.answer}`);
+  const answers = ownerAnswers(t.steps).map((a) => `${a.step} ${a.answer}`);
   await record({
     kind: 'work',
     actor: 'owner',
     title: `${done ? 'Done' : 'Dropped'} by ${owner}: ${t.title}`,
-    body: [t.why, ...answers].join('\n'),
+    // Answers first: search_ledger shows the first 400 characters, and a long why would cut them off.
+    body: [...answers, t.why].join('\n'),
     reason: t.note,
     taskId: t.id
   });
@@ -3083,7 +3085,7 @@ export type Delivery = {
   at: Date;
   /** open, approved, denied, revise, done, dropped, or for a report new or read. */
   status: string;
-  /** When the owner decided it, for an ask. */
+  /** When the owner decided an ask or finished or dropped a task. */
   decidedAt?: Date | null;
 };
 
@@ -3103,7 +3105,13 @@ export async function deliveries(staffId: string, limit = 200): Promise<Delivery
       .orderBy(desc(asks.createdAt))
       .limit(limit),
     db
-      .select({ id: tasks.id, title: tasks.title, at: tasks.createdAt, status: tasks.status })
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        at: tasks.createdAt,
+        status: tasks.status,
+        decidedAt: tasks.doneAt
+      })
       .from(tasks)
       .where(eq(tasks.staffId, staffId))
       .orderBy(desc(tasks.createdAt))
@@ -3419,7 +3427,15 @@ export async function officeActivity(since: Date) {
     })),
     tasksForOwner: {
       open: openTasks.map((t) => ({ from: t.staffId, title: t.title, since: pt(t.createdAt) })),
-      done: doneTasks.map((t) => ({ from: t.staffId, title: t.title, status: t.status }))
+      done: doneTasks.map((t) => {
+        const said = taskSaid(t);
+        return {
+          from: t.staffId,
+          title: t.title,
+          status: t.status,
+          ...(said ? { answer: said } : {})
+        };
+      })
     }
   };
 }

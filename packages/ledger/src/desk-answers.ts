@@ -2,10 +2,48 @@
 // a task or a report, and a goal's change of status. One row per kind and
 // answer, so a new kind fails the type check here until it says what its
 // answer does. Imports types only, so the page reads it too.
-import type { AskKind, GoalStatus } from './schema.ts';
+import type { AskKind, AskStatus, GoalStatus, Step, TaskStatus } from './schema.ts';
 
 export const DESK_ITEMS = ['ask', 'task', 'report'] as const;
 export type DeskItem = (typeof DESK_ITEMS)[number];
+
+/** The answer a step holds, when it is an answer the owner chose: a secret goes to the keychain, and `tickStep` accepts an answer on any step. */
+export const stepAnswer = (s: Step): string | undefined =>
+  s.answer && s.action?.kind === 'choice' ? s.answer : undefined;
+
+/** Text on one line, so what a brief or note carries cannot split a section (`sectionsOf`) or a note (`answers()`). */
+export const flat = (s: string): string => s.replace(/\s+/g, ' ').trim();
+
+/** What the owner chose on a task's steps. */
+export function ownerAnswers(steps: Step[]): { step: string; answer: string }[] {
+  return steps.flatMap((s) => {
+    const answer = stepAnswer(s);
+    return answer ? [{ step: s.text, answer }] : [];
+  });
+}
+
+/** What the owner said on a task, on one line: each `<step>: <answer>`, then their note, joined by spaces. Empty when they said nothing. */
+export function taskSaid(t: { steps: Step[]; note: string | null }): string {
+  return flat(
+    [...ownerAnswers(t.steps).map((a) => `${a.step}: ${a.answer}`), t.note ?? ''].join(' ')
+  );
+}
+
+/** How each end of an ask or task reads to an Odd. */
+export const SAID_AS: Record<Exclude<AskStatus, 'open'> | Exclude<TaskStatus, 'open'>, string> = {
+  approved: 'approved',
+  denied: 'turned down',
+  revise: 'sent back',
+  done: 'finished',
+  dropped: 'dropped'
+};
+
+/** The reason `raiseAsk` closes an ask with when the Odd raises a new version of it: the office's words, never the owner's. */
+export const ASK_REPLACED = 'Replaced by a new version.';
+
+/** Whether the Odd replaced this ask with a new version, so the owner never answered it. */
+export const askReplaced = (a: { status: AskStatus; reason: string | null }): boolean =>
+  a.status === 'revise' && a.reason === ASK_REPLACED;
 
 /**
  * What reaches the Odd when the owner answers. A `none` names the Linear row

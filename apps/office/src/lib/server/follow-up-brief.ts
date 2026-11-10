@@ -12,6 +12,7 @@ import {
   switchesSaid
 } from '@oddboro/ledger';
 import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow } from '@oddboro/ledger';
+import { ownerAnswers } from '@oddboro/ledger/desk-answers';
 import { workPath } from '@oddboro/ledger/work-paths';
 import { filterWords } from '@oddboro/ledger/filters';
 import { ACT_WRITE } from './house.ts';
@@ -149,9 +150,9 @@ function taskDoneBrief(
   t?: { row: TaskRow; files: string[] }
 ): string[] {
   if (!t) return feedbackBrief(f, r);
-  const answers = t.row.steps
-    .filter((s) => s.answer)
-    .map((s) => `- They answered "${s.text}" with: ${s.answer}`);
+  const answers = ownerAnswers(t.row.steps).map(
+    (a) => `- They answered "${a.step}" with: ${a.answer}`
+  );
   return [
     `{owner} finished the task you gave them: "${t.row.title}". Pick up the work that waited on it now.`,
     '',
