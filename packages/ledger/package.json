@@ -21,7 +21,8 @@
     "./upgrade": "./src/upgrade.ts",
     "./update-window": "./src/update-window.ts",
     "./work-paths": "./src/work-paths.ts",
-    "./filters": "./src/filter-words.ts"
+    "./filters": "./src/filter-words.ts",
+    "./certificates": "./src/certificates.ts"
   },
   "scripts": {
     "generate": "drizzle-kit generate",

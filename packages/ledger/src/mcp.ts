@@ -132,7 +132,9 @@ import {
 } from './time.ts';
 import { hasTool, isGrantable } from './tools.ts';
 import { home } from './home.ts';
+import { trustSystemCertificates } from './certificates.ts';
 
+trustSystemCertificates();
 const ME = process.env.STAFF_ID ?? '';
 const me = await staffer(ME);
 if (!me) throw new Error(`STAFF_ID "${ME}" names no Odd in this office`);
