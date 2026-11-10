@@ -306,7 +306,7 @@ changed since the frame before (`encodeGifChanges`).
 ## Layout
 
 ```
-scripts/art.ts               The art generator. hero-office.json, vignette-office.json and manager-looks.json are its specs.
+scripts/art.ts               The art generator. hero-office.json, vignette-office.json, manager-looks.json and persona-looks.json are its specs.
 scripts/paint.ts             Paints and lights the office's sprites for an hour of the day, for art.ts and office-gif.ts.
 scripts/office-gif.ts        The README's office: Main Street by day with eight Odds at work, as docs/office.gif.
 scripts/release-art.ts       The releases page's GIFs, on the desk vignette. gif.ts encodes them.

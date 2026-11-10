@@ -711,7 +711,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    in `~/.oddboro` besides `staff/` and `data/` (and `threads/<id>/` for a
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
-   With Run commands, `--settings` adds Claude Code's sandbox (`claudeSandbox`
+   The rules, the sandbox and the system prompt reach Claude Code in files
+   beside the run's MCP file (`--settings`, `--append-system-prompt-file`),
+   never on the command line: one deny for each folder in `~/.claude/projects`
+   passed Windows' 32,767 characters for an owner who uses Claude Code a lot.
+   With Run commands, the settings add Claude Code's sandbox (`claudeSandbox`
    in `src/lib/server/sandbox.ts`): commands read what the run reads, plus
    their temp folder, node when it sits in the home folder, the owner's
    developer tool folders, and the system's own folders outside `/Users` and
@@ -884,7 +888,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    one at a time per sign-in (`once`), since a service may end a sign-in whose
    refresh token arrives twice. For the same reason `steadyFetch` retries only
    a request that never left this computer; one whose answer was lost is not
-   retried within one request. The same provider signs the owner in to New
+   retried within one request. GitHub refuses a token request with 200 and its
+   error in the body, which the SDK would drop without a word, so `githubRefusal`
+   hands the SDK a 400 and logs GitHub's reason, and `freshAccess` logs any
+   renewal that did not take. The same provider signs the owner in to New
    Altitude (see "A New Altitude account"). Gmail and Google
    Drive are `builtin` connectors (migration `0009_google`): the office serves
    their tools itself (`src/lib/server/google/`, connected in-process by

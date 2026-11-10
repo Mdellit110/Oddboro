@@ -95,7 +95,6 @@ process.stdin.on('end', () => {
 /** After any hold, so two runs can be refused at once. */
 function answer() {
   // Only a staff run carries --settings, so it is read only for the trigger.
-  const settings = () => JSON.parse(process.argv[process.argv.indexOf('--settings') + 1]);
   if (
     lastLine().includes('Refuse the open network') &&
     settings().sandbox?.network?.allowedDomains?.includes('*')
@@ -104,6 +103,11 @@ function answer() {
     process.exit(1);
   }
   reply();
+}
+/** A staff run's settings, from the file --settings names; the office's own runs pass them inline. */
+function settings() {
+  const v = process.argv[process.argv.indexOf('--settings') + 1];
+  return JSON.parse(v.startsWith('{') ? v : fs.readFileSync(v, 'utf8'));
 }
 function emptyFolder(p) {
   try {
@@ -121,7 +125,9 @@ function reply() {
     // The office passes the servers as a file, read here while the run goes.
     mcp: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')),
     env: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')).mcpServers.office.env,
-    system: after('--append-system-prompt'),
+    // A staff run's settings and system prompt come in files, read here while the run goes.
+    claudeSettings: settings(),
+    system: fs.readFileSync(after('--append-system-prompt-file'), 'utf8'),
     message,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
     autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
@@ -599,6 +605,12 @@ export type Gave = {
   envNames: string[];
   /** The servers a Claude Code run got, read from the file `--mcp-config` names while the run went. */
   mcp?: unknown;
+  /** A Claude Code run's settings, read from the file `--settings` names while the run went. */
+  claudeSettings?: {
+    permissions: { allow: string[]; deny: string[] };
+    enabledPlugins: unknown;
+    sandbox?: unknown;
+  };
   env: Record<string, string>;
   system: string;
   message: string;

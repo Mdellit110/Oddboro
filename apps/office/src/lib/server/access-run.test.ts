@@ -63,25 +63,18 @@ function made(...parts: string[]): string {
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 /** Every value given with `flag`, which may come more than once. */
 const each = (args: string[], flag: string) => args.filter((_, i) => args[i - 1] === flag);
-/** The values after `flag`, up to the next flag. */
-function listAfter(args: string[], flag: string): string[] {
-  const from = args.indexOf(flag) + 1;
-  const end = args.findIndex((a, i) => i >= from && a.startsWith('--'));
-  return args.slice(from, end);
-}
 type Sandbox = {
   filesystem: { denyRead: string[]; allowRead: string[]; denyWrite: string[] };
   network: { allowedDomains: string[]; deniedDomains?: string[] };
   credentials: { envVars: { name: string; mode: string }[] };
 };
-const sandboxOf = (run: Gave) =>
-  (JSON.parse(after(run.args, '--settings')) as { sandbox?: Sandbox }).sandbox;
+const sandboxOf = (run: Gave) => run.claudeSettings!.sandbox as Sandbox | undefined;
 /** The run's temp folder, where Run commands puts its commands' own files. */
 const tmpOf = (run: Gave) => `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
 /** The paths of a Claude Code run's Read allows, in order. */
 const readAllows = (run: Gave) =>
-  listAfter(run.args, '--allowedTools')
-    .filter((a) => a.startsWith('Read(/'))
+  run
+    .claudeSettings!.permissions.allow.filter((a) => a.startsWith('Read(/'))
     .map((a) => a.slice('Read(/'.length, -'/**)'.length));
 
 /** A run on another tool, with `commands` as given and nothing else switched on. */
@@ -138,7 +131,7 @@ test("each tool's launch gives a shell exactly when commandsHow says and the off
       if (agent === 'claude') {
         // Its own file tools never, since the office carries them on every system.
         assert.equal(tools, shell ? 'Bash' : '', on);
-        assert.ok(listAfter(run.args, '--allowedTools').includes('mcp__files'), on);
+        assert.ok(run.claudeSettings!.permissions.allow.includes('mcp__files'), on);
       }
       if (agent === 'grok') {
         assert.ok(!shell, on);
@@ -216,7 +209,7 @@ test(
     assert.equal(after(run.args, '--tools'), 'Bash,WebSearch,WebFetch');
     assert.ok(filesOf(run)?.walls.writes.includes(w), 'the given folder left the file tools');
     assert.ok(sandboxOf(run), 'the handed-over run lost its sandbox');
-    const allowed = listAfter(run.args, '--allowedTools');
+    const allowed = run.claudeSettings!.permissions.allow;
     assert.ok(allowed.includes(`Edit(${L.rulePath(w)}/**)`), allowed.join(' '));
     assert.equal(run.env.CEILING, 'draft');
     // Every tool is listed: the gateway holds each change for the owner's yes.

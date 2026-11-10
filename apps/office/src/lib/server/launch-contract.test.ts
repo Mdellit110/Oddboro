@@ -127,28 +127,21 @@ const OWN: Record<Agent, readonly (string | RegExp)[]> = {
 
 /** Every value given after `flag`, which may come more than once. */
 const each = (args: string[], flag: string) => args.filter((_, i) => args[i - 1] === flag);
-/** The values after `flag`, up to the next flag. */
-function listAfter(args: string[], flag: string): string[] {
-  const from = args.indexOf(flag) + 1;
-  const end = args.findIndex((a, i) => i >= from && a.startsWith('--'));
-  return args.slice(from, end);
-}
-
 /** Where a tool has no kernel profile (Windows), the office's file server is its wall. */
 const carriedReads = (g: Gave) => filesOf(g)?.walls.reads ?? [];
 
 /** Each tool's walls, read from its own shape: the folders a run may read, and whether it reaches the network. */
 const WALLS: Record<Agent, (gave: Gave) => { reads: string[]; network: boolean }> = {
   claude: (g) => {
-    const sandbox = (
-      JSON.parse(each(g.args, '--settings')[0] ?? '{}') as {
-        sandbox?: { network?: { allowedDomains?: string[] } };
-      }
-    ).sandbox;
+    // Its rules and sandbox come in the file `--settings` names, as the stand-in
+    // read it; the sandbox is `claudeSandbox`'s JSON, typed here only as far as it is read.
+    assert.ok(g.claudeSettings, 'a Claude Code run passed no settings');
+    const sandbox = g.claudeSettings.sandbox as
+      { network?: { allowedDomains?: string[] } } | undefined;
     return {
       // Its Read allow rules, and the folders it works in besides its own.
       reads: [
-        ...listAfter(g.args, '--allowedTools')
+        ...g.claudeSettings.permissions.allow
           .filter((a) => a.startsWith('Read(/'))
           .map((a) => a.slice('Read(/'.length, -'/**)'.length)),
         ...each(g.args, '--add-dir')
