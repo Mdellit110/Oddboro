@@ -5,7 +5,7 @@
 //
 //   node packages/ledger/src/mcp.ts      (stdio; the office starts it)
 import { realpathSync, statSync } from 'node:fs';
-import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -144,7 +144,7 @@ import {
   type RIDES_WITH,
   type ToolRun
 } from './tools.ts';
-import { home, isOfficeFile } from './home.ts';
+import { home, isOfficeFile, isWhereNamed } from './home.ts';
 
 const ME = process.env.STAFF_ID ?? '';
 const me = await staffer(ME);
@@ -376,7 +376,7 @@ async function filesForHandOff(
     // `ownFile` names the file where its real path is, so a link on the way,
     // such as an attachments folder swapped for one, names another file.
     // `workFile` refuses a link in the work already.
-    if (!inWork && file.name.toLowerCase() !== normalize(asked).toLowerCase())
+    if (!inWork && !isWhereNamed({ realInside: file.name, named: asked }))
       return {
         problem: `${p} is reached through a link, and a hand-off carries only a file where it really is. Name the file itself, and call hand_off again.`
       };

@@ -633,11 +633,16 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   `src/mail-footer.ts`) unless it already says it; the owner may delete it.
   `propose_reply` takes `attachments`: files in the Odd's own folder by path
   (`mailAttachments` in `src/mail-attachments.ts`), kept on the ask as
-  `reply.attachments`; a file that fails the check refuses the call. The
-  office's own files are found by real path in any letter case
-  (`isOfficeFile` in `src/home.ts`, which `hand_off` shares), so no link or
-  full path carries one. `test/replies.test.ts` holds it, two runs at once
-  included, and `test/mail-attachments.test.ts` each way of naming one.
+  `reply.attachments`; a file that fails the check refuses the call. A file
+  goes only where it really is: its real path inside the Odd's real folder
+  must be the path it was named by, in any letter case (`isWhereNamed` in
+  `src/home.ts`, which `hand_off` shares), so a symbolic link or junction on
+  the way, to a hidden folder, back to the top or onto another drive, is
+  refused, and the Odd is told to name the file itself. The office's own
+  files are found by real path in any letter case (`isOfficeFile`, which
+  `hand_off` shares too). A hard link is a copy, which an Odd may make anyway.
+  `test/replies.test.ts` holds it, two runs at once included, and
+  `test/mail-attachments.test.ts` each way of naming one.
 - A `filter` ask carries one Gmail filter in `asks.filter` (`GmailFilter` in
   `src/filter-words.ts`, which says one in plain words), raised by
   `propose_filter`, offered and placed as `propose_reply` is. It only files

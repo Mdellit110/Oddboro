@@ -3,7 +3,7 @@
 // development they fall back to ~/.oddboro, this repo and port 4500.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { extname, join } from 'node:path';
+import { extname, join, normalize, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -64,6 +64,21 @@ const lowerOfficeFiles = OFFICE_FILE_NAMES.map((n) => n.toLowerCase());
  */
 export const isOfficeFile = (realInside: string): boolean =>
   lowerOfficeFiles.includes(realInside.toLowerCase());
+
+const asNamed = (p: string): string => normalize(p).replace(/\\/g, '/').toLowerCase();
+/**
+ * Whether a file an Odd named by a path inside its folder really is there:
+ * `realInside` is the path from the folder's real path to the file's. A link
+ * on the way names another file, perhaps a hidden one or one outside the
+ * folder, so an email and a hand-off carry only a file where it really is.
+ */
+export function isWhereNamed(file: { realInside: string; named: string }): boolean {
+  const real = asNamed(file.realInside);
+  // win32's reading, since it also takes a posix full path: on Windows
+  // `relative()` gives a file on another drive as `D:\...`, never `..`.
+  if (win32.isAbsolute(file.realInside) || real.split('/')[0] === '..') return false;
+  return real === asNamed(file.named);
+}
 
 /** An Odd's one chat session, which every chat resumes (staff.ts). */
 export const chatSession = (id: string): string => home('staff', id, OFFICE_FILES.session);
