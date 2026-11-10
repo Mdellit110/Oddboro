@@ -5,7 +5,7 @@
 //
 //   node packages/ledger/src/mcp.ts      (stdio; the office starts it)
 import { realpathSync, statSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
 import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -106,7 +106,7 @@ import {
 } from './threads.ts';
 import { INSTRUCTIONS, THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { withFooter } from './mail-footer.ts';
-import { mailAttachments } from './mail-attachments.ts';
+import { MAIL_FILES_MAX, mailAttachments } from './mail-attachments.ts';
 import {
   doesSomething,
   filterWords,
@@ -144,7 +144,7 @@ import {
   type RIDES_WITH,
   type ToolRun
 } from './tools.ts';
-import { home } from './home.ts';
+import { home, OFFICE_FILE_NAMES } from './home.ts';
 
 const ME = process.env.STAFF_ID ?? '';
 const me = await staffer(ME);
@@ -335,6 +335,27 @@ const isInstructionFile = (name: string): boolean =>
   name.split(/[\\/]/).some((step) => lowerInstructions.includes(step.toLowerCase()));
 
 /**
+ * The office name of a file a hand_off names by its full path: in this Odd's
+ * folder, its path inside it; in the office's folder of threads, its work name,
+ * since a hand-off's brief lists the work's files at their full paths. Any
+ * other name stays as it is.
+ */
+function officeName(p: string): string {
+  if (!isAbsolute(p)) return p;
+  const inside = (root: string) => {
+    const r = relative(root, p);
+    return r && !isAbsolute(r) && r.split(sep)[0] !== '..' ? r : undefined;
+  };
+  const own = inside(HOME);
+  if (own) return own;
+  const work = inside(home(THREADS_DIR));
+  return work ? `${THREADS_DIR}/${work.split(sep).join('/')}` : p;
+}
+
+// A Mac's and Windows's disks read `Chat.jsonl` as `chat.jsonl`, so case does not count.
+const lowerOfficeFiles = OFFICE_FILE_NAMES.map((n) => n.toLowerCase());
+
+/**
  * The files a hand_off names, as paths inside the folder of work `on` for
  * those already there, and what to copy there for the rest, or why the
  * hand-off cannot go.
@@ -348,16 +369,33 @@ async function filesForHandOff(
   // Each landing name to the file there: as the office found it, and as the Odd named it.
   const landing = new Map<string, { name: string; named: string }>();
   for (const p of named) {
-    const file = await readableFile(p);
+    const asked = officeName(p);
+    const file = await readableFile(asked);
     if (!file)
       return {
-        problem: `You cannot read ${p}. Name a file in your folder by its path inside it, or one in the folder of work you are on from ${THREADS_DIR}/, never by its full path, and call hand_off again.`
+        problem: `You cannot read ${p}. Name a file in your folder by its path inside it or its full path, or one in the folder of work you are on from ${THREADS_DIR}/, and call hand_off again.`
+      };
+    const inWork = workPath(file.name);
+    // `ownFile` names the file where its real path is, so a link on the way,
+    // such as an attachments folder swapped for one, names another file.
+    // `workFile` refuses a link in the work already.
+    if (!inWork && file.name.toLowerCase() !== normalize(asked).toLowerCase())
+      return {
+        problem: `${p} is reached through a link, and a hand-off carries only a file where it really is. Name the file itself, and call hand_off again.`
       };
     if (isInstructionFile(file.name))
       return {
         problem: `${p} is an instruction file, and those never go with a hand-off. Say what your colleague needs in the brief, and call hand_off again.`
       };
-    const inWork = workPath(file.name);
+    const steps = file.name.split(/[\\/]/);
+    if (steps.some((step) => step.startsWith('.')))
+      return {
+        problem: `${p} is a hidden file, and those never go with a hand-off. Name another file, or leave it out, and call hand_off again.`
+      };
+    if (!inWork && steps.length === 1 && lowerOfficeFiles.includes(file.name.toLowerCase()))
+      return {
+        problem: `${p} is one of the office's own files, and those never go with a hand-off. Say what your colleague needs in the brief, and call hand_off again.`
+      };
     const inside = inWork && inWork.thread === on ? inWork.inside : undefined;
     const name = file.name.replace(/[\\/]/g, '-');
     // Lower case, since a Mac's and Windows's disks hold those as one file.
@@ -1667,10 +1705,10 @@ if (HANDS_OFF.tool) {
           .describe('What to do, why, and what to send back. Name any files in files.'),
         files: z
           .array(z.string())
-          .max(5)
+          .max(MAIL_FILES_MAX)
           .optional()
           .describe(
-            `Files the work needs, named as for attach: one in your folder, or one in the folder of work you are on, from ${THREADS_DIR}/. Pictures and files ${OWNER} attached in chat are in attachments/ in your folder. They land in this work for your colleague. Never one from a tool your colleague lacks, without ${OWNER}'s yes.`
+            `Files the work needs: one in your folder, by its path inside it or its full path, or one in the folder of work you are on, from ${THREADS_DIR}/. Pictures and files ${OWNER} attached in chat are in attachments/ in your folder. They land in this work for your colleague. Never one from a tool your colleague lacks, without ${OWNER}'s yes.`
           ),
         request: z
           .string()

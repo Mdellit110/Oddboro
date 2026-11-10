@@ -22,10 +22,11 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterEach, test } from 'node:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { db, sql, toolServer } from './tool-server.ts';
@@ -43,7 +44,8 @@ const {
 } = await import('../src/schema.ts');
 const { ASK_REPLACED } = await import('../src/desk-answers.ts');
 const { and, eq, inArray } = await import('drizzle-orm');
-const { workName } = await import('../src/work-paths.ts');
+const { givenName, workName } = await import('../src/work-paths.ts');
+const { MAIL_FILES_MAX } = await import('../src/mail-attachments.ts');
 const { isOffered, OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
 const { HAND_OFF_LIMIT, LEADS_NONE, threadPart } = await import('../src/threads.ts');
@@ -90,7 +92,7 @@ await db
     odd('jo', 'Jo')
   ]);
 // A job description Pia could propose a hire with, so only the goal check stops it.
-const { home } = await import('../src/home.ts');
+const { home, OFFICE_FILE_NAMES } = await import('../src/home.ts');
 mkdirSync(home('staff', 'pia', 'notes'), { recursive: true });
 writeFileSync(home('staff', 'pia', 'notes', 'jd-printer.md'), 'Prints signs.');
 const [fair] = await db.insert(goals).values({ title: 'Run the bake sale' }).returning();
@@ -748,24 +750,30 @@ test("a hand-off carrying a file from other work the sender is on puts it in thi
   assert.deepEqual((await handedAs(here, 'Use the notes'))?.handOff?.files, [`ann/${name}`]);
 });
 
-test('a hand-off naming a file the sender cannot read is refused with an error, and nothing is handed on', async () => {
+test('a hand-off naming a file the sender cannot read is refused with an error, and nothing is handed on', async (t) => {
   const { c, own, open, give } = await carrier('bea');
+  t.after(() => c.close());
+  // Bea's own folder is there, as every Odd's is, so only the rule stops each file.
+  own('mine.md');
   const here = await open('Bea work');
-  own('full-path.md');
-  const { open: openTheirs } = await carrier('bea-other');
+  const { c: theirServer, open: openTheirs } = await carrier('bea-other');
+  t.after(() => theirServer.close());
   const theirs = await openTheirs('Work Bea is not on');
   put(join(threadPart(theirs, 'bea-other'), 'x.md'), 'not for Bea');
+  // Another Odd's own file, by its path from Bea's folder and by its full path.
+  put(join(home('staff', 'paige'), 'x.md'), "Paige's");
   const before = (await handedOn(here)).length;
   const shut = [
     'nope.md',
-    join(home('staff', 'bea'), 'full-path.md'),
-    workName(theirs, 'bea-other/x.md')
+    '../paige/x.md',
+    join(home('staff', 'paige'), 'x.md'),
+    workName(theirs, 'bea-other/x.md'),
+    join(threadPart(theirs, 'bea-other'), 'x.md')
   ];
   for (const name of shut) {
     const r = await give(here, 'Use it', [name]);
     assert.equal(r.isError, true, name);
-    assert.ok(said(r).startsWith('Nothing was handed off yet.'), said(r));
-    assert.ok(said(r).includes(name), said(r));
+    assert.ok(said(r).startsWith(`Nothing was handed off yet. You cannot read ${name}.`), said(r));
   }
   assert.equal((await handedOn(here)).length, before);
   const works = await workCount();
@@ -795,6 +803,174 @@ test('a hand-off naming an instruction file is refused', async () => {
   assert.equal((await handedOn(here)).length, before);
   assert.equal(existsSync(threadPart(here, 'cat')), false, 'an instruction file was copied');
 });
+
+test("a full path in the giver's own folder carries that file, and one in this work's folder names the file there", async (t) => {
+  const { c, own, open, give } = await carrier('amy');
+  t.after(() => c.close());
+  const here = await open('Amy work');
+  own(join('notes', 'full.md'), 'by its full path');
+  put(join(threadPart(here, 'paige'), 'z.md'), 'already here');
+  const r = await give(here, 'By full paths', [
+    join(home('staff', 'amy'), 'notes', 'full.md'),
+    join(threadPart(here, 'paige'), 'z.md')
+  ]);
+  assert.equal(r.isError, undefined, said(r));
+  assert.deepEqual((await handedAs(here, 'By full paths'))?.handOff?.files, [
+    'paige/z.md',
+    'amy/notes-full.md'
+  ]);
+  assert.equal(
+    readFileSync(join(threadPart(here, 'amy'), 'notes-full.md'), 'utf8'),
+    'by its full path'
+  );
+});
+
+test("the office's own files at the top of the giver's folder never go with a hand-off, by any name, and each refusal names the file as the Odd did", async (t) => {
+  const { c, own, open, give } = await carrier('ola');
+  t.after(() => c.close());
+  const here = await open('Ola work');
+  // Upper case too: a Mac's and Windows's disks read it as the same file.
+  for (const name of OFFICE_FILE_NAMES) for (const n of [name, name.toUpperCase()]) own(n, '{}');
+  const before = (await handedOn(here)).length;
+  for (const office of OFFICE_FILE_NAMES)
+    for (const name of [
+      office,
+      `./${office}`,
+      office.toUpperCase(),
+      join(home('staff', 'ola'), office)
+    ]) {
+      const r = await give(here, 'Use it', [name]);
+      assert.equal(r.isError, true, name);
+      assert.ok(
+        said(r).startsWith(`Nothing was handed off yet. ${name} is one of the office's own files`),
+        said(r)
+      );
+    }
+  assert.equal((await handedOn(here)).length, before);
+  assert.equal(existsSync(threadPart(here, 'ola')), false, 'an office file was copied');
+  // Below the top, a file of that name is the Odd's own, and goes.
+  const below = join('notes', OFFICE_FILE_NAMES[0]);
+  own(below, 'notes of its own');
+  const r = await give(here, 'Use the notes', [below]);
+  assert.equal(r.isError, undefined, said(r));
+  assert.deepEqual((await handedAs(here, 'Use the notes'))?.handOff?.files, [
+    `ola/notes-${OFFICE_FILE_NAMES[0]}`
+  ]);
+});
+
+test("a hidden file never goes with a hand-off, from the giver's folder or the work's", async (t) => {
+  const { c, own, open, give } = await carrier('hid');
+  t.after(() => c.close());
+  const here = await open('Hid work');
+  own('.notes.md');
+  own(join('drafts', '.x.md'));
+  put(join(threadPart(here, 'paige'), '.y.md'), 'hidden in the work');
+  const before = (await handedOn(here)).length;
+  for (const name of [
+    '.notes.md',
+    join('drafts', '.x.md'),
+    join(home('staff', 'hid'), '.notes.md'),
+    workName(here, 'paige/.y.md')
+  ]) {
+    const r = await give(here, 'Use it', [name]);
+    assert.equal(r.isError, true, name);
+    assert.ok(said(r).startsWith(`Nothing was handed off yet. ${name} is a hidden file`), said(r));
+  }
+  assert.equal((await handedOn(here)).length, before);
+  assert.equal(existsSync(threadPart(here, 'hid')), false, 'a hidden file was copied');
+});
+
+test(
+  "the owner's chat attachments go with a hand-off from the giver's attachments folder, and never through one swapped for a link",
+  { skip: TEMP_IN_APPDATA },
+  async (t) => {
+    const { c, own, open, give } = await carrier('ada');
+    t.after(() => c.close());
+    const here = await open('Ada work');
+    const kept = 'attachments/20261110-081108-35bc-image.png';
+    own(kept, 'png');
+    const r = await give(here, 'Look at the screenshot', [kept]);
+    assert.equal(r.isError, undefined, said(r));
+    const lands = 'attachments-20261110-081108-35bc-image.png';
+    assert.deepEqual((await handedAs(here, 'Look at the screenshot'))?.handOff?.files, [
+      `ada/${lands}`
+    ]);
+    const part = threadPart(here, 'ada');
+    assert.deepEqual(partNow(part), { [lands]: 'png' });
+
+    // The Odd writes its own folder, so it can swap attachments/ for a link:
+    // out of its folder, or to another folder in it.
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-attachments-')));
+    t.after(() => rmSync(outside, { recursive: true, force: true }));
+    writeFileSync(join(outside, 'out.png'), 'not hers');
+    own(join('pics', 'in.png'), 'hers');
+    const folder = join(home('staff', 'ada'), 'attachments');
+    rmSync(folder, { recursive: true });
+    const before = (await handedOn(here)).length;
+    for (const [target, named, why] of [
+      [outside, 'attachments/out.png', 'You cannot read attachments/out.png'],
+      [
+        join(home('staff', 'ada'), 'pics'),
+        'attachments/in.png',
+        'attachments/in.png is reached through a link'
+      ]
+    ]) {
+      symlinkSync(target, folder, 'dir');
+      try {
+        const linked = await give(here, 'Through a linked folder', [named]);
+        assert.equal(linked.isError, true, said(linked));
+        assert.ok(said(linked).startsWith(`Nothing was handed off yet. ${why}`), said(linked));
+        notByOfficePath(linked);
+      } finally {
+        unlinkSync(folder);
+      }
+    }
+    assert.equal((await handedOn(here)).length, before);
+    assert.deepEqual(partNow(part), { [lands]: 'png' });
+  }
+);
+
+test('a hand-off carries as many files as an email may, and no more', async (t) => {
+  const { c, own, open, give } = await carrier('max');
+  t.after(() => c.close());
+  const here = await open('Max work');
+  const names = Array.from({ length: MAIL_FILES_MAX + 1 }, (_, i) => `f${i}.md`);
+  for (const name of names) own(name, name);
+  const before = (await handedOn(here)).length;
+  const over = await give(here, 'Too many', names);
+  assert.equal(over.isError, true, said(over));
+  assert.equal((await handedOn(here)).length, before);
+  assert.equal(existsSync(threadPart(here, 'max')), false, 'a file was copied');
+  const r = await give(here, 'As many as it may', names.slice(0, MAIL_FILES_MAX));
+  assert.equal(r.isError, undefined, said(r));
+  assert.equal((await handedAs(here, 'As many as it may'))?.handOff?.files?.length, MAIL_FILES_MAX);
+});
+
+test(
+  'a file in a folder the owner gave the giver never goes with a hand-off, by its full path or its office name',
+  { skip: TEMP_IN_APPDATA },
+  async (t) => {
+    const { c, own, open, give } = await carrier('gil');
+    t.after(() => c.close());
+    // Its own folder is there, as every Odd's is, so only the rule stops the file.
+    own('notes.md');
+    const given = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-given-')));
+    t.after(() => rmSync(given, { recursive: true, force: true }));
+    writeFileSync(join(given, 'site.md'), 'from the given folder');
+    await db
+      .update(staff)
+      .set({ folders: [{ path: given, write: false }] })
+      .where(eq(staff.id, 'gil'));
+    const here = await open('Gil work');
+    const before = (await handedOn(here)).length;
+    for (const name of [join(given, 'site.md'), givenName(basename(given), 'site.md')]) {
+      const r = await give(here, 'Use the site', [name]);
+      assert.equal(r.isError, true, name);
+      assert.ok(said(r).startsWith(`Nothing was handed off yet. You cannot read ${name}`), said(r));
+    }
+    assert.equal((await handedOn(here)).length, before);
+  }
+);
 
 test("a file already in this work's folder is listed for the colleague and not copied", async () => {
   const { open, give } = await carrier('dee');
