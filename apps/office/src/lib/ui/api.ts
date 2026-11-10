@@ -9,7 +9,9 @@ import type { Path } from '$app/types';
 
 /**
  * An address one of the office's own routes answers, with any search after
- * it, so a call to a route that does not exist fails the type check.
+ * it. The type check catches a wrong address only up to its first route
+ * parameter: `Path` writes a parameter as `${string}`, which matches any
+ * rest, so `/api/staff/${id}/attachmentz` still passes.
  */
 // The slash is added here because SvelteKit 3.1's `Path` names each route without one.
 export type ApiUrl = `/${Path}` | `/${Path}?${string}`;
