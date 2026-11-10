@@ -1,13 +1,15 @@
 // Files a staffer wrote, opened in the office's viewer. Only files inside a
-// staffer's own folder or its parts of thread folders, or one it attached
-// from the folder of a thread it is on (`workFile`), only text, and only ones
-// that already exist: the owner reads and edits what the staff made, the
-// owner does not browse the Mac. A page an Odd built opens in the owner's
-// browser instead (`openStaffPage`), found the same way.
+// staffer's own folder or its parts of thread folders, one it attached from
+// the folder of a thread it is on (`workFile`), or one in a folder the owner
+// gave it (`givenFile`), only text, and only ones that already exist: the
+// owner reads and edits what the staff made, the owner does not browse the
+// Mac. A page an Odd built opens in the owner's browser instead
+// (`openStaffPage`), found the same way.
 import {
   closeSync,
   constants,
   type Dirent,
+  existsSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -17,8 +19,10 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
+  type StaffRow,
   learnFromEdit,
   openFile,
   record,
@@ -29,7 +33,7 @@ import {
   workFile
 } from '@oddboro/ledger';
 import { fixedError, isFixedError } from '@oddboro/ledger/errors';
-import { workName, workPath } from '@oddboro/ledger/work-paths';
+import { givenName, givenPath, workName, workPath } from '@oddboro/ledger/work-paths';
 import { PAGE } from '#lib/pages.ts';
 
 const HOMES = home('staff');
@@ -187,17 +191,71 @@ export function threadsWithPart(staff: string): number[] {
 const isFolder = (path: string): boolean =>
   !!lstatSync(path, { throwIfNoEntry: false })?.isDirectory();
 
+/** A file `locate` found: its real path, the path the viewer opens it by, and whether the owner's folder holds it. */
+type Found = { file: string; path: string; given?: true };
+
+/** Whether `path` is a full path on this computer, from `~` or from the top. */
+const isFull = (path: string): boolean => isAbsolute(path) || path.startsWith('~/');
+
+/**
+ * A file in a folder the owner gave `who` and that is still on the disk,
+ * named by its full path (from `~` or from the top) or by its name in the
+ * office (`givenName`). Only a file whose real path stays inside the real path
+ * of that folder, so a link never leads out, and only by the one path named:
+ * nothing is searched for, since a folder the owner gave can be a whole
+ * drive. It goes by the innermost given folder that holds it. A folder with no
+ * name of its own (a drive's top) or one that shares its name with another
+ * given folder names nothing, since its files' names would not lead back to it.
+ */
+function givenFile(who: StaffRow, path: string): Found | undefined {
+  const folders = who.folders
+    .filter((f) => existsSync(f.path))
+    .map((f) => ({ name: basename(f.path), as: resolve(f.path), real: realpathSync(f.path) }))
+    .filter((f, _, all) => f.name && all.filter((g) => g.name === f.name).length === 1);
+  const inside = (real: string, rel: string): string | undefined => {
+    try {
+      const file = realpathSync(join(real, rel));
+      return file.startsWith(real + sep) && statSync(file).isFile() ? file : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const named = givenPath(path);
+  if (named) {
+    const f = folders.find((g) => g.name === named.folder);
+    const file = f && inside(f.real, named.inside);
+    return file ? { file, path, given: true } : undefined;
+  }
+  if (!isFull(path)) return undefined;
+  const full = path.startsWith('~/') ? join(homedir(), path.slice(2)) : resolve(path);
+  // The innermost folder first, as the Odd wrote it or by its real path.
+  for (const f of folders.sort((a, b) => b.real.length - a.real.length)) {
+    for (const root of new Set([f.as, f.real])) {
+      const rel = relative(root, full);
+      if (!rel || rel.startsWith('..') || isAbsolute(rel)) continue;
+      const file = inside(f.real, rel);
+      if (file) return { file, path: givenName(f.name, relative(f.real, file)), given: true };
+    }
+  }
+  return undefined;
+}
+
 /**
  * A staffer's file: its real path, and the path the viewer opens it by. A
  * bare name its own folder lacks is the newest one it wrote on a thread, and
  * keeps its bare name, since the owner never sees a thread or its folder. A
  * name in a thread's folder (`workPath`), as the Odd attached it, is that one
- * file while the Odd is on that thread, in whoever's part of it.
+ * file while the Odd is on that thread, in whoever's part of it. A full path,
+ * or a name in a folder the owner gave it, is a file in that folder
+ * (`givenFile`).
  */
-async function locate(staff: string, path: string): Promise<{ file: string; path: string }> {
-  if (!/^[a-z0-9-]+$/.test(staff) || !(await staffer(staff))) throw fixedError('No such Odd');
-  // The page names a file inside the Odd's folders, never by where it sits on the Mac.
-  if (isAbsolute(path)) throw new FileError(`No file at ${basename(path)}`);
+async function locate(staff: string, path: string): Promise<Found> {
+  const who = /^[a-z0-9-]+$/.test(staff) ? await staffer(staff) : undefined;
+  if (!who) throw fixedError('No such Odd');
+  // A full path names only a file in a folder the owner gave the Odd, never anywhere else on the Mac.
+  const given = givenFile(who, path);
+  if (given) return given;
+  if (isFull(path)) throw new FileError(`No file at ${basename(path)}`);
   // The Odd's tools read such a name the same way (`attachable`), so both find one file.
   if (workPath(path)) {
     const file = await workFile(staff, path);
@@ -220,11 +278,7 @@ export async function readStaffFile(staff: string, path: string): Promise<StaffF
   return readFound(staff, path, await locate(staff, path));
 }
 
-async function readFound(
-  staff: string,
-  path: string,
-  found: { file: string; path: string }
-): Promise<StaffFile> {
+async function readFound(staff: string, path: string, found: Found): Promise<StaffFile> {
   if (statSync(found.file).size > MAX_BYTES)
     throw new FileError(`${basename(path)} is too big to open here`);
   const content = readFileSync(found.file, 'utf8');
@@ -238,7 +292,7 @@ async function readFound(
  * folders, never through a link. Its size does not matter: the browser opens
  * it, and the office never reads it.
  */
-async function findPage(staff: string, path: string): Promise<{ file: string; path: string }> {
+async function findPage(staff: string, path: string): Promise<Found> {
   const found = await locate(staff, path);
   const file = realpathSync(found.file);
   if (!PAGE.test(file)) throw new FileError(`${basename(path)} is not a page`);
@@ -294,7 +348,9 @@ export async function writeStaffFile(
 ): Promise<StaffFile> {
   // The Odd that attached it may not have written it, so its edit would teach the wrong Odd.
   if (workPath(path)) throw new FileError(`${basename(path)} opens here to read only`);
-  const { file } = await locate(staff, path);
+  const { file, given } = await locate(staff, path);
+  // The owner's own folder holds the owner's work as much as the Odd's: the owner edits it in their own tools.
+  if (given) throw new FileError(`${basename(path)} opens here to read only`);
   if (Math.abs(statSync(file).mtimeMs - mtime) > 1)
     throw fixedError('The Odd changed this file since you opened it. Reopen it to see.');
   // The mtime check makes this the Odd's version, unless the owner saved it before.

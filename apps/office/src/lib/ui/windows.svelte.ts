@@ -30,7 +30,7 @@ export const wins = $state<{
   /** False when the owner folded the panel away: the windows stay open behind it. */
   shown: boolean;
   /**
-   * True when an open file or report should sit above the Odd's panel. Opening a window,
+   * True when the front window should sit above the Odd's panel. Opening a window,
    * clicking its tab and closing the Odd's panel set it; picking an Odd clears it.
    */
   raised: boolean;

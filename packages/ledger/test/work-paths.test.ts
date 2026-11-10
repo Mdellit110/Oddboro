@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { win32 } from 'node:path';
 import { test } from 'node:test';
-import { workPath } from '../src/work-paths.ts';
+import { givenName, givenPath, shownPath, workPath } from '../src/work-paths.ts';
 
 const ROOT = 'C:\\h\\threads\\1';
 
@@ -62,3 +62,25 @@ test('a path outside the threads folder, or a thread number past Postgres, names
   assert.equal(workPath('staff/vera/x.md'), undefined);
   assert.equal(workPath(`threads/${2 ** 31}/vera/x.md`), undefined);
 });
+
+test('a name in a folder the owner gave reads as that folder and the path inside it', () => {
+  assert.deepEqual(givenPath('folders/site/docs/plan.md'), {
+    folder: 'site',
+    inside: 'docs/plan.md'
+  });
+  assert.equal(givenName('site', 'docs/plan.md'), 'folders/site/docs/plan.md');
+  assert.equal(shownPath('folders/site/docs/plan.md'), 'site/docs/plan.md');
+  assert.equal(shownPath('threads/1/vera/a.md'), 'a.md');
+  assert.equal(shownPath('notes/a.md'), 'notes/a.md');
+});
+
+for (const [row, path] of [
+  ['a .. step', 'folders/site/../x.md'],
+  ['a backslash climb', 'folders/site/a\\..\\..\\x.md'],
+  ['a . step', 'folders/site/./x.md'],
+  ['an empty step', 'folders/site//x.md'],
+  ['a folder called ..', 'folders/../x.md'],
+  ['a folder name with a backslash', 'folders/a\\b/x.md'],
+  ['no path inside the folder', 'folders/site']
+] as const)
+  test(`givenPath refuses ${row}`, () => assert.equal(givenPath(path), undefined));

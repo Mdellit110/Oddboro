@@ -1249,7 +1249,7 @@
       min={340}
       max={Math.max(760, Math.round(innerWidth * 0.4))}
       storageKey="oddboro.panel.start"
-      onTop={wins.raised && (front?.kind === 'file' || front?.kind === 'report')}
+      onTop={wins.raised}
     >
       <div class="flex h-full min-h-0 flex-col">
         <div class="pb-2">{@render plate(true)}</div>

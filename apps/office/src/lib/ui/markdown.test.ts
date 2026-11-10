@@ -6,10 +6,14 @@ import { askAbout } from './file-links.ts';
 import { renderMarkdown } from './markdown.ts';
 
 const refused = new Set<string>();
+// The name the office gives a full path into a folder the owner gave an Odd.
+const renamed = new Map<string, string>();
 // The page's one call: the office says every name opens, but those in `refused`.
 globalThis.fetch = (async (_url: string, init: RequestInit) => {
   const { files } = JSON.parse(String(init.body)) as { files: { path: string }[] };
-  return Response.json(files.map((f) => (refused.has(f.path) ? null : f.path)));
+  return Response.json(
+    files.map((f) => (refused.has(f.path) ? null : (renamed.get(f.path) ?? f.path)))
+  );
 }) as typeof fetch;
 
 /** `text` as the page shows it once the office has answered about its names. */
@@ -130,7 +134,6 @@ for (const [row, text, html] of [
   ['a file: link to no office file stays text', '[a](file:///etc/passwd)'],
   ['a javascript: link stays text', '[a](javascript:alert(1))'],
   ['a data: link stays text', '[a](data:text/html;base64,eA==)'],
-  ['a file: link outside any office folder stays text', '[a](file:///Users/Shared/notes/a.md)'],
   [
     'a file: autolink to no office file stays text',
     '<file:///etc/passwd>',
@@ -369,3 +372,50 @@ for (const [written, name] of [
       assert.ok((await shown(`See ${url} now`)).includes(`data-file="${ref}"`));
     });
 }
+
+test('a full path into a folder the owner gave links by the name the office gives it, in text, code and a file: link', async () => {
+  const page = '/Users/Shared/Projects/site/index.html';
+  renamed.set(page, 'folders/site/index.html');
+  renamed.set('~/Projects/site/index.html', 'folders/site/index.html');
+  const plain = await shown(`Built ${page} today`, 'vera');
+  assert.match(plain, /data-file="vera:folders\/site\/index\.html"/);
+  assert.equal(visible(plain), 'Built site/index.htmlOpen in browser today');
+  assert.equal(
+    visible(await shown('`~/Projects/site/index.html`', 'vera')),
+    'site/index.htmlOpen in browser'
+  );
+  const linked = await shown(`[the page](file://${page})`, 'vera');
+  assert.doesNotMatch(linked, /file:/);
+  assert.equal(visible(linked), 'the pageOpen in browser');
+});
+
+test('a full path in a link label among other words reads as its file name', async () => {
+  const thread = await shown(
+    '[open ~/.oddboro/threads/1/vera/a.md now](file:///Users/Shared/.oddboro/threads/1/vera/a.md)',
+    'vera'
+  );
+  assert.equal(visible(thread), 'open a.md now');
+  renamed.set('/Users/Shared/Projects/site/notes.md', 'folders/site/notes.md');
+  const given = await shown(
+    '[see /Users/Shared/Projects/site/notes.md here](file:///Users/Shared/Projects/site/notes.md)',
+    'vera'
+  );
+  assert.equal(visible(given), 'see site/notes.md here');
+});
+
+test('a full path the office says opens nothing stays as written, and a file: link to it keeps only its words', async () => {
+  refused.add('/Users/Shared/notes/a.md');
+  assert.equal(await shown('[a](file:///Users/Shared/notes/a.md)', 'vera'), '<p>a</p>');
+  assert.equal(
+    await shown('See /Users/Shared/notes/a.md.', 'vera'),
+    '<p>See /Users/Shared/notes/a.md.</p>'
+  );
+});
+
+test('a full path outside the office asks nothing when no Odd wrote the text, and a web address or a/b/c.md is no path', () => {
+  assert.deepEqual(renderMarkdown('See /Users/Shared/notes/b.md').unknown, []);
+  assert.deepEqual(
+    renderMarkdown('see https://example.com/a/b.html and a/b/c.md', 'vera').unknown,
+    []
+  );
+});
