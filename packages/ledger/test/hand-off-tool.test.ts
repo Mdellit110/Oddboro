@@ -594,15 +594,10 @@ test('every tool the server registers is a listed office tool or rides with one'
 for (const [id, holds] of Object.entries(HOLDERS))
   for (const run of ['chat', 'thread'] as const)
     test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them, as each row's conditions allow`, async () => {
-      // None of these Odds is the Office Manager, so `notToManager` takes nothing away.
+      // None of these Odds is the Office Manager, and only Tot holds Gmail.
+      const toolRun = { gmail: id === 'tot', chat: run === 'chat', manager: false };
       const offered = new Set<string>(
-        OFFICE_TOOLS.filter(
-          (t) =>
-            (t.always || holds.includes(t.id)) &&
-            !t.prompt &&
-            (!t.withGmail || id === 'tot') &&
-            (!t.inChat || run === 'chat')
-        ).map((t) => t.id)
+        OFFICE_TOOLS.filter((t) => isOffered(holds, t.id, toolRun)).map((t) => t.id)
       );
       // A cast only to name the keys: Object.keys types them as strings.
       const riding = (Object.keys(RIDES_WITH) as (keyof typeof RIDES_WITH)[]).filter(
@@ -612,9 +607,9 @@ for (const [id, holds] of Object.entries(HOLDERS))
       assert.deepEqual(await registered(id, run), want, `${id} in a ${run}`);
     });
 
-// The test above reads each row's conditions to work out what a run gets, so
-// a condition dropped from a row changes what it expects too. These hold the
-// rows themselves, and that `isOffered` never offers a `prompt` row.
+// The test above works out what a run gets with `isOffered`, so a condition
+// dropped from a row, or from `isOffered`, changes what it expects too. These
+// hold the rows themselves, and what `isOffered` gives for each condition.
 test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never offered, even to a chat holding it', () => {
   const where = (field: 'inChat' | 'notToManager' | 'prompt') =>
     OFFICE_TOOLS.filter((t) => t[field]).map((t) => t.id);
@@ -631,6 +626,22 @@ test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait
     isOffered(['see_office'], 'see_office', { chat: true, manager: false, gmail: false }),
     false
   );
+});
+
+test('isOffered gives an always tool to every run its row allows, and a held tool only to an Odd holding it', () => {
+  const job = { chat: false, manager: false, gmail: false };
+  const chatRun = { ...job, chat: true };
+  // my_tasks sets no condition: even the manager's job run with no Gmail has it.
+  assert.equal(isOffered([], 'my_tasks', { ...job, manager: true }), true);
+  assert.equal(isOffered([], 'leave_office', chatRun), true);
+  assert.equal(isOffered([], 'leave_office', job), false);
+  assert.equal(isOffered([], 'leave_office', { ...chatRun, manager: true }), false);
+  assert.equal(isOffered([], 'tell_lead', job), false);
+  assert.equal(isOffered([], 'tell_lead', chatRun), true);
+  assert.equal(isOffered([], 'propose_reply', chatRun), false);
+  assert.equal(isOffered([], 'propose_reply', { ...job, gmail: true }), true);
+  assert.equal(isOffered([], 'search_ledger', chatRun), false);
+  assert.equal(isOffered(['search_ledger'], 'search_ledger', job), true);
 });
 
 test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {

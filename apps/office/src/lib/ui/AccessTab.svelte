@@ -21,7 +21,6 @@
   import ServiceActions from './ServiceActions.svelte';
   import { findsIn, toolGroups } from './tool-groups.ts';
   import type { StaffProfile } from '../staff/roster.ts';
-  import type { AgentTool } from '../../routes/api/agents/+server.ts';
 
   type Grant = {
     connector: string;
@@ -301,7 +300,7 @@
     folders: 'Find a folder',
     services: 'Find a service'
   } as const;
-  const tools = $derived(toolGroups(find));
+  const tools = $derived(toolGroups(find, profile));
   const shownGrants = $derived(grants.filter((g) => matches(g.name, GRANT_LABEL[g.level])));
   const commandsShown = $derived(
     matches(SWITCH_NAMES.commands, how.state === 'switch' ? '' : how.why)

@@ -577,7 +577,6 @@ if (has('search_ledger'))
 
 // In a chat, the threads this Odd works on and does not lead (`threadsOn`):
 // what the owner asks there about one goes to its lead with tell_lead.
-const said = OWNER_SAID;
 const workingOn = offered('tell_lead') ? await threadsOn(ME) : [];
 const goalRule = await goalWork(ME, workingOn);
 // A hub in a run on no thread, such as a chat or a job, names the thread an ask
@@ -1799,7 +1798,7 @@ if (HANDS_OFF.tool) {
 // Only in a chat (`inChat` on its row), and only for threads this Odd works on
 // and does not lead: their words reach the lead as theirs, and the Odd's own
 // only as its reading.
-if (said && workingOn.length)
+if (workingOn.length)
   tool(
     'tell_lead',
     {
@@ -1825,7 +1824,9 @@ if (said && workingOn.length)
         staffId: ME,
         threadId: work,
         owner: OWNER,
-        said,
+        // `inChat` offers it only where the office sets OWNER_SAID. With none,
+        // no words match, so tellLead refuses and nothing reaches the lead.
+        said: OWNER_SAID ?? '',
         words,
         reading,
         exchange: process.env.CHAT_EXCHANGE || undefined

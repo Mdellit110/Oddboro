@@ -502,7 +502,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    box over their list, which filters it as the owner types and clears on a
    tab change. Office lists two switches, Run
    commands and Browse the web, above the office tools the owner gives, then
-   under Always on, with no switch, each office tool every Odd has (both lists
+   under Always on, with no switch, each office tool every Odd has that some
+   run of this one is offered (`isOffered`, so the Office Manager's leaves out
+   Ask to leave; both lists
    split from `OFFICE_TOOLS` by `toolGroups` in `src/lib/ui/tool-groups.ts`,
    and filtered by the same search); Folders
    (`FoldersList.svelte`) lists each folder with Can read and Can write side

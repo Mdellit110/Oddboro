@@ -770,7 +770,9 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
     it is offered (`withGmail`, `inChat`, `notToManager`, and `prompt` for
     one that only shapes the prompt and is never offered) is a field on its
     row, which `isOffered` in `src/tools.ts` reads for the tool server
-    (`offered()` in `mcp.ts`) and the office's `named-tools.test.ts`.
+    (`offered()` in `mcp.ts`), the Settings tab's Always on group
+    (`toolGroups` in the office), `test/hand-off-tool.test.ts` and the
+    office's `named-tools.test.ts`.
   - To add an owner control on an Odd's card (a key the staff PATCH route
     reads), start at `STAFF_PATCH_KEYS` in `src/grantable.ts`; the type
     check fails until `PATCH_KEY` classes it as a grant's control, a run
