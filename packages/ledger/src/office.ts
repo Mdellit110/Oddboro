@@ -1607,8 +1607,9 @@ async function decide(
       .from(asks)
       .where(eq(asks.id, id));
     // Refused before the ask closes, so a no-longer-possible yes leaves it open with the reason.
-    if (decision === 'approve' && (raised?.kind === 'remove' || raised?.kind === 'bring_back')) {
-      const held = await leavingRefused(raised.kind, raised.odd);
+    if (decision === 'approve' && raised) {
+      const move = oddMoveOf(raised.kind);
+      const held = move && (await leavingRefused(LEAVING_CHECK[move], raised.odd));
       if (held) throw new Error(held);
     }
     if (decision === 'iterate' && yesOrNo(raised?.kind))
@@ -1811,6 +1812,24 @@ async function decide(
 function effectsOf(kind: AskKind, decision: Decision): readonly AskEffect[] {
   const cell = (OWNER_ANSWERS.ask[kind] as AskAnswer)[decision];
   return cell === 'refused' ? [] : 'by' in cell ? cell.then : cell;
+}
+
+/**
+ * What `leavingRefused` checks before a yes that moves an Odd, by the move.
+ * Any kind whose yes makes that move gets the same check.
+ */
+const LEAVING_CHECK = {
+  odd_leaves: 'remove',
+  odd_returns: 'bring_back'
+} as const satisfies Partial<
+  Record<Extract<AskEffect, string>, Parameters<typeof leavingRefused>[0]>
+>;
+
+/** The move the owner's yes to an ask of this kind makes, from its row in `OWNER_ANSWERS`. */
+function oddMoveOf(kind: AskKind): keyof typeof LEAVING_CHECK | undefined {
+  return effectsOf(kind, 'approve').find(
+    (e): e is keyof typeof LEAVING_CHECK => typeof e === 'string' && Object.hasOwn(LEAVING_CHECK, e)
+  );
 }
 
 /** No run carries out this answer: it goes back to the hand-off or thread the ask came from. */
