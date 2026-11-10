@@ -3,7 +3,7 @@
 // error, in the place RUN_FAILURE declares for that kind of run. Run with
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
-import { mkdirSync, renameSync, rmSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { UsageKind } from '@oddboro/ledger';
@@ -16,11 +16,19 @@ import { chatPreface } from './chat-preface.ts';
 const { start } = await import('./jobs.ts');
 const { currentDesign, followDesign, startDesign } = await import('./design-job.ts');
 const { replayed, replayedAt } = await import('./replay.ts');
+const { keepAttachment } = await import('./chat-files.ts');
 
 /** What every run says when Claude Code is not on the computer. */
 const GONE = 'Could not start Claude Code: spawn claude ENOENT';
 
-await L.pg`insert into staff ${L.pg([odd('fay', 'Fay'), odd('gil', 'Gil'), odd('hal', 'Hal')])}`;
+await L.pg`insert into staff ${L.pg([
+  odd('fay', 'Fay'),
+  odd('gil', 'Gil'),
+  odd('hal', 'Hal'),
+  odd('ivy', 'Ivy'),
+  odd('kim', 'Kim'),
+  odd('lee', 'Lee')
+])}`;
 
 /** `fn`, run on a computer without Claude Code: only the stand-ins on PATH, and claude not among them. */
 async function withoutClaude<T>(fn: () => Promise<T>): Promise<T> {
@@ -35,15 +43,19 @@ async function withoutClaude<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** A file the owner sends with a message: by its tag, and its name as the office kept it. */
+type Sent = { tag: string; name: string };
+
 /** The owner's page sending one chat message, about a desk item `re` or not, and every event the reply streamed. */
 async function send(
   id: string,
   message: string,
-  re?: { kind: 'report'; id: number }
+  re?: { kind: 'report'; id: number },
+  files?: Sent[]
 ): Promise<ChatEvent[]> {
   const res = await request('/api/staff/[id]/chat', 'POST', {
     params: { id },
-    body: { message, re }
+    body: { message, re, files }
   });
   return (await res.text())
     .split('\n\n')
@@ -80,6 +92,51 @@ test('the next chat after a failed one tells the Odd once what the owner said, a
   assert.equal(message.split('Are you there?').length - 1, 1, 'the owner line was said twice');
   assert.match(message, /Your run on .*'s last message you saw before this one failed/);
   assert.ok(!message.includes(`You: ${GONE}`), 'the error was replayed as the Odd speaking');
+  assert.ok(!message.includes('Files attached'), 'a message with no files was retold with some');
+});
+
+/** A PDF the owner attached for `id`, kept as the attachments route keeps one. */
+function attachPdf(id: string): Sent & { path: string } {
+  const { name } = keepAttachment(id, 'report.pdf', 'application/pdf', new Uint8Array([37, 80]));
+  return { tag: 'report.pdf', name, path: L.home('staff', id, 'attachments', name) };
+}
+
+test("a new session's retry after a failed chat with a file is told where the file is kept", async () => {
+  const pdf = attachPdf('ivy');
+  await withoutClaude(() => send('ivy', 'Summarise [report.pdf]', undefined, [pdf]));
+  const { message } = await chatOf('ivy', 'Try again.');
+  assert.ok(message.includes(`- [report.pdf]: ${pdf.path} (application/pdf)`), message);
+});
+
+test('a retry after a failed chat whose file was deleted since is told the file is gone, with no path', async () => {
+  const pdf = attachPdf('kim');
+  await withoutClaude(() => send('kim', 'Summarise [report.pdf]', undefined, [pdf]));
+  rmSync(pdf.path);
+  const { message } = await chatOf('kim', 'Try again.');
+  assert.ok(message.includes('- [report.pdf]: gone, deleted from your folder since'), message);
+  assert.ok(!message.includes(pdf.name), 'the retry was given a path to a file that is gone');
+});
+
+test("a new session's replay of a chat with a file names where the file is kept", async () => {
+  const pdf = attachPdf('lee');
+  // Plain lines, so the replay holds both whole; the stand-in names no session, so the next chat is a new one.
+  writeFileSync(
+    L.home('staff', 'lee', 'chat.jsonl'),
+    [
+      {
+        at: '2026-11-06T09:00:00.000Z',
+        from: 'owner',
+        text: 'Read [report.pdf]',
+        files: [{ tag: pdf.tag, name: pdf.name, mediaType: 'application/pdf', size: 2 }]
+      },
+      { at: '2026-11-06T09:01:00.000Z', from: 'staff', text: 'Read it.' }
+    ]
+      .map((l) => JSON.stringify(l) + '\n')
+      .join('')
+  );
+  const { message } = await chatOf('lee', 'What did it say?');
+  assert.match(message, /: Read \[report\.pdf\]\n\(Files attached/);
+  assert.ok(message.includes(`- [report.pdf]: ${pdf.path} (application/pdf)`), message);
 });
 
 test('a failed chat about a report records no feedback on it, and leaves it unread', async () => {

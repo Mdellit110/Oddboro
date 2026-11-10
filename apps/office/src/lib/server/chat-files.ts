@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { home } from '@oddboro/ledger/home';
 import { attachableType, extensionFor, type ChatFile } from '#lib/attachments.ts';
+import type { KeptFile } from './chat-preface.ts';
 
 const FOLDER = 'attachments';
 /** A kept file's name: no folder, no hidden file, nothing a shell or glob reads as special. */
@@ -60,6 +61,21 @@ export function attachmentPath(id: string, name: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The files an owner line names, as they are now, each through
+ * `attachedFiles`: one deleted since is `gone`, so the rest still reach the run.
+ */
+export function filesNow(id: string, files: ChatFile[]): KeptFile[] {
+  return files.map((f) => {
+    try {
+      return attachedFiles(id, [f])[0];
+    } catch {
+      // Not there any more: the run hears it is gone, never a path to nothing.
+      return { tag: f.tag, gone: true };
+    }
+  });
 }
 
 /** The attachments a message names, checked against the attachments folder; throws on one that is not there. */

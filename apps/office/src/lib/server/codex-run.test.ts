@@ -480,6 +480,69 @@ test("a Codex Odd's chat gets the owner's pictures as --image, after resume on a
   assert.ok(!JSON.stringify(line).includes('/attachments/'), 'the path went in the chat log');
 });
 
+test("a Codex Odd's resumed chat after a failed one with a picture is told where the picture is and gets it as --image", async () => {
+  forget('cole');
+  await chatOf('cole');
+  const { attachedFiles, keepAttachment } = await import('./chat-files.ts');
+  const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const files = attachedFiles('cole', [{ tag: 'Image #1', name: shot.name }]);
+  // Codex is not on the computer for this one message: its run names no session, so the session never had it.
+  const path = process.env.PATH;
+  process.env.PATH = bin;
+  renameSync(join(bin, 'codex'), join(bin, 'codex-away'));
+  let error = '';
+  try {
+    await chat(
+      'cole',
+      'What is [Image #1]?',
+      (e) => {
+        if (e.type === 'error') error = e.message;
+      },
+      undefined,
+      files
+    );
+  } finally {
+    renameSync(join(bin, 'codex-away'), join(bin, 'codex'));
+    process.env.PATH = path;
+  }
+  assert.match(error, /^Could not start Codex/);
+  const next = await chatOf('cole', 'Try again.');
+  assert.deepEqual(next.args.slice(-4), [
+    'resume',
+    '019a0000-0000-7000-8000-00000000c0de',
+    `--image=${files[0].path}`,
+    '-'
+  ]);
+  assert.match(next.message, /so you never saw it: "What is \[Image #1\]\?"\.\)/);
+  assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
+});
+
+test('a new Codex session gets the pictures of the owner lines its replay retells as --image', async () => {
+  forget('cole');
+  const { keepAttachment } = await import('./chat-files.ts');
+  const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const path = L.home('staff', 'cole', 'attachments', shot.name);
+  // Plain lines, so no stand-in acts on words in them.
+  writeFileSync(
+    L.home('staff', 'cole', 'chat.jsonl'),
+    [
+      {
+        at: '2026-11-06T09:00:00.000Z',
+        from: 'owner',
+        text: 'What is [Image #1]?',
+        files: [{ tag: 'Image #1', ...shot }]
+      },
+      { at: '2026-11-06T09:01:00.000Z', from: 'staff', text: 'A chair.' }
+    ]
+      .map((l) => JSON.stringify(l) + '\n')
+      .join('')
+  );
+  const next = await chatOf('cole', 'And the colour?');
+  assert.ok(!next.args.includes('resume'), 'a new session resumed one');
+  assert.equal(next.args.at(-2), `--image=${path}`);
+  assert.ok(next.message.includes(`- [Image #1]: ${path} (image/png)`), next.message);
+});
+
 test("a Codex Odd without Run commands is told it has no shell and to ask for one with ask_for_switch; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;

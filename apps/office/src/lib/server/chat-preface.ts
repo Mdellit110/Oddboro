@@ -5,6 +5,27 @@
 // new manager's hello, or "How did the call go?" after a poke, means nothing
 // to the session.
 import type { ChatEntry } from '../staff/chat.ts';
+import type { ChatFile } from '#lib/attachments.ts';
+
+/** An attached file as a run hears it: kept, with its full path, or gone from the attachments folder since. */
+export type KeptFile = (ChatFile & { path: string }) | { tag: string; gone: true };
+
+/** A chat line as the office retells it: an owner line carries its files as they are now (`filesNow`). */
+export type RetoldEntry = ChatEntry & { now?: KeptFile[] };
+
+/** How a run hears one attached file, on the owner's new message and on a line the office retells alike. */
+export const fileLine = (f: KeptFile): string =>
+  'gone' in f
+    ? `- [${f.tag}]: gone, deleted from your folder since`
+    : `- [${f.tag}]: ${f.path} (${f.mediaType})`;
+
+/** The files of owner lines the office retells (`replay`, `chatPreface`). */
+export const retoldFiles = (files: KeptFile[]): string =>
+  [
+    '(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
+    ...files.map(fileLine),
+    ')'
+  ].join('\n');
 
 /** A line the session never saw: a poke the office delivered, a line it said in the staffer's name, or a failed run's error. */
 const unseen = (e: ChatEntry) => e.poke || e.told || e.failed;
@@ -25,11 +46,8 @@ const DECIDED: Record<string, string> = {
  */
 export type Session = 'resumed' | { replayed: Set<number> };
 
-/**
- * Each told, poke and failed run's owner line since the owner last wrote is
- * said once: here only when the session does not hold it already.
- */
-export function chatPreface(past: ChatEntry[], landed: Landed[], session: Session): string[] {
+/** Where `past` stands for `session`: which lines it holds, and the failed runs since the owner last wrote. */
+function heardOf(past: ChatEntry[], session: Session) {
   // The office saves a failed run's error right after the owner's line (`chat` in staff.ts).
   const failedOn = (i: number) => past[i].from === 'owner' && past[i + 1]?.failed === true;
   // The last failed run whose tool named a session (`inSession`): the session
@@ -42,11 +60,28 @@ export function chatPreface(past: ChatEntry[], landed: Landed[], session: Sessio
   const holds = (i: number) =>
     session === 'resumed' ? failedOn(i) && i <= saved : session.replayed.has(i);
   const heard = past.findLastIndex((e, i) => e.from === 'owner' && !failedOn(i)) + 1;
+  const failed = past.flatMap((_, i) => (i >= heard && failedOn(i) ? [i] : []));
+  return { failedOn, holds, heard, failed };
+}
+
+/** Where in `past` sit the failed runs' owner lines the session never saw, which `chatPreface` retells. */
+export function missedAt(past: ChatEntry[], session: Session): number[] {
+  const { failed, holds } = heardOf(past, session);
+  return failed.filter((i) => !holds(i));
+}
+
+/**
+ * Each told, poke and failed run's owner line since the owner last wrote is
+ * said once: here only when the session does not hold it already. A failed
+ * run's owner line comes with its files as they are now.
+ */
+export function chatPreface(past: RetoldEntry[], landed: Landed[], session: Session): string[] {
+  const { failedOn, holds, heard, failed } = heardOf(past, session);
   const since = past.flatMap((e, i) => (i >= heard && !holds(i) ? [e] : []));
   const told = since.filter((e) => e.told);
   const poked = since.filter((e) => e.poke);
-  const failed = past.flatMap((_, i) => (i >= heard && failedOn(i) ? [i] : []));
-  const missed = failed.filter((i) => !holds(i)).map((i) => past[i]);
+  const missed = missedAt(past, session).map((i) => past[i]);
+  const missedFiles = missed.flatMap((e) => e.now ?? []);
   const ran = failed.filter(holds).length;
   // The session saw what it delivered up to the end of its last reply.
   const last = past.findLast((e, i) => !unseen(e) && !failedOn(i))?.at ?? '';
@@ -77,6 +112,7 @@ export function chatPreface(past: ChatEntry[], landed: Landed[], session: Sessio
           `({owner} wrote to you before this, but your run failed each time, so you never saw it: ${missed.map((e) => `"${e.text}"`).join(', ')}.)`
         ]
       : []),
+    ...(missedFiles.length ? [retoldFiles(missedFiles)] : []),
     ...(put.length
       ? [
           `(Since {owner} last wrote, you put these on their desk: ${put.map((d) => `${d.kind} "${d.title}"`).join(', ')}.)`

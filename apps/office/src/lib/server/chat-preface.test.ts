@@ -143,3 +143,25 @@ test('a new session hears a failed message its replay holds once, and only that 
     "(Your run on {owner}'s last message you saw before this one failed, so they have no reply from you to it.)"
   ]);
 });
+
+test("a failed message the session never saw is retold with its files as they are now: a kept one's path, a gone one said gone", () => {
+  const past = [
+    {
+      ...owner('2026-11-06T09:02:00Z', 'Compare [a.pdf] and [b.png].'),
+      now: [
+        { tag: 'a.pdf', name: 'k-a.pdf', mediaType: 'application/pdf', size: 1, path: '/o/a.pdf' },
+        { tag: 'b.png', gone: true as const }
+      ]
+    },
+    failed('2026-11-06T09:03:00Z', 'Quota used up.')
+  ];
+  assert.deepEqual(chatPreface(past, [], 'resumed'), [
+    '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Compare [a.pdf] and [b.png].".)',
+    [
+      '(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
+      '- [a.pdf]: /o/a.pdf (application/pdf)',
+      '- [b.png]: gone, deleted from your folder since',
+      ')'
+    ].join('\n')
+  ]);
+});

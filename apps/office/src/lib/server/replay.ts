@@ -10,6 +10,7 @@ import { opendirSync, statSync, type Dir } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { shownFolder } from '@oddboro/ledger';
 import type { ChatEntry } from '../staff/chat.ts';
+import { retoldFiles, type RetoldEntry } from './chat-preface.ts';
 
 /** At most this many characters of chat text go into one replay. */
 export const REPLAY_CHARS = 24_000;
@@ -33,7 +34,7 @@ const said = (e: ChatEntry) => !!e.text && !e.failed;
  * whose text fits the budget together. A newest line over the budget alone
  * keeps its end, after a `…`.
  */
-export function replayed(entries: ChatEntry[], budget = REPLAY_CHARS): ChatEntry[] {
+export function replayed<E extends ChatEntry>(entries: E[], budget = REPLAY_CHARS): E[] {
   const lines = entries.filter(said);
   let total = 0;
   let from = lines.length;
@@ -67,10 +68,13 @@ export function replaySince(entries: ChatEntry[], kept: ChatEntry[]): string | u
   return oldest.from === 'owner' ? oldest.at : (entries[first - 1]?.at ?? oldest.at);
 }
 
-/** The earlier chat, word for word, for a session that never saw it. Pure. */
-export function replay(entries: ChatEntry[], changed: Changed, budget = REPLAY_CHARS): string {
+/** The earlier chat, word for word, with each owner line's files as they are now, for a session that never saw it. Pure. */
+export function replay(entries: RetoldEntry[], changed: Changed, budget = REPLAY_CHARS): string {
   const kept = replayed(entries, budget);
-  const lines = kept.map((e) => `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}`);
+  const lines = kept.map(
+    (e) =>
+      `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}${e.now?.length ? `\n${retoldFiles(e.now)}` : ''}`
+  );
   const more = changed.files.length - REPLAY_FILES;
   const files =
     changed.files.slice(0, REPLAY_FILES).join(', ') + (more > 0 ? `, and ${more} more` : '');

@@ -157,7 +157,15 @@ import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
 import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
 import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
-import { chatPreface } from './chat-preface.ts';
+import {
+  chatPreface,
+  fileLine,
+  missedAt,
+  type KeptFile,
+  type RetoldEntry,
+  type Session
+} from './chat-preface.ts';
+import { filesNow } from './chat-files.ts';
 import { officeEnv } from './run-env.ts';
 import { runEnv, toolServerEnv } from './run-env-allow.ts';
 import { firstDayOf } from './first-day.ts';
@@ -1298,7 +1306,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
 function attachedBrief(files: (ChatFile & { path: string })[]): string {
   return [
     `({owner} attached ${files.length === 1 ? 'a file' : `${files.length} files`} to this message. Each is kept in your folder, and each tag in brackets in their message names one. Look at each picture and read each file before you answer. A picture already shown with this message needs no opening.`,
-    ...files.map((f) => `- [${f.tag}]: ${f.path} (${f.mediaType})`),
+    ...files.map(fileLine),
     ')'
   ].join('\n');
 }
@@ -1343,7 +1351,10 @@ export async function chat(
       const landed = (await deliveries(id, 20)).filter(
         (d) => !(d.kind === re?.ref.kind && d.id === re.ref.id)
       );
-      const past = history(id);
+      // Each owner line's files as they are now, for the lines the office retells below.
+      const past: RetoldEntry[] = history(id).map((e) =>
+        e.files?.length ? { ...e, now: filesNow(id, e.files) } : e
+      );
       // A new session (the Odd moved to another tool, or its session is gone)
       // never saw the chat: it gets the latest of it word for word. The preface
       // leaves out the told, poke and failed run's owner lines the replay holds,
@@ -1352,6 +1363,12 @@ export async function chat(
       const resumed = !!sessionIdIn(chatSession(id), await runHomeOf(who));
       const kept = resumed ? [] : replayed(past);
       const since = replaySince(past, kept);
+      const replayedLines = replayedAt(past, kept);
+      const session: Session = resumed ? 'resumed' : { replayed: new Set(replayedLines) };
+      // A retold line's pictures go to the run as a new message's do.
+      const retold = [...replayedLines, ...missedAt(past, session)].flatMap(
+        (i) => past[i].now ?? []
+      );
       // The Odd writes only its own folder and the given folders it may change, so only those are walked.
       const writable = ownTools(who, currentPlatform())
         .granted.filter((f) => f.write)
@@ -1365,11 +1382,7 @@ export async function chat(
               )
             ]
           : []),
-        ...chatPreface(
-          past,
-          landed,
-          resumed ? 'resumed' : { replayed: new Set(replayedAt(past, kept)) }
-        ),
+        ...chatPreface(past, landed, session),
         ...(re ? [re.brief] : []),
         message,
         ...(files.length ? [attachedBrief(files)] : [])
@@ -1377,9 +1390,9 @@ export async function chat(
       r = await run(who, prompt, {
         kind: 'chat',
         ownerSaid: message,
-        images: files
-          .filter((f) => isPicture(f.mediaType))
-          .map((f) => ({ path: f.path, mediaType: f.mediaType })),
+        images: [...files, ...retold].flatMap((f: KeptFile) =>
+          'gone' in f || !isPicture(f.mediaType) ? [] : [{ path: f.path, mediaType: f.mediaType }]
+        ),
         sessionFile: chatSession(id),
         timeoutMs: CHAT_TIMEOUT_MS,
         // The choices a reply ends with go to the page beside its text, as buttons.
