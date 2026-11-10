@@ -200,8 +200,33 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
   'PATCH /api/accounts': async (send) =>
     send({ body: { id: await accountOf('Old'), label: 'New' } }),
   'DELETE /api/accounts': async (send) => send({ body: { id: await accountOf('Gone') } }),
-  'POST /api/asks/[id]': async (send) =>
-    send({ params: { id: String(await askOf('Book the hall')) }, body: { decision: 'deny' } }),
+  // A no, then each yes that writes more than its decision: setting a goal,
+  // taking a plan, a tool already connected, and letting go an Odd with a task
+  // open (its own Odd, so no later row loses one it uses).
+  'POST /api/asks/[id]': async (send) => {
+    const answer = async (id: number, decision: string, picks?: number[]) =>
+      send({ params: { id: String(id) }, body: { decision, picks } });
+    await answer(await askOf('Book the hall'), 'deny');
+    await answer(
+      await asked({
+        kind: 'goal',
+        goal: { title: 'Plant the beds', horizon: 'week', area: 'Home' }
+      }),
+      'approve'
+    );
+    const plan = {
+      goalId: await goal('Water the beds'),
+      items: [{ kind: 'assign' as const, staff: 'cleo', part: 'The hose.' }]
+    };
+    await answer(await asked({ kind: 'plan', plan }), 'approve', [0]);
+    await grant('lead', 'https://ready.example.net/mcp');
+    const [ready] = await L.pg<{ id: string }[]>`
+      update connectors set ready_at = now() where id like 'ready-example-net%' returning id`;
+    await answer(await asked({ access: { connector: ready.id, level: 'read' } }), 'approve');
+    await L.pg`insert into staff ${L.pg(odd('uma', 'Uma'))}`;
+    await L.giveTask('uma', { title: 'Sign it', why: 'w', steps: ['Sign'] });
+    await answer(await asked({ kind: 'remove', odd: 'uma' }), 'approve');
+  },
   'POST /api/asks/[id]/reply': async (send) => {
     const id = await asked({
       kind: 'reply',
@@ -338,11 +363,15 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
       }
     });
   },
-  // An Odd of its own with nothing open, so leaving writes its one row and no
-  // later row loses an Odd it uses.
+  // Odds of their own, so no later row loses an Odd it uses: one with nothing
+  // open, whose leaving writes its hire row alone, then one with an ask and a
+  // task open, which close with their own rows.
   'DELETE /api/staff/[id]': async (send) => {
-    await L.pg`insert into staff ${L.pg(odd('tess', 'Tess'))}`;
+    await L.pg`insert into staff ${L.pg([odd('tess', 'Tess'), odd('vic', 'Vic')])}`;
     await send({ params: { id: 'tess' } });
+    await L.raiseAsk('vic', { title: 'Open', why: 'w', ifApproved: 'i' });
+    await L.giveTask('vic', { title: 'Sign it', why: 'w', steps: ['Sign'] });
+    await send({ params: { id: 'vic' } });
   },
   'PATCH /api/staff/[id]#permission': (send) =>
     send({ params: { id: 'sam' }, body: { permission: 'draft' } }),

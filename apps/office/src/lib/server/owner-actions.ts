@@ -78,7 +78,10 @@ export const OWNER_ACTIONS = {
   'POST /api/agents/[tool]': { notAnAction: SETUP },
   'PUT /api/agents/[tool]': { notAnAction: SETUP },
   'DELETE /api/agents/[tool]': { notAnAction: SETUP },
-  'POST /api/asks/[id]': { records: 'decision' },
+  'POST /api/asks/[id]': {
+    mayRecord: ['decision', 'access', 'hire', 'work'],
+    when: "A decision for every answer. A yes also writes a second decision for a goal it sets or a plan it takes, an access row for a tool already connected, and for a remove or bring_back ask the Odd's hire row; letting an Odd go closes what it had open as the staff DELETE does."
+  },
   'POST /api/asks/[id]/call': { records: 'decision' },
   'POST /api/asks/[id]/filter': { records: 'decision' },
   'POST /api/asks/[id]/folder': { records: 'decision' },
@@ -147,11 +150,11 @@ export const OWNER_ACTIONS = {
   'PATCH /api/services/[id]': { records: 'access' },
   'POST /api/services/[id]': { none: NO_ROW },
   'POST /api/staff': { records: 'hire' },
-  // The owner's Remove: the Odd leaves (`removeOdd`), one `hire` row. What
-  // it had open closes with a row each, as that item's own end would write:
-  // a `decision` per ask of it or about it withdrawn, a `work` per open task
-  // dropped and per follow-up it had yet to start, which fails.
-  'DELETE /api/staff/[id]': { records: 'hire' },
+  // The owner's Remove (`removeOdd`).
+  'DELETE /api/staff/[id]': {
+    mayRecord: ['hire', 'decision', 'work'],
+    when: "One hire row as the Odd leaves. What it had open closes with a row each, as that item's own end would write: a decision per ask of it or about it withdrawn, a work row per open task dropped and per follow-up it had yet to start, which fails."
+  },
   'PATCH /api/staff/[id]#permission': { records: 'access' },
   'PATCH /api/staff/[id]#agent': { records: 'access' },
   'PATCH /api/staff/[id]#tool': { records: 'access' },
