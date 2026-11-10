@@ -40,7 +40,8 @@ const port = await new Promise<number>((done) => {
 // settings. A message that says "Hold until <file> exists." keeps the run
 // going until it does. One that says "Refuse the open network", in a run
 // whose sandbox opens every host, gets the words Claude Code's binary refuses
-// that with, on stderr, and exit 1, after any hold.
+// that with, on stderr, and exit 1, after any hold. One that says "Think
+// aloud: <words>." streams <words> as text first.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
 // waits on the owner.
@@ -132,6 +133,8 @@ function reply() {
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
+  const aloud = /Think aloud: ([^.]+)\./.exec(message)?.[1];
+  if (aloud) line({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: aloud } } });
   line({ type: 'result', subtype: 'success', result: JSON.stringify(gave) + '\\nOutcome: done' });
 }
 `
@@ -523,7 +526,9 @@ mock.module('@oddboro/ledger/secrets', {
     },
     setSecret: (connector: string, name: string, value: string) =>
       void secrets.set(`${connector}:${name}`, value),
-    deleteSecret: (connector: string, name: string) => secrets.delete(`${connector}:${name}`)
+    deleteSecret: (connector: string, name: string) => secrets.delete(`${connector}:${name}`),
+    // The stand-in store always answers, whatever this computer's own does.
+    secretStore: () => ({ ok: true })
   }
 });
 // A Codex run starts only from a signed-in home; the stand-in reads nothing in it.
