@@ -147,7 +147,7 @@
     <div class="desk rounded-card border-hairline bg-panel-solid relative border p-1">
       <div class="flex items-center justify-between px-4 py-2.5">
         <div class="flex items-center gap-2">
-          <p class="font-pixel text-muted text-sm tracking-wide">{NAME}'s access</p>
+          <p class="font-pixel text-muted text-sm tracking-wide">{NAME}'s Settings</p>
           <span
             class="border-hairline bg-raise text-ink inline-flex items-center gap-1 rounded-full border py-0.5 ps-1.5 pe-2 text-[11px] leading-4 font-medium"
           >
@@ -195,7 +195,9 @@
         <p class="text-muted mt-5 text-sm">
           Change {NAME}'s level or a tool, and watch what {NAME} can do.
         </p>
-        <p class="text-faint mt-4 text-xs font-semibold tracking-wide uppercase">Level</p>
+        <p class="text-faint mt-4 text-xs font-semibold tracking-wide uppercase">
+          Permission level
+        </p>
         <div class="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="{NAME}'s level">
           {#each LEVELS as l (l.id)}
             {@const on = level === l.id}
@@ -212,7 +214,7 @@
           {/each}
         </div>
 
-        <p class="text-faint mt-6 text-xs font-semibold tracking-wide uppercase">Tools</p>
+        <p class="text-faint mt-6 text-xs font-semibold tracking-wide uppercase">Services</p>
         <ul class="mt-2 space-y-3">
           {#each TOOLS as t (t.id)}
             {@const g = grant[t.id]}
