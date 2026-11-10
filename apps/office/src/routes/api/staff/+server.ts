@@ -6,15 +6,23 @@
 // chat and gets started on its first day (`firstDay`). A hire with no job says
 // hello and then runs only when it is handed work: one serving a goal gets its
 // first piece from the goal's lead, whom approving the hire wakes. The tool it
-// runs on (Runs on) is stored with the row, so its hello and every run after
-// go through it.
+// runs on, the account it signs in with there, its model and how hard it
+// thinks are stored with the row, so its hello and every run after go through
+// them. Left out, each is the office's.
 import { error, json } from '@sveltejs/kit';
 import {
+  account as accountRow,
   addJob,
+  AGENT_NAMES,
   agentsOn,
   approveHire,
   ask,
+  EFFORT_ORDER,
+  effortsOf,
   hire,
+  MODELS,
+  OFFICE_ACCOUNT,
+  officeAgent,
   offeredAgent,
   parseLevel
 } from '@oddboro/ledger';
@@ -30,6 +38,9 @@ import type { RequestHandler } from './$types';
 type Body = Partial<Record<'name' | 'role' | 'room' | 'permission' | 'remit' | 'desk', string>> & {
   tools?: unknown;
   agent?: unknown;
+  account?: unknown;
+  model?: unknown;
+  effort?: unknown;
   askId?: unknown;
   look?: unknown;
   portraitPx?: unknown;
@@ -60,6 +71,17 @@ export const POST: RequestHandler = async ({ request }) => {
   const agent = b.agent === undefined ? undefined : offeredAgent(b.agent, process.platform);
   if (b.agent !== undefined && !agent)
     error(400, `Pick ${agentsOn(process.platform).join(' or ')}`);
+  // Checked against the tool it will run on before anything is made, as the Model tab checks a change.
+  const on = agent ?? officeAgent();
+  const model = typeof b.model === 'string' && b.model ? b.model : null;
+  if (model && !MODELS[on].some((m) => m.id === model))
+    error(400, `${AGENT_NAMES[on]} has no model called ${model}`);
+  const effort = EFFORT_ORDER.find((e) => e === b.effort) ?? null;
+  if (b.effort != null && (!effort || !effortsOf(on, model).includes(effort)))
+    error(400, `${AGENT_NAMES[on]} does not think at that level`);
+  const account = typeof b.account === 'string' && b.account !== OFFICE_ACCOUNT ? b.account : null;
+  if (account && (await accountRow(account))?.agent !== on)
+    error(400, `That is not one of ${AGENT_NAMES[on]}'s accounts`);
   const jobName = text(b.job?.name, 80);
   const jobSteps = text(b.job?.instructions, 8000);
   const jobSchedule = b.job ? parseSchedule(b.job.schedule) : null;
@@ -83,6 +105,9 @@ export const POST: RequestHandler = async ({ request }) => {
       room,
       permission,
       agent,
+      account,
+      model,
+      effort,
       sprite: 'staff',
       variant: 'look',
       portrait: 'look',

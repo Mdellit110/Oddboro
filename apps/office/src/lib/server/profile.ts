@@ -23,7 +23,7 @@ import { claudeSettings } from './claude.ts';
  * setup, else `OFFICE_CODEX_MODEL` or `OFFICE_GROK_MODEL`, else the tool's own
  * default, first in its list.
  */
-function officeModel(agent: Agent): string | undefined {
+export function officeModel(agent: Agent): string | undefined {
   if (agent === 'claude')
     return claudeSettings().model === 'sonnet' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
   const set = agent === 'codex' ? process.env.OFFICE_CODEX_MODEL : process.env.OFFICE_GROK_MODEL;

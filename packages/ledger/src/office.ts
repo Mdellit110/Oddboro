@@ -649,6 +649,10 @@ export type Hire = Pick<
   newParts?: DrawnPart[];
   /** The coding tool its runs go through, stored before its first run. Claude Code when left out. */
   agent?: Agent;
+  /** The account it signs in with on that tool, its model, and how hard it thinks. The office's when left out. */
+  account?: string | null;
+  model?: string | null;
+  effort?: Effort | null;
   /** The New Altitude persona it was installed from. */
   package?: PersonaLink;
 };
