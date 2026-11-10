@@ -52,6 +52,8 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     officeModel: officeModel(r.agent),
     effort: effortFor(r.agent, r.effort, r.role === MANAGER_ROLE, modelFor(r.agent, r.model)),
     tools: r.tools,
+    // Every office keeps its manager, so its card offers no Remove.
+    ...(r.role === MANAGER_ROLE ? { manager: true as const } : {}),
     commands: r.commands,
     web: r.web,
     webLine: webLine(r.agent, process.platform, reach.held),

@@ -681,11 +681,15 @@
                     ? 'Connect'
                     : a.kind === 'switch'
                       ? 'Turn on'
-                      : a.kind === 'window'
-                        ? 'Let it carry on'
-                        : a.plan && picked(a) < a.plan.items.length
-                          ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                          : 'Approve'}</button
+                      : a.kind === 'remove'
+                        ? 'Remove'
+                        : a.kind === 'bring_back'
+                          ? 'Bring back'
+                          : a.kind === 'window'
+                            ? 'Let it carry on'
+                            : a.plan && picked(a) < a.plan.items.length
+                              ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                              : 'Approve'}</button
             >
           {/if}
         </div>

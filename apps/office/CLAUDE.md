@@ -207,7 +207,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Folders tab's line. Plain Approve refuses a folder ask. A `switch` ask (an
    Odd's `ask_for_switch`) takes Turn on, which approves it and turns Run
    commands, Browse the web or both on for that Odd in one step, as the
-   Settings tab does. An item a lead raised from a colleague's
+   Settings tab does. A `remove` ask (an Odd's `leave_office`, or the
+   manager's `remove_odd`) takes Remove, and a `bring_back` ask (the
+   manager's `bring_back_odd`) takes Bring back; both take Deny and no
+   Iterate. An item a lead raised from a colleague's
    handed-back work says so on its sender line ("Marshall, from Paige's
    work", `via` on the ask or task), and the colleague's name opens their
    chat; the item still belongs to the lead.
@@ -288,8 +291,14 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    thinking level); In progress (`WorkSection.svelte`); Jobs
    (`JobsSection.svelte`: click one to edit it in place, "+ Add a job", and
    "Next run today at 3:00 PM" or Paused, from `nextRunAt` and `nextWhen`
-   in format.ts); the job description; stats; and the look, with Redraw look
-   and Send to a place. While it has work in progress, a count in a turning
+   in format.ts); the job description; stats; the look, with Redraw look
+   and Send to a place; and Remove from the office, which says what leaving
+   does and asks once on the page before DELETE on the staff route lets the
+   Odd go (`removeOdd` in the ledger's `leaving.ts`). The Office Manager's page
+   has no Remove (`manager` on the profile). The next office load drops the
+   Odd from the roster, so it leaves the floor and its panel closes; any run
+   of it stops (`stopRuns` in `staff.ts`, registered in `hooks.server.ts`).
+   While it has work in progress, a count in a turning
    ring sits beside the name (CSS only, still under reduced motion, and gone
    with nothing in progress); it opens the info page at In progress, as
    `show: {tab: 'work'}` does. The chat stays mounted

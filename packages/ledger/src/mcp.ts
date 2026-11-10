@@ -35,6 +35,8 @@ import {
   searchLedger,
   setDescription,
   staffer,
+  anyStaffer,
+  formerStaff,
   type GoAhead,
   record,
   roster,
@@ -74,6 +76,8 @@ import {
   switchesSaid
 } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
+import { leavesLine, leavingRefused } from './leaving.ts';
+import { MANAGER_ROLE } from './managers.ts';
 import {
   APPLIES_TO_MAX,
   CITE_FIRST,
@@ -1762,6 +1766,104 @@ if (has('propose_hire'))
       return text(`Ask ${ask.id} is on ${OWNER}'s desk.`);
     }
   );
+
+// Leaving the office (leaving.ts). Each only in a chat, on the owner's own
+// words, and each only raises an ask: the Odd leaves or comes back on the
+// owner's yes alone.
+const leaveNote = `It lands on ${OWNER}'s desk as an ask, and nothing happens until they say yes. Use it only when ${OWNER} told you so in this chat, never on your own.`;
+
+if (OWNER_SAID && has('leave_office') && me.role !== MANAGER_ROLE)
+  tool(
+    'leave_office',
+    {
+      description: `${OWNER} told you to leave the office: ask them to confirm. On their yes you leave at once: off the floor, your jobs off, and what you have open on their desk withdrawn. Your history stays, and the ${MANAGER_ROLE} can bring you back. ${leaveNote}`,
+      inputSchema: {
+        why: z
+          .string()
+          .max(600)
+          .describe(
+            `What ${OWNER} said, in their words, and anything they should know before you go.`
+          )
+      }
+    },
+    async ({ why }) => {
+      const held = await leavingRefused('remove', ME);
+      if (held) return refused(held);
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'remove',
+        odd: ME,
+        title: `Let ${me.name} go from the office`,
+        why,
+        ifApproved: leavesLine(me.name)
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. Tell them you go once they say yes there, and not before.`
+      );
+    }
+  );
+
+if (OWNER_SAID && has('remove_odd'))
+  tool(
+    'remove_odd',
+    {
+      description: `${OWNER} told you to let another Odd go: ask them to confirm. On their yes it leaves at once: off the floor, its jobs off, its open work handed back or withdrawn. Its history stays, and you can bring it back with bring_back_odd. Never the ${MANAGER_ROLE}. ${leaveNote}`,
+      inputSchema: {
+        odd: z.string().describe('The id of the Odd to let go, as office_report lists it.'),
+        why: z.string().max(600).describe(`What ${OWNER} said, in their words.`)
+      }
+    },
+    async ({ odd, why }) => {
+      const held = await leavingRefused('remove', odd);
+      if (held) return refused(held);
+      const who = (await staffer(odd))!;
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'remove',
+        odd,
+        title: `Let ${who.name} go from the office`,
+        why,
+        ifApproved: leavesLine(who.name)
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. ${who.name} goes once they say yes there, and not before.`
+      );
+    }
+  );
+
+if (OWNER_SAID && has('bring_back_odd')) {
+  const gone = await formerStaff();
+  tool(
+    'bring_back_odd',
+    {
+      description: `${OWNER} told you to bring back an Odd that left the office: ask them to confirm. On their yes it comes back as it was, with its jobs on again. What it had open when it left stays closed. ${leaveNote} ${
+        gone.length
+          ? `Odds that left, latest first: ${gone.map((p) => `${p.id} (${p.name}, ${p.role})`).join('; ')}.`
+          : 'No Odd has left this office.'
+      }`,
+      inputSchema: {
+        odd: z.string().describe('The id of the Odd to bring back, from the list above.'),
+        why: z.string().max(600).describe(`What ${OWNER} said, in their words.`)
+      }
+    },
+    async ({ odd, why }) => {
+      const held = await leavingRefused('bring_back', odd);
+      if (held) return refused(held);
+      const who = (await anyStaffer(odd))!;
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'bring_back',
+        odd,
+        title: `Bring ${who.name} back to the office`,
+        why,
+        ifApproved: `${who.name} comes back as it was: its job description, tools, folders, lessons and files, with its jobs on again.`
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. ${who.name} comes back once they say yes there, and not before.`
+      );
+    }
+  );
+}
 
 if (has('office_report'))
   tool(

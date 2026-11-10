@@ -32,6 +32,8 @@ export type StaffProfile = {
   effort?: Effort;
   /** The office tools the owner granted, beyond the ones every staffer has. */
   tools: string[];
+  /** The Office Manager, whom the office always keeps: its card offers no Remove. */
+  manager?: true;
   /** The owner's Run commands switch, as stored; `reach.commandsHow` says whether its tool follows it. */
   commands: boolean;
   /** The owner's Browse the web switch, as stored. */
