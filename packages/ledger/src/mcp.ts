@@ -145,7 +145,9 @@ import {
   type ToolRun
 } from './tools.ts';
 import { home, isOfficeFile, isWhereNamed } from './home.ts';
+import { trustSystemCertificates } from './certificates.ts';
 
+trustSystemCertificates();
 const ME = process.env.STAFF_ID ?? '';
 const me = await staffer(ME);
 if (!me) throw new Error(`STAFF_ID "${ME}" names no Odd in this office`);
