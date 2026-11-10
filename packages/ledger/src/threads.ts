@@ -44,7 +44,7 @@ import {
   type ThreadStatus
 } from './schema.ts';
 import { flat, type DeskItem } from './desk-answers.ts';
-import { sharing } from './sharing.ts';
+import { heldTools, lacking, sharing, toolNames, type Tool } from './sharing.ts';
 import { holdForWindow, WINDOW_RESET, windowWoke } from './usage-window.ts';
 import { THREADS_DIR, workPath } from './work-paths.ts';
 
@@ -734,6 +734,36 @@ export function threadsOnBrief(rows: ThreadOn[]): string {
 }
 
 /**
+ * What a lead reads of the colleague's own line in a chat's last exchange
+ * when the lead lacks a tool the colleague holds: `left out`, since that line
+ * may quote the tool's contents, as a hand-off's `kept` warns (`sharing.ts`),
+ * or `quoted` in full. The owner ruled `left out` on 2026-11-09, and this one
+ * value is where another answer goes. Remove it, keeping the `left out` path,
+ * once the pull request that added it merges with that ruling unchanged.
+ */
+const REPLY_A_LEAD_LACKS: 'left out' | 'quoted' = 'left out';
+
+/**
+ * The chat's last exchange as the lead reads it, on one line. The office puts
+ * each chat line on a line of its own, the colleague's last (`lastExchange` in
+ * the office's `chat-preface.ts`), so that line alone is the colleague's
+ * words. With `lacks` (tools the colleague holds and the lead lacks) and
+ * `left out`, the note says that line was left out and why, in its place.
+ */
+export function exchangeForLead(
+  exchange: string,
+  name: string,
+  lacks: Tool[],
+  reply: typeof REPLY_A_LEAD_LACKS
+): string {
+  const lines = exchange.split('\n').map(flat).filter(Boolean);
+  const own = lines.pop();
+  if (!own) return '';
+  const left = `One line ${name} said in that chat is left out, since ${name} has ${toolNames(lacks.map((t) => t.name))} and you do not.`;
+  return [...lines, lacks.length && reply === 'left out' ? left : own].join(' ');
+}
+
+/**
  * The owner told a colleague in chat something about a thread it works on and
  * does not lead: their words go to the thread's lead, which picks the thread
  * back up with them (`answerThread`). `said` is the owner's whole message, set
@@ -741,7 +771,7 @@ export function threadsOnBrief(rows: ThreadOn[]): string {
  * so only the owner's own words reach the lead as theirs. `reading` is what the
  * colleague understood them to mean, which goes labelled as the colleague's,
  * since a lead cannot judge a clarifying "no" from the bare word. `exchange` is
- * the last two lines of that chat, as the office set them.
+ * the last two lines of that chat, as the office set them (`exchangeForLead`).
  */
 export async function tellLead(t: {
   staffId: string;
@@ -763,7 +793,6 @@ export async function tellLead(t: {
     return {
       problem: `Say in reading what you understood ${t.owner} to mean, in your own words. Nothing was passed on.`
     };
-  const exchange = flat(t.exchange ?? '');
   const [row] = await db
     .select({ hubId: threads.hubId, status: threads.status, lead: staff.name })
     .from(threads)
@@ -788,6 +817,10 @@ export async function tellLead(t: {
     };
   const [me] = await db.select({ name: staff.name }).from(staff).where(eq(staff.id, t.staffId));
   const name = me?.name ?? t.staffId;
+  const lacks = t.exchange
+    ? lacking(await heldTools([row.hubId, t.staffId]), row.hubId, [t.staffId])
+    : [];
+  const exchange = exchangeForLead(t.exchange ?? '', name, lacks, REPLY_A_LEAD_LACKS);
   // A lead once read this as the colleague taking it on, and sent no work.
   await answerThread(
     t.threadId,

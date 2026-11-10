@@ -29,10 +29,12 @@ const EXCHANGE_LINE_MAX = 300;
 
 /**
  * The last Odd line before the owner's message and the owner line before it,
- * as one line, each cut to `EXCHANGE_LINE_MAX`, for tell_lead. A told or poke
- * line counts as the Odd's: the owner read it just before replying, whichever
- * way it was written. Without an owner line before it (a hello, a first
- * question) it is the Odd's half alone.
+ * each on a line of its own and cut to `EXCHANGE_LINE_MAX`, for tell_lead. A
+ * told or poke line counts as the Odd's: the owner read it just before
+ * replying, whichever way it was written. Without an owner line before it (a
+ * hello, a first question) it is the Odd's half alone. The Odd's half is last,
+ * so tell_lead can leave it out for a lead that lacks the Odd's tools
+ * (`exchangeForLead` in the ledger's `threads.ts`).
  */
 export function lastExchange(
   past: ChatEntry[],
@@ -44,7 +46,7 @@ export function lastExchange(
   const quoted = (e: ChatEntry) => `"${cut(flat(e.text), EXCHANGE_LINE_MAX)}"`;
   const owner = spoken.slice(0, odd).findLast((e) => e.from === 'owner');
   return owner
-    ? `Just before, ${who.owner} said: ${quoted(owner)}. ${who.odd} replied: ${quoted(spoken[odd])}.`
+    ? `Just before, ${who.owner} said: ${quoted(owner)}.\n${who.odd} replied: ${quoted(spoken[odd])}.`
     : `Just before, ${who.odd} said: ${quoted(spoken[odd])}.`;
 }
 

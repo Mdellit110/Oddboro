@@ -6,13 +6,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { and, eq } from 'drizzle-orm';
-import { followUps, staff, threads } from '../src/schema.ts';
+import { connectors, followUps, grants, staff, threads } from '../src/schema.ts';
 import { db } from './pglite.ts';
 
 // Loaded once db.ts is this database, so every query they make lands here.
 const { handOff } = await import('../src/hand-offs.ts');
 const { raiseAsk } = await import('../src/office.ts');
-const { tellLead, threadsOn, threadsOnBrief } = await import('../src/threads.ts');
+const { exchangeForLead, tellLead, threadsOn, threadsOnBrief } = await import('../src/threads.ts');
 
 const odd = (id: string, name: string) => ({
   id,
@@ -142,4 +142,75 @@ test("a colleague's chat says the work waits on the owner while an ask raised on
   assert.ok(row, 'Bram is not on the work');
   assert.equal(row.stage, 'waiting_on_you');
   assert.ok(threadsOnBrief([row]).includes('led by Cole (waiting on {owner})'));
+});
+
+// Gil holds Gmail. Lena leads work Gil is on and lacks it; Mae leads other
+// work Gil is on and holds it too. Every office has Gmail (0009_google): mark
+// it connected, so Mae's grant is in force.
+await db.insert(staff).values([odd('gil', 'Gil'), odd('lena', 'Lena'), odd('mae', 'Mae')]);
+await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
+await db.insert(grants).values([
+  { staffId: 'gil', connectorId: 'gmail', level: 'read' },
+  { staffId: 'mae', connectorId: 'gmail', level: 'read' }
+]);
+const exchange = 'Just before, Sam said: "Any news?".\nGil replied: "The bank wrote back.".';
+const fromGil = async (lead: string, title: string, exchange?: string) => {
+  const id = await onThread(lead, 'gil', title);
+  const r = await tellLead({
+    staffId: 'gil',
+    threadId: id,
+    owner: 'Sam',
+    said,
+    words: 'make the colours warmer.',
+    reading,
+    exchange
+  });
+  assert.ok('lead' in r, JSON.stringify(r));
+  const [wake] = await resumes(id);
+  return wake.note ?? '';
+};
+const gilsReading = `Gil's own reading, which is not Sam's words: ${reading}`;
+
+test('a lead holding every tool the colleague holds reads the last exchange in full', async () => {
+  assert.ok(
+    (await fromGil('mae', 'Mae holds Gmail', exchange)).endsWith(
+      `${gilsReading} Just before, Sam said: "Any news?". Gil replied: "The bank wrote back.".`
+    )
+  );
+});
+
+test("a lead lacking a tool the colleague holds reads the owner's line and not the colleague's, and is told one line was left out", async () => {
+  const note = await fromGil('lena', 'Lena lacks Gmail', exchange);
+  assert.ok(
+    note.endsWith(
+      `${gilsReading} Just before, Sam said: "Any news?". One line Gil said in that chat is left out, since Gil has Gmail and you do not.`
+    ),
+    note
+  );
+  assert.ok(!note.includes('bank'), note);
+});
+
+test("a colleague's line alone is left out for a lead lacking its tools", async () => {
+  const note = await fromGil(
+    'lena',
+    'Lena lacks Gmail, Gil spoke first',
+    'Just before, Gil said: "The bank wrote back.".'
+  );
+  assert.ok(
+    note.endsWith(
+      `${gilsReading} One line Gil said in that chat is left out, since Gil has Gmail and you do not.`
+    ),
+    note
+  );
+});
+
+test("with no exchange, a lead lacking the colleague's tools reads the note as it was", async () => {
+  assert.ok((await fromGil('lena', 'Lena lacks Gmail, no exchange')).endsWith(gilsReading));
+});
+
+test("with the colleague's line set to be quoted, a lead lacking its tools reads the exchange in full", () => {
+  assert.equal(
+    exchangeForLead(exchange, 'Gil', [{ id: 'gmail', name: 'Gmail' }], 'quoted'),
+    'Just before, Sam said: "Any news?". Gil replied: "The bank wrote back.".'
+  );
 });
