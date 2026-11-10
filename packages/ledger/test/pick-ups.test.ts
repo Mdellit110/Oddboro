@@ -1029,7 +1029,7 @@ test('a lead run that ended a park on a task and then fails parks the work on th
   );
 });
 
-test('a lead run that ended a park on a task fails after the task was finished: the work wakes once, told it was finished and that its other run started back then', async () => {
+test('a lead run that ended a park on a task fails after the task was finished: the work wakes once, told it was finished and that its other run was set going back then', async () => {
   const { work, task, back } = await liftedPark('fails-finished', 'Proof the flyer');
   await O.finishTask(task.id, true, 'Looks right.');
   assert.deepEqual(await onThread(work, 'resume'), [], 'nothing was parked on it as it ended');
@@ -1038,7 +1038,7 @@ test('a lead run that ended a park on a task fails after the task was finished: 
   assert.equal(woken.length, 1);
   assert.match(
     woken[0].note ?? '',
-    /finished "Proof the flyer", the task you parked this work on\. Another run of yours started from that task when it ended and carries its own part: do only this work's part here\. Pick it up now: Looks right\.$/
+    /finished "Proof the flyer", the task you parked this work on\. Another run of yours was set going when the task ended and carries its own part: do only this work's part here\. Pick it up now: Looks right\.$/
   );
   const after = await threadOf(work);
   assert.equal(after.resumeOnTask, null);
@@ -1285,7 +1285,7 @@ test('a dropped task tells its own work which parked work picked up, and the par
   assert.equal(alone.note, `${owner} dropped "Approve\nthe dropped-alone copy": Not needed.`);
 });
 
-test('a lead run that ended a park on a task given on other work fails after the task was finished: the work hears a run on that work started back then', async () => {
+test('a lead run that ended a park on a task given on other work fails after the task was finished: the work hears a run on that work was set going back then', async () => {
   const { work, otherWork = 0, task } = await taskOnOwnWork('fails-own');
   const [h] = await onThread(otherWork, 'hand_off');
   await runs(h, 'done', 'Printed a proof.');
@@ -1301,7 +1301,7 @@ test('a lead run that ended a park on a task given on other work fails after the
   assert.equal(woken.length, 1);
   assert.match(
     woken[0].note ?? '',
-    /the task you parked this work on\. A run on "Work on fails-own", the work that task was given on, started when the task ended, and its lead carries that work's own part: do only this work's part here\. Pick it up now\.$/
+    /the task you parked this work on\. A run on "Work on fails-own", the work that task was given on, was set going when the task ended, and its lead carries that work's own part: do only this work's part here\. Pick it up now\.$/
   );
 });
 

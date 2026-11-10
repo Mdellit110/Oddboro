@@ -2127,7 +2127,7 @@ export async function finishFollowUp(
   });
   if (finished && finished.ended) {
     const t = finished.ended;
-    // The task's own run started when the task ended, while the park was
+    // The task's own run was set going when the task ended, while the park was
     // lifted, so it was not told of this work and does not pick up now.
     const own = await ownRunOf(await taskEnd(t));
     await wakeOnTask(t, {
@@ -2155,7 +2155,7 @@ export async function finishFollowUp(
  * between this look and the park and wake nothing. Returns the task when it
  * ended during the run: the park is back so the work stays open, and
  * `wakeOnTask` then wakes it as the task's end would have, but told the task's
- * own run started back when the task ended. A time that passed
+ * own run was set going back when the task ended. A time that passed
  * during the run comes back as it was, so the clock's next look wakes the work,
  * once, since `wakeThread` claims the time as it wakes.
  */

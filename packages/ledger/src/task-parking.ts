@@ -69,7 +69,7 @@ export async function parkedWork(taskId: number): Promise<{ id: number; title: s
  * `ownRun` is there when a run on the task's own work picks up too, with the
  * title of the work it is on, or null for a task on no work: each parked
  * thread is told that run carries its own part. `earlier` when that run
- * started before this wake, as the task ended, and was not told of this work:
+ * was set going before this wake, as the task ended, and was not told of this work:
  * a failed run gave the park back after the task ended (`finishFollowUp`).
  */
 export async function wakeOnTask(
@@ -93,10 +93,10 @@ export async function wakeOnTask(
     ? ''
     : run.work === null
       ? run.earlier
-        ? " Another run of yours started from that task when it ended and carries its own part: do only this work's part here."
+        ? " Another run of yours was set going when the task ended and carries its own part: do only this work's part here."
         : " Another run of yours picks up from that task too and carries its own part: do only this work's here."
       : run.earlier
-        ? ` A run on "${flat(run.work)}", the work that task was given on, started when the task ended, and its lead carries that work's own part: do only this work's part here.`
+        ? ` A run on "${flat(run.work)}", the work that task was given on, was set going when the task ended, and its lead carries that work's own part: do only this work's part here.`
         : ` "${flat(run.work)}", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here.`;
   const next = how.done ? 'Pick it up now' : 'Decide what comes of the work now';
   const said = `${ended}${own} ${next}`;
