@@ -211,7 +211,8 @@ function askLinesOf(a?: AskRow): string[] {
 }
 
 function carryOutBrief(f: FollowUpRow, a: AskRow | undefined, also: AskRow[]): string[] {
-  const askLines = askLinesOf(a);
+  // A connect task's end starts this run and wakes the work parked on that task at once.
+  const askLines = [...askLinesOf(a), ...(f.pickedUp ?? []).map((t) => `- ${pickedUpLine(t)}`)];
   const alsoAnswers = (what: string) =>
     also.length
       ? [

@@ -320,7 +320,7 @@ test('work parked on a task that the usage window then holds waits on the window
     .returning();
   const [task] = await db
     .insert(tasks)
-    .values({ title: 'Sign off the sim', why: 'w', steps: [] })
+    .values({ staffId: 'wren', title: 'Sign off the sim', why: 'w', steps: [] })
     .returning();
   assert.ok('title' in (await parkOnTask('wren', t.id, task.id)));
   await freshWindow(0.95);

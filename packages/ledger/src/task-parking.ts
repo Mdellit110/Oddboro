@@ -1,10 +1,10 @@
 // Work a lead parked until a task on the owner's desk ends. The task's end is
 // the only wake: nothing looks at the clock or goes round a loop for it.
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { db } from './db.ts';
 import { flat, SAID_AS } from './desk-answers.ts';
 import { asks, tasks, threads } from './schema.ts';
-import { answerThread, taskThread } from './threads.ts';
+import { answerThread, taskThread, worksOn } from './threads.ts';
 
 /** Parks work on a task, or says why it cannot. */
 export async function parkOnTask(
@@ -16,14 +16,28 @@ export async function parkOnTask(
     // Locked, so the task cannot end between this look and the park: it would
     // wake nothing, and the work would wait on a task already over.
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).for('update');
-    if (!task) return { problem: `There is no task ${taskId}.` };
+    const fromAsk = task?.askId
+      ? await tx
+          .select({ id: asks.id, threadId: asks.threadId })
+          .from(asks)
+          .where(eq(asks.id, task.askId))
+      : [];
+    const on = task && taskThread(task, fromAsk);
+    // Another Odd's task on work this Odd is not on reads as no task at all, so
+    // a park gives away neither its title, its status nor the owner's note on it.
+    // Asked inside the transaction: under PGlite a query outside it would wait on it.
+    const onItsWork = async (thread: number) =>
+      (
+        await tx
+          .select({ id: threads.id })
+          .from(threads)
+          .where(and(eq(threads.id, thread), or(eq(threads.hubId, hubId), worksOn(hubId))))
+      ).length > 0;
+    const seen = !!task && (task.staffId === hubId || (on !== undefined && (await onItsWork(on))));
+    if (!task || !seen) return { problem: `There is no task ${taskId}.` };
     if (task.status !== 'open')
       return { problem: `Already ${SAID_AS[task.status]}: do it now, in this run.` };
-    const threadAsks = await tx
-      .select({ id: asks.id, threadId: asks.threadId })
-      .from(asks)
-      .where(eq(asks.threadId, id));
-    if (taskThread(task, threadAsks) === id)
+    if (on === id)
       return {
         problem:
           'That task is on this work, so the answer to it already brings you back. Finish this run with "Outcome: waiting".'
@@ -52,12 +66,13 @@ export async function parkedWork(taskId: number): Promise<{ id: number; title: s
 
 /**
  * The task ended: every thread parked on it picks up, with what happened.
- * `ownWork` is the work the task was given on, when its own run picks up too:
- * each parked thread is told that work carries its own part.
+ * `ownRun` is there when a run on the task's own work picks up too, with the
+ * title of the work it is on, or null for a task on no work: each parked
+ * thread is told that run carries its own part.
  */
 export async function wakeOnTask(
   t: { id: number; title: string; note: string | null },
-  how: { done: boolean; owner: string; ownWork?: string }
+  how: { done: boolean; owner: string; ownRun?: { work: string | null } }
 ): Promise<void> {
   const parked = await db
     .update(threads)
@@ -69,9 +84,13 @@ export async function wakeOnTask(
   const ended = how.done
     ? `${how.owner} finished "${title}", the task you parked this work on.`
     : `${how.owner} dropped "${title}", the task you parked this work on, so it will not be finished.`;
-  const own = how.ownWork
-    ? ` "${flat(how.ownWork)}", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here.`
-    : '';
+  // A task on no work can be parked on only by the Odd that gave it
+  // (`parkOnTask`), so its own run is this Odd's.
+  const own = !how.ownRun
+    ? ''
+    : how.ownRun.work === null
+      ? " Another run of yours picks up from that task too and carries its own part: do only this work's here."
+      : ` "${flat(how.ownRun.work)}", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here.`;
   const next = how.done ? 'Pick it up now' : 'Decide what comes of the work now';
   const said = `${ended}${own} ${next}`;
   for (const { id } of parked) await answerThread(id, note ? `${said}: ${note}` : `${said}.`);

@@ -30,12 +30,14 @@ export function taskSaid(t: { steps: Step[]; note: string | null }): string {
 }
 
 /**
- * What the run that hears a task ended is told of other work parked on that
- * task. That work picks up in its own run at the same moment (`wakeOnTask`),
- * so without this line both runs did the parked work.
+ * What each run a task's end starts on the task's own work is told of other
+ * work parked on that task. That work picks up in its own run at the same
+ * moment (`wakeOnTask`), so without this line both runs did the parked work.
+ * "This", not "this task": a carry-out's brief speaks of the ask, not of the
+ * connect task that ended.
  */
 export const pickedUpLine = (title: string): string =>
-  `"${flat(title)}" was waiting on this task and has picked up on its own; leave that work to it.`;
+  `"${flat(title)}" was waiting on this too and has picked up on its own; leave that work to it.`;
 
 /** How each end of an ask or task reads to an Odd. */
 export const SAID_AS: Record<Exclude<AskStatus, 'open'> | Exclude<TaskStatus, 'open'>, string> = {
@@ -100,6 +102,22 @@ export type AskEffect = Exclude<Effect, 'task_done' | 'wake_parked'>;
 export type TaskEffect = Extract<
   Effect,
   'carry_out' | 'task_done' | 'answer_back' | 'wake_parked' | { none: string }
+>;
+
+/**
+ * Whether each effect of a task's end starts a run on the task's own work:
+ * always, only when the task is on a piece of work (an answer goes back there,
+ * and reaches nobody otherwise), or never. Each such run and the work parked
+ * on the task are told of each other (`finishTask`), or both do the parked work.
+ */
+export const OWN_RUN = {
+  carry_out: 'always',
+  task_done: 'always',
+  answer_back: 'on its work',
+  wake_parked: 'never'
+} as const satisfies Record<
+  Exclude<TaskEffect, { none: string }>,
+  'always' | 'on its work' | 'never'
 >;
 
 export type AskAnswer = {

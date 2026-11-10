@@ -119,8 +119,8 @@ test("a finished task's brief names each work that picked up on its own, and is 
     task
   );
   const lines = [
-    '- "Print run" was waiting on this task and has picked up on its own; leave that work to it.',
-    '- "Frame it" was waiting on this task and has picked up on its own; leave that work to it.'
+    '- "Print run" was waiting on this too and has picked up on its own; leave that work to it.',
+    '- "Frame it" was waiting on this too and has picked up on its own; leave that work to it.'
   ];
   assert.deepEqual(
     told.filter((l) => !lines.includes(l)),
@@ -134,4 +134,34 @@ test("a finished task's brief names each work that picked up on its own, and is 
     'each line sits with what the owner gave, before the steps'
   );
   assert.ok(!alone.some((l) => l.includes('picked up on its own')));
+});
+
+test("a carry-out started by a connect task's end names each work that picked up on its own, after the ask, and is the same as before when none did", () => {
+  const asked: AskRow[] = [
+    { ...ask, kind: 'access', access: { connector: 'gmail', level: 'read' } } as AskRow,
+    {
+      ...ask,
+      kind: 'folder',
+      folder: { path: '/tmp/taxes', level: 'read', given: { path: '/tmp/taxes', level: 'read' } }
+    } as AskRow,
+    { ...ask, kind: 'switch', switches: ['web'] } as AskRow,
+    ask
+  ];
+  const line =
+    '- "Inbox sort" was waiting on this too and has picked up on its own; leave that work to it.';
+  for (const a of asked) {
+    const alone = followUpBrief({ ...followUp('carry_out'), pickedUp: null }, a);
+    const told = followUpBrief({ ...followUp('carry_out'), pickedUp: ['Inbox\nsort'] }, a);
+    assert.deepEqual(
+      told.filter((l) => l !== line),
+      alone,
+      `${a.kind}: the line is the only change`
+    );
+    const at = told.indexOf(line);
+    assert.ok(
+      at > told.indexOf(`- What you said would happen: ${a.ifApproved}`) &&
+        at < told.findIndex((l) => l.startsWith('1. ')),
+      `${a.kind}: the line sits with the ask, before the steps`
+    );
+  }
 });

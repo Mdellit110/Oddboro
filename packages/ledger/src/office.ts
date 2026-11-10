@@ -122,6 +122,7 @@ import { isGrantable, OFFICE_TOOLS, tickable, yesOrNo } from './tools.ts';
 import { HIRE_DEFAULTS } from './grantable.ts';
 import {
   ASK_REPLACED,
+  OWN_RUN,
   ownerAnswers,
   OWNER_ANSWERS,
   pickedUpLine,
@@ -1331,10 +1332,14 @@ function carriedOutBy(together: AskRow[]): AskRow[] {
   return runs;
 }
 
-/** Start the carry-outs for asks one answer settled (`carriedOutBy`). */
-async function carryOutTogether(together: AskRow[]): Promise<void> {
+/**
+ * Start the carry-outs for asks one answer settled (`carriedOutBy`).
+ * `pickedUp` is the work parked on the connect task that just ended, which
+ * picks up in its own run (`finishTask`).
+ */
+async function carryOutTogether(together: AskRow[], pickedUp?: string[]): Promise<void> {
   for (const a of carriedOutBy(together))
-    await followUp(a.staffId, 'carry_out', { askId: a.id, note: null });
+    await followUp(a.staffId, 'carry_out', { askId: a.id, note: null, pickedUp });
 }
 
 /**
@@ -2965,13 +2970,16 @@ export async function finishTask(id: number, done: boolean, note: string | null)
   // is told the other has its part, or both do the parked work.
   const parked = await parkedWork(t.id);
   const ownThread = t.threadId ?? from?.threadId;
-  const ownPicksUp = effects.some(
-    (e) => e === 'task_done' || e === 'carry_out' || e === 'answer_back'
+  const ownRuns = effects.some(
+    (e) =>
+      typeof e === 'string' &&
+      (OWN_RUN[e] === 'always' || (OWN_RUN[e] === 'on its work' && !!ownThread))
   );
   const [own] =
-    parked.length && ownThread && ownPicksUp
+    parked.length && ownThread && ownRuns
       ? await db.select({ title: threads.title }).from(threads).where(eq(threads.id, ownThread))
       : [];
+  const ownRun = ownRuns ? { work: own?.title ?? null } : undefined;
   const pickedUp = parked.length ? parked.map((p) => p.title) : undefined;
   for (const effect of effects) {
     if (typeof effect === 'object') continue;
@@ -2993,7 +3001,8 @@ export async function finishTask(id: number, done: boolean, note: string | null)
       // The owner finished connecting a tool an Odd asked for: it can start the
       // work that was waiting on it, once however many asks that one answer settled.
       case 'carry_out':
-        if (t.staffId && from) await carryOutTogether([from, ...(await answeredWith(from))]);
+        if (t.staffId && from)
+          await carryOutTogether([from, ...(await answeredWith(from))], pickedUp);
         break;
       // Any other task an Odd gave them: the Odd picks up whatever waited on
       // it, such as hiring from an intake the owner just filled in.
@@ -3003,7 +3012,7 @@ export async function finishTask(id: number, done: boolean, note: string | null)
         break;
       // Work on another thread that waited on this task, whoever gave it.
       case 'wake_parked':
-        await wakeOnTask(t, { done, owner, ownWork: own?.title });
+        await wakeOnTask(t, { done, owner, ownRun });
         break;
       default:
         effect satisfies never;

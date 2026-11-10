@@ -671,12 +671,13 @@ async function parksOn(lead: string, work: number, task: number) {
   const parked = await P.parkOnTask(lead, work, task);
   assert.ok('title' in parked, JSON.stringify(parked));
 }
-const aTask = (colleague: string, title: string) =>
-  O.giveTask(colleague, { title, why: 'w', steps: ['Do it'] });
+// A task the lead gave, on no work: the one kind on no work it may park on (`parkOnTask`).
+const aTask = (lead: string, title: string) =>
+  O.giveTask(lead, { title, why: 'w', steps: ['Do it'] });
 
 test('finishing a task wakes the thread parked on it once, and a dropped task wakes it too and says so', async () => {
   const finished = await ownWork('finished');
-  const proof = await aTask(finished.colleague, 'Proof the banner');
+  const proof = await aTask(finished.lead, 'Proof the banner');
   await parksOn(finished.lead, finished.work, proof.id);
   await O.finishTask(proof.id, true, null);
   await O.finishTask(proof.id, true, null);
@@ -684,12 +685,12 @@ test('finishing a task wakes the thread parked on it once, and a dropped task wa
   assert.equal(woken.length, 1);
   assert.match(
     woken[0].note ?? '',
-    /finished "Proof the banner", the task you parked this work on\. Pick it up now\.$/
+    /finished "Proof the banner", the task you parked this work on\. Another run of yours picks up from that task too and carries its own part: do only this work's here\. Pick it up now\.$/
   );
   assert.equal((await threadOf(finished.work)).resumeOnTask, null);
 
   const dropped = await ownWork('dropped');
-  const print = await aTask(dropped.colleague, 'Print\nthe banner');
+  const print = await aTask(dropped.lead, 'Print\nthe banner');
   await parksOn(dropped.lead, dropped.work, print.id);
   await O.finishTask(print.id, false, 'Not needed\nany more.');
   const told = await onThread(dropped.work, 'resume');
@@ -703,7 +704,7 @@ test('finishing a task wakes the thread parked on it once, and a dropped task wa
 
   // Work that ended another way while parked stays ended.
   const ended = await ownWork('ended');
-  const frame = await aTask(ended.colleague, 'Frame the banner');
+  const frame = await aTask(ended.lead, 'Frame the banner');
   await parksOn(ended.lead, ended.work, frame.id);
   await db.update(threads).set({ endedAt: new Date() }).where(eq(threads.id, ended.work));
   await O.finishTask(frame.id, true, null);
@@ -720,7 +721,7 @@ async function stoppedWhileParked(name: string) {
     .values({ title: `Goal of ${name}` })
     .returning();
   const { lead, colleague, h, work } = await ownWork(name, goal.id);
-  const task = await aTask(colleague, `Task of ${name}`);
+  const task = await aTask(lead, `Task of ${name}`);
   await parksOn(lead, work, task.id);
   await runs(h, 'done', 'Did it.');
   await runs((await onThread(work, 'handed_back'))[0], 'done', 'Read it.');
@@ -796,6 +797,7 @@ test('a connect task the office drops wakes the work parked on it, and says it w
   const [connect] = await db
     .insert(tasks)
     .values({
+      staffId: lead,
       title: 'Connect the printer',
       why: 'w',
       steps: [
@@ -816,8 +818,8 @@ test('a connect task the office drops wakes the work parked on it, and says it w
 });
 
 test('a thread parked on a task stays open when its run ends done', async () => {
-  const { lead, colleague, h, work } = await ownWork('stays-open');
-  const sign = await aTask(colleague, 'Sign the banner');
+  const { lead, h, work } = await ownWork('stays-open');
+  const sign = await aTask(lead, 'Sign the banner');
   await parksOn(lead, work, sign.id);
   await runs(h, 'done', 'Drew it.');
   const [back] = await onThread(work, 'handed_back');
@@ -830,8 +832,8 @@ test('a thread parked on a task stays open when its run ends done', async () => 
 });
 
 test("a parked thread's lead is told what it waits on", async () => {
-  const { lead, colleague, work } = await ownWork('told');
-  const check = await aTask(colleague, 'Check the\nspelling');
+  const { lead, work } = await ownWork('told');
+  const check = await aTask(lead, 'Check the\nspelling');
   await parksOn(lead, work, check.id);
   const story = await B.threadStory(await threadOf(work));
   assert.ok(
@@ -915,7 +917,7 @@ test('a dropped task tells its own work which parked work picked up, and the par
   const [answer] = await onThread(work, 'resume');
   assert.equal(
     answer.note,
-    `${owner} dropped "Approve\nthe dropped-own copy": Not needed. "Print run of dropped-own" was waiting on this task and has picked up on its own; leave that work to it.`
+    `${owner} dropped "Approve\nthe dropped-own copy": Not needed. "Print run of dropped-own" was waiting on this too and has picked up on its own; leave that work to it.`
   );
   const [woken] = await onThread(otherWork ?? 0, 'resume');
   assert.match(woken.note ?? '', /"Work on dropped-own", the work that task was given on/);
@@ -924,4 +926,142 @@ test('a dropped task tells its own work which parked work picked up, and the par
   await O.finishTask(lone.task, false, 'Not needed.');
   const [alone] = await onThread(lone.work, 'resume');
   assert.equal(alone.note, `${owner} dropped "Approve\nthe dropped-alone copy": Not needed.`);
+});
+
+/**
+ * A lead's access ask, raised on its own work or, with `onWork` false, from a
+ * chat, approved, so its connect task is on the desk; and, unless `parked` is
+ * false, a second piece of the lead's work parked on that connect task.
+ */
+async function connectWithParked(name: string, { onWork = true, parked = true } = {}) {
+  const { lead, colleague, work } = await ownWork(name);
+  const { ask } = await O.raiseAsk(lead, {
+    title: `Connect Gmail for ${name}`,
+    why: 'w',
+    ifApproved: 'i',
+    access: { connector: 'gmail', level: 'read' },
+    threadId: onWork ? work : undefined
+  });
+  await O.decideAsk(ask.id, 'approve', null);
+  const [connect] = await db.select().from(tasks).where(eq(tasks.askId, ask.id));
+  assert.ok(connect, 'the yes made no connect task');
+  const other = parked
+    ? await H.handOff({
+        from: lead,
+        to: colleague,
+        work: { title: `Mail of ${name}`, brief: 'Sort it.' },
+        thread: { title: `Inbox of ${name}` }
+      })
+    : undefined;
+  const otherWork = other && 'id' in other ? ((await byId(other.id)).threadId ?? 0) : undefined;
+  if (otherWork) await parksOn(lead, otherWork, connect.id);
+  return { lead, work, otherWork, ask: ask.id, connect: connect.id };
+}
+const carryOuts = (askId: number) =>
+  db
+    .select()
+    .from(followUps)
+    .where(and(eq(followUps.askId, askId), eq(followUps.kind, 'carry_out')));
+
+test("a connect task's end tells the carry-out on the ask's work which parked work picked up, and tells that work the ask's work picks up too", async () => {
+  const { work, otherWork, ask, connect } = await connectWithParked('carry-on-work');
+  await O.finishTask(connect, true, null);
+  const [carry] = await carryOuts(ask);
+  assert.equal(carry.threadId, work);
+  assert.deepEqual(carry.pickedUp, ['Inbox of carry-on-work']);
+  const [woken] = await onThread(otherWork ?? 0, 'resume');
+  assert.match(
+    woken.note ?? '',
+    /"Work on carry-on-work", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here\. Pick it up now\.$/
+  );
+});
+
+test('a connect task for an ask raised in a chat tells its carry-out which parked work picked up, and tells that work another run of its own carries the access work', async () => {
+  const { otherWork, ask, connect } = await connectWithParked('carry-from-chat', {
+    onWork: false
+  });
+  await O.finishTask(connect, true, null);
+  const [carry] = await carryOuts(ask);
+  assert.equal(carry.threadId, null);
+  assert.deepEqual(carry.pickedUp, ['Inbox of carry-from-chat']);
+  const [woken] = await onThread(otherWork ?? 0, 'resume');
+  assert.match(
+    woken.note ?? '',
+    /the task you parked this work on\. Another run of yours picks up from that task too and carries its own part: do only this work's here\. Pick it up now\.$/
+  );
+});
+
+test('a connect task with nothing parked on it starts its carry-out with nothing picked up', async () => {
+  const { ask, connect } = await connectWithParked('carry-alone', { parked: false });
+  await O.finishTask(connect, true, null);
+  const [carry] = await carryOuts(ask);
+  assert.equal(carry.pickedUp, null);
+});
+
+test('a dropped connect task starts no run of its own, so the work parked on it hears only of the drop', async () => {
+  const { otherWork, connect } = await connectWithParked('carry-dropped', { onWork: false });
+  await O.finishTask(connect, false, null);
+  const [woken] = await onThread(otherWork ?? 0, 'resume');
+  assert.match(
+    woken.note ?? '',
+    /dropped "Connect Gmail .+", the task you parked this work on, so it will not be finished\. Decide what comes of the work now\.$/
+  );
+});
+
+test("work parks only on a task its lead gave or a task on work it is on, and another Odd's task reads as no task at all", async () => {
+  const { lead, work } = await ownWork('park-reach');
+  const other = 'other-lead-park-reach';
+  await db.insert(staff).values(odd(other, 'Other lead'));
+  // The lead works on the other lead's work, so a task there is one it can see.
+  const handed = await H.handOff({
+    from: other,
+    to: lead,
+    work: { title: 'Help with the stall', brief: 'Help.' },
+    thread: { title: 'The stall' }
+  });
+  assert.ok('id' in handed, JSON.stringify(handed));
+  const stall = (await byId(handed.id)).threadId ?? 0;
+  const onTheirWork = await O.giveTask(other, {
+    title: 'Book the stall',
+    why: 'w',
+    steps: ['Book it'],
+    threadId: stall
+  });
+  await parksOn(lead, work, onTheirWork.id);
+
+  const theirs = await O.giveTask('rex', { title: 'Rex private errand', why: 'w', steps: ['Go'] });
+  const theirsDone = await O.giveTask('rex', { title: 'Rex done errand', why: 'w', steps: ['Go'] });
+  await O.finishTask(theirsDone.id, true, null);
+  const elsewhere = await ownWork('park-elsewhere');
+  const onOtherWork = await O.giveTask(elsewhere.lead, {
+    title: 'Sign the elsewhere copy',
+    why: 'w',
+    steps: ['Sign it'],
+    threadId: elsewhere.work
+  });
+  for (const id of [theirs.id, theirsDone.id, onOtherWork.id])
+    assert.deepEqual(await P.parkOnTask(lead, work, id), { problem: `There is no task ${id}.` });
+  assert.equal((await threadOf(work)).resumeOnTask, onTheirWork.id, 'a refusal left the park');
+
+  await O.finishTask(theirs.id, true, 'SENTINEL only for Rex');
+  assert.ok(
+    !(await onThread(work, 'resume')).some((f) => f.note?.includes('SENTINEL')),
+    "the other Odd's note reached the work"
+  );
+
+  const own = await aTask(lead, 'Own finished errand');
+  await O.finishTask(own.id, true, null);
+  assert.deepEqual(await P.parkOnTask(lead, work, own.id), {
+    problem: 'Already finished: do it now, in this run.'
+  });
+});
+
+test('work that has ended cannot be parked on a task', async () => {
+  const { lead, work } = await ownWork('park-ended');
+  const task = await aTask(lead, 'Proof the ended copy');
+  await db.update(threads).set({ endedAt: new Date() }).where(eq(threads.id, work));
+  assert.deepEqual(await P.parkOnTask(lead, work, task.id), {
+    problem: `Work ${work} has ended, or is not work you lead.`
+  });
+  assert.equal((await threadOf(work)).resumeOnTask, null);
 });

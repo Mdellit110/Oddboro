@@ -336,7 +336,9 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   the Odd reads the answers and attached files, then does what came next,
   like proposing the hire an intake was for. Other work parked on the task
   picks up in its own run at the same moment, so `finishTask` reads it first
-  and the `task_done` row names it in `follow_ups.picked_up`, office text kept
+  and each `task_done` or `carry_out` row the task's end starts names it in
+  `follow_ups.picked_up` (`OWN_RUN` in `src/desk-answers.ts` says which ends
+  start such a run), office text kept
   out of the owner's `note`: the brief tells the Odd to leave that work to it. A dropped task starts nothing,
   unless it was given on a hand-off or a thread (below).
   A denied ask with a reason also starts a `denied` follow-up: the Odd reads
@@ -475,10 +477,12 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   never goes, and the hub wakes to say where the work stands. An ask raised
   before asks held their hand-off wakes the hub to hand on again. The hub moves it on by a colleague finishing, by
   `resume_at` (`parkThread`; the office clock calls `wakeThread`, which starts
-  a `resume` follow-up), by `resume_at`'s `after_task` (`parkOnTask`, which sets
-  `threads.resume_on_task` and clears the time; `wakeOnTask` wakes it when the
-  task is done or dropped, and says which, and names the work the task was
-  given on when that work picks up too, whose lead carries its own part; a stopped thread loses its park), or by the owner answering an ask or task raised on it
+  a `resume` follow-up), by `resume_at`'s `after_task` (`parkOnTask`, which takes
+  only a task the hub gave or one on work it is on, any other reading as no
+  task, sets `threads.resume_on_task` and clears the time; `wakeOnTask` wakes it when the
+  task is done or dropped, and says which, and when a run on the task's own
+  work picks up too, names that work, whose lead carries its own part, or for
+  a task on no work says another run of the hub's does; a stopped thread loses its park), or by the owner answering an ask or task raised on it
   (`asks.thread_id`, `tasks.thread_id`; `answerThread` when no run follows,
   carrying the ask, so an approved goal plan starts the hub leading its work).
   An answer that comes while the hub's `resume` has yet to start joins it as
