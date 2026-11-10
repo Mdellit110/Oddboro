@@ -1,10 +1,11 @@
 // The files the owner attaches in a chat, kept in the Odd's own `attachments/`
 // folder. Every run already reads that folder, so each tool opens them with
 // the file tools it has. Nothing else on the computer is touched.
-import { lstatSync, mkdirSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { home } from '@oddboro/ledger/home';
+import { fixedError } from '@oddboro/ledger/errors';
 import { attachableType, extensionFor, type ChatFile } from '#lib/attachments.ts';
 import type { KeptFile } from './chat-preface.ts';
 
@@ -13,6 +14,21 @@ const FOLDER = 'attachments';
 const KEPT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
 
 const attachmentsOf = (id: string) => join(home('staff'), id, FOLDER);
+
+/**
+ * Whether the Odd's attachments folder is a real folder inside its real
+ * folder. An Odd writes its own folder, so it can swap `attachments/` for a
+ * link, then name a file there on a forged line in its chat.jsonl: no file is
+ * kept, read or retold through such a folder (as `learnFromReply` refuses).
+ */
+function ownAttachments(id: string): boolean {
+  try {
+    return realpathSync(attachmentsOf(id)) === join(realpathSync(home('staff', id)), FOLDER);
+  } catch {
+    // No folder yet, or no Odd: nothing is there to read.
+    return false;
+  }
+}
 
 /** The original name cut to safe letters, so a kept name reads like the file it came from. */
 function stem(name: string): string {
@@ -37,6 +53,8 @@ export function keepAttachment(
   if (!mediaType) throw new Error('Attach a picture, a PDF or a text file.');
   const dir = attachmentsOf(id);
   mkdirSync(dir, { recursive: true });
+  if (!ownAttachments(id))
+    throw fixedError("This Odd's attachments folder is not its own, so the file was not kept.");
   const at = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
   const end = `${stem(original)}.${extensionFor(original, mediaType)}`;
   // A file of the same name in the same second gets other random letters:
@@ -52,9 +70,9 @@ export function keepAttachment(
   }
 }
 
-/** The full path of a kept file, only when it is a plain file in the Odd's attachments folder. */
+/** The full path of a kept file, only when it is a plain file in the Odd's own attachments folder. */
 export function attachmentPath(id: string, name: string): string | undefined {
-  if (!KEPT.test(name)) return undefined;
+  if (!KEPT.test(name) || !ownAttachments(id)) return undefined;
   const path = join(attachmentsOf(id), name);
   try {
     return lstatSync(path).isFile() ? path : undefined;

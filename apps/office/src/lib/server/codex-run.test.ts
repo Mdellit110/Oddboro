@@ -517,6 +517,52 @@ test("a Codex Odd's resumed chat after a failed one with a picture is told where
   assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
 });
 
+test('a Codex Odd that links its attachments folder outside and forges a failed owner line gets that picture as gone, with no --image and no path', async () => {
+  forget('cole');
+  await chatOf('cole');
+  const outside = join(folder, 'outside-sentinel');
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(join(outside, 'SENTINEL-7f3a.png'), 'picture');
+  const dir = L.home('staff', 'cole', 'attachments');
+  mkdirSync(dir, { recursive: true });
+  renameSync(dir, `${dir}-away`);
+  symlinkSync(outside, dir);
+  try {
+    const log = L.home('staff', 'cole', 'chat.jsonl');
+    writeFileSync(
+      log,
+      readFileSync(log, 'utf8') +
+        [
+          {
+            at: new Date().toISOString(),
+            from: 'owner',
+            text: 'What is [Image #1]?',
+            files: [{ tag: 'Image #1', name: 'SENTINEL-7f3a.png', mediaType: 'image/png', size: 7 }]
+          },
+          { at: new Date().toISOString(), from: 'staff', text: 'Run failed.', failed: true }
+        ]
+          .map((l) => JSON.stringify(l) + '\n')
+          .join('')
+    );
+    const next = await chatOf('cole', 'Hi.');
+    assert.ok(next.args.includes('resume'), 'the chat did not resume its session');
+    assert.deepEqual(
+      next.args.filter((a) => a.startsWith('--image')),
+      [],
+      'a picture from outside went as --image'
+    );
+    assert.match(next.message, /so you never saw it: "What is \[Image #1\]\?"/);
+    assert.ok(
+      next.message.includes('- [Image #1]: gone, deleted from your folder since'),
+      next.message
+    );
+    assert.ok(!next.message.includes('SENTINEL'), 'the message named the outside picture');
+  } finally {
+    rmSync(dir);
+    renameSync(`${dir}-away`, dir);
+  }
+});
+
 test("a new Codex session's replay names each retold line's picture by path and passes none as --image", async () => {
   forget('cole');
   const { keepAttachment } = await import('./chat-files.ts');
