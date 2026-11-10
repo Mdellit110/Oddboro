@@ -153,7 +153,9 @@ change.
   to a route that does not exist. A route the owner acts through has its row
   in `OWNER_ACTIONS` in `apps/office/src/lib/server/owner-actions.ts`;
   `owner-actions.test.ts` fails a POST, PUT, PATCH or DELETE handler with
-  none, and a row that says it records but writes no ledger row. No check
+  none, a row that says it records but writes no ledger row, and a row that
+  writes only sometimes (`mayRecord`, the kinds it may write and when) but
+  writes a kind it does not list, or nothing in the state that writes. No check
   finds a GET or a page's `load` that changes something: give it a row by
   hand, and the test then fails if its handler goes.
 - **A call out of the office.** Start at its file's entry in `OUTBOUND` in

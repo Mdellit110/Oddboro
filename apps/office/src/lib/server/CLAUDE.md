@@ -37,10 +37,13 @@ then names every other place.
   guard does not catch one; that file says what else it does not count.
 - To add a route that changes something (a POST, PUT, PATCH or DELETE
   handler, a staff PATCH body key, or an `op` in `TASK_OPS`), add its row to
-  `OWNER_ACTIONS` in `owner-actions.ts`: the ledger kind it records, what it
-  changes or the Linear row that owes one, or why it is not an action.
-  `owner-actions.test.ts` fails until the row is there, and drives each
-  recording row to check it writes exactly one ledger row of that kind. A GET
+  `OWNER_ACTIONS` in `owner-actions.ts`: the ledger kind it records, the
+  kinds it may record and when (`mayRecord`, for a route that writes only
+  sometimes, never `none`), what it changes or the Linear row that owes one,
+  or why it is not an action. `owner-actions.test.ts` fails until the row is
+  there, and drives each recording row to check it writes exactly one ledger
+  row of that kind, and each `mayRecord` row to check it writes only the
+  kinds it lists, and some in the state its driver sets up to write. A GET
   that changes something, or a page's `load` that does, gets a row by hand:
   the test cannot tell it from a read.
 - To add a kind of run (`UsageKind` in the ledger), add its row to

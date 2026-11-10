@@ -6,7 +6,8 @@
 // so the test cannot find one that changes something: such a GET, or a page's
 // `load`, gets a row by hand. owner-actions.test.ts fails on a handler with no
 // row and on a GET row whose handler is gone, and drives each `records` row to
-// check it writes exactly one ledger row of that kind.
+// check it writes exactly one ledger row of that kind, and each `mayRecord`
+// row in a state where it writes, to check it writes only the kinds it lists.
 import type { LedgerKind } from '@oddboro/ledger';
 
 /** The Linear row that owes a ledger line for each action that names it. */
@@ -16,6 +17,14 @@ const SETUP = 'Setting up the office, before or beside its records, not an actio
 export type OwnerAction =
   /** It writes one ledger row of this kind. */
   | { records: LedgerKind }
+  /**
+   * It writes ledger rows of these kinds and no other, only when and as many as
+   * `when` says; otherwise none. A route that writes a row only sometimes is
+   * never `none`, which would hide the row from the next reader. One action
+   * can write several kinds: adding a persona Odd writes its hire and a `work`
+   * row for each part drawn for it (`saveParts` in the ledger).
+   */
+  | { mayRecord: readonly [LedgerKind, ...LedgerKind[]]; when: string }
   /**
    * It changes the office's records and writes no ledger row: what it changes,
    * or the Linear row that owes one.
@@ -49,14 +58,19 @@ export const OWNER_ACTIONS = {
   // The owner's New Altitude account lives in the system's secret store, and
   // the reports switch in the settings file; none of them is a record.
   'POST /api/account': { notAnAction: SETUP },
-  'DELETE /api/account': { notAnAction: SETUP },
+  'DELETE /api/account': {
+    none: "Ends the account's sign-in and each persona's, and makes every persona Odd quiet."
+  },
   'PUT /api/diagnostics': { notAnAction: SETUP },
   'POST /api/diagnostics/envelope': {
     notAnAction: "Passes the page's error report through the office's filter; nothing is kept."
   },
   // The account's sign-in is setup. A persona's comes back here too, and
-  // wakes its quiet Odd or adds it, whose hire writes its own ledger row.
-  'GET /account/callback': { none: "Finishes a persona's sign-in: wakes or adds its Odd." },
+  // wakes its quiet Odd or adds it.
+  'GET /account/callback': {
+    mayRecord: ['hire', 'work'],
+    when: "A hire, and a work row for each part of its look, when a persona's sign-in finishes in an open office with no Odd of it yet."
+  },
   'POST /api/accounts': { records: 'access' },
   'PATCH /api/accounts': { records: 'access' },
   'DELETE /api/accounts': { records: 'access' },
@@ -102,16 +116,22 @@ export const OWNER_ACTIONS = {
   'PUT /api/office/design': { records: 'work' },
   'POST /api/office/layouts/[id]': { records: 'work' },
   'POST /api/office/move-in': { records: 'work' },
-  'POST /api/onboarding': { records: 'hire' },
+  'POST /api/onboarding': {
+    mayRecord: ['hire', 'work'],
+    when: 'A hire for the Office Manager, and for each persona granted on its card a hire and a work row for each part of its look.'
+  },
   // Reads New Altitude's list and brings each persona Odd in line with it:
-  // quiet, speaking again, or on a newer package, whose update writes its own
-  // ledger row.
+  // quiet or speaking again, which writes no ledger row, or on a newer package.
   'GET /api/personas': {
-    none: "Sets each persona Odd's quiet and package to New Altitude's list."
+    mayRecord: ['work'],
+    when: 'One for each persona Odd New Altitude lists on a newer package.'
   },
   // Add and Reconnect. A kept sign-in that still holds finishes at once, as
-  // the callback does.
-  'POST /api/personas/[slug]': { none: "Starts a persona's sign-in: wakes or adds its Odd." },
+  // the callback does, and wakes its quiet Odd or adds it.
+  'POST /api/personas/[slug]': {
+    mayRecord: ['hire', 'work'],
+    when: 'A hire, and a work row for each part of its look, when a kept sign-in still holds, the office is open and it has no Odd of the persona yet.'
+  },
   'DELETE /api/personas/[slug]': { none: "Ends a persona's sign-in and makes its Odd quiet." },
   'POST /api/pokes/[id]': { none: NO_ROW },
   'DELETE /api/pokes/[id]': { none: NO_ROW },
@@ -206,9 +226,10 @@ export const OWNER_ACTIONS = {
   'GET /connect/callback': { none: NO_ROW }
 } as const satisfies Record<string, OwnerAction>;
 
-/** Each action that writes a ledger row. */
+/** Each action that writes a ledger row, always or only sometimes. */
 export type Recording = {
-  [K in keyof typeof OWNER_ACTIONS]: (typeof OWNER_ACTIONS)[K] extends { records: LedgerKind }
+  [K in keyof typeof OWNER_ACTIONS]: (typeof OWNER_ACTIONS)[K] extends
+    { records: LedgerKind } | { mayRecord: readonly LedgerKind[] }
     ? K
     : never;
 }[keyof typeof OWNER_ACTIONS];

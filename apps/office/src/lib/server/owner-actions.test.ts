@@ -1,11 +1,13 @@
-// Every owner route that changes something is declared in OWNER_ACTIONS, and
-// each that says it records writes exactly one ledger row of its kind. Of the
-// rows that write none, only those in CHANGES are driven.
+// Every owner route that changes something is declared in OWNER_ACTIONS, each
+// that says it records writes exactly one ledger row of its kind, and each
+// that says it may record writes only the kinds it lists, in every state its
+// driver tries, and some in at least one. Of the rows that write none, only
+// those in CHANGES are driven.
 import assert from 'node:assert/strict';
 import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import { PATCH_KEY, STAFF_PATCH_KEYS } from '@oddboro/ledger/grantable';
 import { FLOORS, GROUNDS, WALLS, type OfficeSpec } from '@oddboro/world';
 import type { Step } from '@oddboro/ledger';
@@ -21,7 +23,8 @@ import {
   secrets,
   type Call
 } from './office-under-test.ts';
-import { OWNER_ACTIONS, TASK_OPS, type Recording } from './owner-actions.ts';
+import { fakeNewAltitude, PAT } from './fake-new-altitude.ts';
+import { OWNER_ACTIONS, TASK_OPS, type OwnerAction, type Recording } from './owner-actions.ts';
 
 const ROUTES = fileURLToPath(new URL('../../routes', import.meta.url));
 const ACTIONS = ['POST', 'PUT', 'PATCH', 'DELETE'];
@@ -141,6 +144,54 @@ const asked = (fields: Omit<Parameters<typeof L.raiseAsk>[1], 'title' | 'why' | 
     (r) => r.ask.id
   );
 
+/**
+ * The route's answer to the page's call: its handler, or for a GET of a page,
+ * such as the sign-in callback New Altitude sends the browser back to, its
+ * `load`, which reads only the URL.
+ */
+async function reach(route: string, method: string, call: Call = {}): Promise<unknown> {
+  if (method !== 'GET' || !routeIds('+page.server.ts').includes(route))
+    return request(route, method, call);
+  const page = (await import(join(ROUTES, route, '+page.server.ts'))) as {
+    load: (event: { url: URL }) => Promise<unknown>;
+  };
+  const url = new URL(`http://office${route}`);
+  url.search = new URLSearchParams(call.query ?? {}).toString();
+  return page.load({ url });
+}
+
+// New Altitude on this computer, for the persona routes. It lists three
+// made-up personas, so each route that adds one has one the office lacks.
+const newAltitude = await fakeNewAltitude();
+process.env.ODDBORO_ACCOUNT_SITE = `${newAltitude.origin}/`;
+after(() => newAltitude.close());
+/** `pat` under another name: its slug, name, part and sprites renamed alike, so its look is its own. */
+const personaAs = (slug: string, name: string) =>
+  JSON.parse(JSON.stringify(PAT).replaceAll('pat', slug).replaceAll('Pat', name)) as typeof PAT;
+newAltitude.odds = [PAT, personaAs('quin', 'Quin'), personaAs('rio', 'Rio')];
+
+/** New Altitude's page at `url` saying yes: the query it sends the browser back to the callback with. */
+async function yesAt(url: string): Promise<Record<string, string>> {
+  const res = await fetch(url, { redirect: 'manual' });
+  return Object.fromEntries(new URL(res.headers.get('location') ?? '').searchParams);
+}
+/** The callback's page for `query`, by its title. */
+const callback = async (query: Record<string, string>) =>
+  ((await reach('/account/callback', 'GET', { query })) as { title: string }).title;
+/** The owner's Sign in to New Altitude, through to the callback. */
+async function signInToNewAltitude(): Promise<void> {
+  const res = await request('/api/account', 'POST');
+  assert.equal(
+    await callback(await yesAt(((await res.json()) as { url: string }).url)),
+    'Signed in'
+  );
+}
+/** Add on persona `slug`, with no sign-in kept: the callback's query once New Altitude says yes. */
+async function addPersona(slug: string): Promise<Record<string, string>> {
+  const res = await request('/api/personas/[slug]', 'POST', { params: { slug } });
+  return yesAt(((await res.json()) as { url: string }).url);
+}
+
 /** What sends the page's call to the route under test, counting the ledger either side. */
 type Send = (call: Call) => Promise<void>;
 /** For each action that records: any rows it needs, then the call that makes it act. */
@@ -237,8 +288,39 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
   },
   // After a move-in, so there is a sample to go back to.
   'POST /api/office/layouts/[id]': (send) => send({ params: { id: 'sample' } }),
-  'POST /api/onboarding': (send) =>
-    send({ body: { name: 'Tess', zone: 'UTC', manager: { preset: look().id } } }),
+  // Pat's sign-in finished before the welcome, so the welcome adds Pat after
+  // the manager: two hire rows.
+  'POST /api/onboarding': async (send) => {
+    await signInToNewAltitude();
+    assert.equal(await callback(await addPersona('pat')), 'Connected');
+    await send({ body: { name: 'Tess', zone: 'UTC', manager: { preset: look().id } } });
+  },
+  // The rows below need the office open, so they come after the welcome.
+  // Rio's sign-in finishing in the open office adds Rio. The same page
+  // opened again finishes nothing, so it writes nothing.
+  'GET /account/callback': async (send) => {
+    const query = await addPersona('rio');
+    await send({ query });
+    await send({ query });
+  },
+  // Quin's sign-in kept from before the welcome, as after a restart: Add finds
+  // it still holds and adds Quin at once.
+  'POST /api/personas/[slug]': async (send) => {
+    const [{ at }] = await L.pg<{ at: Date }[]>`select welcomed_at as at from owner`;
+    await L.pg`update owner set welcomed_at = null`;
+    assert.equal(await callback(await addPersona('quin')), 'Connected');
+    await L.pg`update owner set welcomed_at = ${at}`;
+    await send({ params: { slug: 'quin' } });
+    // Quin is here now, so Add again only finds the sign-in still holds.
+    await send({ params: { slug: 'quin' } });
+  },
+  // The list as the office has it changes nothing; then Pat on a newer
+  // package, which the sync brings Pat's Odd up to.
+  'GET /api/personas': async (send) => {
+    await send({});
+    newAltitude.odds[0] = { ...PAT, odd: { ...(PAT.odd as object), version: 2 } };
+    await send({});
+  },
   'PUT /api/rooms': async (send) =>
     send({ body: { room: (await currentOffice()).world.rooms[0].id, name: 'The den' } }),
   'POST /api/staff': async (send) => {
@@ -336,23 +418,45 @@ async function ledgerCounts(): Promise<Map<string, number>> {
   return new Map(rows.map((r) => [r.kind, r.n]));
 }
 
-test('every owner route is declared, and each that records writes exactly one ledger row of its kind', async (t) => {
+test('every owner route is declared, each that records writes exactly one ledger row of its kind, and each that may record writes only the kinds it lists, and some in a state that writes', async (t) => {
   assert.deepEqual(await handlers(), Object.keys(OWNER_ACTIONS).sort());
   for (const key of Object.keys(TRY) as Recording[]) {
     await t.test(key, async () => {
       const [method, at] = key.split(' ');
-      let wrote: Record<string, number> | undefined;
+      // What each call wrote, by ledger kind, in the order the driver sent them.
+      const wrote: Record<string, number>[] = [];
       await TRY[key](async (call) => {
         const before = await ledgerCounts();
-        await request(at.split('#')[0], method, call);
+        await reach(at.split('#')[0], method, call);
         const after = await ledgerCounts();
-        wrote = Object.fromEntries(
-          [...after]
-            .filter(([k, n]) => n !== (before.get(k) ?? 0))
-            .map(([k, n]) => [k, n - (before.get(k) ?? 0)])
+        wrote.push(
+          Object.fromEntries(
+            [...after]
+              .filter(([k, n]) => n !== (before.get(k) ?? 0))
+              .map(([k, n]) => [k, n - (before.get(k) ?? 0)])
+          )
         );
       });
-      assert.deepEqual(wrote, { [OWNER_ACTIONS[key].records]: 1 }, `${key} wrote these rows`);
+      assert.notEqual(wrote.length, 0, `${key}'s driver never called the route`);
+      // Read as any declaration, so a row declared `none` that writes fails
+      // here rather than only at the type check.
+      const declared: OwnerAction = OWNER_ACTIONS[key];
+      if ('records' in declared)
+        for (const rows of wrote)
+          assert.deepEqual(rows, { [declared.records]: 1 }, `${key} wrote these rows`);
+      else if ('mayRecord' in declared) {
+        const listed: readonly string[] = declared.mayRecord;
+        for (const rows of wrote)
+          assert.deepEqual(
+            Object.keys(rows).filter((kind) => !listed.includes(kind)),
+            [],
+            `${key} wrote ${JSON.stringify(rows)}, which holds a kind it does not list`
+          );
+        assert.ok(
+          wrote.some((rows) => Object.keys(rows).length > 0),
+          `${key} wrote no ledger row in any state its driver tried`
+        );
+      } else assert.fail(`${key} wrote ${JSON.stringify(wrote)}, yet declares no ledger row`);
     });
   }
 });
@@ -403,17 +507,24 @@ const CHANGES: Partial<Record<keyof typeof OWNER_ACTIONS, (send: Send) => Promis
     const action = { kind: 'choice' as const, options: ['Red', 'Blue'] };
     const id = await taskOf('Pick a colour', { text: 'Pick one', done: false, action });
     await send({ params: { id }, body: { op: 'choose', index: 0, answer: 'Blue' } });
+  },
+  // A persona Odd of its own, so signing out has one to make quiet.
+  'DELETE /api/account': async (send) => {
+    const persona = { slug: 'sol', version: 1, disclosure: 'Sol is made up.' };
+    await L.pg`insert into staff ${L.pg(odd('sol', 'Sol'))}`;
+    await L.pg`update staff set package = ${JSON.stringify(persona)}::jsonb where id = 'sol'`;
+    await send({});
   }
 };
 
-test("marking pokes read, the update window, setup and working a task's steps each change a row of the office and write no ledger row, and none is classed as changing nothing", async (t) => {
+test("marking pokes read, the update window, setup, working a task's steps and signing out of New Altitude each change a row of the office and write no ledger row, and none is classed as changing nothing", async (t) => {
   for (const [key, act] of Object.entries(CHANGES)) {
     await t.test(key, async () => {
       const [method, at] = key.split(' ');
       let changed: string[] = [];
       await act(async (call) => {
         const before = await tableDigests();
-        await request(at.split('#')[0], method, call);
+        await reach(at.split('#')[0], method, call);
         const after = await tableDigests();
         changed = [...after.keys()].filter((k) => after.get(k) !== before.get(k));
       });
