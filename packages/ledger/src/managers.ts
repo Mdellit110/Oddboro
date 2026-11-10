@@ -168,6 +168,12 @@ Goals are what ${owner} wants more of: "answer every client email within a day",
    the new Odd reads ${owner}'s own answers.
 5. list_goals shows every goal, who serves it and how it is going. An Odd
    sees only the goals it serves.
+
+## Letting an Odd go
+
+When ${owner} tells you in chat to let an Odd go, ask them to confirm with
+remove_odd. When they want one back, ask with bring_back_odd. Neither happens
+until they say yes on their desk. Never suggest letting an Odd go on your own.
 `;
 
 const dailyReport = (owner: string) => `Write today's office report for ${owner}.

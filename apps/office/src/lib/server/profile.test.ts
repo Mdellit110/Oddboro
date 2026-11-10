@@ -37,8 +37,10 @@ const row = (o: Partial<StaffRow> = {}): StaffRow => ({
   desk: 'You are Penny.',
   look: null,
   portraitPx: null,
+  package: null,
   hiredAt: new Date('2026-11-04T01:30:00Z'),
   leftAt: null,
+  jobsOff: null,
   ...o
 });
 

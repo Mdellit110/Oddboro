@@ -1,6 +1,7 @@
 // That a tool's description, and each of its arguments' descriptions, names
 // only office tools the Odd reading it holds, for an Odd holding no office
-// tool the owner gives and for one holding each alone. The tool server runs
+// tool the owner gives and for one holding each alone, in a run and in a chat,
+// since a chat offers tools no other run does (`inChat`). The tool server runs
 // in its own process, as for a run (tool-server.ts). Run with
 // `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
@@ -66,9 +67,12 @@ const descriptions = (schema: unknown): string[] =>
         )
       : [];
 
-/** Each tool the Odd's server lists, with the office tools it names that the Odd does not hold. */
-async function unheld(id: string): Promise<Record<string, string[]>> {
-  const server = await toolServer(id, { RUN_KEY: `k-${id}` });
+/** The kinds of run whose tool lists differ by what the Odd holds: a chat carries the owner's words. */
+const RUNS = { run: {}, chat: { OWNER_SAID: 'Please sort this out.' } };
+
+/** Each tool the Odd's server lists in `run`, with the office tools it names that the Odd does not hold. */
+async function unheld(id: string, run: keyof typeof RUNS): Promise<Record<string, string[]>> {
+  const server = await toolServer(id, { RUN_KEY: `k-${id}-${run}`, ...RUNS[run] });
   const { tools } = await server.listTools();
   const held = new Set(tools.map((t) => t.name));
   const reply = (await server.callTool({ name: 'my_access', arguments: {} })) as {
@@ -90,15 +94,17 @@ async function unheld(id: string): Promise<Record<string, string[]>> {
 
 const seen: Record<string, Set<string>> = {};
 for (const [id, holds] of ODDS)
-  test(`a tool description names only office tools the Odd holds, except the declared ones (holding ${holds.join(', ') || 'none'})`, async () => {
-    const undeclared: Record<string, string[]> = {};
-    for (const [tool, names] of Object.entries(await unheld(id))) {
-      for (const n of names) (seen[tool] ??= new Set()).add(n);
-      const left = names.filter((n) => !NAMES_UNHELD[tool]?.includes(n));
-      if (left.length) undeclared[tool] = left;
-    }
-    assert.deepEqual(undeclared, {}, `tools named that ${id} does not hold`);
-  });
+  // A cast only to name the keys: Object.keys types them as strings.
+  for (const run of Object.keys(RUNS) as (keyof typeof RUNS)[])
+    test(`a tool description names only office tools the Odd holds, except the declared ones (holding ${holds.join(', ') || 'none'}, in a ${run})`, async () => {
+      const undeclared: Record<string, string[]> = {};
+      for (const [tool, names] of Object.entries(await unheld(id, run))) {
+        for (const n of names) (seen[tool] ??= new Set()).add(n);
+        const left = names.filter((n) => !NAMES_UNHELD[tool]?.includes(n));
+        if (left.length) undeclared[tool] = left;
+      }
+      assert.deepEqual(undeclared, {}, `tools named that ${id} does not hold in a ${run}`);
+    });
 
 test('every declared name is still named by its tool for some Odd', () => {
   for (const [tool, names] of Object.entries(NAMES_UNHELD))

@@ -1,6 +1,6 @@
 {
-  "id": "b892e0d7-5480-4a95-949b-14092235457c",
-  "prevId": "795062f0-527c-4d50-b0de-6823713bbef6",
+  "id": "35ce58bb-9c9a-4b82-9b17-4f8801c2347b",
+  "prevId": "75887648-c64b-4315-b52c-0895f44708ff",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -300,6 +300,12 @@
         "switches": {
           "name": "switches",
           "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "odd": {
+          "name": "odd",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -667,24 +673,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "picked_up": {
-          "name": "picked_up",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unparked_task": {
-          "name": "unparked_task",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unparked_at": {
-          "name": "unparked_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "report_when_done": {
           "name": "report_when_done",
           "type": "boolean",
@@ -776,15 +764,6 @@
           "tableFrom": "follow_ups",
           "tableTo": "threads",
           "columnsFrom": ["thread_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "follow_ups_unparked_task_tasks_id_fk": {
-          "name": "follow_ups_unparked_task_tasks_id_fk",
-          "tableFrom": "follow_ups",
-          "tableTo": "tasks",
-          "columnsFrom": ["unparked_task"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -2186,6 +2165,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "package": {
+          "name": "package",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "hired_at": {
           "name": "hired_at",
           "type": "timestamp with time zone",
@@ -2196,6 +2181,12 @@
         "left_at": {
           "name": "left_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "jobs_off": {
+          "name": "jobs_off",
+          "type": "integer[]",
           "primaryKey": false,
           "notNull": false
         }
@@ -2501,12 +2492,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "resume_on_task": {
-          "name": "resume_on_task",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "runs": {
           "name": "runs",
           "type": "text[]",
@@ -2562,15 +2547,6 @@
           "tableFrom": "threads",
           "tableTo": "asks",
           "columnsFrom": ["held_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "threads_resume_on_task_tasks_id_fk": {
-          "name": "threads_resume_on_task_tasks_id_fk",
-          "tableFrom": "threads",
-          "tableTo": "tasks",
-          "columnsFrom": ["resume_on_task"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"

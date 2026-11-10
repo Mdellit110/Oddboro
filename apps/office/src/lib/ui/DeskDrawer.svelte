@@ -554,8 +554,7 @@
             </div>
           {:else if a.call}
             {@const c = a.call}
-            <div>
-              <dt class="text-xs text-muted">The call, exactly as the office makes it</dt>
+            {#snippet exact()}
               <dd class="mt-1 flex flex-col gap-1 rounded-lg bg-raise px-2.5 py-2 text-xs">
                 <div><span class="text-muted">Tool:</span> {c.tool}</div>
                 <div class="text-muted">Inputs:</div>
@@ -564,6 +563,28 @@
                     c.arguments
                   )}</pre>
               </dd>
+            {/snippet}
+            <div>
+              {#if c.said && c.shown?.length}
+                <!-- What it does in words, and each email it does it to, as Gmail showed them when it was held. -->
+                <dt class="text-xs text-muted">{c.said}</dt>
+                <dd class="mt-1 rounded-lg bg-raise px-2.5 py-2 text-xs">
+                  <ul class="flex max-h-72 flex-col gap-1 overflow-y-auto">
+                    {#each c.shown as item, n (n)}
+                      <li class="break-words">{item}</li>
+                    {/each}
+                  </ul>
+                </dd>
+                <details class="mt-2">
+                  <summary class="cursor-pointer text-xs text-muted hover:text-ink"
+                    >The call, exactly as the office makes it</summary
+                  >
+                  {@render exact()}
+                </details>
+              {:else}
+                <dt class="text-xs text-muted">The call, exactly as the office makes it</dt>
+                {@render exact()}
+              {/if}
               <p class="mt-1.5 text-[11px] text-faint">
                 Nothing has changed yet. Approve, and the office makes this call once, then {who(
                   a.staffId
@@ -681,11 +702,15 @@
                     ? 'Connect'
                     : a.kind === 'switch'
                       ? 'Turn on'
-                      : a.kind === 'window'
-                        ? 'Let it carry on'
-                        : a.plan && picked(a) < a.plan.items.length
-                          ? `Approve ${picked(a)} of ${a.plan.items.length}`
-                          : 'Approve'}</button
+                      : a.kind === 'remove'
+                        ? 'Remove'
+                        : a.kind === 'bring_back'
+                          ? 'Bring back'
+                          : a.kind === 'window'
+                            ? 'Let it carry on'
+                            : a.plan && picked(a) < a.plan.items.length
+                              ? `Approve ${picked(a)} of ${a.plan.items.length}`
+                              : 'Approve'}</button
             >
           {/if}
         </div>

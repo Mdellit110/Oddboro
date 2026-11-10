@@ -27,10 +27,11 @@ an update (`update.rs`).
    problem and starts as it is. See "Updates" below.
 2. Checks the port. If anything answers on it, shows "another office is
    already running" and quits. It never attaches to that office.
-3. Reads the owner's login-shell PATH once (`$SHELL -l -c`, 5 second
-   timeout; `/bin/zsh` on a Mac and `/bin/sh` on Linux when `SHELL` is
-   unset), then adds `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`
-   and `~/.claude/local` if missing. Windows has no login shell: the app's
+3. Reads the owner's login-shell PATH once (`$SHELL -l -i -c`, so
+   `~/.zshrc` and the Node managers it sets up run, then `$SHELL -l -c` if
+   that fails; 5 second timeout each; `/bin/zsh` on a Mac and `/bin/sh` on
+   Linux when `SHELL` is unset), then adds `/opt/homebrew/bin`,
+   `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` if missing. Windows has no login shell: the app's
    own PATH, plus `%USERPROFILE%\.local\bin` (Claude Code's and uv's
    installers), WinGet's `Links` folder and `C:\Program Files\Git\cmd`.
 4. Starts Node, shows the small loading window, and asks `GET /` every half
@@ -135,6 +136,7 @@ never get IPC without one.
 | `ODDBORO_DB_PORT`              | passed through when the shell's env sets it                |
 | `PATH`                         | the login-shell PATH from step 3                           |
 | `ODDBORO_VERSION`              | the app's version, like `0.0.4`                            |
+| `BODY_SIZE_LIMIT`              | `11M`, so a 10 MB file attached in a chat gets through     |
 | `ODDBORO_UPDATE_TOKEN`         | a fresh secret per run, release builds only                |
 | `ODDBORO_SECRETS`              | `shell` on a Mac: the shell keeps the office's secrets     |
 | `ODDBORO_GOOGLE_CLIENT_SECRET` | the Google sign-in client's secret, when the build had one |

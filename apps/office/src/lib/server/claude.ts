@@ -64,6 +64,14 @@ export function officeModel(agent: Agent): string | undefined {
   return AGENT_MODELS.claude.find((m) => m.id.includes(picked))?.id;
 }
 
+/**
+ * The model the page names as the office's on `agent`: the office's own
+ * (`officeModel`), else the tool's own default, first in its list. A run
+ * passes no model when the office names none, so this is only for showing.
+ */
+export const shownOfficeModel = (agent: Agent): string | undefined =>
+  officeModel(agent) ?? AGENT_MODELS[agent][0]?.id;
+
 /** Whether the office draws an Odd's look from words or a headshot (`drawsLooks`). */
 export const officeDrawsLooks = () => drawsLooks(officeAgent(), officeModel(officeAgent()));
 

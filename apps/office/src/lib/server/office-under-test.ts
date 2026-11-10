@@ -42,6 +42,8 @@ const port = await new Promise<number>((done) => {
 // network", in a run whose sandbox opens every host, gets the words Claude
 // Code's binary refuses that with, on stderr, and exit 1, after any hold.
 // Only the last line, since a later prompt can quote an earlier message.
+// One that says "Think aloud: <words>." on any line streams <words> as
+// text first.
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
 // waits on the owner.
@@ -93,7 +95,6 @@ process.stdin.on('end', () => {
 /** After any hold, so two runs can be refused at once. */
 function answer() {
   // Only a staff run carries --settings, so it is read only for the trigger.
-  const settings = () => JSON.parse(process.argv[process.argv.indexOf('--settings') + 1]);
   if (
     lastLine().includes('Refuse the open network') &&
     settings().sandbox?.network?.allowedDomains?.includes('*')
@@ -102,6 +103,11 @@ function answer() {
     process.exit(1);
   }
   reply();
+}
+/** A staff run's settings, from the file --settings names; the office's own runs pass them inline. */
+function settings() {
+  const v = process.argv[process.argv.indexOf('--settings') + 1];
+  return JSON.parse(v.startsWith('{') ? v : fs.readFileSync(v, 'utf8'));
 }
 function emptyFolder(p) {
   try {
@@ -119,7 +125,9 @@ function reply() {
     // The office passes the servers as a file, read here while the run goes.
     mcp: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')),
     env: JSON.parse(fs.readFileSync(after('--mcp-config'), 'utf8')).mcpServers.office.env,
-    system: after('--append-system-prompt'),
+    // A staff run's settings and system prompt come in files, read here while the run goes.
+    claudeSettings: settings(),
+    system: fs.readFileSync(after('--append-system-prompt-file'), 'utf8'),
     message,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
     autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
@@ -136,6 +144,8 @@ function reply() {
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
+  const aloud = /Think aloud: ([^.]+)\./.exec(message)?.[1];
+  if (aloud) line({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: aloud } } });
   line({ type: 'result', subtype: 'success', result: JSON.stringify(gave) + '\\nOutcome: done' });
 }
 `
@@ -532,7 +542,9 @@ mock.module('@oddboro/ledger/secrets', {
     },
     setSecret: (connector: string, name: string, value: string) =>
       void secrets.set(`${connector}:${name}`, value),
-    deleteSecret: (connector: string, name: string) => secrets.delete(`${connector}:${name}`)
+    deleteSecret: (connector: string, name: string) => secrets.delete(`${connector}:${name}`),
+    // The stand-in store always answers, whatever this computer's own does.
+    secretStore: () => ({ ok: true })
   }
 });
 // A Codex run starts only from a signed-in home; the stand-in reads nothing in it.
@@ -593,6 +605,12 @@ export type Gave = {
   envNames: string[];
   /** The servers a Claude Code run got, read from the file `--mcp-config` names while the run went. */
   mcp?: unknown;
+  /** A Claude Code run's settings, read from the file `--settings` names while the run went. */
+  claudeSettings?: {
+    permissions: { allow: string[]; deny: string[] };
+    enabledPlugins: unknown;
+    sandbox?: unknown;
+  };
   env: Record<string, string>;
   system: string;
   message: string;

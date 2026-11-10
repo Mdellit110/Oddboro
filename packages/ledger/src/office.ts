@@ -18,6 +18,7 @@ import {
   not,
   or,
   sql,
+  type AnyColumn,
   type SQL
 } from 'drizzle-orm';
 import { existsSync, realpathSync, rmSync, statSync } from 'node:fs';
@@ -105,6 +106,7 @@ import {
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
 import { currentPlatform } from './platform.ts';
+import { bringBack, leavingRefused, removeOdd } from './leaving.ts';
 import {
   GRANT_LABEL,
   grantWorks,
@@ -118,7 +120,7 @@ import {
 } from './access-words.ts';
 import { filterWords, sameCriteria, type GmailFilter } from './filter-words.ts';
 import { nextRun, zone } from './time.ts';
-import { isGrantable, OFFICE_TOOLS, tickable, yesOrNo } from './tools.ts';
+import { isGrantable, OFFICE_TOOLS, ON_BY_DEFAULT, tickable, yesOrNo } from './tools.ts';
 import { HIRE_DEFAULTS } from './grantable.ts';
 import {
   ASK_REPLACED,
@@ -133,6 +135,7 @@ import {
   type TaskEffect
 } from './desk-answers.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
+import type { PersonaLink } from './personas.ts';
 
 export type StaffRow = typeof staff.$inferSelect;
 export type AskRow = typeof asks.$inferSelect;
@@ -148,13 +151,38 @@ export type LedgerRow = Omit<typeof ledger.$inferSelect, 'embedding'>;
 
 // Staff
 
+/**
+ * Rows of an Odd that still works here. One that left runs nothing and shows
+ * nowhere (leaving.ts), even should a row of its slip past the closing there.
+ */
+const ofWorkingOdd = (col: AnyColumn) =>
+  inArray(col, db.select({ id: staff.id }).from(staff).where(isNull(staff.leftAt)));
+
 export async function roster(): Promise<StaffRow[]> {
   return db.select().from(staff).where(isNull(staff.leftAt)).orderBy(asc(staff.hiredAt));
 }
 
+/**
+ * A working Odd. One that left the office is not found, so nothing runs it,
+ * hands it work or changes it (`removeOdd` in leaving.ts).
+ */
 export async function staffer(id: string, q: Db = db): Promise<StaffRow | undefined> {
+  const [row] = await q
+    .select()
+    .from(staff)
+    .where(and(eq(staff.id, id), isNull(staff.leftAt)));
+  return row;
+}
+
+/** Any Odd ever hired, one that left included: for a name in history, and a new hire's id. */
+export async function anyStaffer(id: string, q: Db = db): Promise<StaffRow | undefined> {
   const [row] = await q.select().from(staff).where(eq(staff.id, id));
   return row;
+}
+
+/** The Odds that left the office, the latest to leave first. */
+export async function formerStaff(): Promise<StaffRow[]> {
+  return db.select().from(staff).where(isNotNull(staff.leftAt)).orderBy(desc(staff.leftAt));
 }
 
 /** Only the owner moves a staffer's level. Grants above the new level wait until it rises again. */
@@ -761,6 +789,12 @@ export type Hire = Pick<
   newParts?: DrawnPart[];
   /** The coding tool its runs go through, stored before its first run. Claude Code when left out. */
   agent?: Agent;
+  /** The account it signs in with on that tool, its model, and how hard it thinks. The office's when left out. */
+  account?: string | null;
+  model?: string | null;
+  effort?: Effort | null;
+  /** The New Altitude persona it was installed from. */
+  package?: PersonaLink;
 };
 
 /** Current staff whose generated look matches this one, other than `except`. */
@@ -804,6 +838,8 @@ export async function setLook(
 ): Promise<void> {
   const who = await staffer(id);
   if (!who) throw fixedError('No such Odd');
+  if (who.package)
+    throw new Error(`${who.name}'s look comes from New Altitude and cannot be redrawn.`);
   const twin = await lookTaken(look, id);
   if (twin) throw new Error(`${twin.name} already looks exactly like that`);
   await saveParts(newParts, id);
@@ -818,8 +854,11 @@ export async function hire(h: Hire): Promise<StaffRow> {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '') || 'staff';
   let id = base;
-  for (let i = 2; await staffer(id); i++) id = `${base}-${i}`;
-  const tools = h.tools?.filter(isGrantable);
+  // An Odd that left keeps its id, so it can come back as itself.
+  for (let i = 2; await anyStaffer(id); i++) id = `${base}-${i}`;
+  // A hire that names its tools still starts with the ones on by default.
+  const named = h.tools?.filter(isGrantable);
+  const tools = named && [...new Set([...ON_BY_DEFAULT, ...named])];
   if (h.look) {
     const twin = await lookTaken(h.look);
     if (twin) throw new Error(`${twin.name} already looks exactly like that. Redraw first.`);
@@ -1142,7 +1181,7 @@ async function refuseSecondSwitch(
 }
 
 /** The asks an Odd raises in its own words, which may not repeat one already open. Access asks have twins instead (`asksNoMore`). */
-const ONCE_ONLY: AskKind[] = ['approval', 'goal'];
+const ONCE_ONLY: AskKind[] = ['approval', 'goal', 'remove', 'bring_back'];
 
 export async function raiseAsk(
   staffId: string,
@@ -1164,8 +1203,11 @@ export async function raiseAsk(
     switches?: OwnSwitch[];
     /** A call ask's held call, from the gateway (`holdCall` in the office's gateway.ts). */
     call?: HeldCall;
-    /** `goal`, `plan`, `reply`, `filter`, `folder`, `switch` and `call` say so; the rest follow from access or hire. */
-    kind?: 'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'switch' | 'call';
+    /** A remove or bring_back ask's Odd (leaving.ts). */
+    odd?: string;
+    /** `goal`, `plan`, `reply`, `filter`, `folder`, `switch`, `call`, `remove` and `bring_back` say so; the rest follow from access or hire. */
+    kind?:
+      'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'switch' | 'call' | 'remove' | 'bring_back';
     revises?: number;
     /** The colleague whose handed-back work the lead raised this from (`VIA`). */
     via?: string;
@@ -1459,7 +1501,7 @@ export async function raiseCall(
   if (there) return { ask: there, already: true };
   const { ask } = await raiseAsk(place.staffId, {
     kind: 'call',
-    title: `Use ${call.tool} in ${service}`,
+    title: call.said ? `${call.said} in ${service}` : `Use ${call.tool} in ${service}`,
     why: `Called while working at Drafts for your yes, so the office held it for you.`,
     ifApproved: `The office makes this exact call to ${service}, and the work carries on with what it returns.`,
     call,
@@ -1563,13 +1605,27 @@ async function decide(
     filter?: GmailFilter;
     call?: HeldCall;
     folder?: FolderRequest;
+    /**
+     * The Odd that raised it left the office (`removeOdd`): the office closes
+     * it as a no, with this line as the answer that goes back, and no run reads it.
+     */
+    withdrawn?: string;
   }
 ): Promise<boolean> {
   if (decision === 'iterate' && !reason) throw fixedError('Say what to change');
   if (decision !== 'deny') {
-    const [raised] = await db.select({ kind: asks.kind }).from(asks).where(eq(asks.id, id));
+    const [raised] = await db
+      .select({ kind: asks.kind, odd: asks.odd })
+      .from(asks)
+      .where(eq(asks.id, id));
+    // Refused before the ask closes, so a no-longer-possible yes leaves it open with the reason.
+    if (decision === 'approve' && raised) {
+      const move = oddMoveOf(raised.kind);
+      const held = move && (await leavingRefused(LEAVING_CHECK[move], raised.odd));
+      if (held) throw new Error(held);
+    }
     if (decision === 'iterate' && yesOrNo(raised?.kind))
-      throw new Error('Say yes or no: the office raised this, so nobody reworks it');
+      throw new Error('Say yes or no: nobody reworks this one');
     // Only the office's send or save approves a reply, once Gmail took it.
     if (decision === 'approve' && raised?.kind === 'reply' && !o.reply)
       throw new Error(OWNER_ANSWERS.ask.reply.approve.by);
@@ -1651,17 +1707,19 @@ async function decide(
     : { approve: 'Approved', deny: 'Denied', iterate: 'Sent back' }[decision];
   await record({
     kind: 'decision',
-    actor: 'owner',
+    actor: o.withdrawn ? 'office' : 'owner',
     // A folder given or a switch turned on from its ask reads as the Settings tab's change does.
-    title: made
-      ? `Created a Gmail filter: ${filterDone(made)}`
-      : gave
-        ? gaveFolder((await staffer(ask.staffId))?.name ?? ask.staffId, gave.path, gave.level)
-        : turned?.on.length
-          ? turnedOn(turned.before.name, turned.on)
-          : called
-            ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
-            : `${verb}: ${ask.title}`,
+    title: o.withdrawn
+      ? `Withdrawn: ${ask.title}`
+      : made
+        ? `Created a Gmail filter: ${filterDone(made)}`
+        : gave
+          ? gaveFolder((await anyStaffer(ask.staffId))?.name ?? ask.staffId, gave.path, gave.level)
+          : turned?.on.length
+            ? turnedOn(turned.before.name, turned.on)
+            : called
+              ? `${called.ok ? 'Made' : 'Made, and it failed'}: ${ask.title}`
+              : `${verb}: ${ask.title}`,
     body: `${sent ? `To ${sent.to.join(', ')}${sent.cc.length ? `, cc ${sent.cc.join(', ')}` : ''}. Subject: ${sent.subject}. ` : ''}${called ? `It returned: ${callResultText(called, 600)} ` : ''}${turned ? (networkNote(turned.before, turned.after).body ?? '') + ' ' : ''}Asked by ${ask.staffId}. ${ask.why}${
       twins.length
         ? ` This also answers ${twins.map((t) => `#${t.id}`).join(', ')}, the same ask from another of ${ask.staffId}'s runs.`
@@ -1677,7 +1735,7 @@ async function decide(
     : made
       ? `${owner} created the Gmail filter "${ask.title}" as: ${filterDone(made)}`
       : `${owner} ${decision === 'deny' ? 'said no to' : 'approved'} "${ask.title}"`;
-  const answer = ask.reason ? `${said}: ${ask.reason}` : `${said}.`;
+  const answer = o.withdrawn ?? (ask.reason ? `${said}: ${ask.reason}` : `${said}.`);
   for (const effect of effectsOf(ask.kind, decision)) {
     if (typeof effect === 'object') continue;
     switch (effect) {
@@ -1742,9 +1800,18 @@ async function decide(
       case 'answer_back':
         for (const a of [ask, ...twins]) await answerBack(a, decision, answer);
         break;
-      // A no with a reason may be a lesson: the Odd that asked reads it once.
+      // A no with a reason may be a lesson: the Odd that asked reads it once. An
+      // ask withdrawn because its Odd left has nobody to read it.
       case 'denied_lesson':
-        if (ask.reason) await followUp(ask.staffId, 'denied', { askId: ask.id, note: ask.reason });
+        if (ask.reason && !o.withdrawn)
+          await followUp(ask.staffId, 'denied', { askId: ask.id, note: ask.reason });
+        break;
+      // Last in its row, so the answer went back first, and leaving closes any run it started.
+      case 'odd_leaves':
+        if (ask.odd) await removeOdd(ask.odd, { askId: ask.id });
+        break;
+      case 'odd_returns':
+        if (ask.odd) await bringBack(ask.odd, { askId: ask.id });
         break;
       default:
         effect satisfies never;
@@ -1759,6 +1826,24 @@ function effectsOf(kind: AskKind, decision: Decision): readonly AskEffect[] {
   return cell === 'refused' ? [] : 'by' in cell ? cell.then : cell;
 }
 
+/**
+ * What `leavingRefused` checks before a yes that moves an Odd, by the move.
+ * Any kind whose yes makes that move gets the same check.
+ */
+const LEAVING_CHECK = {
+  odd_leaves: 'remove',
+  odd_returns: 'bring_back'
+} as const satisfies Partial<
+  Record<Extract<AskEffect, string>, Parameters<typeof leavingRefused>[0]>
+>;
+
+/** The move the owner's yes to an ask of this kind makes, from its row in `OWNER_ANSWERS`. */
+function oddMoveOf(kind: AskKind): keyof typeof LEAVING_CHECK | undefined {
+  return effectsOf(kind, 'approve').find(
+    (e): e is keyof typeof LEAVING_CHECK => typeof e === 'string' && Object.hasOwn(LEAVING_CHECK, e)
+  );
+}
+
 /** No run carries out this answer: it goes back to the hand-off or thread the ask came from. */
 const answerBack = (ask: AskRow, decision: Decision, answer: string) =>
   answerLater(
@@ -1766,6 +1851,44 @@ const answerBack = (ask: AskRow, decision: Decision, answer: string) =>
     decision === 'deny' ? 'failed' : 'done',
     answer
   );
+
+/**
+ * The Odd that raised an open ask left the office: the office closes it as a
+ * no, and `line` goes back where the ask came from, to a hand-off's lead or the
+ * thread's hub. Nobody reads it for a lesson.
+ */
+export async function withdrawAsk(id: number, line: string): Promise<void> {
+  await decide(id, 'deny', line, { withdrawn: line });
+}
+
+/**
+ * The Odd that gave the owner an open task left the office: the office drops
+ * it, and `line` goes back where it came from, as a dropped task's answer does.
+ */
+export async function withdrawTask(id: number, line: string): Promise<void> {
+  const [t] = await db
+    .update(tasks)
+    .set({ status: 'dropped', note: line, doneAt: new Date() })
+    .where(and(eq(tasks.id, id), eq(tasks.status, 'open')))
+    .returning();
+  if (!t) return;
+  await record({
+    kind: 'work',
+    actor: 'office',
+    title: `Withdrawn: ${t.title}`,
+    body: line,
+    taskId: t.id
+  });
+  const from = t.askId ? await ask(t.askId) : undefined;
+  await answerLater(
+    {
+      handOffId: t.handOffId ?? from?.handOffId ?? null,
+      threadId: t.threadId ?? from?.threadId ?? null
+    },
+    'failed',
+    line
+  );
+}
 
 /**
  * The owner answered something raised on a hand-off or a thread, and no run
@@ -1855,7 +1978,7 @@ export async function followUpsToDo(): Promise<
   const rows = await db
     .select()
     .from(followUps)
-    .where(and(isNull(followUps.startedAt), not(waitsOnOwnRun())))
+    .where(and(isNull(followUps.startedAt), not(waitsOnOwnRun()), ofWorkingOdd(followUps.staffId)))
     .orderBy(asc(followUps.createdAt));
   return Promise.all(
     rows.map(async (f) => {
@@ -2313,13 +2436,16 @@ export async function grantAccess(
  * A tool the owner already gave a staffer stopped working: its connect steps go
  * on the desk again, after the staffer's own steps for getting a new key. There
  * is no ask, since the owner said yes once. A tool has one open reconnect at a time.
+ * Only a tool that takes a key has a box for one, so the staffer's key steps
+ * go only on its task. For a tool that signs in, or needs nothing, they would
+ * send the owner looking for a box that is not there (`keptOut` says so).
  */
 export async function reconnectTask(
   staffId: string,
   connectorId: string,
   problem: string,
   getKey: string[]
-): Promise<{ task: TaskRow; already: boolean } | { problem: string }> {
+): Promise<{ task: TaskRow; already: boolean; keptOut: boolean } | { problem: string }> {
   const who = await staffer(staffId);
   const conn = await connector(connectorId);
   if (!who || !conn) return { problem: `No connector named ${connectorId}.` };
@@ -2335,15 +2461,16 @@ export async function reconnectTask(
   const waiting = open.find((t) =>
     t.steps.some((st) => st.action && 'connector' in st.action && st.action.connector === conn.id)
   );
-  if (waiting) return { task: waiting, already: true };
+  if (waiting) return { task: waiting, already: true, keptOut: false };
+  const takesKey = secretNames(conn).some((n) => n !== 'oauth');
   const steps = connectSteps(conn, true);
   const task = await giveTask(staffId, {
     title: `Reconnect ${conn.name} for ${who.name}`,
     why: problem,
-    steps: [...getKey, ...steps],
+    steps: [...(takesKey ? getKey : []), ...steps],
     byOffice: true
   });
-  return { task, already: false };
+  return { task, already: false, keptOut: !takesKey && getKey.length > 0 };
 }
 
 /**
@@ -3173,9 +3300,22 @@ export type Desk = {
 
 export async function desk(): Promise<Desk> {
   const [a, t, r, f] = await Promise.all([
-    db.select().from(asks).where(eq(asks.status, 'open')).orderBy(asc(asks.createdAt)),
-    db.select().from(tasks).where(eq(tasks.status, 'open')).orderBy(asc(tasks.createdAt)),
-    db.select().from(reports).where(isNull(reports.readAt)).orderBy(asc(reports.createdAt)),
+    db
+      .select()
+      .from(asks)
+      .where(and(eq(asks.status, 'open'), ofWorkingOdd(asks.staffId)))
+      .orderBy(asc(asks.createdAt)),
+    db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.status, 'open'), or(isNull(tasks.staffId), ofWorkingOdd(tasks.staffId))))
+      .orderBy(asc(tasks.createdAt)),
+    // A report from an Odd that left waits unseen, and shows again if it comes back.
+    db
+      .select()
+      .from(reports)
+      .where(and(isNull(reports.readAt), ofWorkingOdd(reports.staffId)))
+      .orderBy(asc(reports.createdAt)),
     db
       .select({ attachments })
       .from(attachments)
@@ -3437,7 +3577,10 @@ export async function deleteJob(id: number): Promise<void> {
 }
 
 export async function enabledJobs(): Promise<JobRow[]> {
-  return db.select().from(jobs).where(eq(jobs.enabled, true));
+  return db
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.enabled, true), ofWorkingOdd(jobs.staffId)));
 }
 
 export async function job(id: number): Promise<JobRow | undefined> {
@@ -3764,7 +3907,13 @@ export async function waitingPokes(staffId?: string): Promise<PokeRow[]> {
   return db
     .select()
     .from(pokes)
-    .where(and(eq(pokes.status, 'waiting'), staffId ? eq(pokes.staffId, staffId) : undefined))
+    .where(
+      and(
+        eq(pokes.status, 'waiting'),
+        staffId ? eq(pokes.staffId, staffId) : undefined,
+        ofWorkingOdd(pokes.staffId)
+      )
+    )
     .orderBy(asc(pokes.at));
 }
 

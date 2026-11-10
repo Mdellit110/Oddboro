@@ -154,10 +154,12 @@ test("a run gets the office's gateway for its outside tools, and never their key
   assert.equal(mcpServers.notes.url, `${L.OFFICE_URL}/api/gateway/notes`);
   assert.match(mcpServers.notes.headers.Authorization, /^Bearer \S{40,}$/);
   assert.ok(!gave.args.join('\n').includes(KEY), "the run's arguments hold no key");
+  assert.ok(!JSON.stringify(gave.claudeSettings).includes(KEY), "the run's settings hold no key");
   assert.ok(!JSON.stringify(gave.env).includes(KEY), "the run's environment holds no key");
   // Claude Code's own list names the same tools, so either one alone holds.
-  assert.ok(gave.args.includes('mcp__notes__search'));
-  assert.ok(!gave.args.some((a) => a.startsWith('mcp__notes__create_note')));
+  const allowed = gave.claudeSettings!.permissions.allow;
+  assert.ok(allowed.includes('mcp__notes__search'));
+  assert.ok(!allowed.some((a) => a.startsWith('mcp__notes__create_note')));
   // The run ended, so its token reaches nothing now.
   const after = await gateway(
     new Request(mcpServers.notes.url, {
@@ -269,7 +271,7 @@ test("at Draft, Read and write passes reads on and holds each change for the own
   // A plain Approve never makes the call: only the office's own, from the desk.
   await assert.rejects(L.approveAsk(calls[0].id, null, {}), /Approve the call from its card/);
   // On the owner's yes the office makes that exact call, and the Odd carries on with the result.
-  const result = await makeCall(calls[0].call);
+  const result = await makeCall(calls[0].call, calls[0].staffId);
   assert.deepEqual({ ok: result.ok, text: result.text }, { ok: true, text: 'captured' });
   assert.equal(await L.approveCall(calls[0].id, { ...calls[0].call, result }), true);
   const [carry] = await L.pg`select kind from follow_ups where ask_id = ${calls[0].id}`;

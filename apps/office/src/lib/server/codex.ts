@@ -439,9 +439,6 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
   const model = r.model ?? process.env[OFFICE_MODEL_VAR.codex];
   const args = [
     'exec',
-    // Joined to its flag: `--image` takes many values, so a bare file after
-    // it would also take the "-" that reads the message.
-    ...(r.images ?? []).map((i) => `--image=${i.path}`),
     '--json',
     // The Odd's folder is not a git repository.
     '--skip-git-repo-check',
@@ -469,7 +466,12 @@ export function codexLaunch(r: CodexRun): CodexLaunch {
     ...(r.effort ? set('model_reasoning_effort', r.effort) : []),
     ...(model ? ['-m', model] : []),
     // "-" reads the message from stdin, so one that starts with a dash is never a flag.
-    ...(r.resume ? ['resume', r.resume, '-'] : ['-'])
+    // Pictures go last, after `resume <id>` on a resumed session, which takes its
+    // own `--image` (Codex 0.166). Each is joined to its flag: `--image` takes many
+    // values, so a bare file after it would also take the "-".
+    ...(r.resume ? ['resume', r.resume] : []),
+    ...(r.images ?? []).map((i) => `--image=${i.path}`),
+    '-'
   ];
   return {
     args,

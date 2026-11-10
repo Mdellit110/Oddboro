@@ -44,7 +44,7 @@ const {
 const { ASK_REPLACED } = await import('../src/desk-answers.ts');
 const { and, eq, inArray } = await import('drizzle-orm');
 const { workName } = await import('../src/work-paths.ts');
-const { OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
+const { isOffered, OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
 const { HAND_OFF_LIMIT, LEADS_NONE, threadPart } = await import('../src/threads.ts');
 afterEach(() => oneThreadPerGoal(sql, MANAGER_ROLE));
@@ -555,7 +555,9 @@ test('every office tool refuses a key it does not take, and says which keys it d
     }
   }
   assert.deepEqual(
-    OFFICE_TOOLS.map((t) => t.id).filter((id) => !reached.has(id)),
+    OFFICE_TOOLS.filter((t) => !t.prompt)
+      .map((t) => t.id)
+      .filter((id) => !reached.has(id)),
     [],
     'an office tool this test never reached'
   );
@@ -567,8 +569,12 @@ test('every office tool refuses a key it does not take, and says which keys it d
 // thread offers resume_at.
 const RUNS = { chat, thread: { THREAD_ID: String(sale.id) } };
 type Run = keyof typeof RUNS;
-/** A tool offered in one kind of run only, whoever holds it. */
-const ONLY_IN: Record<string, Run> = { tell_lead: 'chat', resume_at: 'thread' };
+/**
+ * A tool that rides with a listed one and is offered in one kind of run only.
+ * A listed tool says so on its own row (`inChat`), which the test reads and a
+ * test below pins.
+ */
+const RIDES_ONLY_IN: Partial<Record<keyof typeof RIDES_WITH, Run>> = { resume_at: 'thread' };
 const registered = async (staffId: string, run: Run) => {
   const c = await toolServer(staffId, { ...RUNS[run], RUN_KEY: `k-${staffId}-${run}` });
   return (await c.listTools()).tools.map((t) => t.name).sort();
@@ -587,18 +593,45 @@ test('every tool the server registers is a listed office tool or rides with one'
 // One test per tool server: each takes seconds to start, and a test has 15.
 for (const [id, holds] of Object.entries(HOLDERS))
   for (const run of ['chat', 'thread'] as const)
-    test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them`, async () => {
+    test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them, as each row's conditions allow`, async () => {
+      // None of these Odds is the Office Manager, so `notToManager` takes nothing away.
       const offered = new Set<string>(
         OFFICE_TOOLS.filter(
-          (t) => (t.always || holds.includes(t.id)) && (!t.withGmail || id === 'tot')
+          (t) =>
+            (t.always || holds.includes(t.id)) &&
+            !t.prompt &&
+            (!t.withGmail || id === 'tot') &&
+            (!t.inChat || run === 'chat')
         ).map((t) => t.id)
       );
-      const riding = Object.entries(RIDES_WITH).filter(([, rides]) => offered.has(rides));
-      const want = [...offered, ...riding.map(([name]) => name)]
-        .filter((name) => (ONLY_IN[name] ?? run) === run)
-        .sort();
+      // A cast only to name the keys: Object.keys types them as strings.
+      const riding = (Object.keys(RIDES_WITH) as (keyof typeof RIDES_WITH)[]).filter(
+        (name) => offered.has(RIDES_WITH[name]) && (RIDES_ONLY_IN[name] ?? run) === run
+      );
+      const want = [...offered, ...riding].sort();
       assert.deepEqual(await registered(id, run), want, `${id} in a ${run}`);
     });
+
+// The test above reads each row's conditions to work out what a run gets, so
+// a condition dropped from a row changes what it expects too. These hold the
+// rows themselves, and that `isOffered` never offers a `prompt` row.
+test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never offered, even to a chat holding it', () => {
+  const where = (field: 'inChat' | 'notToManager' | 'prompt') =>
+    OFFICE_TOOLS.filter((t) => t[field]).map((t) => t.id);
+  assert.deepEqual(where('inChat'), [
+    'leave_office',
+    'withdraw',
+    'tell_lead',
+    'remove_odd',
+    'bring_back_odd'
+  ]);
+  assert.deepEqual(where('notToManager'), ['leave_office']);
+  assert.deepEqual(where('prompt'), ['see_office']);
+  assert.equal(
+    isOffered(['see_office'], 'see_office', { chat: true, manager: false, gmail: false }),
+    false
+  );
+});
 
 test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {
   const c = await toolServer('tot', { RUN_KEY: 'k-tot-hint' });
@@ -760,6 +793,45 @@ test("a file already in this work's folder is listed for the colleague and not c
   assert.equal(r.isError, undefined, said(r));
   assert.deepEqual((await handedAs(here, 'Check it'))?.handOff?.files, ['paige/y.md']);
   assert.equal(existsSync(threadPart(here, 'dee')), false, 'the file was copied');
+});
+
+test("a hand-off a v0.0.9 office stored, naming a file in the giver's own folder, briefs the colleague that the file is no longer there", async () => {
+  const { handOffBrief } = await import('../src/hand-offs.ts');
+  const { own, open } = await carrier('vic');
+  const here = await open('Vic work');
+  // Before the upgrade, hand_off stored the path in the giver's own folder and
+  // copied the file only as the colleague's run started.
+  const kept = 'attachments/20261110-081108-35bc-image.png';
+  own(kept, 'png');
+  const [row] = await db
+    .insert(followUps)
+    .values({
+      staffId: 'paige',
+      kind: 'hand_off',
+      threadId: here,
+      handOff: { from: 'vic', title: 'Look at the screenshot', brief: 'Say.', files: [kept] }
+    })
+    .returning();
+  try {
+    assert.ok(row.handOff && row.threadId);
+    const brief = handOffBrief({
+      kind: 'hand_off',
+      h: row.handOff,
+      colleague: { id: 'vic', name: 'Vic' },
+      me: 'paige',
+      result: null,
+      thread: row.threadId
+    }).join('\n');
+    assert.ok(
+      brief.includes(
+        `- Files Vic named for this work that are no longer there: ${kept}. Say so in your reply if the work needs them.`
+      ),
+      brief
+    );
+    assert.doesNotMatch(brief, /in reach/);
+  } finally {
+    await db.delete(followUps).where(eq(followUps.id, row.id));
+  }
 });
 
 test('a hand-off naming two files that would land under one name is refused and names both', async () => {

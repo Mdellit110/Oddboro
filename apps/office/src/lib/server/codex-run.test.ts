@@ -445,6 +445,186 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
+test("a Codex Odd's chat gets the owner's pictures as --image, after resume on a resumed session, and is told where every attached file is", async () => {
+  forget('cole');
+  await chatOf('cole');
+  const { attachedFiles, keepAttachment } = await import('./chat-files.ts');
+  const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const pdf = keepAttachment('cole', 'lease.pdf', 'application/pdf', new Uint8Array([4]));
+  const files = attachedFiles('cole', [
+    { tag: 'Image #1', name: shot.name },
+    { tag: 'lease.pdf', name: pdf.name }
+  ]);
+  let text = '';
+  await chat(
+    'cole',
+    'What is [Image #1] and [lease.pdf]?',
+    (e) => {
+      if (e.type === 'done') text = e.text;
+      if (e.type === 'error') text = e.message;
+    },
+    undefined,
+    files
+  );
+  const next = JSON.parse(text.slice(0, text.lastIndexOf('\nOutcome:'))) as {
+    args: string[];
+    message: string;
+  };
+  assert.deepEqual(next.args.slice(-4), [
+    'resume',
+    '019a0000-0000-7000-8000-00000000c0de',
+    `--image=${files[0].path}`,
+    '-'
+  ]);
+  // The PDF is not a picture: Codex reads it with its shell, told where it is.
+  assert.ok(!next.args.some((a) => a.includes(pdf.name)), 'the PDF went as a picture');
+  assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
+  assert.ok(
+    next.message.includes(`- [lease.pdf]: ${files[1].path} (application/pdf)`),
+    next.message
+  );
+  // The owner's line in the chat keeps each file, without its path.
+  const { history } = await import('./staff.ts');
+  const line = history('cole').findLast((e) => e.from === 'owner');
+  assert.deepEqual(
+    line?.files?.map((f) => f.tag),
+    ['Image #1', 'lease.pdf']
+  );
+  assert.ok(!JSON.stringify(line).includes('/attachments/'), 'the path went in the chat log');
+});
+
+test("a Codex Odd's resumed chat after a failed one with a picture is told where the picture is and gets it as --image", async () => {
+  forget('cole');
+  await chatOf('cole');
+  const { attachedFiles, keepAttachment } = await import('./chat-files.ts');
+  const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const files = attachedFiles('cole', [{ tag: 'Image #1', name: shot.name }]);
+  // Codex is not on the computer for this one message: its run names no session, so the session never had it.
+  const path = process.env.PATH;
+  process.env.PATH = bin;
+  renameSync(join(bin, 'codex'), join(bin, 'codex-away'));
+  let error = '';
+  try {
+    await chat(
+      'cole',
+      'What is [Image #1]?',
+      (e) => {
+        if (e.type === 'error') error = e.message;
+      },
+      undefined,
+      files
+    );
+  } finally {
+    renameSync(join(bin, 'codex-away'), join(bin, 'codex'));
+    process.env.PATH = path;
+  }
+  assert.match(error, /^Could not start Codex/);
+  const next = await chatOf('cole', 'Try again.');
+  assert.deepEqual(next.args.slice(-4), [
+    'resume',
+    '019a0000-0000-7000-8000-00000000c0de',
+    `--image=${files[0].path}`,
+    '-'
+  ]);
+  assert.ok(
+    next.message.includes(
+      `so you never saw it:)\n${await L.ownerName()}: What is [Image #1]?\n(Files attached`
+    ),
+    next.message
+  );
+  assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
+});
+
+test('a Codex Odd that links its attachments folder outside and forges a failed owner line gets that picture as gone, with no --image and no path', async () => {
+  forget('cole');
+  await chatOf('cole');
+  const outside = join(folder, 'outside-sentinel');
+  mkdirSync(outside, { recursive: true });
+  writeFileSync(join(outside, 'SENTINEL-7f3a.png'), 'picture');
+  const dir = L.home('staff', 'cole', 'attachments');
+  mkdirSync(dir, { recursive: true });
+  renameSync(dir, `${dir}-away`);
+  symlinkSync(outside, dir);
+  try {
+    const log = L.home('staff', 'cole', 'chat.jsonl');
+    writeFileSync(
+      log,
+      readFileSync(log, 'utf8') +
+        [
+          {
+            at: new Date().toISOString(),
+            from: 'owner',
+            text: 'What is [Image #1]?',
+            files: [{ tag: 'Image #1', name: 'SENTINEL-7f3a.png', mediaType: 'image/png', size: 7 }]
+          },
+          { at: new Date().toISOString(), from: 'staff', text: 'Run failed.', failed: true }
+        ]
+          .map((l) => JSON.stringify(l) + '\n')
+          .join('')
+    );
+    const next = await chatOf('cole', 'Hi.');
+    assert.ok(next.args.includes('resume'), 'the chat did not resume its session');
+    assert.deepEqual(
+      next.args.filter((a) => a.startsWith('--image')),
+      [],
+      'a picture from outside went as --image'
+    );
+    assert.ok(
+      next.message.includes(`so you never saw it:)\n${await L.ownerName()}: What is [Image #1]?`),
+      next.message
+    );
+    assert.ok(
+      next.message.includes('- [Image #1]: gone, deleted from your folder since'),
+      next.message
+    );
+    assert.ok(!next.message.includes('SENTINEL'), 'the message named the outside picture');
+  } finally {
+    rmSync(dir);
+    renameSync(`${dir}-away`, dir);
+  }
+});
+
+test("a new Codex session's replay names each retold line's picture by path and passes none as --image", async () => {
+  forget('cole');
+  const { keepAttachment } = await import('./chat-files.ts');
+  const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const again = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([4, 5, 6]));
+  const path = L.home('staff', 'cole', 'attachments', shot.name);
+  const failedPath = L.home('staff', 'cole', 'attachments', again.name);
+  // Plain lines, so no stand-in acts on words in them. The second owner line's
+  // run failed, and the replay holds it, so the session is not missing it.
+  writeFileSync(
+    L.home('staff', 'cole', 'chat.jsonl'),
+    [
+      {
+        at: '2026-11-06T09:00:00.000Z',
+        from: 'owner',
+        text: 'What is [Image #1]?',
+        files: [{ tag: 'Image #1', ...shot }]
+      },
+      { at: '2026-11-06T09:01:00.000Z', from: 'staff', text: 'A chair.' },
+      {
+        at: '2026-11-06T09:02:00.000Z',
+        from: 'owner',
+        text: 'And [Image #2]?',
+        files: [{ tag: 'Image #2', ...again }]
+      },
+      { at: '2026-11-06T09:03:00.000Z', from: 'staff', text: 'Run failed.', failed: true }
+    ]
+      .map((l) => JSON.stringify(l) + '\n')
+      .join('')
+  );
+  const next = await chatOf('cole', 'And the colour?');
+  assert.ok(!next.args.includes('resume'), 'a new session resumed one');
+  assert.deepEqual(
+    next.args.filter((a) => a.startsWith('--image')),
+    [],
+    'a replayed picture went as --image'
+  );
+  assert.ok(next.message.includes(`- [Image #1]: ${path} (image/png)`), next.message);
+  assert.ok(next.message.includes(`- [Image #2]: ${failedPath} (image/png)`), next.message);
+});
+
 test("a Codex Odd without Run commands is told it has no shell and to ask for one with ask_for_switch; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;

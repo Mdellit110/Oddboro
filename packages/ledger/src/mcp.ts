@@ -35,6 +35,11 @@ import {
   searchLedger,
   setDescription,
   staffer,
+  task,
+  withdrawAsk,
+  withdrawTask,
+  anyStaffer,
+  formerStaff,
   type GoAhead,
   record,
   roster,
@@ -68,7 +73,6 @@ import { currentPlatform } from './platform.ts';
 import {
   FOLDER_SAID,
   grantWorks,
-  levelAtMost,
   LEVELS,
   NOT_OWN_TOOLS,
   OWN_SWITCHES,
@@ -77,6 +81,8 @@ import {
   switchesSaid
 } from './access-words.ts';
 import { handOff, type CarriedFile } from './hand-offs.ts';
+import { leavesLine, leavingRefused } from './leaving.ts';
+import { MANAGER_ROLE } from './managers.ts';
 import { parkOnTask } from './task-parking.ts';
 import {
   APPLIES_TO_MAX,
@@ -100,6 +106,7 @@ import {
 } from './threads.ts';
 import { INSTRUCTIONS, THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { withFooter } from './mail-footer.ts';
+import { mailAttachments } from './mail-attachments.ts';
 import {
   doesSomething,
   filterWords,
@@ -132,9 +139,10 @@ import {
   GRANTABLE_TOOLS,
   hasTool,
   isGrantable,
-  OFFICE_TOOLS,
+  isOffered,
   type OfficeToolId,
-  type RIDES_WITH
+  type RIDES_WITH,
+  type ToolRun
 } from './tools.ts';
 import { home } from './home.ts';
 
@@ -154,6 +162,22 @@ const HOME = home('staff', ME);
  * the staffer, so a change made "because the owner asked" carries their real words.
  */
 const OWNER_SAID = process.env.OWNER_SAID || undefined;
+// Each Gmail account is a connector of its own. With more than one, the Odd
+// names the one the email came to, and the reply goes out from it.
+const mailboxes = (await grantsFor(ME))
+  .filter((g) => g.connector.config.google === 'gmail')
+  .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
+/** This run, as the office tools' row conditions read it. */
+const RUN: ToolRun = {
+  gmail: mailboxes.length > 0,
+  chat: OWNER_SAID !== undefined,
+  manager: me.role === MANAGER_ROLE
+};
+/**
+ * Whether this run is offered `tool` (`isOffered`). A tool with a condition is
+ * registered behind this, never behind a rule of its own.
+ */
+const offered = (tool: OfficeToolId) => isOffered(me.tools, tool, RUN);
 /**
  * The owner's note a follow-up carries out: their reason on an ask, what to
  * change, or their note on a task. Lessons may quote it; it is no go-ahead.
@@ -554,7 +578,7 @@ if (has('search_ledger'))
 // In a chat, the threads this Odd works on and does not lead (`threadsOn`):
 // what the owner asks there about one goes to its lead with tell_lead.
 const said = OWNER_SAID;
-const workingOn = said && has('tell_lead') ? await threadsOn(ME) : [];
+const workingOn = offered('tell_lead') ? await threadsOn(ME) : [];
 const goalRule = await goalWork(ME, workingOn);
 // A hub in a run on no thread, such as a chat or a job, names the thread an ask
 // or task is for, or null, so what it raises about a thread lands there.
@@ -748,11 +772,6 @@ const address = z
   .min(3)
   .max(320)
   .regex(/^[^\r\n,;]+$/, 'One address each, on one line.');
-// Each Gmail account is a connector of its own. With more than one, the Odd
-// names the one the email came to, and the reply goes out from it.
-const mailboxes = (await grantsFor(ME))
-  .filter((g) => g.connector.config.google === 'gmail')
-  .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
 const mailboxIds = mailboxes.map((m) => m.id) as [string, ...string[]];
 const mailboxArg = mailboxes.length
   ? (() => {
@@ -781,11 +800,8 @@ function mailbox(
     };
   return { connector: m.id, account: m.account };
 }
-/** Whether the Odd holds `tool` and, when its row says `withGmail`, a Gmail account. */
-const hasWithMail = (tool: OfficeToolId) =>
-  has(tool) && (mailboxes.length > 0 || !OFFICE_TOOLS.some((t) => t.id === tool && t.withGmail));
 
-if (hasWithMail('propose_reply'))
+if (offered('propose_reply'))
   tool(
     'propose_reply',
     {
@@ -808,6 +824,13 @@ if (hasWithMail('propose_reply'))
           .max(400)
           .describe('One or two lines on the email it answers: who wrote and what they want.'),
         why: z.string().max(1000).describe('Why this reply, in one or two plain sentences.'),
+        attachments: z
+          .array(z.string())
+          .max(10)
+          .optional()
+          .describe(
+            `Files from your own folder that go with it, by their path inside it or their full path, like "attachments/20261110-081108-35bc-image.png". Files ${OWNER} attached in chat are in attachments/. Up to 10, 18 MB together. ${OWNER} sees each one and may take any off.`
+          ),
         account: mailboxArg,
         revises: revisesArg,
         ...raisedArgs
@@ -823,11 +846,14 @@ if (hasWithMail('propose_reply'))
       body,
       summary,
       why,
+      attachments = [],
       revises,
       ...where
     }) => {
       const box = mailbox(account);
       if ('problem' in box) return refused(box.problem);
+      const files = mailAttachments(ME, attachments);
+      if ('problem' in files) return refused(files.problem);
       const on = await placed(where);
       if ('problem' in on) return refused(on.problem);
       const more = to.length > 1 ? ` and ${to.length - 1} more` : '';
@@ -849,6 +875,7 @@ if (hasWithMail('propose_reply'))
           // The footer goes in now, where the owner sees it and may delete it.
           body: withFooter(body),
           summary,
+          ...(files.length ? { attachments: files } : {}),
           ...box
         },
         revises,
@@ -864,7 +891,7 @@ if (hasWithMail('propose_reply'))
 // then the office creates it in Gmail. Only for an Odd that holds Gmail at any
 // level, since it files mail the Odd read there.
 const filterText = z.string().trim().max(500).optional();
-if (hasWithMail('propose_filter'))
+if (offered('propose_filter'))
   tool(
     'propose_filter',
     {
@@ -1202,7 +1229,7 @@ tool(
 tool(
   'reconnect_access',
   {
-    description: `A tool ${OWNER} already gave you stopped working: its tools fail to load, or it turns down its key or sign-in. This puts the office's own steps to connect it again on ${OWNER}'s desk, with a box for the new key and a Connect button, and no ask, since they said yes once. Never write those steps yourself with give_owner_a_task. Pass get_key only when the tool takes a key: how to get a new one, one action per step, naming the exact page and button.`,
+    description: `A tool ${OWNER} already gave you stopped working: its tools fail to load, or it turns down its key or sign-in. This puts the office's own steps to connect it again on ${OWNER}'s desk, with a box for the new key or a Sign in button, then a Connect button, and no ask, since they said yes once. Never write those steps yourself with give_owner_a_task. Pass get_key only when the tool takes a key: how to get a new one, one action per step, naming the exact page and button.`,
     inputSchema: {
       connector: z.string().describe('The id my_access lists.'),
       problem: z
@@ -1221,10 +1248,12 @@ tool(
   async ({ connector: id, problem, get_key = [] }) => {
     const r = await reconnectTask(ME, id, problem, get_key);
     if ('problem' in r) return text(r.problem);
+    if (r.already)
+      return text(
+        `Task ${r.task.id} to connect it is already on ${OWNER}'s desk. Point them to it.`
+      );
     return text(
-      r.already
-        ? `Task ${r.task.id} to connect it is already on ${OWNER}'s desk. Point them to it.`
-        : `Task ${r.task.id} is on ${OWNER}'s desk. You hear when they finish it.`
+      `Task ${r.task.id} is on ${OWNER}'s desk. You hear when they finish it.${r.keptOut ? ` ${id} takes no key, so your get_key steps were left out. Never tell ${OWNER} to paste a key for it.` : ''}`
     );
   }
 );
@@ -1612,7 +1641,7 @@ if (HANDS_OFF.tool) {
   /** Each colleague's line, with the tools of this Odd's it lacks. */
   const lines = colleagues.map((c) => {
     const lacks = lacking(held, c.id, [ME]);
-    return `- ${c.id}: ${c.name}, ${c.role}. ${c.remit}${lacks.length ? ` Lacks ${toolNames(lacks.map(yours))}.` : ''}`;
+    return `- ${c.id}: ${c.name}, ${c.role}. ${c.remit}${lacks.length ? ` Lacks ${toolNames(lacks.map(yours))}.` : ''}${c.package ? ' Their replies come from New Altitude, so what you hand them leaves this computer.' : ''}`;
   });
   tool(
     'hand_off',
@@ -1642,7 +1671,7 @@ if (HANDS_OFF.tool) {
           .max(5)
           .optional()
           .describe(
-            `Files the work needs, named as for attach: one in your folder, or one in the folder of work you are on, from ${THREADS_DIR}/. They land in this work for your colleague. Never one from a tool your colleague lacks, without ${OWNER}'s yes.`
+            `Files the work needs, named as for attach: one in your folder, or one in the folder of work you are on, from ${THREADS_DIR}/. Pictures and files ${OWNER} attached in chat are in attachments/ in your folder. They land in this work for your colleague. Never one from a tool your colleague lacks, without ${OWNER}'s yes.`
           ),
         request: z
           .string()
@@ -1767,9 +1796,9 @@ if (HANDS_OFF.tool) {
     );
 }
 
-// Only in a chat, where the office set the owner's words, and only for threads
-// this Odd works on and does not lead: their words reach the lead as theirs,
-// and the Odd's own only as its reading.
+// Only in a chat (`inChat` on its row), and only for threads this Odd works on
+// and does not lead: their words reach the lead as theirs, and the Odd's own
+// only as its reading.
 if (said && workingOn.length)
   tool(
     'tell_lead',
@@ -1900,6 +1929,156 @@ if (has('propose_hire'))
       return text(`Ask ${ask.id} is on ${OWNER}'s desk.`);
     }
   );
+
+// Taking its own open asks and tasks off the owner's desk, only in a chat, on
+// the owner's own words. A withdrawn ask is a no by the office: its line goes
+// back where it came from, and no run reads it for a lesson (`withdrawAsk`).
+if (offered('withdraw'))
+  tool(
+    'withdraw',
+    {
+      description: `Take your own open asks and tasks off ${OWNER}'s desk, when ${OWNER} told you so in this chat: "clear your asks", "drop that task". Nothing it would have done happens, and a held call is never made. Use it only on ${OWNER}'s word, never to tidy up on your own; to change an item, raise a new one that revises it instead. The ids are in "Still on ${OWNER}'s desk from you", or my_asks.`,
+      inputSchema: {
+        asks: z.array(z.number().int()).max(200).optional().describe('Your open asks to take off.'),
+        tasks: z
+          .array(z.number().int())
+          .max(200)
+          .optional()
+          .describe('Your open tasks for them to take off.')
+      }
+    },
+    async ({ asks: askIds = [], tasks: taskIds = [] }) => {
+      if (!askIds.length && !taskIds.length) return refused('Name the asks or tasks to take off.');
+      // Offered only in a chat (`inChat` on its row), where the office sets OWNER_SAID.
+      const line = `${me.name} took it off your desk, as you said in chat: "${OWNER_SAID!.slice(0, 300)}"`;
+      const gone: string[] = [];
+      const left: string[] = [];
+      for (const id of new Set(askIds)) {
+        const a = await ask(id);
+        if (a?.staffId !== ME || a.status !== 'open') left.push(`ask ${id}`);
+        else await withdrawAsk(id, line).then(() => gone.push(`ask ${id}`));
+      }
+      for (const id of new Set(taskIds)) {
+        const t = await task(id);
+        if (t?.staffId !== ME || t.status !== 'open') left.push(`task ${id}`);
+        else await withdrawTask(id, line).then(() => gone.push(`task ${id}`));
+      }
+      return text(
+        [
+          gone.length ? `Took off ${OWNER}'s desk: ${gone.join(', ')}.` : 'Nothing was taken off.',
+          left.length ? `Not yours or not open, so left as it is: ${left.join(', ')}.` : ''
+        ]
+          .filter(Boolean)
+          .join(' ')
+      );
+    }
+  );
+
+// Leaving the office (leaving.ts). Each only in a chat, on the owner's own
+// words (`inChat` on its row in tools.ts), and each only raises an ask: the
+// Odd leaves or comes back on the owner's yes alone.
+const leaveNote = `It lands on ${OWNER}'s desk as an ask, and nothing happens until they say yes. Use it only when ${OWNER} told you so in this chat, never on your own.`;
+
+if (offered('leave_office'))
+  tool(
+    'leave_office',
+    {
+      description: `${OWNER} told you to leave the office: ask them to confirm. On their yes you leave at once: off the floor, your jobs off, and what you have open on their desk withdrawn. Your history stays, and the ${MANAGER_ROLE} can bring you back. ${leaveNote}`,
+      inputSchema: {
+        why: z
+          .string()
+          .max(600)
+          .describe(
+            `What ${OWNER} said, in their words, and anything they should know before you go.`
+          )
+      }
+    },
+    async ({ why }) => {
+      const held = await leavingRefused('remove', ME);
+      if (held) return refused(held);
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'remove',
+        odd: ME,
+        title: `Let ${me.name} go from the office`,
+        why,
+        ifApproved: leavesLine(me.name)
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. Tell them you go once they say yes there, and not before.`
+      );
+    }
+  );
+
+if (offered('remove_odd')) {
+  // Listed here, as bring_back_odd lists the Odds that left, so the tool names
+  // no other tool the Odd may not hold to find an id.
+  const here = (await roster()).filter((p) => p.id !== ME && p.role !== MANAGER_ROLE);
+  tool(
+    'remove_odd',
+    {
+      description: `${OWNER} told you to let another Odd go: ask them to confirm. On their yes it leaves at once: off the floor, its jobs off, its open work handed back or withdrawn. Its history stays${offered('bring_back_odd') ? ', and you can bring it back with bring_back_odd' : ''}. Never the ${MANAGER_ROLE}. ${leaveNote} ${
+        here.length
+          ? `Odds you can ask about: ${here.map((p) => `${p.id} (${p.name}, ${p.role})`).join('; ')}.`
+          : 'No other Odd works here.'
+      }`,
+      inputSchema: {
+        odd: z.string().describe('The id of the Odd to let go, from the list above.'),
+        why: z.string().max(600).describe(`What ${OWNER} said, in their words.`)
+      }
+    },
+    async ({ odd, why }) => {
+      const held = await leavingRefused('remove', odd);
+      if (held) return refused(held);
+      const who = (await staffer(odd))!;
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'remove',
+        odd,
+        title: `Let ${who.name} go from the office`,
+        why,
+        ifApproved: leavesLine(who.name)
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. ${who.name} goes once they say yes there, and not before.`
+      );
+    }
+  );
+}
+
+if (offered('bring_back_odd')) {
+  const gone = await formerStaff();
+  tool(
+    'bring_back_odd',
+    {
+      description: `${OWNER} told you to bring back an Odd that left the office: ask them to confirm. On their yes it comes back as it was, with its jobs on again. What it had open when it left stays closed. ${leaveNote} ${
+        gone.length
+          ? `Odds that left, latest first: ${gone.map((p) => `${p.id} (${p.name}, ${p.role})`).join('; ')}.`
+          : 'No Odd has left this office.'
+      }`,
+      inputSchema: {
+        odd: z.string().describe('The id of the Odd to bring back, from the list above.'),
+        why: z.string().max(600).describe(`What ${OWNER} said, in their words.`)
+      }
+    },
+    async ({ odd, why }) => {
+      const held = await leavingRefused('bring_back', odd);
+      if (held) return refused(held);
+      const who = (await anyStaffer(odd))!;
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'bring_back',
+        odd,
+        title: `Bring ${who.name} back to the office`,
+        why,
+        ifApproved: `${who.name} comes back as it was: its job description, tools, folders, lessons and files, with its jobs on again.`
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. ${who.name} comes back once they say yes there, and not before.`
+      );
+    }
+  );
+}
 
 if (has('office_report'))
   tool(

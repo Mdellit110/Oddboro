@@ -13,6 +13,16 @@ export type OfficeTool = {
   always?: boolean;
   /** Offered only while the Odd holds Gmail (`mailboxes` in mcp.ts), even by `always`. */
   withGmail?: boolean;
+  /**
+   * Offered only in a chat, where the office sets the owner's words
+   * (`OWNER_SAID` in mcp.ts), even by `always`: the tool acts on what the
+   * owner just said, and a job or a follow-up has no such words.
+   */
+  inChat?: boolean;
+  /** Never offered to the Office Manager, even by `always`: the manager never leaves. */
+  notToManager?: boolean;
+  /** It shapes the run's prompt (`see_office`) and is no tool the Odd calls, so never offered. */
+  prompt?: boolean;
 };
 
 const TOOLS = [
@@ -45,6 +55,21 @@ const TOOLS = [
   },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
   {
+    id: 'leave_office',
+    name: 'Ask to leave',
+    does: 'Asks you to let it go from the office, when you tell it to leave. It goes only on your yes.',
+    always: true,
+    inChat: true,
+    notToManager: true
+  },
+  {
+    id: 'withdraw',
+    name: 'Take things off your desk',
+    does: 'Takes its own open asks and tasks off your desk, when you tell it to in chat.',
+    always: true,
+    inChat: true
+  },
+  {
     id: 'keep_lesson',
     name: 'Keep lessons',
     does: 'Remembers a correction you give it, so you never give it twice. You see each one in its chat, with Undo.',
@@ -72,7 +97,8 @@ const TOOLS = [
     id: 'tell_lead',
     name: 'Tell the lead',
     does: 'Passes what you tell it in chat about work another Odd leads to that Odd: your words, and what it understood you to mean.',
-    always: true
+    always: true,
+    inChat: true
   },
   {
     id: 'search_ledger',
@@ -137,6 +163,12 @@ const TOOLS = [
     does: 'Brings you a hire, ready to open in the hire window.'
   },
   {
+    id: 'see_office',
+    name: "Sees who's in the office",
+    does: 'Sees every Odd here by name and role, so it can hand work to the right one, or ask you which one you mean.',
+    prompt: true
+  },
+  {
     id: 'office_report',
     name: 'Office report',
     does: 'Sees what every Odd did: jobs, runs, asks and tasks.'
@@ -155,6 +187,18 @@ const TOOLS = [
     id: 'propose_goal_plan',
     name: 'Plan goals',
     does: 'Brings you one plan per goal: who to hire and what Odds already here take on.'
+  },
+  {
+    id: 'remove_odd',
+    name: 'Remove Odds',
+    does: 'Asks you to let another Odd go from the office. It goes only on your yes.',
+    inChat: true
+  },
+  {
+    id: 'bring_back_odd',
+    name: 'Bring Odds back',
+    does: 'Asks you to bring back an Odd that left the office, as it was. It comes back only on your yes.',
+    inChat: true
   },
   {
     id: 'update_goal',
@@ -177,8 +221,16 @@ export const RIDES_WITH = {
   resume_at: 'hand_off'
 } as const satisfies Record<string, OfficeToolId>;
 
+/**
+ * Tools every new hire starts with, whatever tools its hire names, which the
+ * owner may then take off. Migration 0017 gave `see_office` to every Odd
+ * already hired.
+ */
+export const ON_BY_DEFAULT: OfficeToolId[] = ['see_office'];
+
 /** What a new hire starts with. The owner adds or removes from there. */
 export const STARTER_TOOLS: OfficeToolId[] = [
+  ...ON_BY_DEFAULT,
   'search_ledger',
   'give_owner_a_task',
   'find_connectors',
@@ -198,12 +250,40 @@ export const isGrantable = (id: string): id is OfficeToolId => GRANTABLE.has(id)
 export const hasTool = (granted: readonly string[], id: string) =>
   OFFICE_TOOLS.some((t) => t.id === id && (t.always || granted.includes(id)));
 
+/** What about a run decides which office tools it is offered, beyond what its Odd holds. */
+export type ToolRun = {
+  /** The Odd holds Gmail, at any level. */
+  gmail: boolean;
+  /** A chat, where the office sets the owner's words (`OWNER_SAID`). */
+  chat: boolean;
+  /** The Odd is the Office Manager. */
+  manager: boolean;
+};
+
+/**
+ * Whether `run` is offered the office tool `id`: its Odd, holding `granted`,
+ * has it (`hasTool`), it is a tool the Odd calls (not `prompt`), and each
+ * condition the tool's row sets holds (`withGmail`, `inChat`, `notToManager`).
+ * The tool server registers by it.
+ */
+export const isOffered = (granted: readonly string[], id: string, run: ToolRun): boolean => {
+  const row = OFFICE_TOOLS.find((t) => t.id === id);
+  return (
+    hasTool(granted, id) &&
+    !row?.prompt &&
+    (!row?.withGmail || run.gmail) &&
+    (!row?.inChat || run.chat) &&
+    (!row?.notToManager || !run.manager)
+  );
+};
+
 /** A task step the owner ticks by hand: one with no control, or a sign-in. */
 export const tickable = (s: Step) => !s.action || s.action.kind === 'oauth';
 
 /**
- * Asks the office raises itself, not an Odd: the owner answers yes or no, and
- * nobody could rework one sent back, so they take no Iterate.
+ * Asks the owner answers yes or no, with no Iterate: the office raised it
+ * itself, so nobody could rework one sent back, or it lets an Odd go or
+ * brings one back, which has nothing to rework.
  */
 export const yesOrNo = (kind: AskKind | undefined): boolean =>
   kind !== undefined && OWNER_ANSWERS.ask[kind].iterate === 'refused';

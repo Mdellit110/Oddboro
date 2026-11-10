@@ -245,6 +245,7 @@ test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a m
   assert.deepEqual(hired, {
     permission: 'draft',
     tools: [
+      'see_office',
       'search_ledger',
       'give_owner_a_task',
       'find_connectors',
@@ -258,7 +259,9 @@ test('a hire with nothing picked starts from every one of HIRE_DEFAULTS, and a m
       'list_goals',
       'propose_goal',
       'propose_goal_plan',
-      'update_goal'
+      'update_goal',
+      'remove_odd',
+      'bring_back_odd'
     ]
   });
 });

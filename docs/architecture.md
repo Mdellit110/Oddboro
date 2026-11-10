@@ -126,8 +126,10 @@ change.
   `packages/ledger/src/tools.ts`, and register it in `mcp.ts` behind
   `has()`. A tool registered only alongside another, never granted alone
   (such as `my_pokes` with `poke_owner`), goes in `RIDES_WITH` instead,
-  under the tool it rides with. An `always` row with `withGmail` is offered
-  only while the Odd holds Gmail.
+  under the tool it rides with. When it is offered is a field on its row,
+  never a rule in `mcp.ts`, which registers such a tool behind `offered()`:
+  `withGmail` only while the Odd holds Gmail, `inChat` only in a chat on the
+  owner's words, `notToManager` never to the Office Manager.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in
@@ -151,7 +153,9 @@ change.
   to a route that does not exist. A route the owner acts through has its row
   in `OWNER_ACTIONS` in `apps/office/src/lib/server/owner-actions.ts`;
   `owner-actions.test.ts` fails a POST, PUT, PATCH or DELETE handler with
-  none, and a row that says it records but writes no ledger row. No check
+  none, a row that says it records but writes no ledger row, and a row that
+  writes only sometimes (`mayRecord`, the kinds it may write and when) but
+  writes a kind it does not list, or nothing in the state that writes. No check
   finds a GET or a page's `load` that changes something: give it a row by
   hand, and the test then fails if its handler goes.
 - **A call out of the office.** Start at its file's entry in `OUTBOUND` in

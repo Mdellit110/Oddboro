@@ -68,12 +68,6 @@ function made(...parts: string[]): string {
 const after = (args: string[], flag: string) => args[args.indexOf(flag) + 1];
 /** Every value given with `flag`, which may come more than once. */
 const each = (args: string[], flag: string) => args.filter((_, i) => args[i - 1] === flag);
-/** The values after `flag`, up to the next flag. */
-function listAfter(args: string[], flag: string): string[] {
-  const from = args.indexOf(flag) + 1;
-  const end = args.findIndex((a, i) => i >= from && a.startsWith('--'));
-  return args.slice(from, end);
-}
 type Sandbox = {
   filesystem: {
     denyRead: string[];
@@ -84,7 +78,7 @@ type Sandbox = {
   [k: string]: unknown;
 };
 const settingsOf = (run: Gave) =>
-  JSON.parse(after(run.args, '--settings')) as { sandbox?: Sandbox; enabledPlugins: unknown };
+  run.claudeSettings as { sandbox?: Sandbox; enabledPlugins: unknown };
 
 // In an empty home, so no developer tool folder of this Mac's joins the sandbox's reads.
 test(
@@ -100,8 +94,8 @@ test(
       const run = await chatOf('otto');
       // The office carries its files, so Bash is its one tool of its own.
       assert.equal(after(run.args, '--tools'), 'Bash');
-      assert.ok(listAfter(run.args, '--allowedTools').includes('Bash'));
-      assert.ok(listAfter(run.args, '--allowedTools').includes('mcp__files'));
+      assert.ok(run.claudeSettings!.permissions.allow.includes('Bash'));
+      assert.ok(run.claudeSettings!.permissions.allow.includes('mcp__files'));
       assert.equal(filesOf(run)?.walls.cwd, staffDir('otto'));
       const tmp = `/private/tmp/ob-${run.env.RUN_KEY.slice(0, 8)}`;
       assert.match(run.tmpdir ?? '', /^\/private\/tmp\/ob-[0-9a-f]{8}$/);
@@ -241,7 +235,7 @@ test("a Claude run with Browse the web gets WebSearch and WebFetch, beside the o
   const run = await chatOf('wes');
   assert.equal(after(run.args, '--tools'), 'WebSearch,WebFetch');
   assert.equal(filesOf(run)?.walls.cwd, staffDir('wes'));
-  const allowed = listAfter(run.args, '--allowedTools');
+  const allowed = run.claudeSettings!.permissions.allow;
   assert.ok(allowed.includes('WebSearch') && allowed.includes('WebFetch'), allowed.join(' '));
   assert.ok(!allowed.includes('Bash'));
   assert.equal(settingsOf(run).sandbox, undefined);
@@ -341,8 +335,8 @@ test('a granted folder reaches every tool at its level', async () => {
   for (const id of ['fern', 'gwen', 'cato', 'gem']) await setOwn(id, { folders });
 
   const claude = await chatOf('fern');
-  const allowed = listAfter(claude.args, '--allowedTools');
-  const denied = listAfter(claude.args, '--disallowedTools');
+  const allowed = claude.claudeSettings!.permissions.allow;
+  const denied = claude.claudeSettings!.permissions.deny;
   const rule = (tool: string, p: string) => `${tool}(${L.rulePath(p)})`;
   assert.ok(allowed.includes(rule('Read', `${r}/**`)) && allowed.includes(rule('Read', `${w}/**`)));
   assert.ok(allowed.includes(rule('Edit', `${w}/**`)));
@@ -406,7 +400,10 @@ test('a folder that was deleted can still be removed, and reaches no run', async
   rmSync(gone, { recursive: true });
   const run = await chatOf('fern');
   assert.ok(!each(run.args, '--add-dir').includes(gone), 'a deleted folder was added');
-  assert.ok(!run.args.some((a) => a.includes(gone)), 'a deleted folder reached the run');
+  assert.ok(
+    ![...run.args, JSON.stringify(run.claudeSettings)].some((a) => a.includes(gone)),
+    'a deleted folder reached the run'
+  );
   assert.ok(!run.system.includes(gone), 'the Odd was told of a deleted folder');
   assert.equal((await patch('fern', { folder: gone, access: null })).status, 200);
   assert.deepEqual((await L.staffer('fern'))?.folders, []);
@@ -624,7 +621,7 @@ const repoRuns = (w: string) =>
 async function deniedWrites(
   paths: string[]
 ): Promise<Record<'claude' | 'grok' | 'gemini', string[]>> {
-  const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
+  const claude = (await chatOf('fern')).claudeSettings!.permissions.deny;
   const grok = each((await chatOf('gwen')).args, '--deny');
   const policy = (await chatOf('gem')).policy ?? '';
   return {
@@ -646,7 +643,7 @@ test("a given write folder's git hooks, config and submodules are read and never
   const paths = repoRuns(w);
   assert.deepEqual(await deniedWrites(paths), { claude: paths, grok: paths, gemini: paths });
 
-  const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
+  const claude = (await chatOf('fern')).claudeSettings!.permissions.deny;
   assert.ok(!claude.some((d) => d.startsWith('Read(') && d.includes('.git')), 'git cannot read');
   assert.ok(!((await chatOf('gwen')).profile ?? '').includes('.git/'), 'the kernel shuts git out');
   // Codex keeps each write folder's own .git read only itself, and refuses a glob it reads.
@@ -679,7 +676,7 @@ test("only a folder the owner gave an Odd to change refuses git's hooks and conf
     assert.deepEqual(await deniedWrites(own(id)), none, `${id}'s own folder`);
 
   // Its tools' instruction files stay shut in its own folder, on every tool.
-  const claude = listAfter((await chatOf('fern')).args, '--disallowedTools');
+  const claude = (await chatOf('fern')).claudeSettings!.permissions.deny;
   assert.ok(claude.includes(`Edit(${L.rulePath(join(dirs.fern, 'CLAUDE.md'))})`));
   const grok = each((await chatOf('gwen')).args, '--deny');
   assert.ok(grok.includes(`Write(${join(dirs.gwen, '**', 'AGENTS.md')})`), grok.join(' '));

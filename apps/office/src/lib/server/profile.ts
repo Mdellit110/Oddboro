@@ -8,8 +8,6 @@ import {
   heldReach,
   MANAGER_ROLE,
   modelFor,
-  MODELS,
-  type Agent,
   networkHeld,
   ownTools,
   shownFolder,
@@ -19,7 +17,7 @@ import {
 } from '@oddboro/ledger';
 import { officeDay } from '@oddboro/ledger/time';
 import { lookVersion, type StaffProfile } from '../staff/roster.ts';
-import { officeModel } from './claude.ts';
+import { shownOfficeModel } from './claude.ts';
 
 /**
  * A staff row as the page needs it. The job description stays on the server.
@@ -41,9 +39,11 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
     ...(r.account ? { account: r.account } : {}),
     model: modelFor(r.agent, r.model),
     // An Odd with none of its own runs the office's, else its tool's default, first in its list.
-    officeModel: officeModel(r.agent) ?? MODELS[r.agent][0]?.id,
+    officeModel: shownOfficeModel(r.agent),
     effort: effortFor(r.agent, r.effort, r.role === MANAGER_ROLE, modelFor(r.agent, r.model)),
     tools: r.tools,
+    // Every office keeps its manager, so its card offers no Remove.
+    ...(r.role === MANAGER_ROLE ? { manager: true as const } : {}),
     commands: r.commands,
     web: r.web,
     webLine: webLine(r.agent, currentPlatform(), reach.held),
@@ -64,6 +64,7 @@ export function toProfile(r: StaffRow, guesses = 0): StaffProfile {
             sheet: `/api/staff/${r.id}/look?v=${lookVersion(r.look, r.portraitPx)}`,
             portrait: `/api/staff/${r.id}/portrait?v=${lookVersion(r.look, r.portraitPx)}`
           }
-        : undefined
+        : undefined,
+    ...(r.package ? { persona: r.package } : {})
   };
 }

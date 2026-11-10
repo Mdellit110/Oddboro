@@ -50,6 +50,7 @@ import {
   onPlatform,
   onWindows,
   ownerData,
+  ownerHome,
   plain,
   hide,
   rgBin,
@@ -62,8 +63,10 @@ const { agentCommand } = await import('./agent-sign-in.ts');
 const { configServers } = await import('./launch.ts');
 const { LAUNCHES } = await import('./cli.ts');
 const { deniedEdits } = await import('./files.ts');
+// The model an Odd with none of its own runs on each tool, which the picker sends for its Office default card.
+const { shownOfficeModel } = await import('./claude.ts');
 
-test("a colleague's run on a hand-off works at Draft, and its key is held while it goes and only then", async () => {
+test("a colleague's run on a hand-off works at Draft, is not told to hand its colleagues work, and its key is held while it goes and only then", async () => {
   const h = await L.handOff({
     from: 'lead',
     to: 'paige',
@@ -72,6 +75,9 @@ test("a colleague's run on a hand-off works at Draft, and its key is held while 
   });
   assert.ok('id' in h, JSON.stringify(h));
   const run = await runOf(h.id);
+  // Paige holds hand_off, but a colleague's run is not offered it, so it is not told to call it.
+  assert.match(run.system, /You cannot hand them work/);
+  assert.doesNotMatch(run.system, /call hand_off/);
   assert.equal(run.env.CEILING, 'draft');
   assert.equal(run.env.LESSON_RUN, undefined);
   assert.equal(run.env.HAND_OFF_ID, String(h.id));
@@ -89,6 +95,8 @@ test("a run that reads the owner's no for a lesson works at Draft, hands nothing
   assert.equal(lesson.env.LESSON_RUN, '1');
   assert.equal(lesson.env.CEILING, 'draft');
   assert.doesNotMatch(lesson.system, /Plan the picnic/);
+  assert.match(lesson.system, /You cannot hand them work/);
+  assert.doesNotMatch(lesson.system, /call hand_off/);
   const yes = await L.raiseAsk('lead', { title: 'Book the hall', why: 'w', ifApproved: 'i' });
   await L.decideAsk(yes.ask.id, 'approve', null);
   const carry = await runOf(await startedBy(yes.ask.id, 'carry_out'), yes.ask.id);
@@ -229,15 +237,10 @@ test("a Grok run's agent file gives a command server and a hosted one in the sha
   ]);
 });
 
-test("a Claude Code Odd's chat gets the arguments it always had, with the office's file tools in place of its own, plus the new instruction files' denies", async () => {
+test("a Claude Code Odd's chat gets the arguments it always had, with its rules, sandbox and system prompt in files, the office's file tools in place of its own, plus the new instruction files' denies", async () => {
   const run = await chatOf('sam');
   const { args } = run;
-  const shown = plain(hide(args, '--mcp-config', '--settings', '--append-system-prompt'))
-    // The sessions folder Claude Code names after the Odd's folder, and what the
-    // home folder holds, differ from Mac to Mac.
-    .filter((a, i, all) => !(a.startsWith('Read(') && all.indexOf('--disallowedTools') < i))
-    .map((a) => (/^Read\(\/~\/\.claude\/projects\/[^/]+\/\*\*\)$/.test(a) ? '<sessions>' : a));
-  assert.deepEqual(shown, [
+  assert.deepEqual(plain(hide(args, '--mcp-config', '--settings', '--append-system-prompt-file')), [
     '-p',
     '--output-format',
     'stream-json',
@@ -246,35 +249,6 @@ test("a Claude Code Odd's chat gets the arguments it always had, with the office
     // The office carries its files, and it has no shell or web: no tool of its own at all.
     '--tools',
     '',
-    '--allowedTools',
-    'Read(/<home>/staff/sam/**)',
-    'Read(/<home>/data/**)',
-    '<sessions>',
-    'Edit(/<home>/staff/sam/**)',
-    'mcp__office',
-    'mcp__files',
-    '--disallowedTools',
-    // cb54187's instruction-file denies, plus Grok's, Codex's and Gemini's for an Odd that
-    // might move to one, each as the path and everything under it (`denyRules`).
-    ...[
-      'CLAUDE.md',
-      'CLAUDE.local.md',
-      '.claude',
-      '.grok',
-      'AGENTS.md',
-      '.mcp.json',
-      'AGENTS.override.md',
-      '.codex',
-      '.agents',
-      'GEMINI.md',
-      '.gemini'
-    ].flatMap((f) =>
-      [`/<home>/staff/sam/${f}`, `/<home>/staff/sam/**/${f}`].flatMap((p) => [
-        `Edit(${p})`,
-        `Edit(${p}/**)`
-      ])
-    ),
-    // No repository's hooks or config: those are refused only in a folder the owner gave it (`repoRunPaths`).
     '--permission-mode',
     'dontAsk',
     '--setting-sources',
@@ -292,13 +266,53 @@ test("a Claude Code Odd's chat gets the arguments it always had, with the office
     // No level picked: Medium (`effortFor`).
     '--effort',
     'medium',
-    '--append-system-prompt',
-    '<append-system-prompt>',
+    '--append-system-prompt-file',
+    '<append-system-prompt-file>',
     '--session-id',
     '<id>'
   ]);
-  // Each read deny, compared above only by its place, holds the folder itself and what is in it.
-  const denied = plain(args.slice(args.indexOf('--disallowedTools')));
+  const { allow, deny } = run.claudeSettings!.permissions;
+  // The sessions folder Claude Code names after the Odd's folder differs from Mac to Mac.
+  assert.deepEqual(
+    plain(allow).map((a) =>
+      /^Read\(\/~\/\.claude\/projects\/[^/]+\/\*\*\)$/.test(a) ? '<sessions>' : a
+    ),
+    [
+      'Read(/<home>/staff/sam/**)',
+      'Read(/<home>/data/**)',
+      '<sessions>',
+      'Edit(/<home>/staff/sam/**)',
+      'mcp__office',
+      'mcp__files'
+    ]
+  );
+  // What the home folder holds differs from Mac to Mac, so the read denies are compared apart.
+  assert.deepEqual(
+    plain(deny).filter((a) => !a.startsWith('Read(')),
+    // cb54187's instruction-file denies, plus Grok's, Codex's and Gemini's for an Odd that
+    // might move to one, each as the path and everything under it (`denyRules`).
+    [
+      'CLAUDE.md',
+      'CLAUDE.local.md',
+      '.claude',
+      '.grok',
+      'AGENTS.md',
+      '.mcp.json',
+      'AGENTS.override.md',
+      '.codex',
+      '.agents',
+      'GEMINI.md',
+      '.gemini'
+    ].flatMap((f) =>
+      [`/<home>/staff/sam/${f}`, `/<home>/staff/sam/**/${f}`].flatMap((p) => [
+        `Edit(${p})`,
+        `Edit(${p}/**)`
+      ])
+    )
+    // No repository's hooks or config: those are refused only in a folder the owner gave it (`repoRunPaths`).
+  );
+  // Each read deny holds the folder itself and what is in it.
+  const denied = plain(deny);
   assert.ok(denied.includes('Read(/~/.ssh)') && denied.includes('Read(/~/.ssh/**)'));
   // The office's file server, under this Node, holds the folders the rules above name.
   const dir = join(folder, 'staff', 'sam');
@@ -313,6 +327,19 @@ test("a Claude Code Odd's chat gets the arguments it always had, with the office
     }
   });
 });
+
+test("a Claude Code run for an owner with hundreds of Claude Code projects fits on Windows' command line, each project's deny in its settings file", () =>
+  ownerHome(async (home) => {
+    const projects = join(home, '.claude', 'projects');
+    const named = (i: number) =>
+      join(projects, `-Users-someone-code-a-project-with-a-long-name-${i}`);
+    for (let i = 0; i < 400; i++) mkdirSync(named(i), { recursive: true });
+    const run = await chatOf('cleo');
+    // Windows quotes each argument and parts them with a space, 32,767 characters in all.
+    const line = run.args.reduce((n, a) => n + a.length + 3, 0);
+    assert.ok(line < 4_000, `the command line takes ${line} characters`);
+    assert.ok(run.claudeSettings!.permissions.deny.includes(`Read(${L.rulePath(named(399))}/**)`));
+  }));
 
 test("a Grok Odd's chat on a Mac starts grok sandboxed in its own folder, with no file, shell, web or image tool of its own, and only the office's MCP tools, its file tools among them", async () => {
   const run = await onPlatform('darwin', () => chatOf('gus'));
@@ -844,6 +871,8 @@ const patch = (id: string, body: unknown) =>
   } as unknown as Parameters<typeof PATCH>[0]);
 const refused = (status: number) => (e: unknown) => (e as { status?: number }).status === status;
 
+// Each tool's model is written out, not read from `shownOfficeModel`, so a
+// change to which model the picker shows fails here.
 test('the "Runs on" picker hears only of the tools on this Mac', async () => {
   const only = join(folder, 'only-claude');
   mkdirSync(only, { recursive: true });
@@ -870,14 +899,18 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           name: 'Claude Code',
           installed: true,
           signIn: { how: 'browser', installing: false, signedIn: false },
-          commandsHow: L.commandsHow('claude', 'darwin')
+          commandsHow: L.commandsHow('claude', 'darwin'),
+          // Setup's model, Opus until the owner picks Sonnet.
+          officeModel: 'claude-opus-5-5'
         },
         {
           id: 'grok',
           name: 'Grok',
           installed: false,
           signIn: { how: 'browser', installing: false, signedIn: false },
-          commandsHow: L.commandsHow('grok', 'darwin')
+          commandsHow: L.commandsHow('grok', 'darwin'),
+          // No Grok model set, so Grok's own default.
+          officeModel: 'grok-4.7'
         },
         // The office under test's Codex home holds a sign-in file with no account in it.
         {
@@ -885,7 +918,9 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           name: 'Codex',
           installed: false,
           signIn: { how: 'browser', installing: false, signedIn: true },
-          commandsHow: L.commandsHow('codex', 'darwin')
+          commandsHow: L.commandsHow('codex', 'darwin'),
+          // No Codex model set, so Codex's own default.
+          officeModel: 'gpt-6.1-sol'
         }
       ]
     });
@@ -939,7 +974,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
       name: 'Grok',
       installed: false,
       signIn: out,
-      commandsHow: L.commandsHow('grok', 'win32')
+      commandsHow: L.commandsHow('grok', 'win32'),
+      officeModel: shownOfficeModel('grok')
     },
     {
       id: 'codex',
@@ -947,7 +983,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
       installed: false,
       // The office's Codex home is signed in under test.
       signIn: { ...out, signedIn: true },
-      commandsHow: L.commandsHow('codex', 'win32')
+      commandsHow: L.commandsHow('codex', 'win32'),
+      officeModel: shownOfficeModel('codex')
     }
   ];
   const installed = [
@@ -957,6 +994,7 @@ require(${JSON.stringify(join(bin, 'claude'))});
       installed: true,
       signIn: out,
       commandsHow,
+      officeModel: shownOfficeModel('claude'),
       version: '2.1.318'
     },
     ...others
@@ -977,7 +1015,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
               name: 'Claude Code',
               installed: false,
               signIn: { how: 'browser', installing: false, signedIn: false },
-              commandsHow
+              commandsHow,
+              officeModel: shownOfficeModel('claude')
             },
             ...others
           ],
@@ -997,7 +1036,14 @@ require(${JSON.stringify(join(bin, 'claude'))});
         assert.deepEqual(agentCommand('claude'), [join(native, 'claude.exe'), []]);
         // Installed. This Mac cannot run a stand-in claude.exe, so it has no version to say.
         assert.deepEqual((await picker()).tools, [
-          { id: 'claude', name: 'Claude Code', installed: true, signIn: out, commandsHow },
+          {
+            id: 'claude',
+            name: 'Claude Code',
+            installed: true,
+            signIn: out,
+            commandsHow,
+            officeModel: shownOfficeModel('claude')
+          },
           ...others
         ]);
       })
@@ -1192,14 +1238,12 @@ test("a lead's chat is told where its goal stands as it starts, and reads the go
   );
   assert.doesNotMatch(before.system, /^0$/m, 'an Odd that serves no goal gets no stray 0');
   assert.match(before.system, /Answer .+ from it, over anything you said earlier in this chat\./);
-  assert.ok(
-    before.args.includes(`Read(/${folder}/**)`),
-    "the lead's chat may read the goal's folder"
-  );
+  const { allow, deny } = before.claudeSettings!.permissions;
+  assert.ok(allow.includes(`Read(/${folder}/**)`), "the lead's chat may read the goal's folder");
   assert.ok(before.args.includes(folder), "the goal's folder is added to the lead's chat");
-  assert.ok(!before.args.includes(`Read(/${L.home('threads')})`), 'no deny rule covers it');
+  assert.ok(!deny.includes(`Read(/${L.home('threads')})`), 'no deny rule covers it');
   assert.ok(
-    !before.args.some((a) => a.startsWith(`Edit(/${folder}`)),
+    !allow.some((a) => a.startsWith(`Edit(/${folder}`)),
     "the lead's chat writes nothing there"
   );
 
@@ -1303,9 +1347,10 @@ test("a colleague's chat on work with no goal is told what each step did and wha
   const run = await chatOf('paige', 'How are the receipts?');
   assert.match(run.system, /1\. Sort the receipts \(Paige\): finished\. Two boxes sorted\./);
   assert.match(run.system, /"Keep the old receipts": approved\. Their words: Yes, keep them\./);
-  assert.ok(run.args.includes(`Read(/${folder}/**)`), "the colleague's chat may read the folder");
+  const { allow } = run.claudeSettings!.permissions;
+  assert.ok(allow.includes(`Read(/${folder}/**)`), "the colleague's chat may read the folder");
   assert.ok(
-    !run.args.some((a) => a.startsWith(`Edit(/${folder}`)),
+    !allow.some((a) => a.startsWith(`Edit(/${folder}`)),
     "the colleague's chat writes nothing there"
   );
 });
@@ -1361,7 +1406,7 @@ test('work whose story does not fit a chat keeps its line in the list, and its f
     assert.ok(!run.system.includes(`## Work ${oldest.thread}\n`), 'the oldest story is told');
     assert.ok(run.system.includes(`## Work ${newest.thread}\n`), 'the newest story is not told');
     assert.ok(
-      run.args.includes(`Read(/${L.threadFolder(oldest.thread)}/**)`),
+      run.claudeSettings!.permissions.allow.includes(`Read(/${L.threadFolder(oldest.thread)}/**)`),
       "the left-out work's folder is not readable"
     );
   } finally {
@@ -1430,11 +1475,12 @@ test('a chat leaves out the folder of work that has none yet', async () => {
   const made = L.threadFolder((await handedOn('paige', 'Work with a folder')).thread);
   const none = L.threadFolder((await handedOn('paige', 'Work with no folder')).thread);
   mkdirSync(made, { recursive: true });
-  const { args } = await chatOf('paige', 'What are you on?');
+  const { args, claudeSettings } = await chatOf('paige', 'What are you on?');
+  const { allow } = claudeSettings!.permissions;
   assert.ok(args.includes(made), 'the folder that exists is not added');
-  assert.ok(args.includes(`Read(/${made}/**)`), 'the folder that exists is not readable');
+  assert.ok(allow.includes(`Read(/${made}/**)`), 'the folder that exists is not readable');
   assert.ok(!args.includes(none), 'a folder not made yet is added');
-  assert.ok(!args.includes(`Read(/${none}/**)`), 'a folder not made yet is given a read rule');
+  assert.ok(!allow.includes(`Read(/${none}/**)`), 'a folder not made yet is given a read rule');
 });
 
 test('a reply about an ask the Odd replaced hears no reason from the owner, and one the owner answered hears theirs', async () => {
@@ -1532,6 +1578,28 @@ test("a chat's tool server gets the exchange from before the owner's message, fo
   sayInChat('nell', 'Which colour did you want?');
   const run = await chatOf('nell', 'Red, please.');
   assert.equal(run.env.CHAT_EXCHANGE, 'Just before, Nell said: "Which colour did you want?".');
+});
+
+test("a lead's pick-up on a thread is not told the other work it leads, since it hands on only there", async () => {
+  // Other work Lena leads, which her runs on no thread are told of.
+  await L.pg`insert into threads (title, hub_id, holder_id) values ('Sweep the yard', 'lead', 'lead')`;
+  const h = await L.handOff({
+    from: 'lead',
+    to: 'paige',
+    work: { title: 'Count the cones', brief: 'Count them.' },
+    thread: { title: 'The fete' }
+  });
+  assert.ok('id' in h, JSON.stringify(h));
+  const f = await L.startFollowUp(h.id);
+  assert.ok(f, "Paige's hand-off could not start");
+  await L.finishFollowUp(f, 'Count the cones', 'done', 'Twelve cones.');
+  const [back] = await L.pg<{ id: number }[]>`
+    select id from follow_ups where staff_id = 'lead' and kind = 'handed_back' and thread_id = ${h.thread}`;
+  assert.ok(back, "Paige's result woke no pick-up");
+  const pickUp = await runOf(back.id);
+  assert.match(pickUp.system, /Count the cones/);
+  assert.doesNotMatch(pickUp.system, /## Work you lead/);
+  assert.doesNotMatch(pickUp.system, /Sweep the yard/);
 });
 
 test('no test reached the keychain', () => {
@@ -1692,7 +1760,7 @@ test("an Odd signs in through the account it is on: its own folder for each, the
     const onWork = await chatOf('sam');
     assert.equal(onWork.configDir, join(accounts, 'claude', work.id));
     // Its own sessions stay readable; every other account's folder does not.
-    const denied = plain(onWork.args.slice(onWork.args.indexOf('--disallowedTools')));
+    const denied = plain(onWork.claudeSettings!.permissions.deny);
     assert.ok(denied.includes('Read(/<home>/accounts/codex)'), denied.join(' '));
     assert.ok(denied.includes('Read(/<home>/accounts/claude/office)'), denied.join(' '));
 

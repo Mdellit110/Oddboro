@@ -9,7 +9,9 @@ import type { Path } from '$app/types';
 
 /**
  * An address one of the office's own routes answers, with any search after
- * it, so a call to a route that does not exist fails the type check.
+ * it. The type check catches a wrong address only up to its first route
+ * parameter: `Path` writes a parameter as `${string}`, which matches any
+ * rest, so `/api/staff/${id}/attachmentz` still passes.
  */
 // The slash is added here because SvelteKit 3.1's `Path` names each route without one.
 export type ApiUrl = `/${Path}` | `/${Path}?${string}`;
@@ -26,6 +28,25 @@ export async function call<T = { ok: true }>(
     signal,
     headers: method === 'GET' ? undefined : { 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  if (!res.ok) throw await failure(res);
+  return res.json() as Promise<T>;
+}
+
+/**
+ * One file's bytes as a POST, with its name and type in headers. It goes as
+ * application/octet-stream, which SvelteKit's form check never applies to,
+ * whatever the file is.
+ */
+export async function sendFile<T>(url: ApiUrl, file: Blob, name: string, type: string): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-file-name': encodeURIComponent(name),
+      'x-media-type': type
+    },
+    body: file
   });
   if (!res.ok) throw await failure(res);
   return res.json() as Promise<T>;

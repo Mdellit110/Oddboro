@@ -22,6 +22,8 @@ import { HIRE_DEFAULTS } from './grantable.ts';
 import type { Agent, Effort, GrantedFolder } from './agents.ts';
 import type { FolderAccess, Level, OwnSwitch } from './access-words.ts';
 import type { GmailFilter } from './filter-words.ts';
+import type { MailAttachment } from './mail-attachments.ts';
+import type { PersonaLink } from './personas.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
 const created = (name = 'created_at') => at(name).notNull().defaultNow();
@@ -62,9 +64,16 @@ export const staff = pgTable('staff', {
   look: jsonb().$type<LookSpec>(),
   /** The drawn portrait for a generated look, as .px text. */
   portraitPx: text(),
+  /** Set for an Odd installed from a New Altitude persona: which, its version, its disclosure, and why it is quiet. */
+  package: jsonb().$type<PersonaLink>(),
   hiredAt: created('hired_at'),
-  /** Set when the owner lets a staffer go. Its history stays. */
-  leftAt: at('left_at')
+  /**
+   * Set when the Odd left the office (`removeOdd`): it is off the floor and
+   * runs nothing, and its history stays. Bringing it back clears it.
+   */
+  leftAt: at('left_at'),
+  /** The jobs that were on when it left, which bringing it back turns on again. */
+  jobsOff: integer().array()
 });
 
 /**
@@ -97,7 +106,10 @@ export type AccountRow = typeof accounts.$inferSelect;
  * changes something, held by the gateway for an Odd at Draft (`asks.call`):
  * on the owner's yes the office makes that exact call. `switch` asks for the
  * owner's Run commands or Browse the web switch, or both (`asks.switches`):
- * the owner's yes turns them on.
+ * the owner's yes turns them on. `remove` asks to let an Odd go (`asks.odd`):
+ * an Odd asking to leave names itself, and the Office Manager names another.
+ * `bring_back` is the manager's ask to bring back an Odd that left. The owner's
+ * yes does it (`removeOdd`, `bringBack`).
  */
 export const ASK_KINDS = [
   'approval',
@@ -111,7 +123,9 @@ export const ASK_KINDS = [
   'filter',
   'folder',
   'switch',
-  'call'
+  'call',
+  'remove',
+  'bring_back'
 ] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
 /** `revise` means the owner sent it back to be reworked. */
@@ -148,6 +162,8 @@ export type ReplyDraft = {
   body: string;
   /** The Odd's one or two lines on the email it answers. */
   summary: string;
+  /** Files from the Odd's folder that go with it (`mail-attachments.ts`); the owner may drop any. */
+  attachments?: MailAttachment[];
   /** The Gmail connector it goes out through: the account the email came to. */
   connector?: string;
   /** That account's address, as the desk shows it. */
@@ -165,6 +181,14 @@ export type HeldCall = {
   connector: string;
   tool: string;
   arguments: Record<string, unknown>;
+  /** What it does in the owner's words, from the call alone ("Archive: 26 emails"): the ask's title. */
+  said?: string;
+  /**
+   * Each thing it acts on, read from the service as it was held (an email's
+   * subject, sender and date). Words from strangers: the page shows them,
+   * and no Odd's prompt or brief ever carries them.
+   */
+  shown?: string[];
   /** Set once the office made the call: whether the tool took it, and its words. */
   result?: { ok: boolean; text: string; at: string };
 };
@@ -305,6 +329,8 @@ export const asks = pgTable('asks', {
   call: jsonb().$type<HeldCall>(),
   /** A switch ask's switches, Run commands or Browse the web, to turn on (`ask_for_switch`). */
   switches: jsonb().$type<OwnSwitch[]>(),
+  /** A remove or bring_back ask's Odd (a staff id). */
+  odd: text(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
@@ -713,7 +739,11 @@ export type HandOff = {
   withheld?: string[];
   /** The colleague's own tools that someone else on the thread lacks: it must not write their contents there. */
   kept?: string[];
-  /** The files named for this work, as paths inside the thread's folder. */
+  /**
+   * The files named for this work, as paths inside the thread's folder. A
+   * hand-off a v0.0.9 office stored holds paths in the giver's own folder
+   * instead; the colleague's brief names those as no longer there.
+   */
   files?: string[];
   outcome?: Outcome;
   id?: number;

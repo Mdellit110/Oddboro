@@ -82,6 +82,9 @@ export const askReplaced = (a: { status: AskStatus; reason: string | null }): bo
  * - `task_done`: a `task_done` follow-up, to pick up what waited on the task.
  * - `wake_parked`: the work a lead parked on the task picks up, told how the
  *   task ended (`wakeOnTask`).
+ * - `odd_leaves`: the Odd the ask names leaves the office (`removeOdd` in
+ *   leaving.ts), after the answer went back, so leaving closes any run it started.
+ * - `odd_returns`: the Odd the ask names comes back as it was (`bringBack`).
  */
 export type Effect =
   | 'approval_work'
@@ -97,6 +100,8 @@ export type Effect =
   | 'denied_lesson'
   | 'task_done'
   | 'wake_parked'
+  | 'odd_leaves'
+  | 'odd_returns'
   | { none: string };
 export type AskEffect = Exclude<Effect, 'task_done' | 'wake_parked'>;
 export type TaskEffect = Extract<
@@ -128,7 +133,10 @@ export type AskAnswer = {
    */
   approve: readonly AskEffect[] | { by: string; then: readonly AskEffect[] };
   deny: readonly AskEffect[];
-  /** `refused`: the office raised it, so the owner says yes or no and nobody reworks it. */
+  /**
+   * `refused`: the owner says yes or no and nobody reworks it, since the office
+   * raised it, or it lets an Odd go or brings one back.
+   */
   iterate: readonly AskEffect[] | 'refused';
 };
 /**
@@ -192,6 +200,12 @@ export const OWNER_ANSWERS = {
       approve: { by: 'Approve the call from its card on the desk', then: ['carry_out'] },
       deny: NO,
       iterate: REWORK
+    },
+    remove: { approve: ['answer_back', OFF_A_THREAD, 'odd_leaves'], deny: NO, iterate: 'refused' },
+    bring_back: {
+      approve: ['answer_back', OFF_A_THREAD, 'odd_returns'],
+      deny: NO,
+      iterate: 'refused'
     }
   } satisfies Record<AskKind, AskAnswer>,
   task: {

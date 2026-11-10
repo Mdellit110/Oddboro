@@ -9,6 +9,7 @@ import {
   closeSync,
   constants,
   copyFileSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -533,6 +534,12 @@ export function handOffBrief(b: {
 }): string[] {
   const { h, colleague, goal } = b;
   const folder = threadFolder(b.thread);
+  // A hand-off a v0.0.9 office stored names paths in the giver's own folder,
+  // never copied here, and a file can be deleted after the copy: the brief
+  // names either as gone rather than point at nothing.
+  const files = h.files ?? [];
+  const present = files.filter((f) => existsSync(join(folder, f)));
+  const gone = files.filter((f) => !present.includes(f));
   if (b.kind === 'hand_off')
     return [
       `${colleague.name} handed you a piece of work. Do it now. Your reply goes back to them.`,
@@ -542,9 +549,15 @@ export function handOffBrief(b: {
       '',
       h.brief,
       '',
-      ...(h.files?.length
+      ...(present.length
         ? [
-            `- Files for this work, in reach: ${h.files.map((f) => join(folder, f)).join(', ')}.`,
+            `- Files for this work, in reach: ${present.map((f) => join(folder, f)).join(', ')}.`,
+            ''
+          ]
+        : []),
+      ...(gone.length
+        ? [
+            `- Files ${colleague.name} named for this work that are no longer there: ${gone.join(', ')}. Say so in your reply if the work needs them.`,
             ''
           ]
         : []),

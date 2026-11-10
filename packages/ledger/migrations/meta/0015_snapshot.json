@@ -1,5 +1,5 @@
 {
-  "id": "795062f0-527c-4d50-b0de-6823713bbef6",
+  "id": "75887648-c64b-4315-b52c-0895f44708ff",
   "prevId": "d716beff-a5d5-4326-aeb7-b985fda547a2",
   "version": "7",
   "dialect": "postgresql",
@@ -184,11 +184,11 @@
         "art_drawn_for_offices_id_fk": {
           "name": "art_drawn_for_offices_id_fk",
           "tableFrom": "art",
-          "columnsFrom": ["drawn_for"],
           "tableTo": "offices",
+          "columnsFrom": ["drawn_for"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -207,15 +207,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "asks_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -365,11 +365,11 @@
         "asks_staff_id_staff_id_fk": {
           "name": "asks_staff_id_staff_id_fk",
           "tableFrom": "asks",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -388,15 +388,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "attachments_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -449,9 +449,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "attachments_by_ask": {
           "name": "attachments_by_ask",
@@ -464,38 +464,38 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "attachments_staff_id_staff_id_fk": {
           "name": "attachments_staff_id_staff_id_fk",
           "tableFrom": "attachments",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "attachments_task_id_tasks_id_fk": {
           "name": "attachments_task_id_tasks_id_fk",
           "tableFrom": "attachments",
-          "columnsFrom": ["task_id"],
           "tableTo": "tasks",
+          "columnsFrom": ["task_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "attachments_ask_id_asks_id_fk": {
           "name": "attachments_ask_id_asks_id_fk",
           "tableFrom": "attachments",
-          "columnsFrom": ["ask_id"],
           "tableTo": "asks",
+          "columnsFrom": ["ask_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -596,15 +596,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "follow_ups_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -711,56 +711,56 @@
         "follow_ups_staff_id_staff_id_fk": {
           "name": "follow_ups_staff_id_staff_id_fk",
           "tableFrom": "follow_ups",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "follow_ups_ask_id_asks_id_fk": {
           "name": "follow_ups_ask_id_asks_id_fk",
           "tableFrom": "follow_ups",
-          "columnsFrom": ["ask_id"],
           "tableTo": "asks",
+          "columnsFrom": ["ask_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "follow_ups_report_id_reports_id_fk": {
           "name": "follow_ups_report_id_reports_id_fk",
           "tableFrom": "follow_ups",
-          "columnsFrom": ["report_id"],
           "tableTo": "reports",
+          "columnsFrom": ["report_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "follow_ups_task_id_tasks_id_fk": {
           "name": "follow_ups_task_id_tasks_id_fk",
           "tableFrom": "follow_ups",
-          "columnsFrom": ["task_id"],
           "tableTo": "tasks",
+          "columnsFrom": ["task_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "follow_ups_goal_id_goals_id_fk": {
           "name": "follow_ups_goal_id_goals_id_fk",
           "tableFrom": "follow_ups",
-          "columnsFrom": ["goal_id"],
           "tableTo": "goals",
+          "columnsFrom": ["goal_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "follow_ups_thread_id_threads_id_fk": {
           "name": "follow_ups_thread_id_threads_id_fk",
           "tableFrom": "follow_ups",
-          "columnsFrom": ["thread_id"],
           "tableTo": "threads",
+          "columnsFrom": ["thread_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -779,15 +779,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "goal_progress_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "goal_id": {
@@ -840,29 +840,29 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "goal_progress_goal_id_goals_id_fk": {
           "name": "goal_progress_goal_id_goals_id_fk",
           "tableFrom": "goal_progress",
-          "columnsFrom": ["goal_id"],
           "tableTo": "goals",
+          "columnsFrom": ["goal_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "goal_progress_staff_id_staff_id_fk": {
           "name": "goal_progress_staff_id_staff_id_fk",
           "tableFrom": "goal_progress",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -881,15 +881,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "goals_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "title": {
@@ -1002,29 +1002,29 @@
         "grants_staff_id_staff_id_fk": {
           "name": "grants_staff_id_staff_id_fk",
           "tableFrom": "grants",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "grants_connector_id_connectors_id_fk": {
           "name": "grants_connector_id_connectors_id_fk",
           "tableFrom": "grants",
-          "columnsFrom": ["connector_id"],
           "tableTo": "connectors",
+          "columnsFrom": ["connector_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "grants_ask_id_asks_id_fk": {
           "name": "grants_ask_id_asks_id_fk",
           "tableFrom": "grants",
-          "columnsFrom": ["ask_id"],
           "tableTo": "asks",
+          "columnsFrom": ["ask_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1048,15 +1048,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "jobs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -1116,11 +1116,11 @@
         "jobs_staff_id_staff_id_fk": {
           "name": "jobs_staff_id_staff_id_fk",
           "tableFrom": "jobs",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1139,15 +1139,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "ledger_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "kind": {
@@ -1226,44 +1226,44 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "hnsw",
-          "concurrently": false
+          "with": {}
         },
         "ledger_words": {
           "name": "ledger_words",
           "columns": [
             {
               "expression": "to_tsvector('english', \"title\" || ' ' || \"body\" || ' ' || coalesce(\"reason\", ''))",
-              "isExpression": true,
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "gin",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "ledger_ask_id_asks_id_fk": {
           "name": "ledger_ask_id_asks_id_fk",
           "tableFrom": "ledger",
-          "columnsFrom": ["ask_id"],
           "tableTo": "asks",
+          "columnsFrom": ["ask_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "ledger_task_id_tasks_id_fk": {
           "name": "ledger_task_id_tasks_id_fk",
           "tableFrom": "ledger",
-          "columnsFrom": ["task_id"],
           "tableTo": "tasks",
+          "columnsFrom": ["task_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1307,20 +1307,20 @@
         "lesson_uses_staff_id_staff_id_fk": {
           "name": "lesson_uses_staff_id_staff_id_fk",
           "tableFrom": "lesson_uses",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "lesson_uses_lesson_id_lessons_id_fk": {
           "name": "lesson_uses_lesson_id_lessons_id_fk",
           "tableFrom": "lesson_uses",
-          "columnsFrom": ["lesson_id"],
           "tableTo": "lessons",
+          "columnsFrom": ["lesson_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1344,15 +1344,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "lessons_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -1436,29 +1436,29 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "lessons_staff_id_staff_id_fk": {
           "name": "lessons_staff_id_staff_id_fk",
           "tableFrom": "lessons",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "lessons_heard_by_staff_id_fk": {
           "name": "lessons_heard_by_staff_id_fk",
           "tableFrom": "lessons",
-          "columnsFrom": ["heard_by"],
           "tableTo": "staff",
+          "columnsFrom": ["heard_by"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1509,15 +1509,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "offices_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "name": {
@@ -1665,11 +1665,11 @@
         "parts_drawn_for_staff_id_fk": {
           "name": "parts_drawn_for_staff_id_fk",
           "tableFrom": "parts",
-          "columnsFrom": ["drawn_for"],
           "tableTo": "staff",
+          "columnsFrom": ["drawn_for"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1744,15 +1744,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "pokes_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -1799,11 +1799,11 @@
         "pokes_staff_id_staff_id_fk": {
           "name": "pokes_staff_id_staff_id_fk",
           "tableFrom": "pokes",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1822,15 +1822,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "reports_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -1870,11 +1870,11 @@
         "reports_staff_id_staff_id_fk": {
           "name": "reports_staff_id_staff_id_fk",
           "tableFrom": "reports",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1936,15 +1936,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "runs_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "job_id": {
@@ -1998,20 +1998,20 @@
         "runs_job_id_jobs_id_fk": {
           "name": "runs_job_id_jobs_id_fk",
           "tableFrom": "runs",
-          "columnsFrom": ["job_id"],
           "tableTo": "jobs",
+          "columnsFrom": ["job_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "runs_staff_id_staff_id_fk": {
           "name": "runs_staff_id_staff_id_fk",
           "tableFrom": "runs",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2159,6 +2159,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "package": {
+          "name": "package",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "hired_at": {
           "name": "hired_at",
           "type": "timestamp with time zone",
@@ -2216,20 +2222,20 @@
         "staff_goals_staff_id_staff_id_fk": {
           "name": "staff_goals_staff_id_staff_id_fk",
           "tableFrom": "staff_goals",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "staff_goals_goal_id_goals_id_fk": {
           "name": "staff_goals_goal_id_goals_id_fk",
           "tableFrom": "staff_goals",
-          "columnsFrom": ["goal_id"],
           "tableTo": "goals",
+          "columnsFrom": ["goal_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -2290,15 +2296,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "tasks_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -2381,20 +2387,20 @@
         "tasks_staff_id_staff_id_fk": {
           "name": "tasks_staff_id_staff_id_fk",
           "tableFrom": "tasks",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "tasks_ask_id_asks_id_fk": {
           "name": "tasks_ask_id_asks_id_fk",
           "tableFrom": "tasks",
-          "columnsFrom": ["ask_id"],
           "tableTo": "asks",
+          "columnsFrom": ["ask_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2413,15 +2419,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "threads_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "title": {
@@ -2500,38 +2506,38 @@
         "threads_goal_id_goals_id_fk": {
           "name": "threads_goal_id_goals_id_fk",
           "tableFrom": "threads",
-          "columnsFrom": ["goal_id"],
           "tableTo": "goals",
+          "columnsFrom": ["goal_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "threads_hub_id_staff_id_fk": {
           "name": "threads_hub_id_staff_id_fk",
           "tableFrom": "threads",
-          "columnsFrom": ["hub_id"],
           "tableTo": "staff",
+          "columnsFrom": ["hub_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "threads_holder_id_staff_id_fk": {
           "name": "threads_holder_id_staff_id_fk",
           "tableFrom": "threads",
-          "columnsFrom": ["holder_id"],
           "tableTo": "staff",
+          "columnsFrom": ["holder_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "threads_held_by_asks_id_fk": {
           "name": "threads_held_by_asks_id_fk",
           "tableFrom": "threads",
-          "columnsFrom": ["held_by"],
           "tableTo": "asks",
+          "columnsFrom": ["held_by"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2550,15 +2556,15 @@
           "primaryKey": true,
           "notNull": true,
           "identity": {
+            "type": "always",
             "name": "usage_id_seq",
+            "schema": "public",
             "increment": "1",
+            "startWith": "1",
             "minValue": "1",
             "maxValue": "2147483647",
-            "startWith": "1",
             "cache": "1",
-            "cycle": false,
-            "schema": "public",
-            "type": "always"
+            "cycle": false
           }
         },
         "staff_id": {
@@ -2613,8 +2619,8 @@
           "primaryKey": false,
           "notNull": false,
           "generated": {
-            "type": "stored",
-            "as": "input_tokens + output_tokens + cache_read_tokens + cache_write_tokens"
+            "as": "input_tokens + output_tokens + cache_read_tokens + cache_write_tokens",
+            "type": "stored"
           }
         },
         "cost_usd": {
@@ -2650,20 +2656,20 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "usage_staff_id_staff_id_fk": {
           "name": "usage_staff_id_staff_id_fk",
           "tableFrom": "usage",
-          "columnsFrom": ["staff_id"],
           "tableTo": "staff",
+          "columnsFrom": ["staff_id"],
           "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2675,10 +2681,10 @@
   },
   "enums": {},
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},
