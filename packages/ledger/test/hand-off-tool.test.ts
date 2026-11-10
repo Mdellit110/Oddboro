@@ -655,6 +655,9 @@ const put = (path: string, text: string) => {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
 };
+/** Fails a refusal that names a file by its path from the office's folder, which hand_off never takes back. */
+const notByOfficePath = (r: Awaited<ReturnType<Client['callTool']>>) =>
+  assert.doesNotMatch(said(r), /staff[\\/]/, said(r));
 /** An Odd of the test's own, with its own folder and its own work, so no test sees another's files. */
 async function carrier(id: string) {
   await db.insert(staff).values({ ...odd(id, id), tools: [...STARTER_TOOLS] });
@@ -742,7 +745,8 @@ test('a hand-off naming an instruction file is refused', async () => {
   for (const name of [...names, workName(here, 'paige/.claude/z')]) {
     const r = await give(here, 'Use it', [name]);
     assert.equal(r.isError, true, name);
-    assert.ok(said(r).includes(name), said(r));
+    assert.ok(said(r).startsWith(`Nothing was handed off yet. ${name} is an instruction`), said(r));
+    notByOfficePath(r);
   }
   assert.equal((await handedOn(here)).length, before);
   assert.equal(existsSync(threadPart(here, 'cat')), false, 'an instruction file was copied');
@@ -768,6 +772,9 @@ test('a hand-off naming two files that would land under one name is refused and 
   const r = await give(here, 'Use both', ['a-b.md', nested]);
   assert.equal(r.isError, true);
   assert.ok(said(r).includes('a-b.md') && said(r).includes(nested), said(r));
+  // Named as the Odd wrote it, not as the office found it in its folder.
+  const dotted = await give(here, 'Use both', ['./a-b.md', nested]);
+  assert.ok(said(dotted).includes(`one name: ./a-b.md and ${nested}.`), said(dotted));
   // A backslash too: `ownFile` gives Windows's separator there. And case, which
   // a Mac's and Windows's disks do not tell apart.
   own('a\\c.md');
@@ -825,14 +832,36 @@ test('a carried file never replaces a different file already in the work, and no
   own('notes.md', 'old scratch in own folder');
   own('fresh.md', 'new');
   const before = (await handedOn(here)).length;
-  for (const files of [['notes.md'], ['fresh.md', 'notes.md']]) {
+  // The last is named as the Odd wrote it, not as the office found it in its folder.
+  for (const files of [['notes.md'], ['fresh.md', 'notes.md'], ['./notes.md']]) {
     const r = await give(here, 'Use the notes', files);
     assert.equal(r.isError, true, said(r));
-    assert.ok(said(r).startsWith('Nothing was handed off yet.'), said(r));
-    assert.ok(said(r).includes(join('staff', 'ivy', 'notes.md')), said(r));
-    assert.ok(said(r).includes(workName(here, 'ivy/notes.md')), said(r));
+    assert.ok(
+      said(r).startsWith(
+        `Nothing was handed off yet. ${files.at(-1)} would land on ${workName(here, 'ivy/notes.md')},`
+      ),
+      said(r)
+    );
+    notByOfficePath(r);
   }
   assert.deepEqual(partNow(part), { 'notes.md': 'DRAFT BUILT ON THE WORK' });
+  assert.equal((await handedOn(here)).length, before);
+
+  // A file from other work is named by its path in that work.
+  const other = await open('Ivy other work');
+  const from = workName(other, 'ivy/x.md');
+  put(join(threadPart(other, 'ivy'), 'x.md'), 'from the other work');
+  const lands = `threads-${other}-ivy-x.md`;
+  put(join(part, lands), 'A DIFFERENT DRAFT');
+  const fromWork = await give(here, 'Use the other notes', [from]);
+  assert.equal(fromWork.isError, true, said(fromWork));
+  assert.ok(
+    said(fromWork).startsWith(
+      `Nothing was handed off yet. ${from} would land on ${workName(here, `ivy/${lands}`)},`
+    ),
+    said(fromWork)
+  );
+  assert.equal(readFileSync(join(part, lands), 'utf8'), 'A DIFFERENT DRAFT');
   assert.equal((await handedOn(here)).length, before);
 });
 
@@ -850,7 +879,7 @@ test('a carried file with the same words as the one already in the work is not c
 });
 
 test(
-  'a hand-off naming a file the office cannot open is refused by its name in the office, and the work is left as it was',
+  'a hand-off naming a file the office cannot open is refused by the name the Odd gave it, and the work is left as it was',
   {
     skip:
       (process.platform === 'win32' && 'Windows keeps letting the owner read a file after chmod') ||
@@ -868,8 +897,11 @@ test(
     const refused = async (files: string[]) => {
       const r = await give(here, 'Use it', files);
       assert.equal(r.isError, true, said(r));
-      assert.ok(said(r).startsWith('Nothing was handed off yet.'), said(r));
-      assert.ok(said(r).includes(join('staff', 'kit', 'locked.md')), said(r));
+      assert.ok(
+        said(r).startsWith('Nothing was handed off yet. The office cannot open locked.md to copy'),
+        said(r)
+      );
+      notByOfficePath(r);
       for (const full of [home(), realpathSync(home())])
         assert.ok(!said(r).includes(full), `a full path: ${said(r)}`);
       assert.doesNotMatch(said(r), /EACCES/);
@@ -893,6 +925,23 @@ test(
     } finally {
       chmodSync(locked, 0o644);
     }
+
+    // A file from other work is named by its path in that work.
+    const other = await open('Kit other work');
+    const shut = join(threadPart(other, 'kit'), 'shut.md');
+    put(shut, 'from the other work');
+    const from = workName(other, 'kit/shut.md');
+    try {
+      chmodSync(shut, 0o000);
+      const r = await give(here, 'Use the other', [from]);
+      assert.equal(r.isError, true, said(r));
+      assert.ok(
+        said(r).startsWith(`Nothing was handed off yet. The office cannot open ${from} to copy`),
+        said(r)
+      );
+    } finally {
+      chmodSync(shut, 0o644);
+    }
   }
 );
 
@@ -912,6 +961,8 @@ test(
       symlinkSync(target, join(part, 'e.md'));
       const r = await give(here, 'Through a file link', ['e.md']);
       assert.equal(r.isError, true, said(r));
+      assert.ok(said(r).startsWith('Nothing was handed off yet. e.md would land on'), said(r));
+      notByOfficePath(r);
       assert.equal(readFileSync(target, 'utf8'), 'untouched');
       assert.equal(lstatSync(join(part, 'e.md')).isSymbolicLink(), true, 'the link was changed');
 
@@ -926,6 +977,31 @@ test(
     } finally {
       rmSync(outside, { recursive: true, force: true });
     }
+  }
+);
+
+test(
+  'a link in the work to a file with the same words as the carried one is refused, never taken as carried before',
+  { skip: TEMP_IN_APPDATA },
+  async (t) => {
+    const { c, own, open, give } = await carrier('lou');
+    t.after(() => c.close());
+    const here = await open('Lou work');
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-same-')));
+    t.after(() => rmSync(outside, { recursive: true, force: true }));
+    own('f.md', 'the same words');
+    const target = join(outside, 'target.md');
+    writeFileSync(target, 'the same words');
+    const part = threadPart(here, 'lou');
+    mkdirSync(part, { recursive: true });
+    symlinkSync(target, join(part, 'f.md'));
+    const before = (await handedOn(here)).length;
+    const r = await give(here, 'Through a link to the same words', ['f.md']);
+    assert.equal(r.isError, true, said(r));
+    assert.ok(said(r).startsWith('Nothing was handed off yet. f.md would land on'), said(r));
+    notByOfficePath(r);
+    assert.equal(lstatSync(join(part, 'f.md')).isSymbolicLink(), true, 'the link was changed');
+    assert.equal((await handedOn(here)).length, before);
   }
 );
 

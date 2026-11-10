@@ -321,7 +321,8 @@ async function filesForHandOff(
 ): Promise<{ here: string[]; carry: CarriedFile[] } | { problem: string }> {
   const here: string[] = [];
   const carry: CarriedFile[] = [];
-  const landing = new Map<string, string>();
+  // Each landing name to the file there: as the office found it, and as the Odd named it.
+  const landing = new Map<string, { name: string; named: string }>();
   for (const p of named) {
     const file = await readableFile(p);
     if (!file)
@@ -338,14 +339,14 @@ async function filesForHandOff(
     // Lower case, since a Mac's and Windows's disks hold those as one file.
     const lands = (inside ?? `${ME}/${name}`).toLowerCase();
     const first = landing.get(lands);
-    if (first === file.name) continue;
+    if (first?.name === file.name) continue;
     if (first)
       return {
-        problem: `Two of these files would land under one name: ${first} and ${file.name}. Rename one and call hand_off again.`
+        problem: `Two of these files would land under one name: ${first.named} and ${p}. Rename one and call hand_off again.`
       };
-    landing.set(lands, file.name);
+    landing.set(lands, { name: file.name, named: p });
     if (inside) here.push(inside);
-    else carry.push({ real: file.real, name });
+    else carry.push({ real: file.real, name, named: p });
   }
   return { here, carry };
 }

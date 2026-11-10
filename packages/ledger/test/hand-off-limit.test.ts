@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { and, eq, sql } from 'drizzle-orm';
 import { asks, followUps, staff, threads } from '../src/schema.ts';
+import { workName } from '../src/work-paths.ts';
 // Types only, erased before run, so threads.ts still loads after the mock.
 import type { ThreadFor } from '../src/threads.ts';
 import { db } from './pglite.ts';
@@ -152,7 +153,7 @@ test("a hand-off past the round's limit keeps its files until the owner's yes", 
     to: 'ivy',
     work,
     thread: { id },
-    carry: [{ real, name }]
+    carry: [{ real, name, named: workName(other.id, 'cole/x.md') }]
   });
   assert.ok('asked' in r, JSON.stringify(r));
   assert.equal(readFileSync(join(threadPart(id, 'cole'), name), 'utf8'), 'from older work');

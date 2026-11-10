@@ -15,10 +15,9 @@ import {
   readFileSync,
   realpathSync
 } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from './db.ts';
-import { home } from './home.ts';
 import {
   asks,
   followUps,
@@ -50,6 +49,11 @@ export type CarriedFile = {
   real: string;
   /** The name it lands under in the sender's part. */
   name: string;
+  /**
+   * The name the Odd gave it on `hand_off`, which a refusal uses: the Odd can
+   * pass that back, never a path from the office's folder.
+   */
+  named: string;
 };
 
 /** Why a hand-off's files cannot land in its work: the hand-off is taken back with it. */
@@ -61,14 +65,11 @@ function opens(path: string): boolean {
     closeSync(openSync(path, 'r'));
     return true;
   } catch {
-    // Unreadable or gone: the caller refuses the file by its office name, since
-    // the error's own text holds real paths.
+    // Unreadable or gone: the caller refuses the file by the name the Odd gave
+    // it, since the error's own text holds real paths.
     return false;
   }
 }
-
-/** A file's path from the office's folder, as a refusal names it: never a full path. */
-const officeName = (real: string): string => relative(realpathSync(home()), real);
 
 /**
  * Copy the files a hand-off carries into the sender's part of its thread.
@@ -80,7 +81,7 @@ function carryFiles(thread: number, from: string, carry: CarriedFile[]): void {
   const unread = carry.find((c) => !opens(c.real));
   if (unread)
     throw new NotCarried(
-      `The office cannot open ${officeName(unread.real)} to copy it. Make it readable, or leave it out, and call hand_off again.`
+      `The office cannot open ${unread.named} to copy it. Make it readable, or leave it out, and call hand_off again.`
     );
   const part = threadPart(thread, from);
   mkdirSync(part, { recursive: true });
@@ -88,14 +89,14 @@ function carryFiles(thread: number, from: string, carry: CarriedFile[]): void {
   // outside their walls: a link left in the part must not take the copy elsewhere.
   if (realpathSync(part) !== join(realpathSync(threadFolder(thread)), from))
     throw new NotCarried('Your part of this work is a link, so files cannot land in it.');
-  const copies = carry.filter(({ real, name }) => {
+  const copies = carry.filter(({ real, name, named }) => {
     const to = join(part, name);
     const there = lstatSync(to, { throwIfNoEntry: false });
     if (!there) return true;
     // A link is never read through, so it counts as a different file.
     if (there.isFile() && readFileSync(to).equals(readFileSync(real))) return false;
     throw new NotCarried(
-      `${officeName(real)} would land on ${workName(thread, `${from}/${name}`)}, a different file already in this work. Rename your file, or name the work's file instead, and call hand_off again.`
+      `${named} would land on ${workName(thread, `${from}/${name}`)}, a different file already in this work. Rename your file, or name the work's file instead, and call hand_off again.`
     );
   });
   // Never over a file that landed after the check.
