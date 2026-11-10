@@ -65,7 +65,15 @@ export async function parkedWork(taskId: number): Promise<{ id: number; title: s
 }
 
 /**
- * The task ended: every thread parked on it picks up, with what happened.
+ * How a task ended, as the work parked on it hears it: `withdrawn` is the
+ * office or its Odd taking it off the desk (`withdrawTask`), never the owner's drop.
+ */
+export type TaskEnded = 'done' | 'dropped' | 'withdrawn';
+
+/**
+ * The task ended: every live thread parked on it picks up, with what happened.
+ * A stopped thread lost its park and wakes for nothing, so neither does the
+ * lead of one, such as an Odd that left the office (`removeOdd`).
  * `ownRun` is there when a run on the task's own work picks up too, with the
  * title of the work it is on, or null for a task on no work: each parked
  * thread is told that run carries its own part. `earlier` when that run
@@ -74,7 +82,7 @@ export async function parkedWork(taskId: number): Promise<{ id: number; title: s
  */
 export async function wakeOnTask(
   t: { id: number; title: string; note: string | null },
-  how: { done: boolean; owner: string; ownRun?: { work: string | null; earlier?: true } }
+  how: { ended: TaskEnded; owner: string; ownRun?: { work: string | null; earlier?: true } }
 ): Promise<void> {
   const parked = await db
     .update(threads)
@@ -83,9 +91,11 @@ export async function wakeOnTask(
     .returning({ id: threads.id });
   const title = flat(t.title);
   const note = flat(t.note ?? '');
-  const ended = how.done
-    ? `${how.owner} finished "${title}", the task you parked this work on.`
-    : `${how.owner} dropped "${title}", the task you parked this work on, so it will not be finished.`;
+  const ended = {
+    done: `${how.owner} finished "${title}", the task you parked this work on.`,
+    dropped: `${how.owner} dropped "${title}", the task you parked this work on, so it will not be finished.`,
+    withdrawn: `"${title}", the task you parked this work on, was taken off ${how.owner}'s desk, so it will not be finished.`
+  }[how.ended];
   // A task on no work can be parked on only by the Odd that gave it
   // (`parkOnTask`), so its own run is this Odd's.
   const run = how.ownRun;
@@ -98,7 +108,7 @@ export async function wakeOnTask(
       : run.earlier
         ? ` A run on "${flat(run.work)}", the work that task was given on, was set going when the task ended, and its lead carries that work's own part: do only this work's part here.`
         : ` "${flat(run.work)}", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here.`;
-  const next = how.done ? 'Pick it up now' : 'Decide what comes of the work now';
+  const next = how.ended === 'done' ? 'Pick it up now' : 'Decide what comes of the work now';
   const said = `${ended}${own} ${next}`;
   for (const { id } of parked) await answerThread(id, note ? `${said}: ${note}` : `${said}.`);
 }

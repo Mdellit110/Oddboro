@@ -38,7 +38,7 @@ import {
   servesNoThread
 } from './hand-offs.ts';
 import { answerWindow } from './usage-window.ts';
-import { parkedWork, wakeOnTask } from './task-parking.ts';
+import { parkedWork, wakeOnTask, type TaskEnded } from './task-parking.ts';
 import {
   addFollowUp,
   answerHandOffs,
@@ -1879,15 +1879,7 @@ export async function withdrawTask(id: number, line: string): Promise<void> {
     body: line,
     taskId: t.id
   });
-  const from = t.askId ? await ask(t.askId) : undefined;
-  await answerLater(
-    {
-      handOffId: t.handOffId ?? from?.handOffId ?? null,
-      threadId: t.threadId ?? from?.threadId ?? null
-    },
-    'failed',
-    line
-  );
+  await taskEnded(t, { ended: 'withdrawn', owner: await ownerName(), said: line });
 }
 
 /**
@@ -2254,7 +2246,7 @@ export async function finishFollowUp(
     // lifted, so it was not told of this work and does not pick up now.
     const own = await ownRunOf(await taskEnd(t));
     await wakeOnTask(t, {
-      done: t.status === 'done',
+      ended: t.status === 'done' ? 'done' : 'dropped',
       owner: await ownerName(),
       ownRun: own && { ...own, earlier: true }
     });
@@ -2853,7 +2845,7 @@ async function dropConnectTasks(id: string, staffId?: string): Promise<void> {
       )
     );
   const owner = await ownerName();
-  for (const t of stale) await wakeOnTask(t, { done: false, owner });
+  for (const t of stale) await wakeOnTask(t, { ended: 'dropped', owner });
 }
 
 /**
@@ -3193,8 +3185,13 @@ async function ownRunOf(end: {
 }): Promise<{ work: string | null } | undefined> {
   if (!end.ownRuns) return undefined;
   const [own] = end.ownThread
-    ? await db.select({ title: threads.title }).from(threads).where(eq(threads.id, end.ownThread))
+    ? await db
+        .select({ title: threads.title, hubId: threads.hubId })
+        .from(threads)
+        .where(eq(threads.id, end.ownThread))
     : [];
+  // A lead that left the office runs nothing, so parked work must not leave its part to it.
+  if (own && !(await staffer(own.hubId))) return undefined;
   return { work: own?.title ?? null };
 }
 
@@ -3216,6 +3213,24 @@ export async function finishTask(id: number, done: boolean, note: string | null)
     reason: t.note,
     taskId: t.id
   });
+  await taskEnded(t, {
+    ended: done ? 'done' : 'dropped',
+    owner,
+    said: `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`
+  });
+}
+
+/**
+ * What a task's end starts, from its row in `OWNER_ANSWERS`, whoever ended it:
+ * the owner (`finishTask`), or the office or its Odd taking it off the desk
+ * (`withdrawTask`), which ends it as a drop. `said` is the line that goes back
+ * where the task came from when no run follows.
+ */
+async function taskEnded(
+  t: TaskRow,
+  how: { ended: TaskEnded; owner: string; said: string }
+): Promise<void> {
+  const done = how.ended === 'done';
   const end = await taskEnd(t);
   const { from, effects } = end;
   // Read before the effects: waking the parked work clears what parks it. Its
@@ -3235,10 +3250,7 @@ export async function finishTask(id: number, done: boolean, note: string | null)
             threadId: t.threadId ?? from?.threadId ?? null
           },
           done ? 'done' : 'failed',
-          [
-            `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`,
-            ...parked.map((p) => pickedUpLine(p.title))
-          ].join(' ')
+          [how.said, ...parked.map((p) => pickedUpLine(p.title))].join(' ')
         );
         break;
       // The owner finished connecting a tool an Odd asked for: it can start the
@@ -3255,7 +3267,7 @@ export async function finishTask(id: number, done: boolean, note: string | null)
         break;
       // Work on another thread that waited on this task, whoever gave it.
       case 'wake_parked':
-        await wakeOnTask(t, { done, owner, ownRun });
+        await wakeOnTask(t, { ended: how.ended, owner: how.owner, ownRun });
         break;
       default:
         effect satisfies never;
