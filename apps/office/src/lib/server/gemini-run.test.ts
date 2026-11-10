@@ -321,7 +321,10 @@ test('after a failed run that started nothing, the resumed session hears the mes
   }
   const { args, message } = await chatOf('gale', 'Still there?');
   assert.deepEqual(args.slice(-2), ['--resume', '0a0a0a0a-0000-4000-8000-00000000ce01']);
-  assert.match(message, /your run failed each time, so you never saw it: "Plan the week\."/);
+  assert.ok(
+    message.includes(`so you never saw it:)\n${await L.ownerName()}: Plan the week.`),
+    message
+  );
   assert.equal(message.split('Plan the week').length - 1, 1, 'the message was said more than once');
   assert.ok(!message.includes('Your run on'), 'it heard of a run on a message it never took');
 });

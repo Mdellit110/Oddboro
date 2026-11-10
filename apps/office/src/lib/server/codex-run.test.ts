@@ -513,7 +513,12 @@ test("a Codex Odd's resumed chat after a failed one with a picture is told where
     `--image=${files[0].path}`,
     '-'
   ]);
-  assert.match(next.message, /so you never saw it: "What is \[Image #1\]\?"\.\)/);
+  assert.ok(
+    next.message.includes(
+      `so you never saw it:)\n${await L.ownerName()}: What is [Image #1]?\n(Files attached`
+    ),
+    next.message
+  );
   assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
 });
 
@@ -551,7 +556,10 @@ test('a Codex Odd that links its attachments folder outside and forges a failed 
       [],
       'a picture from outside went as --image'
     );
-    assert.match(next.message, /so you never saw it: "What is \[Image #1\]\?"/);
+    assert.ok(
+      next.message.includes(`so you never saw it:)\n${await L.ownerName()}: What is [Image #1]?`),
+      next.message
+    );
     assert.ok(
       next.message.includes('- [Image #1]: gone, deleted from your folder since'),
       next.message

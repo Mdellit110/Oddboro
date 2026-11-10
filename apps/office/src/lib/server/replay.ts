@@ -10,7 +10,7 @@ import { opendirSync, statSync, type Dir } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { shownFolder } from '@oddboro/ledger';
 import type { ChatEntry } from '../staff/chat.ts';
-import { retoldFiles, type RetoldEntry } from './chat-preface.ts';
+import { retoldLine, type RetoldEntry } from './chat-preface.ts';
 
 /** At most this many characters of chat text go into one replay. */
 export const REPLAY_CHARS = 24_000;
@@ -71,10 +71,7 @@ export function replaySince(entries: ChatEntry[], kept: ChatEntry[]): string | u
 /** The earlier chat, word for word, with each owner line's files as they are now, for a session that never saw it. Pure. */
 export function replay(entries: RetoldEntry[], changed: Changed, budget = REPLAY_CHARS): string {
   const kept = replayed(entries, budget);
-  const lines = kept.map(
-    (e) =>
-      `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}${e.now?.length ? `\n${retoldFiles(e.now)}` : ''}`
-  );
+  const lines = kept.map(retoldLine);
   const more = changed.files.length - REPLAY_FILES;
   const files =
     changed.files.slice(0, REPLAY_FILES).join(', ') + (more > 0 ? `, and ${more} more` : '');

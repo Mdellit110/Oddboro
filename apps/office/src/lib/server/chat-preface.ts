@@ -19,13 +19,19 @@ export const fileLine = (f: KeptFile): string =>
     ? `- [${f.tag}]: gone, deleted from your folder since`
     : `- [${f.tag}]: ${f.path} (${f.mediaType})`;
 
-/** The files of owner lines the office retells (`replay`, `chatPreface`). */
-export const retoldFiles = (files: KeptFile[]): string =>
-  [
-    '(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
-    ...files.map(fileLine),
-    ')'
-  ].join('\n');
+/** The files under an owner line the office retells, as they are now, or nothing when it has none. */
+const retoldFiles = (e: RetoldEntry): string =>
+  e.now?.length
+    ? [
+        '\n(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
+        ...e.now.map(fileLine),
+        ')'
+      ].join('\n')
+    : '';
+
+/** A chat line the office retells (`replay`, `chatPreface`), with its files under it, so each file sits under its own line. */
+export const retoldLine = (e: RetoldEntry): string =>
+  `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}${retoldFiles(e)}`;
 
 /** A line the session never saw: a poke the office delivered, a line it said in the staffer's name, or a failed run's error. */
 const unseen = (e: ChatEntry) => e.poke || e.told || e.failed;
@@ -73,7 +79,7 @@ export function missedAt(past: ChatEntry[], session: Session): number[] {
 /**
  * Each told, poke and failed run's owner line since the owner last wrote is
  * said once: here only when the session does not hold it already. A failed
- * run's owner line comes with its files as they are now.
+ * run's owner line comes as the replay retells it, with its files as they are now under it.
  */
 export function chatPreface(past: RetoldEntry[], landed: Landed[], session: Session): string[] {
   const { failedOn, holds, heard, failed } = heardOf(past, session);
@@ -81,7 +87,6 @@ export function chatPreface(past: RetoldEntry[], landed: Landed[], session: Sess
   const told = since.filter((e) => e.told);
   const poked = since.filter((e) => e.poke);
   const missed = missedAt(past, session).map((i) => past[i]);
-  const missedFiles = missed.flatMap((e) => e.now ?? []);
   const ran = failed.filter(holds).length;
   // The session saw what it delivered up to the end of its last reply.
   const last = past.findLast((e, i) => !unseen(e) && !failedOn(i))?.at ?? '';
@@ -107,12 +112,15 @@ export function chatPreface(past: RetoldEntry[], landed: Landed[], session: Sess
             : `(Your runs on {owner}'s last ${ran} messages you saw before this one failed, so they have no reply from you to them.)`
         ]
       : []),
+    // Each line with its own files, since pasted pictures are numbered from #1 in every message.
     ...(missed.length
       ? [
-          `({owner} wrote to you before this, but your run failed each time, so you never saw it: ${missed.map((e) => `"${e.text}"`).join(', ')}.)`
+          [
+            '({owner} wrote to you before this, but your run failed each time, so you never saw it:)',
+            ...missed.map(retoldLine)
+          ].join('\n')
         ]
       : []),
-    ...(missedFiles.length ? [retoldFiles(missedFiles)] : []),
     ...(put.length
       ? [
           `(Since {owner} last wrote, you put these on their desk: ${put.map((d) => `${d.kind} "${d.title}"`).join(', ')}.)`

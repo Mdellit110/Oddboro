@@ -107,7 +107,7 @@ test('a resumed session hears that its runs failed on messages it took, and each
   ];
   assert.deepEqual(chatPreface(past, [], 'resumed'), [
     "(Your runs on {owner}'s last 2 messages you saw before this one failed, so they have no reply from you to them.)",
-    '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Call the band.".)'
+    '({owner} wrote to you before this, but your run failed each time, so you never saw it:)\n{owner}: Call the band.'
   ]);
 });
 
@@ -129,7 +129,7 @@ test('a new session whose replay the budget cut never had a failed message, what
     failed('2026-11-06T09:07:00Z', 'No reply after 5 minutes.', true)
   ];
   assert.deepEqual(chatPreface(past, [], { replayed: new Set() }), [
-    '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Book the hall.".)'
+    '({owner} wrote to you before this, but your run failed each time, so you never saw it:)\n{owner}: Book the hall.'
   ]);
 });
 
@@ -156,12 +156,40 @@ test("a failed message the session never saw is retold with its files as they ar
     failed('2026-11-06T09:03:00Z', 'Quota used up.')
   ];
   assert.deepEqual(chatPreface(past, [], 'resumed'), [
-    '({owner} wrote to you before this, but your run failed each time, so you never saw it: "Compare [a.pdf] and [b.png].".)',
     [
+      '({owner} wrote to you before this, but your run failed each time, so you never saw it:)',
+      '{owner}: Compare [a.pdf] and [b.png].',
       '(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
       '- [a.pdf]: /o/a.pdf (application/pdf)',
       '- [b.png]: gone, deleted from your folder since',
       ')'
+    ].join('\n')
+  ]);
+});
+
+test('two failed messages, each with its own pasted [Image #1], each get their own picture under them', () => {
+  const picture = (path: string) => [
+    { tag: 'Image #1', name: 'k.png', mediaType: 'image/png', size: 1, path }
+  ];
+  const past = [
+    { ...owner('2026-11-06T09:02:00Z', 'What is [Image #1]?'), now: picture('/o/a.png') },
+    failed('2026-11-06T09:03:00Z', 'Quota used up.'),
+    { ...owner('2026-11-06T09:04:00Z', 'Here it is again, [Image #1]'), now: picture('/o/b.png') },
+    failed('2026-11-06T09:05:00Z', 'Quota used up.')
+  ];
+  const files = (path: string) =>
+    [
+      '(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
+      `- [Image #1]: ${path} (image/png)`,
+      ')'
+    ].join('\n');
+  assert.deepEqual(chatPreface(past, [], 'resumed'), [
+    [
+      '({owner} wrote to you before this, but your run failed each time, so you never saw it:)',
+      '{owner}: What is [Image #1]?',
+      files('/o/a.png'),
+      '{owner}: Here it is again, [Image #1]',
+      files('/o/b.png')
     ].join('\n')
   ]);
 });
