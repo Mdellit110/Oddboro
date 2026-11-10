@@ -92,6 +92,55 @@ test("a hand-off carries the run's key to its thread, so the hold can see the ru
   assert.deepEqual(t.runs, ['k-chat']);
 });
 
+test("a hand-off carries files from the giver's own folder, and the office copies them into its part of the work's folder for the colleague", async () => {
+  const { home } = await import('../src/home.ts');
+  const { followUps } = await import('../src/schema.ts');
+  const { handFiles, handOffBrief } = await import('../src/hand-offs.ts');
+  const { threadPart } = await import('../src/threads.ts');
+  const kept = 'attachments/20261110-081108-35bc-image.png';
+  mkdirSync(join(home('staff', 'lead'), 'attachments'), { recursive: true });
+  writeFileSync(join(home('staff', 'lead'), kept), 'png');
+  const c = await toolServer('lead', { RUN_KEY: 'k-files' });
+  // Another Odd's file never goes, and nothing is handed.
+  const wrong = await c.callTool({
+    name: 'hand_off',
+    arguments: { to: 'paige', title: 'Look at it', brief: 'Look.', files: ['../paige/x.md'] }
+  });
+  assert.equal(wrong.isError, true);
+  assert.match(said(wrong), /is not a file in your folder/);
+  const r = await c.callTool({
+    name: 'hand_off',
+    arguments: {
+      to: 'paige',
+      title: 'Look at the screenshot',
+      brief: 'Say what it shows.',
+      files: [kept]
+    }
+  });
+  assert.equal(r.isError, undefined, said(r));
+  const h = (await db.select().from(followUps).where(eq(followUps.staffId, 'paige'))).find(
+    (x) => x.handOff?.title === 'Look at the screenshot'
+  )!;
+  assert.deepEqual(h.handOff?.files, [kept]);
+  // As the colleague's run starts, the office copies it and the brief names the copy.
+  const copied = handFiles(h.handOff!, h.threadId!);
+  const at = join(threadPart(h.threadId!, 'lead'), 'handed', kept);
+  assert.deepEqual(copied, { copied: [at], missing: [] });
+  const brief = handOffBrief({
+    kind: 'hand_off',
+    h: h.handOff!,
+    colleague: { id: 'lead', name: 'Lena' },
+    me: 'paige',
+    result: null,
+    thread: h.threadId!,
+    files: copied
+  }).join('\n');
+  assert.ok(brief.includes(`- Files Lena handed you with it, to read:\n  - ${at}`), brief);
+  // A file gone since is named as missing, not copied.
+  rmSync(join(home('staff', 'lead'), kept));
+  assert.deepEqual(handFiles(h.handOff!, h.threadId!), { copied: [], missing: [kept] });
+});
+
 test("a hand-off that hands nothing on comes back as an error that says so, and one held for the owner's yes says it goes ahead on it", async () => {
   const c = await toolServer('lead', { RUN_KEY: 'k-refused' });
   const r = await c.callTool({
@@ -421,7 +470,9 @@ test('every office tool refuses a key it does not take, and says which keys it d
     }
   }
   assert.deepEqual(
-    OFFICE_TOOLS.map((t) => t.id).filter((id) => !reached.has(id)),
+    OFFICE_TOOLS.filter((t) => !t.prompt)
+      .map((t) => t.id)
+      .filter((id) => !reached.has(id)),
     [],
     'an office tool this test never reached'
   );
@@ -479,6 +530,7 @@ for (const [id, holds] of Object.entries(HOLDERS))
         OFFICE_TOOLS.filter(
           (t) =>
             (t.always || holds.includes(t.id)) &&
+            !t.prompt &&
             (!t.withGmail || id === 'tot') &&
             (!t.inChat || run === 'chat')
         ).map((t) => t.id)
@@ -494,11 +546,18 @@ for (const [id, holds] of Object.entries(HOLDERS))
 // The test above reads each row's conditions to work out what a run gets, so
 // a condition dropped from a row changes what it expects too. These hold the
 // rows themselves.
-test('only leave_office, tell_lead, remove_odd and bring_back_odd wait for a chat, and only leave_office is kept from the manager', () => {
-  const where = (field: 'inChat' | 'notToManager') =>
+test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never a tool', () => {
+  const where = (field: 'inChat' | 'notToManager' | 'prompt') =>
     OFFICE_TOOLS.filter((t) => t[field]).map((t) => t.id);
-  assert.deepEqual(where('inChat'), ['leave_office', 'tell_lead', 'remove_odd', 'bring_back_odd']);
+  assert.deepEqual(where('inChat'), [
+    'leave_office',
+    'withdraw',
+    'tell_lead',
+    'remove_odd',
+    'bring_back_odd'
+  ]);
   assert.deepEqual(where('notToManager'), ['leave_office']);
+  assert.deepEqual(where('prompt'), ['see_office']);
 });
 
 test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {

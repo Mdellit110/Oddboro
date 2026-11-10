@@ -35,6 +35,9 @@ import {
   searchLedger,
   setDescription,
   staffer,
+  task,
+  withdrawAsk,
+  withdrawTask,
   anyStaffer,
   formerStaff,
   type GoAhead,
@@ -99,6 +102,7 @@ import {
 } from './threads.ts';
 import { THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { withFooter } from './mail-footer.ts';
+import { mailAttachments } from './mail-attachments.ts';
 import {
   doesSomething,
   filterWords,
@@ -736,6 +740,13 @@ if (offered('propose_reply'))
           .max(400)
           .describe('One or two lines on the email it answers: who wrote and what they want.'),
         why: z.string().max(1000).describe('Why this reply, in one or two plain sentences.'),
+        attachments: z
+          .array(z.string())
+          .max(10)
+          .optional()
+          .describe(
+            `Files from your own folder that go with it, by their path inside it or their full path, like "attachments/20261110-081108-35bc-image.png". Files ${OWNER} attached in chat are in attachments/. Up to 10, 18 MB together. ${OWNER} sees each one and may take any off.`
+          ),
         account: mailboxArg,
         revises: revisesArg,
         ...raisedArgs
@@ -751,11 +762,14 @@ if (offered('propose_reply'))
       body,
       summary,
       why,
+      attachments = [],
       revises,
       ...where
     }) => {
       const box = mailbox(account);
       if ('problem' in box) return refused(box.problem);
+      const files = mailAttachments(ME, attachments);
+      if ('problem' in files) return refused(files.problem);
       const on = await placed(where);
       if ('problem' in on) return refused(on.problem);
       const more = to.length > 1 ? ` and ${to.length - 1} more` : '';
@@ -777,6 +791,7 @@ if (offered('propose_reply'))
           // The footer goes in now, where the owner sees it and may delete it.
           body: withFooter(body),
           summary,
+          ...(files.length ? { attachments: files } : {}),
           ...box
         },
         revises,
@@ -1567,6 +1582,13 @@ if (HANDS_OFF.tool) {
           .min(1)
           .max(4000)
           .describe('What to do, why, and what to send back, with full paths to any files.'),
+        files: z
+          .array(z.string())
+          .max(10)
+          .optional()
+          .describe(
+            `Files from your own folder to hand them, by their path inside it or their full path, like "attachments/20261110-081108-35bc-image.png": pictures and files ${OWNER} attached in chat are in attachments/. The office copies each to this work's folder, where they read it.`
+          ),
         request: z
           .string()
           .min(1)
@@ -1596,7 +1618,9 @@ if (HANDS_OFF.tool) {
             })
       }
     },
-    async ({ to, title, brief, request, goal, continue_work }) => {
+    async ({ to, title, brief, files = [], request, goal, continue_work }) => {
+      const handed = mailAttachments(ME, files);
+      if ('problem' in handed) return notHanded(handed.problem);
       if (continue_work !== undefined && (request !== undefined || goal !== undefined))
         return notHanded(
           `Work ${continue_work} keeps its own request and goal. Leave out request and goal, put what is new in the brief, and call hand_off again.`
@@ -1613,7 +1637,7 @@ if (HANDS_OFF.tool) {
       const r = await handOff({
         from: ME,
         to,
-        work: { title, brief },
+        work: { title, brief, ...(handed.length ? { files: handed.map((f) => f.path) } : {}) },
         thread: on !== undefined ? { id: on } : { title: request ?? title, goalId: goal },
         run: RUN_KEY
       });
@@ -1786,6 +1810,50 @@ if (has('propose_hire'))
         hire
       });
       return text(`Ask ${ask.id} is on ${OWNER}'s desk.`);
+    }
+  );
+
+// Taking its own open asks and tasks off the owner's desk, only in a chat, on
+// the owner's own words. A withdrawn ask is a no by the office: its line goes
+// back where it came from, and no run reads it for a lesson (`withdrawAsk`).
+if (offered('withdraw'))
+  tool(
+    'withdraw',
+    {
+      description: `Take your own open asks and tasks off ${OWNER}'s desk, when ${OWNER} told you so in this chat: "clear your asks", "drop that task". Nothing it would have done happens, and a held call is never made. Use it only on ${OWNER}'s word, never to tidy up on your own; to change an item, raise a new one that revises it instead. The ids are in "Still on ${OWNER}'s desk from you", or my_asks.`,
+      inputSchema: {
+        asks: z.array(z.number().int()).max(200).optional().describe('Your open asks to take off.'),
+        tasks: z
+          .array(z.number().int())
+          .max(200)
+          .optional()
+          .describe('Your open tasks for them to take off.')
+      }
+    },
+    async ({ asks: askIds = [], tasks: taskIds = [] }) => {
+      if (!askIds.length && !taskIds.length) return refused('Name the asks or tasks to take off.');
+      // Offered only in a chat (`inChat` on its row), where the office sets OWNER_SAID.
+      const line = `${me.name} took it off your desk, as you said in chat: "${OWNER_SAID!.slice(0, 300)}"`;
+      const gone: string[] = [];
+      const left: string[] = [];
+      for (const id of new Set(askIds)) {
+        const a = await ask(id);
+        if (a?.staffId !== ME || a.status !== 'open') left.push(`ask ${id}`);
+        else await withdrawAsk(id, line).then(() => gone.push(`ask ${id}`));
+      }
+      for (const id of new Set(taskIds)) {
+        const t = await task(id);
+        if (t?.staffId !== ME || t.status !== 'open') left.push(`task ${id}`);
+        else await withdrawTask(id, line).then(() => gone.push(`task ${id}`));
+      }
+      return text(
+        [
+          gone.length ? `Took off ${OWNER}'s desk: ${gone.join(', ')}.` : 'Nothing was taken off.',
+          left.length ? `Not yours or not open, so left as it is: ${left.join(', ')}.` : ''
+        ]
+          .filter(Boolean)
+          .join(' ')
+      );
     }
   );
 

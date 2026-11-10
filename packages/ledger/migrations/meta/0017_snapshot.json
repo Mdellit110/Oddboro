@@ -1,5 +1,5 @@
 {
-  "id": "4e6b9e5c-9f5a-4aa9-a5fd-3ab2156af8aa",
+  "id": "1e355801-939e-4b5c-9a10-7ef1fc73980c",
   "prevId": "35ce58bb-9c9a-4b82-9b17-4f8801c2347b",
   "version": "7",
   "dialect": "postgresql",
@@ -2100,7 +2100,7 @@
           "type": "text[]",
           "primaryKey": false,
           "notNull": true,
-          "default": "'{\"search_ledger\",\"give_owner_a_task\",\"find_connectors\",\"ask_for_access\",\"edit_my_job\",\"edit_my_description\",\"hand_off\",\"poke_owner\"}'"
+          "default": "'{\"see_office\",\"search_ledger\",\"give_owner_a_task\",\"find_connectors\",\"ask_for_access\",\"edit_my_job\",\"edit_my_description\",\"hand_off\",\"poke_owner\"}'"
         },
         "account": {
           "name": "account",

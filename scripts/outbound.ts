@@ -70,9 +70,10 @@ export const OUTBOUND: readonly Outbound[] = [
   },
   {
     file: 'apps/office/src/lib/ui/api.ts',
-    calls: 3,
+    calls: 4,
     to: "The office, on this computer: the page's routes.",
-    sends: "The owner's actions on the page, to the office.",
+    sends:
+      "The owner's actions on the page, to the office, and each file the owner attaches in a chat (`sendFile`).",
     yes: 'The owner acting on the page; nothing leaves this computer here.'
   },
   {
@@ -101,7 +102,7 @@ export const OUTBOUND: readonly Outbound[] = [
     calls: 1,
     to: 'Google: Gmail and Drive.',
     sends:
-      "The owner's token, and what each call needs: an Odd's read, search, draft, change or send, or a reply or filter the owner sends from its card on the desk.",
+      "The owner's token, and what each call needs: an Odd's read, search, draft, change or send, or a reply or filter the owner sends from its card on the desk, with any files from the Odd's own folder attached to it (`mailAttachments`).",
     yes: "The owner signing Gmail or Drive in and granting the Odd it at Read only or Read and write, or the owner's Send, Save to drafts or Create on the card."
   },
   {

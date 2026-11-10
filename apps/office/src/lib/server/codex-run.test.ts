@@ -432,6 +432,54 @@ test("a Codex Odd's next chat resumes the session its last one started", async (
   assert.deepEqual(next.args.slice(-3), ['resume', '019a0000-0000-7000-8000-00000000c0de', '-']);
 });
 
+test("a Codex Odd's chat gets the owner's pictures as --image, after resume on a resumed session, and is told where every attached file is", async () => {
+  forget('cole');
+  await chatOf('cole');
+  const { attachedFiles, keepAttachment } = await import('./chat-files.ts');
+  const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const pdf = keepAttachment('cole', 'lease.pdf', 'application/pdf', new Uint8Array([4]));
+  const files = attachedFiles('cole', [
+    { tag: 'Image #1', name: shot.name },
+    { tag: 'lease.pdf', name: pdf.name }
+  ]);
+  let text = '';
+  await chat(
+    'cole',
+    'What is [Image #1] and [lease.pdf]?',
+    (e) => {
+      if (e.type === 'done') text = e.text;
+      if (e.type === 'error') text = e.message;
+    },
+    undefined,
+    files
+  );
+  const next = JSON.parse(text.slice(0, text.lastIndexOf('\nOutcome:'))) as {
+    args: string[];
+    message: string;
+  };
+  assert.deepEqual(next.args.slice(-4), [
+    'resume',
+    '019a0000-0000-7000-8000-00000000c0de',
+    `--image=${files[0].path}`,
+    '-'
+  ]);
+  // The PDF is not a picture: Codex reads it with its shell, told where it is.
+  assert.ok(!next.args.some((a) => a.includes(pdf.name)), 'the PDF went as a picture');
+  assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
+  assert.ok(
+    next.message.includes(`- [lease.pdf]: ${files[1].path} (application/pdf)`),
+    next.message
+  );
+  // The owner's line in the chat keeps each file, without its path.
+  const { history } = await import('./staff.ts');
+  const line = history('cole').findLast((e) => e.from === 'owner');
+  assert.deepEqual(
+    line?.files?.map((f) => f.tag),
+    ['Image #1', 'lease.pdf']
+  );
+  assert.ok(!JSON.stringify(line).includes('/attachments/'), 'the path went in the chat log');
+});
+
 test("a Codex Odd without Run commands is told it has no shell and to ask for one with ask_for_switch; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
   const owner = await L.ownerName();
   const shell = `a shell confined to your folders and ${owner}'s developer tools (read only)`;

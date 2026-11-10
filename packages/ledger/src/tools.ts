@@ -21,6 +21,8 @@ export type OfficeTool = {
   inChat?: boolean;
   /** Never offered to the Office Manager, even by `always`: the manager never leaves. */
   notToManager?: boolean;
+  /** It shapes the run's prompt (`see_office`) and is no tool the Odd calls, so never offered. */
+  prompt?: boolean;
 };
 
 const TOOLS = [
@@ -53,6 +55,13 @@ const TOOLS = [
     always: true,
     inChat: true,
     notToManager: true
+  },
+  {
+    id: 'withdraw',
+    name: 'Take things off your desk',
+    does: 'Takes its own open asks and tasks off your desk, when you tell it to in chat.',
+    always: true,
+    inChat: true
   },
   {
     id: 'keep_lesson',
@@ -148,6 +157,12 @@ const TOOLS = [
     does: 'Brings you a hire, ready to open in the hire window.'
   },
   {
+    id: 'see_office',
+    name: "Sees who's in the office",
+    does: 'Sees every Odd here by name and role, so it can hand work to the right one, or ask you which one you mean.',
+    prompt: true
+  },
+  {
     id: 'office_report',
     name: 'Office report',
     does: 'Sees what every Odd did: jobs, runs, asks and tasks.'
@@ -200,8 +215,16 @@ export const RIDES_WITH = {
   resume_at: 'hand_off'
 } as const satisfies Record<string, OfficeToolId>;
 
+/**
+ * Tools every new hire starts with, whatever tools its hire names, which the
+ * owner may then take off. Migration 0017 gave `see_office` to every Odd
+ * already hired.
+ */
+export const ON_BY_DEFAULT: OfficeToolId[] = ['see_office'];
+
 /** What a new hire starts with. The owner adds or removes from there. */
 export const STARTER_TOOLS: OfficeToolId[] = [
+  ...ON_BY_DEFAULT,
   'search_ledger',
   'give_owner_a_task',
   'find_connectors',
@@ -233,13 +256,15 @@ export type ToolRun = {
 
 /**
  * Whether `run` is offered the office tool `id`: its Odd, holding `granted`,
- * has it (`hasTool`), and each condition the tool's row sets holds
- * (`withGmail`, `inChat`, `notToManager`). The tool server registers by it.
+ * has it (`hasTool`), it is a tool the Odd calls (not `prompt`), and each
+ * condition the tool's row sets holds (`withGmail`, `inChat`, `notToManager`).
+ * The tool server registers by it.
  */
 export const isOffered = (granted: readonly string[], id: string, run: ToolRun): boolean => {
   const row = OFFICE_TOOLS.find((t) => t.id === id);
   return (
     hasTool(granted, id) &&
+    !row?.prompt &&
     (!row?.withGmail || run.gmail) &&
     (!row?.inChat || run.chat) &&
     (!row?.notToManager || !run.manager)

@@ -2,6 +2,7 @@
 // import in the browser.
 import type { HandOffLine, HandOffStep, LessonLine, ThreadLine } from '@oddboro/ledger';
 import type { DeskItem } from '@oddboro/ledger/desk-answers';
+import type { ChatFile } from '#lib/attachments.ts';
 
 /** Something the staffer put on the owner's desk. */
 export type ChatRef = { kind: DeskItem; id: number; title: string };
@@ -34,10 +35,14 @@ export type ChatEntry = {
   thread?: { line: ThreadLine; steps: HandOffLine[] };
   /** On a reply a chat run wrote: milliseconds from the owner's message to the reply. */
   took?: number;
+  /** On the owner's line: the files they attached, kept in the Odd's `attachments/`. */
+  files?: ChatFile[];
+  /** On a reply: the choices it ended with (`splitChoices`), which the page shows as buttons. */
+  choices?: string[];
 };
 /** What a chat's reply streams to the page, one server-sent event each. */
 export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool'; name: string }
-  | { type: 'done'; text: string }
+  | { type: 'done'; text: string; choices?: string[] }
   | { type: 'error'; message: string };

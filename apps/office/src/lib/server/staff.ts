@@ -41,6 +41,7 @@ import {
   capabilities,
   capped,
   handOffBrief,
+  handFiles,
   handOffContext,
   handOffsFor,
   resultsToJoin,
@@ -72,6 +73,7 @@ import {
   liveLessons,
   outsideLines,
   ownerName,
+  roster,
   ownerNoteOf,
   firstQuestionIn,
   FIRST_QUESTIONS,
@@ -166,13 +168,16 @@ import {
   shellEnv,
   SIGN_IN_WHERE,
   stopGroups,
-  type McpServer
+  type McpServer,
+  type RunImage
 } from './launch.ts';
+import { isPicture, type ChatFile } from '#lib/attachments.ts';
+import { splitChoices } from '#lib/choices.ts';
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { sandboxPaths } from './sandbox-paths.ts';
 import { agentCommand } from './agent-sign-in.ts';
-import { ACT_WRITE, house, stillOnDeskSection } from './house.ts';
+import { ACT_WRITE, house, stillOnDeskSection, whoIsHereSection } from './house.ts';
 import { followUpBrief } from './follow-up-brief.ts';
 import { OUTCOME_LINE, personaRun, voiced } from './persona-run.ts';
 
@@ -623,11 +628,14 @@ async function prompt(
     own: OwnTools;
     /** Whether this office holds the network (`networkHeld`), read once as the run starts. */
     officeHeld: boolean;
-    /** Whether the run is told the threads it leads, by the tool server's own rule (`handsOff`). */
-    leads: boolean;
+    /**
+     * Whether the run is offered `hand_off` (`tool`) and is told the threads it
+     * leads (`leads`), by the tool server's own rule (`handsOff`).
+     */
+    hands: { tool: boolean; leads: boolean };
   }
 ): Promise<string> {
-  const { dir, own, leads } = opts;
+  const { dir, own, hands } = opts;
   // run() fills in the time, so the rest can be compared with what a resumed session saw.
   const now = NOW;
   const updating = installsAt();
@@ -635,9 +643,17 @@ async function prompt(
     who.desk +
     '\n' +
     (await whoFor(who, dir)) +
+    (hasTool(who.tools, 'see_office')
+      ? whoIsHereSection(
+          (await roster())
+            .filter((o) => o.id !== who.id)
+            .map((o) => ({ id: o.id, name: o.name, role: o.role, persona: !!o.package })),
+          hands.tool
+        )
+      : '') +
     (await taught(who)) +
     // A chat is told each live goal it leads in full (`goalsLedBrief`), so its list leaves them out.
-    (leads
+    (hands.leads
       ? recentThreadsBrief(
           await recentThreads(who.id, { told: opts.led.map((story) => story.thread.id) })
         )
@@ -819,6 +835,8 @@ export type RunOpts = {
   via?: string;
   /** The hand-backs this run's brief already holds in full, so its lead's story leaves them out. */
   shown?: number[];
+  /** Pictures the owner attached in a chat, for a tool that cannot open one with its own tools (Codex). */
+  images?: RunImage[];
   timeoutMs: number;
   onEvent?: (e: ChatEvent) => void;
 };
@@ -897,8 +915,8 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   const extraReads = own.granted.map((f) => f.path);
   const extraWrites = own.granted.filter((f) => f.write).map((f) => f.path);
   // From the facts officeEnv hands the tool server, so the prompt lists the
-  // threads a run leads only when that run is offered hand_off.
-  const { leads } = handsOff(who.tools, {
+  // threads a run leads, and who it may hand work to, only when that run is offered hand_off.
+  const hands = handsOff(who.tools, {
     thread: !!opts.threadId,
     handOff: !!opts.handOffId,
     lesson: !!opts.lessonRun
@@ -914,7 +932,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       shown: opts.shown,
       own,
       officeHeld,
-      leads
+      hands
     })) + (opts.extra ?? '')
   );
   const sections = sectionsOf(system, say(who.desk));
@@ -1124,7 +1142,10 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
           network: own.network,
           effort,
           model,
-          account
+          account,
+          // Claude Code, Grok and Gemini open a picture with their file tools;
+          // Codex has no such tool (`view_image` is off), so it gets them with the message.
+          ...(who.agent === 'codex' && opts.images?.length ? { images: opts.images } : {})
         });
   if ('refused' in launch) {
     opts.onEvent?.({ type: 'error', message: launch.refused });
@@ -1273,12 +1294,23 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   });
 }
 
+/** What a chat run is told about the files the owner attached: where each is, by its tag. */
+function attachedBrief(files: (ChatFile & { path: string })[]): string {
+  return [
+    `({owner} attached ${files.length === 1 ? 'a file' : `${files.length} files`} to this message. Each is kept in your folder, and each tag in brackets in their message names one. Look at each picture and read each file before you answer. A picture already shown with this message needs no opening.`,
+    ...files.map((f) => `- [${f.tag}]: ${f.path} (${f.mediaType})`),
+    ')'
+  ].join('\n');
+}
+
 /** Send one chat message. Resolves when the reply is complete; events stream through `onEvent`. */
 export async function chat(
   id: string,
   message: string,
   onEvent: (e: ChatEvent) => void,
-  replyTo?: Pick<ChatRef, 'kind' | 'id'>
+  replyTo?: Pick<ChatRef, 'kind' | 'id'>,
+  /** Files the owner attached, already kept in the Odd's attachments folder (`attachedFiles`). */
+  files: (ChatFile & { path: string })[] = []
 ): Promise<void> {
   if (chatting.has(id)) throw new Error(`${id} is already replying`);
   const who = await staffer(id);
@@ -1292,7 +1324,8 @@ export async function chat(
     // answer runs the manager, which reads all three in the chat.
     const last = history(id).at(-1);
     const asked = last?.from === 'staff' ? firstQuestionIn(last.text) : -1;
-    if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1) {
+    const attached = files.map(({ path: _, ...f }) => f);
+    if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1 && !files.length) {
       const next = FIRST_QUESTIONS[asked + 1].ask;
       addToChat(id, { at: sent, from: 'owner', text: message });
       addToChat(id, { at: new Date().toISOString(), from: 'staff', text: next, told: true });
@@ -1338,14 +1371,23 @@ export async function chat(
           resumed ? 'resumed' : { replayed: new Set(replayedAt(past, kept)) }
         ),
         ...(re ? [re.brief] : []),
-        message
+        message,
+        ...(files.length ? [attachedBrief(files)] : [])
       ].join('\n\n');
       r = await run(who, prompt, {
         kind: 'chat',
         ownerSaid: message,
+        images: files
+          .filter((f) => isPicture(f.mediaType))
+          .map((f) => ({ path: f.path, mediaType: f.mediaType })),
         sessionFile: chatSession(id),
         timeoutMs: CHAT_TIMEOUT_MS,
-        onEvent
+        // The choices a reply ends with go to the page beside its text, as buttons.
+        onEvent: (e) => {
+          if (e.type !== 'done') return onEvent(e);
+          const { text, choices } = splitChoices(e.text);
+          onEvent({ type: 'done', text, ...(choices.length ? { choices } : {}) });
+        }
       });
     } catch (err) {
       // A throw on the way to a reply (a database read, a file the run reads)
@@ -1356,17 +1398,32 @@ export async function chat(
     // Saved however the run ended, so a reload still shows what the owner said
     // and why no reply came. A failed run's error is never the Odd's words:
     // the replay leaves it out, and the next chat's preface says the run failed.
-    addToChat(id, { at: sent, from: 'owner', text: message, re: re?.ref });
-    const at = new Date();
     addToChat(id, {
-      at: at.toISOString(),
-      from: 'staff',
-      text: r.text,
-      // `took`: how long the owner waited for this reply, from when they sent.
-      ...(r.ok
-        ? { took: at.getTime() - Date.parse(sent) }
-        : { failed: true, ...(r.saved ? { inSession: true } : {}) })
+      at: sent,
+      from: 'owner',
+      text: message,
+      re: re?.ref,
+      ...(attached.length ? { files: attached } : {})
     });
+    const at = new Date();
+    if (r.ok) {
+      const { text, choices } = splitChoices(r.text);
+      addToChat(id, {
+        at: at.toISOString(),
+        from: 'staff',
+        text,
+        // `took`: how long the owner waited for this reply, from when they sent.
+        took: at.getTime() - Date.parse(sent),
+        ...(choices.length ? { choices } : {})
+      });
+    } else
+      addToChat(id, {
+        at: at.toISOString(),
+        from: 'staff',
+        text: r.text,
+        failed: true,
+        ...(r.saved ? { inSession: true } : {})
+      });
     if (r.ok && re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
   } finally {
     chatting.delete(id);
@@ -1562,7 +1619,12 @@ export async function followThrough(
               result: f.note,
               thread: thread.id,
               goal: goalServed,
-              joined
+              joined,
+              // Copied now, before the run starts, so the colleague's run reads them.
+              files:
+                handed.kind === 'hand_off' && handed.files?.length
+                  ? handFiles(handed, thread.id)
+                  : undefined
             })
           : edit
             ? editBrief(edit.path, edit.shown)

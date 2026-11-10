@@ -31,6 +31,25 @@ export async function call<T = { ok: true }>(
   return res.json() as Promise<T>;
 }
 
+/**
+ * One file's bytes as a POST, with its name and type in headers. It goes as
+ * application/octet-stream, which SvelteKit's form check never applies to,
+ * whatever the file is.
+ */
+export async function sendFile<T>(url: string, file: Blob, name: string, type: string): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-file-name': encodeURIComponent(name),
+      'x-media-type': type
+    },
+    body: file
+  });
+  if (!res.ok) throw await failure(res);
+  return res.json() as Promise<T>;
+}
+
 async function failure(res: Response): Promise<Error> {
   const text = await res.text();
   let message = text;

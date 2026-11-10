@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { OWNER_GRANTS } from '@oddboro/ledger/grantable';
-import { house, stillOnDeskSection } from './house.ts';
+import { house, stillOnDeskSection, whoIsHereSection } from './house.ts';
 
 const section = house({ has: () => false, now: '9:00', zone: 'London time' });
 
@@ -24,6 +24,39 @@ test("every run is told that the owner reads every reply, so work goes by its ti
     /never by a number, and a file by its name alone, in code \(`plan\.md`\); when that name could mean more than one file, or the file is a colleague's or in a folder \{owner\} gave you, give its full path from ~ with forward slashes, in code, which the page turns into a link by a short name\. Ids and any other path are for tool calls\./
   );
   assert.doesNotMatch(section, /never by its folder or path/);
+});
+
+test('every run is told to ask which one when a name could be an Odd or someone outside, or there is more than one way, and to offer choices as lines the page turns into buttons', () => {
+  assert.match(
+    section,
+    /- When \{owner\} names someone who could be an Odd here or someone outside the office, such as an email contact, .* ask them which in one short question before you act, naming each choice and where it sends what\. When their words settle it \("email Nate", "hand it to Nate"\), just do it\./
+  );
+  assert.match(
+    section,
+    /end your reply with each choice on a line of its own, as `\[choice\] ` then the answer in their words .* at most five, with nothing after them\./
+  );
+});
+
+test("the office's Odds are listed by name, id and role, a persona's with where its words go, and what this Odd can do about them", () => {
+  const odds = [
+    { id: 'marshall', name: 'Marshall', role: 'Office Manager', persona: false },
+    { id: 'nate', name: 'Nate', role: 'Advisor from New Altitude', persona: true }
+  ];
+  const can = whoIsHereSection(odds, true);
+  assert.match(can, /^\n## Who's in the office\n/);
+  assert.match(can, /- Marshall \(marshall\): Office Manager\.\n/);
+  assert.match(
+    can,
+    /- Nate \(nate\): Advisor from New Altitude\. A persona: Nate's replies come from New Altitude, so what you give Nate leaves this computer\./
+  );
+  assert.match(can, /To give one of them work, call hand_off\./);
+  const cannot = whoIsHereSection(odds, false);
+  assert.match(
+    cannot,
+    /You cannot hand them work\. When \{owner\} asks for something one of them should do, say so/
+  );
+  assert.doesNotMatch(cannot, /call hand_off/);
+  assert.equal(whoIsHereSection([], true), '', 'alone in the office, nothing');
 });
 
 test('every run is told never to claim it sent, gave, brought or handed something no tool call did', () => {

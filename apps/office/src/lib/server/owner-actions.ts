@@ -167,6 +167,10 @@ export const OWNER_ACTIONS = {
   'POST /api/staff/[id]/access': { records: 'access' },
   'PATCH /api/staff/[id]/access': { records: 'access' },
   'DELETE /api/staff/[id]/access': { records: 'access' },
+  'POST /api/staff/[id]/attachments': {
+    notAnAction:
+      "Keeps a file the owner attaches in the Odd's attachments folder, as part of the chat message that names it, which the chat's own log keeps."
+  },
   'POST /api/staff/[id]/chat': {
     notAnAction:
       "The chat's own log keeps it; a decision in it is recorded by the tool the Odd calls."

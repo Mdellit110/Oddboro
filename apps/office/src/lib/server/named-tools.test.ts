@@ -1,9 +1,9 @@
-// That "How the office works" (house) and every follow-up's brief name only
-// office tools the run reading them is offered (`isOffered`, as the tool
-// server registers them), for an Odd holding no office tool the owner gives
-// and for one holding each alone, in every kind of run. The tool server's own
-// descriptions are held by the ledger's named-tools.test.ts. Run with
-// `npm test -w @oddboro/office`.
+// That "How the office works" (house), "Who's in the office" and every
+// follow-up's brief name only office tools the run reading them is offered
+// (`isOffered`, as the tool server registers them), for an Odd holding no
+// office tool the owner gives and for one holding each alone, in every kind
+// of run. The tool server's own descriptions are held by the ledger's
+// named-tools.test.ts. Run with `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
@@ -16,7 +16,7 @@ import {
 } from '@oddboro/ledger';
 import { GRANTABLE_TOOLS, isOffered, OFFICE_TOOLS, type ToolRun } from '@oddboro/ledger/tools';
 import { followUpBrief } from './follow-up-brief.ts';
-import { house } from './house.ts';
+import { house, whoIsHereSection } from './house.ts';
 
 /**
  * Office tools a text names though the Odd reading it may not hold them, by
@@ -91,11 +91,17 @@ const goal = { id: 2, title: 'More clients', area: 'work', horizon: 'ongoing' } 
 
 /**
  * Every text an Odd may read here, by name: house(), which every run reads,
+ * "Who's in the office", which a run whose Odd holds `see_office` reads,
  * and each kind's brief in every wording it has, which only a follow-up reads,
  * and a follow-up is never a chat.
  */
 const texts = (has: (tool: string) => boolean, run: ToolRun): Record<string, string> => ({
   house: house({ has, now: '9:00', zone: 'London time' }),
+  // Told as staff.ts tells it: hand_off only to a run offered it (`handsOff`).
+  "who's here": whoIsHereSection(
+    [{ id: 'nate', name: 'Nate', role: 'Researcher', persona: true }],
+    has('hand_off')
+  ),
   ...(!run.chat &&
     Object.fromEntries(
       FOLLOW_UP_KINDS.map((kind) => [

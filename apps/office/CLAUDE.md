@@ -344,7 +344,17 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    answer as the owner's message. An answer to the first or second,
    tapped or typed, gets the next question from the office (`chat` in
    `staff.ts`, a `told` line, no run); the third runs the manager, whose new
-   session hears all three in its replay. The owner's line is stamped when sent,
+   session hears all three in its replay. Any Odd offers choices the same
+   way: a chat reply that ends with `[choice] ...` lines (every run's
+   "How the office works" says so) loses them from its text
+   (`splitChoices` in `src/lib/choices.ts`, also on the stream's `done`),
+   keeps them as `choices` on its `chat.jsonl` line, and shows them as
+   those buttons, with no Default, while it is the chat's last line.
+   Every Odd holding `see_office` (all, unless the owner takes it off)
+   gets "Who's in the office" in its prompt (`whoIsHereSection` in
+   `house.ts`), and every run is told to ask which one when a name could
+   be an Odd or someone outside, or there is more than one way to do it.
+   The owner's line is stamped when sent,
    so what lands during a reply sits between the two. Under each message is one
    line (`src/lib/ui/chat-lines.ts`): its time ("4 min ago" for an hour, then the
    clock, with the full date on hover or focus), how long a chat run took
@@ -364,7 +374,47 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    next message tells the session what the owner wrote that it never had, and
    only that the run failed on a message it has: a resumed session has each
    one up to the last failed run whose tool named a session (`inSession`,
-   `chatPreface`), since that run's message carried the earlier ones. Its input grows with the text
+   `chatPreface`), since that run's message carried the earlier ones. The
+   owner attaches pictures, PDFs and text files (`ATTACHABLE` in
+   `src/lib/attachments.ts`, up to 10 of 10 MB each): pasting or dropping
+   one on the box puts its tag at the caret (`[Image #1]` for a pasted
+   picture, else its name, `chat-attach.ts`), the paperclip adds files to
+   the tray alone. The tray previews each with a ✕, in a column at the
+   end side over the paperclip and Send, three files tall at most
+   (`.tray`), scrolling past that. The box is always as tall as that
+   column (`side` in `fit`), and at least as tall as the paperclip and
+   Send (`MIN_INPUT`, 76 px), so it grows up as files are attached.
+   Deleting a tag drops its file. Copied text that brings a picture of
+   itself pastes as text. On Send each file goes alone to
+   `/api/staff/[id]/attachments` as application/octet-stream, which keeps
+   it in the Odd's own `attachments/` (`src/lib/server/chat-files.ts`)
+   under `<date>-<time>-<4 random hex>-<name>`, never over another file,
+   then the message names them by tag and kept name. The run's message
+   ends with each tag's full path (`attachedBrief` in `staff.ts`), and the
+   run opens them with its own file tools; Codex, whose `view_image` is
+   off, gets the pictures as `--image`. `chat.jsonl` keeps them on the
+   owner's line (`files`), and the chat shows them from
+   `/api/staff/[id]/attachments/[name]`. An Odd sends any file in its own
+   folder on an email: `propose_reply` and Gmail's `create_draft` take
+   `attachments` by path (`mail-attachments.ts` in the ledger checks each
+   is a plain file there, not hidden and not the office's own, and drops
+   the kept name's prefix, so a recipient sees `image.png`). The reply
+   review shows them (`/api/asks/[id]/attachments/[n]`) with a ✕ each;
+   the owner may take any off, never add one, and the office checks and
+   reads them again as it sends. `create_draft` knows whose files to read
+   from the call's `_meta` (`ODD_META` in `google/http.ts`), which only the
+   gateway and `makeCall` set, on the office's own Google servers alone.
+   An email with files goes to Gmail's upload address as MIME
+   (`uploadType=multipart`). `hand_off` takes `files` the same way, and
+   the office copies them into the giver's part of the work's folder,
+   under `handed/`, as the colleague's run starts (`handFiles` in the
+   ledger), so the colleague reads the owner's screenshot too. A Gmail
+   call held at Draft says what it does and to how many emails as its
+   title (`heldWords` in `google/gmail.ts`, through `heldWordsFor` in
+   `access.ts`), and lists each email's subject, sender and date on the
+   desk (`call.shown`, never in an Odd's prompt), with the exact call
+   folded under it. `update_labels` takes many `thread_ids` in one call.
+   Its input grows with the text
    up to 60% of the chat, and the bar above it drags it taller; that height is
    remembered per viewer. Every run's system prompt opens with "Who you work
    for" (`whoFor` in `staff.ts`): the owner, `data/people.json` when it
