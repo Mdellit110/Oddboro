@@ -66,7 +66,11 @@ pub fn login_path() -> String {
     let mut dirs: Vec<PathBuf> = env::split_paths(&base)
         .filter(|d| !d.as_os_str().is_empty())
         .collect();
-    for dir in install_folders(&home()) {
+    let home = home();
+    for dir in install_folders(&home)
+        .into_iter()
+        .chain(node_manager_folders(&home))
+    {
         if !dirs.contains(&dir) {
             dirs.push(dir);
         }
@@ -87,6 +91,61 @@ fn install_folders(home: &std::path::Path) -> Vec<PathBuf> {
         "/usr/sbin".into(),
         "/sbin".into(),
     ]
+}
+
+/// Where a Node version manager keeps `node` and `npm`, and the tools npm
+/// installs globally, such as `codex`. nvm, fnm, Volta, asdf and mise each
+/// set themselves up in `~/.zshrc` or `~/.bashrc`, which a login shell run
+/// with `-c` never reads, so the PATH above misses them. The app brings its
+/// own Node but not npm, so without these Install fails with
+/// "spawn npm ENOENT". These come last, so the login shell's PATH wins.
+#[cfg(unix)]
+fn node_manager_folders(home: &std::path::Path) -> Vec<PathBuf> {
+    let nvm = env::var_os("NVM_DIR")
+        .filter(|d| !d.is_empty())
+        .map_or_else(|| home.join(".nvm"), PathBuf::from);
+    let fnm = env::var_os("FNM_DIR")
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from);
+    let mut dirs = Vec::new();
+    dirs.extend(newest_nvm_node(&nvm.join("versions/node")));
+    for root in fnm.into_iter().chain([
+        home.join(".local/share/fnm"),
+        home.join("Library/Application Support/fnm"),
+    ]) {
+        dirs.push(root.join("aliases/default/bin"));
+    }
+    dirs.push(home.join(".volta/bin"));
+    dirs.push(home.join(".asdf/shims"));
+    dirs.push(home.join(".local/share/mise/shims"));
+    dirs
+}
+
+#[cfg(windows)]
+fn node_manager_folders(_home: &std::path::Path) -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// The `bin` folder of the newest Node nvm installed (`v24.14.1` beats
+/// `v22.23.4` and `v9.0.0`). nvm's own default alias can name a range such
+/// as `lts/*`, which only nvm resolves, so the newest is the simplest
+/// guess that has npm. None when nvm has no Node.
+#[cfg(unix)]
+fn newest_nvm_node(versions: &std::path::Path) -> Option<PathBuf> {
+    let parse = |name: &str| -> Option<Vec<u64>> {
+        name.strip_prefix('v')?
+            .split('.')
+            .map(|n| n.parse().ok())
+            .collect()
+    };
+    std::fs::read_dir(versions)
+        .ok()?
+        .filter_map(|e| {
+            let name = e.ok()?.file_name().into_string().ok()?;
+            Some((parse(&name)?, name))
+        })
+        .max()
+        .map(|(_, name)| versions.join(name).join("bin"))
 }
 
 /// Claude Code's and uv's installers use `.local\bin`, WinGet links its
@@ -146,4 +205,58 @@ fn read_login_path() -> Option<String> {
     child.stdout.take()?.read_to_string(&mut out).ok()?;
     let path = out.lines().last()?.trim().to_string();
     (!path.is_empty()).then_some(path)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// A fresh, empty home for one test.
+    fn home(name: &str) -> PathBuf {
+        let dir = env::temp_dir().join(format!("oddboro-env-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn nvm_gives_its_newest_node_by_number() {
+        let home = home("nvm");
+        let versions = home.join(".nvm/versions/node");
+        for v in ["v9.0.0", "v22.23.4", "v24.14.1", "v24.2.0", "not-a-version"] {
+            fs::create_dir_all(versions.join(v).join("bin")).unwrap();
+        }
+        assert_eq!(
+            newest_nvm_node(&versions),
+            Some(versions.join("v24.14.1/bin"))
+        );
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn no_nvm_or_an_empty_one_gives_no_node() {
+        let home = home("no-nvm");
+        let versions = home.join(".nvm/versions/node");
+        assert_eq!(newest_nvm_node(&versions), None);
+        fs::create_dir_all(&versions).unwrap();
+        assert_eq!(newest_nvm_node(&versions), None);
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn node_managers_name_nvm_first_then_fnm_volta_asdf_and_mise() {
+        let home = home("order");
+        fs::create_dir_all(home.join(".nvm/versions/node/v24.14.1/bin")).unwrap();
+        let managers = node_manager_folders(&home);
+        // NVM_DIR, when the test's own shell sets it, moves nvm elsewhere.
+        if env::var_os("NVM_DIR").is_none() {
+            assert_eq!(managers[0], home.join(".nvm/versions/node/v24.14.1/bin"));
+        }
+        assert!(managers.contains(&home.join(".volta/bin")));
+        assert!(managers.contains(&home.join(".local/share/fnm/aliases/default/bin")));
+        let installs = install_folders(&home);
+        assert!(managers.iter().all(|d| !installs.contains(d)));
+        fs::remove_dir_all(&home).unwrap();
+    }
 }
