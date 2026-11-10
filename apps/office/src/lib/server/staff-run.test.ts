@@ -845,6 +845,8 @@ const patch = (id: string, body: unknown) =>
   } as unknown as Parameters<typeof PATCH>[0]);
 const refused = (status: number) => (e: unknown) => (e as { status?: number }).status === status;
 
+// Each tool's model is written out, not read from `shownOfficeModel`, so a
+// change to which model the picker shows fails here.
 test('the "Runs on" picker hears only of the tools on this Mac', async () => {
   const only = join(folder, 'only-claude');
   mkdirSync(only, { recursive: true });
@@ -872,7 +874,8 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           installed: true,
           signIn: { how: 'browser', installing: false, signedIn: false },
           commandsHow: L.commandsHow('claude', 'darwin'),
-          officeModel: shownOfficeModel('claude')
+          // Setup's model, Opus until the owner picks Sonnet.
+          officeModel: 'claude-opus-5-5'
         },
         {
           id: 'grok',
@@ -880,7 +883,8 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           installed: false,
           signIn: { how: 'browser', installing: false, signedIn: false },
           commandsHow: L.commandsHow('grok', 'darwin'),
-          officeModel: shownOfficeModel('grok')
+          // No Grok model set, so Grok's own default.
+          officeModel: 'grok-4.7'
         },
         // The office under test's Codex home holds a sign-in file with no account in it.
         {
@@ -889,7 +893,8 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           installed: false,
           signIn: { how: 'browser', installing: false, signedIn: true },
           commandsHow: L.commandsHow('codex', 'darwin'),
-          officeModel: shownOfficeModel('codex')
+          // No Codex model set, so Codex's own default.
+          officeModel: 'gpt-6.1-sol'
         }
       ]
     });
