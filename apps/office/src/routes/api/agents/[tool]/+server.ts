@@ -27,6 +27,7 @@ import {
   claudeSignInState,
   computerWord,
   installEnv,
+  npmMissing,
   SIGN_INS,
   signingIn,
   signInState,
@@ -90,6 +91,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
   const s = SIGN_INS[tool];
   if (b.action === 'install') {
     const [cmd, args] = s.install;
+    const missing = cmd === 'npm' ? npmMissing(name) : undefined;
+    if (missing) error(400, missing);
     return SLOTS[tool].start('install', cmd, args, installEnv());
   }
   if (b.action === 'update') {

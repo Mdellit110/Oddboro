@@ -246,6 +246,19 @@ export const computerWord = (): 'Mac' | 'computer' =>
   currentPlatform() === 'darwin' ? 'Mac' : 'computer';
 
 /**
+ * Why an install through npm cannot start here, or undefined when it can.
+ * Codex and Gemini install with npm, and so does Claude Code off Windows. The
+ * app brings its own Node but not npm, so npm has to be on the PATH the
+ * office started with. Without this check the page showed "spawn npm ENOENT".
+ * Windows is left to the installer as before: its npm is a .cmd shim, which
+ * `onPath` does not look for.
+ */
+export function npmMissing(name: string): string | undefined {
+  if (currentPlatform() === 'win32' || onPath('npm')) return undefined;
+  return `${name} installs with npm, which comes with Node.js, and the office cannot find npm on this ${computerWord()}. Install Node.js from nodejs.org, then quit and reopen Oddboro.`;
+}
+
+/**
  * The environment an installer gets: the office's, with no key of its own and
  * no Grok or xAI setting, since `GROK_BIN_DIR` would put Grok's links outside
  * the folder `grokCommand` looks in, and `GROK_DEPLOYMENT_KEY` would make
