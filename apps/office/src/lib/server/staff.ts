@@ -1363,12 +1363,11 @@ export async function chat(
       const resumed = !!sessionIdIn(chatSession(id), await runHomeOf(who));
       const kept = resumed ? [] : replayed(past);
       const since = replaySince(past, kept);
-      const replayedLines = replayedAt(past, kept);
-      const session: Session = resumed ? 'resumed' : { replayed: new Set(replayedLines) };
-      // A retold line's pictures go to the run as a new message's do.
-      const retold = [...replayedLines, ...missedAt(past, session)].flatMap(
-        (i) => past[i].now ?? []
-      );
+      const session: Session = resumed ? 'resumed' : { replayed: new Set(replayedAt(past, kept)) };
+      // A missed line's pictures go to the run as a new message's do. A line the
+      // replay retells names its files by path alone, so a long replay never
+      // sends every picture the chat ever held.
+      const missed = missedAt(past, session).flatMap((i) => past[i].now ?? []);
       // The Odd writes only its own folder and the given folders it may change, so only those are walked.
       const writable = ownTools(who, currentPlatform())
         .granted.filter((f) => f.write)
@@ -1390,7 +1389,7 @@ export async function chat(
       r = await run(who, prompt, {
         kind: 'chat',
         ownerSaid: message,
-        images: [...files, ...retold].flatMap((f: KeptFile) =>
+        images: [...files, ...missed].flatMap((f: KeptFile) =>
           'gone' in f || !isPicture(f.mediaType) ? [] : [{ path: f.path, mediaType: f.mediaType }]
         ),
         sessionFile: chatSession(id),

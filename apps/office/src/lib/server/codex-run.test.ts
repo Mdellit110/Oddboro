@@ -517,12 +517,15 @@ test("a Codex Odd's resumed chat after a failed one with a picture is told where
   assert.ok(next.message.includes(`- [Image #1]: ${files[0].path} (image/png)`), next.message);
 });
 
-test('a new Codex session gets the pictures of the owner lines its replay retells as --image', async () => {
+test("a new Codex session's replay names each retold line's picture by path and passes none as --image", async () => {
   forget('cole');
   const { keepAttachment } = await import('./chat-files.ts');
   const shot = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([1, 2, 3]));
+  const again = keepAttachment('cole', 'image.png', 'image/png', new Uint8Array([4, 5, 6]));
   const path = L.home('staff', 'cole', 'attachments', shot.name);
-  // Plain lines, so no stand-in acts on words in them.
+  const failedPath = L.home('staff', 'cole', 'attachments', again.name);
+  // Plain lines, so no stand-in acts on words in them. The second owner line's
+  // run failed, and the replay holds it, so the session is not missing it.
   writeFileSync(
     L.home('staff', 'cole', 'chat.jsonl'),
     [
@@ -532,15 +535,27 @@ test('a new Codex session gets the pictures of the owner lines its replay retell
         text: 'What is [Image #1]?',
         files: [{ tag: 'Image #1', ...shot }]
       },
-      { at: '2026-11-06T09:01:00.000Z', from: 'staff', text: 'A chair.' }
+      { at: '2026-11-06T09:01:00.000Z', from: 'staff', text: 'A chair.' },
+      {
+        at: '2026-11-06T09:02:00.000Z',
+        from: 'owner',
+        text: 'And [Image #2]?',
+        files: [{ tag: 'Image #2', ...again }]
+      },
+      { at: '2026-11-06T09:03:00.000Z', from: 'staff', text: 'Run failed.', failed: true }
     ]
       .map((l) => JSON.stringify(l) + '\n')
       .join('')
   );
   const next = await chatOf('cole', 'And the colour?');
   assert.ok(!next.args.includes('resume'), 'a new session resumed one');
-  assert.equal(next.args.at(-2), `--image=${path}`);
+  assert.deepEqual(
+    next.args.filter((a) => a.startsWith('--image')),
+    [],
+    'a replayed picture went as --image'
+  );
   assert.ok(next.message.includes(`- [Image #1]: ${path} (image/png)`), next.message);
+  assert.ok(next.message.includes(`- [Image #2]: ${failedPath} (image/png)`), next.message);
 });
 
 test("a Codex Odd without Run commands is told it has no shell and to ask for one with ask_for_switch; with it, a shell confined to its folders and the owner's developer tools, with no network, Browse the web or not", async () => {
