@@ -24,7 +24,7 @@
     },
     {
       q: 'What leaves my computer?',
-      a: 'Only what the work needs. Odds send their work to the AI they run on, under your own account, and an Odd talks to the tools you connected for it. The app checks GitHub for new versions of itself. Your sign-in goes to New Altitude only if you sign in to a New Altitude account, and error reports only if you are signed in and turn them on.'
+      a: 'Only what the work needs. Odds send their work to the AI they run on, under your own account, and an Odd talks to the tools you connected for it. The app checks GitHub for new versions of itself. Your sign-in goes to New Altitude only if you sign in to a New Altitude account, and error reports only if you are signed in and turn them on. A New Altitude persona you add as an Odd sends its conversations to New Altitude.'
     },
     {
       q: 'Can an Odd act without asking me?',

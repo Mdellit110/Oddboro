@@ -144,6 +144,8 @@ export const ROUTE_IDS = {
   '/api/office/layouts/[id]': true,
   '/api/office/move-in': true,
   '/api/onboarding': true,
+  '/api/personas': true,
+  '/api/personas/[slug]': true,
   '/api/pokes/[id]': true,
   '/api/reports/[id]': true,
   '/api/rooms': true,
