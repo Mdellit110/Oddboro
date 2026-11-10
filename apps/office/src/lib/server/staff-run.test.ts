@@ -64,7 +64,7 @@ const { deniedEdits } = await import('./files.ts');
 // The model an Odd with none of its own runs on each tool, which the picker sends for its Office default card.
 const { shownOfficeModel } = await import('./claude.ts');
 
-test("a colleague's run on a hand-off works at Draft, and its key is held while it goes and only then", async () => {
+test("a colleague's run on a hand-off works at Draft, is not told to hand its colleagues work, and its key is held while it goes and only then", async () => {
   const h = await L.handOff({
     from: 'lead',
     to: 'paige',
@@ -73,6 +73,9 @@ test("a colleague's run on a hand-off works at Draft, and its key is held while 
   });
   assert.ok('id' in h, JSON.stringify(h));
   const run = await runOf(h.id);
+  // Paige holds hand_off, but a colleague's run is not offered it, so it is not told to call it.
+  assert.match(run.system, /You cannot hand them work/);
+  assert.doesNotMatch(run.system, /call hand_off/);
   assert.equal(run.env.CEILING, 'draft');
   assert.equal(run.env.LESSON_RUN, undefined);
   assert.equal(run.env.HAND_OFF_ID, String(h.id));
@@ -90,6 +93,8 @@ test("a run that reads the owner's no for a lesson works at Draft, hands nothing
   assert.equal(lesson.env.LESSON_RUN, '1');
   assert.equal(lesson.env.CEILING, 'draft');
   assert.doesNotMatch(lesson.system, /Plan the picnic/);
+  assert.match(lesson.system, /You cannot hand them work/);
+  assert.doesNotMatch(lesson.system, /call hand_off/);
   const yes = await L.raiseAsk('lead', { title: 'Book the hall', why: 'w', ifApproved: 'i' });
   await L.decideAsk(yes.ask.id, 'approve', null);
   const carry = await runOf(await startedBy(yes.ask.id, 'carry_out'), yes.ask.id);

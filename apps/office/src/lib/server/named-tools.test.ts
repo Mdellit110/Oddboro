@@ -97,7 +97,9 @@ const goal = { id: 2, title: 'More clients', area: 'work', horizon: 'ongoing' } 
  */
 const texts = (has: (tool: string) => boolean, run: ToolRun): Record<string, string> => ({
   house: house({ has, now: '9:00', zone: 'London time' }),
-  // Told as staff.ts tells it: hand_off only to a run offered it (`handsOff`).
+  // Offered here exactly when the Odd holds hand_off, so this checks only that an
+  // Odd without it is never told to call it. That a run whose Odd holds it but is
+  // not offered it (`handsOff`) is not told either is staff-run.test.ts's.
   "who's here": whoIsHereSection(
     [{ id: 'nate', name: 'Nate', role: 'Researcher', persona: true }],
     has('hand_off')
