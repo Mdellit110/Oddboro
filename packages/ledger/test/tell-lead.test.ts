@@ -50,6 +50,18 @@ const resumes = (id: number) =>
     .from(followUps)
     .where(and(eq(followUps.threadId, id), eq(followUps.kind, 'resume')));
 
+// Gil holds Gmail. Lena leads work Gil is on and lacks it; Mae leads other
+// work Gil is on and holds it too. Every office has Gmail (0009_google): mark
+// it connected, so Mae's grant is in force. Set up here, above the first test:
+// under --test-force-exit the runner drops every test registered after a
+// top-level await.
+await db.insert(staff).values([odd('gil', 'Gil'), odd('lena', 'Lena'), odd('mae', 'Mae')]);
+await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
+await db.insert(grants).values([
+  { staffId: 'gil', connectorId: 'gmail', level: 'read' },
+  { staffId: 'mae', connectorId: 'gmail', level: 'read' }
+]);
+
 test("a colleague's chat lists the threads it works on and does not lead, with each lead and where it stands", async () => {
   const rows = await threadsOn('bram');
   assert.deepEqual(rows, [
@@ -144,15 +156,6 @@ test("a colleague's chat says the work waits on the owner while an ask raised on
   assert.ok(threadsOnBrief([row]).includes('led by Cole (waiting on {owner})'));
 });
 
-// Gil holds Gmail. Lena leads work Gil is on and lacks it; Mae leads other
-// work Gil is on and holds it too. Every office has Gmail (0009_google): mark
-// it connected, so Mae's grant is in force.
-await db.insert(staff).values([odd('gil', 'Gil'), odd('lena', 'Lena'), odd('mae', 'Mae')]);
-await db.update(connectors).set({ readyAt: new Date() }).where(eq(connectors.id, 'gmail'));
-await db.insert(grants).values([
-  { staffId: 'gil', connectorId: 'gmail', level: 'read' },
-  { staffId: 'mae', connectorId: 'gmail', level: 'read' }
-]);
 const exchange = 'Just before, Sam said: "Any news?".\nGil replied: "The bank wrote back.".';
 const fromGil = async (lead: string, title: string, exchange?: string) => {
   const id = await onThread(lead, 'gil', title);

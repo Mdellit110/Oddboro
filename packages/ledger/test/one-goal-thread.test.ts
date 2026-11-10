@@ -120,6 +120,11 @@ const propose = (run: string) =>
     run
   });
 
+// Wren does the steps of the work with no goal at the end of the file. Set up
+// here, above the first test: under --test-force-exit the runner drops every
+// test registered after a top-level await.
+await db.insert(staff).values({ id: 'wren', ...odd('Wren', 'Researcher') });
+
 test('a plan raised again after a no goes on the same thread, opened again for a new round', async () => {
   const { ask: first } = await propose('planning-run');
   await run(planning, 'done', 'Plan raised.');
@@ -580,7 +585,6 @@ test('the manager still opens a thread when it serves a goal and has no job', as
 });
 
 // The tests below read a piece of work with no goal, whatever ran before them.
-await db.insert(staff).values({ id: 'wren', ...odd('Wren', 'Researcher') });
 
 /** A new piece of work Marshall leads, with one step handed to Wren and back. */
 async function workWithAStep(title: string, result = 'Done.') {

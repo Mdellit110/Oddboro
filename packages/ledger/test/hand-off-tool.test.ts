@@ -76,6 +76,57 @@ const handOffTool = async (c: Client) =>
 const said = (r: Awaited<ReturnType<Client['callTool']>>) =>
   (r.content as { type: string; text: string }[])[0]?.text ?? '';
 
+// The two fixtures below serve later tests but are set up here, above the
+// first test: under --test-force-exit the runner drops every test registered
+// after a top-level await.
+
+// A goal's thread, led by Mo, that Pia (no job) and Jo (a job) serve.
+const { asks, followUps, jobs, staffGoals, tasks } = await import('../src/schema.ts');
+await db
+  .insert(staff)
+  .values([
+    odd('mo', 'Mo'),
+    { ...odd('pia', 'Pia'), tools: [...STARTER_TOOLS, 'propose_hire'] },
+    odd('jo', 'Jo')
+  ]);
+// A job description Pia could propose a hire with, so only the goal check stops it.
+const { home } = await import('../src/home.ts');
+mkdirSync(home('staff', 'pia', 'notes'), { recursive: true });
+writeFileSync(home('staff', 'pia', 'notes', 'jd-printer.md'), 'Prints signs.');
+const [fair] = await db.insert(goals).values({ title: 'Run the bake sale' }).returning();
+const [sale] = await db
+  .insert(threads)
+  .values({ title: fair.title, goalId: fair.id, hubId: 'mo', holderId: 'mo' })
+  .returning();
+await db.insert(staffGoals).values([
+  { staffId: 'pia', goalId: fair.id, part: 'The signs' },
+  { staffId: 'jo', goalId: fair.id, part: 'The cakes' }
+]);
+await db.insert(jobs).values({
+  staffId: 'jo',
+  name: 'Weekly accounts',
+  instructions: 'Add up.',
+  schedule: { every: 'day', at: '09:00' }
+});
+
+// Three Odds serving the bake sale Mo leads, holding no office tool, one, and
+// every one.
+const HOLDERS: Record<string, readonly string[]> = {
+  nil: [],
+  uno: ['poke_owner'],
+  tot: OFFICE_TOOLS.map((t) => t.id)
+};
+await db
+  .insert(staff)
+  .values(
+    Object.entries(HOLDERS).map(([id, tools]) => ({ ...odd(id, `Odd ${id}`), tools: [...tools] }))
+  );
+await db
+  .insert(staffGoals)
+  .values(Object.keys(HOLDERS).map((staffId) => ({ staffId, goalId: fair.id, part: 'Some' })));
+// `withGmail` tools come only with Gmail, which only Tot holds.
+await db.insert(grants).values({ staffId: 'tot', connectorId: 'gmail', level: 'read' });
+
 test("a run that only reads the owner's no or edit for a lesson is offered no hand_off, and so no continue_work", async () => {
   const plain = await handOffTool(await toolServer('lead', { RUN_KEY: 'k-plain' }));
   assert.ok(plain, 'a chat or follow-up on no thread is offered hand_off');
@@ -215,34 +266,6 @@ test('continuing a finished thread starts a new round with its whole limit', asy
   assert.equal(said(r).split('\n')[1], `${HAND_OFF_LIMIT - 1} hand-offs left this round.`);
 });
 
-// A goal's thread, led by Mo, that Pia (no job) and Jo (a job) serve.
-const { asks, followUps, jobs, staffGoals, tasks } = await import('../src/schema.ts');
-await db
-  .insert(staff)
-  .values([
-    odd('mo', 'Mo'),
-    { ...odd('pia', 'Pia'), tools: [...STARTER_TOOLS, 'propose_hire'] },
-    odd('jo', 'Jo')
-  ]);
-// A job description Pia could propose a hire with, so only the goal check stops it.
-const { home } = await import('../src/home.ts');
-mkdirSync(home('staff', 'pia', 'notes'), { recursive: true });
-writeFileSync(home('staff', 'pia', 'notes', 'jd-printer.md'), 'Prints signs.');
-const [fair] = await db.insert(goals).values({ title: 'Run the bake sale' }).returning();
-const [sale] = await db
-  .insert(threads)
-  .values({ title: fair.title, goalId: fair.id, hubId: 'mo', holderId: 'mo' })
-  .returning();
-await db.insert(staffGoals).values([
-  { staffId: 'pia', goalId: fair.id, part: 'The signs' },
-  { staffId: 'jo', goalId: fair.id, part: 'The cakes' }
-]);
-await db.insert(jobs).values({
-  staffId: 'jo',
-  name: 'Weekly accounts',
-  instructions: 'Add up.',
-  schedule: { every: 'day', at: '09:00' }
-});
 const chat = { OWNER_SAID: 'Pia, can you make the signs blue?' };
 const ask = { title: 'Make the signs blue', why: 'They asked.', if_approved: 'I make them.' };
 const raisedBy = async (staffId: string) => ({
@@ -540,24 +563,8 @@ test('every office tool refuses a key it does not take, and says which keys it d
   assert.deepEqual(await db.select().from(threads).where(eq(threads.hubId, 'all')), []);
 });
 
-// Three Odds serving the bake sale Mo leads, holding no office tool, one, and
-// every one. A chat with the owner's words offers tell_lead, and a run on the
-// sale's thread offers resume_at.
-const HOLDERS: Record<string, readonly string[]> = {
-  nil: [],
-  uno: ['poke_owner'],
-  tot: OFFICE_TOOLS.map((t) => t.id)
-};
-await db
-  .insert(staff)
-  .values(
-    Object.entries(HOLDERS).map(([id, tools]) => ({ ...odd(id, `Odd ${id}`), tools: [...tools] }))
-  );
-await db
-  .insert(staffGoals)
-  .values(Object.keys(HOLDERS).map((staffId) => ({ staffId, goalId: fair.id, part: 'Some' })));
-// `withGmail` tools come only with Gmail, which only Tot holds.
-await db.insert(grants).values({ staffId: 'tot', connectorId: 'gmail', level: 'read' });
+// A chat with the owner's words offers tell_lead, and a run on the sale's
+// thread offers resume_at.
 const RUNS = { chat, thread: { THREAD_ID: String(sale.id) } };
 type Run = keyof typeof RUNS;
 /** A tool offered in one kind of run only, whoever holds it. */
