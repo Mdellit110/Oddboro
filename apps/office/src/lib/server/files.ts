@@ -33,6 +33,7 @@ import {
   home,
   threadFolder,
   threadPart,
+  touchesSecretStore,
   workFile
 } from '@oddboro/ledger';
 import { fixedError, isFixedError } from '@oddboro/ledger/errors';
@@ -269,7 +270,7 @@ async function locate(staff: string, path: string): Promise<Found> {
   const { granted } = ownTools(who, currentPlatform());
   const given = givenFile(granted, path);
   if (given) return { file: given.file, path: given.path, given: true };
-  if (isFull(path)) throw noFile(who, granted, path);
+  if (isFull(path)) throw noFile(who, path);
   // The Odd's tools read such a name the same way (`attachable`), so both find one file.
   if (workPath(path)) {
     const file = await workFile(staff, path);
@@ -283,21 +284,22 @@ async function locate(staff: string, path: string): Promise<Found> {
   // matches a file's name, so a path with a folder never reaches a thread.
   const onThread = !own && !filesNamed(root, path).length ? fileInThreads(staff, path) : undefined;
   const found = own ? { file: join(root, own), path: own } : onThread && { file: onThread, path };
-  if (!found) throw noFile(who, granted, path);
+  if (!found) throw noFile(who, path);
   return found;
 }
 
 /**
  * Why `who` has no file at `path`. A file that is there, in a folder the owner
- * gave it that its runs no longer get, says so, or the owner would go looking
- * for a file they can see. Such a folder on the disk is one in or holding a
- * secret store (`ownTools`). The refusal names the folder by its name alone,
- * never its real path.
+ * gave it that is in or holds a secret store, says so, or the owner would go
+ * looking for a file they can see. It picks those folders by the same test as
+ * the folder's line on the Settings tab (`touchesSecretStore`), so the words
+ * never name a folder its runs miss for any other reason. The refusal names
+ * the folder by its name alone, never its real path.
  */
-function noFile(who: StaffRow, granted: GrantedFolder[], path: string): FileError {
-  const refused = who.folders.filter(
-    (f) => existsSync(f.path) && !granted.some((g) => g.path === f.path)
-  );
+function noFile(who: StaffRow, path: string): FileError {
+  // `givenFile` takes each folder's real path, which a folder gone from the
+  // disk has none of, and a gone folder holds no file to name.
+  const refused = who.folders.filter((f) => existsSync(f.path) && touchesSecretStore(f.path));
   const held = givenFile(refused, path);
   return new FileError(
     held

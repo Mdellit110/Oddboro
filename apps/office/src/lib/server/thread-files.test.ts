@@ -670,7 +670,9 @@ test("a given folder its runs no longer get, holding keys or gone from the disk,
   try {
     await give([
       { path: oldMac, write: false },
-      { path: site, write: false }
+      { path: site, write: false },
+      // In a store and gone from the disk: no refusal below names it or fails on it.
+      { path: join(keys, 'gone'), write: false }
     ]);
     // By its full path and by its name in the office, the folder's name alone.
     assert.equal(
