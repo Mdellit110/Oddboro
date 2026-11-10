@@ -74,8 +74,11 @@ the server never depends on reading it.
 `npm test -w @oddboro/ledger` runs `test/` with `node --test`, and fails any
 test that runs past 15 seconds (`--test-timeout=15000`), or 45 seconds for the
 one test that sets its own limit (the three-server `propose_filter` test in
-`test/filters.test.ts`, 15 seconds per server), so a hang fails the suite
-instead of stalling it. Of the others, the slowest stays under the cap with every
+`test/filters.test.ts`, 15 seconds per server), so a test past its timeout
+fails. A run that never exits, from a handle a test left open, CI ends at the
+job's timeout (`timeout-minutes: 45` in `.github/workflows/ci.yml`). The
+script never passes `--test-force-exit`: under it a run once reported 1,015 of
+its 1,058 tests and still exited 0. Of the others, the slowest stays under the cap with every
 suite running at once, so a busy Mac has room. A hang holds the database, so every later test in its file
 waits out the cap too: keep it no higher than it needs to be. It covers the update
 window, the hold, the install decision, a poke's grace, whether a
