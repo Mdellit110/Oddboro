@@ -36,7 +36,7 @@ export async function call<T = { ok: true }>(
  * application/octet-stream, which SvelteKit's form check never applies to,
  * whatever the file is.
  */
-export async function sendFile<T>(url: string, file: Blob, name: string, type: string): Promise<T> {
+export async function sendFile<T>(url: ApiUrl, file: Blob, name: string, type: string): Promise<T> {
   const res = await fetch(url, {
     method: 'POST',
     headers: {
