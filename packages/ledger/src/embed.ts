@@ -25,8 +25,10 @@ export async function embed(
     if (!res.ok) return null;
     const body = (await res.json()) as { embeddings?: number[][] };
     return body.embeddings?.[0] ?? null;
-  } catch {
-    pausedUntil = Date.now() + PAUSE_MS;
+  } catch (e) {
+    // Only a stuck Ollama pauses it. One that is not running refuses at once,
+    // so the next line may try again.
+    if ((e as { name?: string }).name === 'TimeoutError') pausedUntil = Date.now() + PAUSE_MS;
     return null;
   }
 }
