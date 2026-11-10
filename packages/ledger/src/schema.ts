@@ -759,6 +759,12 @@ export const followUps = pgTable('follow_ups', {
    * Office text, never the owner's words: it stays out of `note`.
    */
   pickedUp: text().array(),
+  /**
+   * The task the thread was parked on when this run's claim ended the park
+   * (`startFollowUp`). Kept so a run that fails can give the wait back
+   * (`finishFollowUp`): only a run that ends without failing, or the task's end, ends it.
+   */
+  unparkedTask: integer().references(() => tasks.id),
   /** The owner ticked "Report when done": success goes on their desk too. A failure always does. */
   reportWhenDone: boolean().notNull().default(false),
   createdAt: created(),

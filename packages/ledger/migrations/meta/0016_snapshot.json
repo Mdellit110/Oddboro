@@ -1,5 +1,5 @@
 {
-  "id": "2fce6e57-0fe5-4f2e-9adf-e9f73e79ba9b",
+  "id": "064c63b9-3ac1-44cb-a614-1701072939ec",
   "prevId": "795062f0-527c-4d50-b0de-6823713bbef6",
   "version": "7",
   "dialect": "postgresql",
@@ -673,6 +673,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "unparked_task": {
+          "name": "unparked_task",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "report_when_done": {
           "name": "report_when_done",
           "type": "boolean",
@@ -764,6 +770,15 @@
           "tableFrom": "follow_ups",
           "tableTo": "threads",
           "columnsFrom": ["thread_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "follow_ups_unparked_task_tasks_id_fk": {
+          "name": "follow_ups_unparked_task_tasks_id_fk",
+          "tableFrom": "follow_ups",
+          "tableTo": "tasks",
+          "columnsFrom": ["unparked_task"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"

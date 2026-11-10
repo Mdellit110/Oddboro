@@ -1947,6 +1947,8 @@ export type Unparked = { task: string } | { at: Date };
  * owner's words picked up stayed parked on a task that might never end, and
  * that task's end woke the finished work again. A colleague's run leaves the
  * lead's park alone, and so does a usage-window hold, which is the office's.
+ * The claimed row keeps the task it lifted (`unparkedTask`), so a run that
+ * then fails gives that wait back (`finishFollowUp`).
  */
 export async function startFollowUp(
   id: number
@@ -1955,7 +1957,7 @@ export async function startFollowUp(
     // The thread is locked, so two claims on it at once cannot each miss the
     // other's run starting, and both go.
     const [on] = await tx
-      .select({ threadId: followUps.threadId })
+      .select({ threadId: followUps.threadId, staffId: followUps.staffId })
       .from(followUps)
       .where(eq(followUps.id, id));
     const [t] = on?.threadId
@@ -1970,12 +1972,14 @@ export async function startFollowUp(
           .where(eq(threads.id, on.threadId))
           .for('update')
       : [];
+    // Only the lead's own run ends its park, so only it records the task it lifted.
+    const leads = t !== undefined && on?.staffId === t.hubId;
     const [claimed] = await tx
       .update(followUps)
-      .set({ startedAt: new Date() })
+      .set({ startedAt: new Date(), unparkedTask: leads ? t.resumeOnTask : null })
       .where(and(eq(followUps.id, id), isNull(followUps.startedAt), not(waitsOnOwnRun())))
       .returning();
-    if (!claimed?.threadId || !t || claimed.staffId !== t.hubId) return claimed;
+    if (!claimed?.threadId || !leads) return claimed;
     const timed = t.heldBy === null ? t.resumeAt : null;
     if (t.resumeOnTask === null && timed === null) return claimed;
     const [task] = t.resumeOnTask
@@ -2072,8 +2076,13 @@ export async function finishFollowUp(
       .update(followUps)
       .set({ outcome, result, doneAt: now })
       .where(and(eq(followUps.id, f.id), isNull(followUps.outcome)))
-      .returning({ id: followUps.id });
+      .returning({ id: followUps.id, unparkedTask: followUps.unparkedTask });
     if (!row) return false;
+    // Read from the row, not `f`: the claim wrote it after `f` may have been read.
+    const ended =
+      outcome === 'failed' && row.unparkedTask !== null && f.threadId
+        ? await giveWaitBack(tx, f.threadId, row.unparkedTask)
+        : undefined;
     if (joined.length)
       await tx
         .update(followUps)
@@ -2106,8 +2115,16 @@ export async function finishFollowUp(
     // The hand-back moves the thread on; with none, the outcome may end it.
     if (back) await addFollowUp(tx, back);
     else if (f.threadId) await settleThread(tx, f.threadId);
-    return true;
+    return { ended };
   });
+  if (finished && finished.ended) {
+    const t = finished.ended;
+    await wakeOnTask(t, {
+      done: t.status === 'done',
+      owner: await ownerName(),
+      ownRun: await ownRunOf(await taskEnd(t))
+    });
+  }
   // The ledger row embeds its text first, which can take a while: outside the transaction.
   if (finished)
     await record({
@@ -2117,6 +2134,36 @@ export async function finishFollowUp(
       body: result,
       askId: f.askId ?? undefined
     });
+}
+
+/**
+ * A lead's run that ended a park on a task failed, so the wait comes back: only
+ * a run that ends without failing, or the task's end, ends one. Not when the
+ * run parked the work again, on a task or a time, or the work ended. The task
+ * is locked, as `parkOnTask` locks it, so it cannot end between this look and
+ * the park and wake nothing. Returns the task when it ended during the run:
+ * the park is back so the work stays open, and `wakeOnTask` then wakes it as
+ * the task's end would have.
+ */
+async function giveWaitBack(
+  tx: Tx,
+  threadId: number,
+  taskId: number
+): Promise<TaskRow | undefined> {
+  const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).for('update');
+  const [back] = await tx
+    .update(threads)
+    .set({ resumeOnTask: taskId })
+    .where(
+      and(
+        eq(threads.id, threadId),
+        isNull(threads.resumeOnTask),
+        isNull(threads.resumeAt),
+        isNull(threads.endedAt)
+      )
+    )
+    .returning({ id: threads.id });
+  return back && task && task.status !== 'open' ? task : undefined;
 }
 
 /** The result of a run a restart cut off. */
@@ -2969,6 +3016,43 @@ export async function tickKey(key: string): Promise<void> {
         .where(eq(tasks.id, t.id));
 }
 
+/**
+ * What an ended task starts (`OWNER_ANSWERS`), and whether a run on the task's
+ * own work picks up among it (`OWN_RUN`). `finishTask` and a failed run giving
+ * a wait back (`finishFollowUp`) both read it, so parked work is told the same.
+ */
+async function taskEnd(t: TaskRow) {
+  // A tool's connect task belongs to the access ask it came from.
+  const from = t.askId ? await ask(t.askId) : undefined;
+  const effects: readonly TaskEffect[] =
+    t.status !== 'done'
+      ? OWNER_ANSWERS.task.dropped
+      : !t.staffId
+        ? OWNER_ANSWERS.task.done.noOdd
+        : from?.kind === 'access'
+          ? OWNER_ANSWERS.task.done.fromAccess
+          : OWNER_ANSWERS.task.done.other;
+  const ownThread = t.threadId ?? from?.threadId ?? null;
+  const ownRuns = effects.some(
+    (e) =>
+      typeof e === 'string' &&
+      (OWN_RUN[e] === 'always' || (OWN_RUN[e] === 'on its work' && ownThread !== null))
+  );
+  return { from, effects, ownThread, ownRuns };
+}
+
+/** The run on an ended task's own work that `wakeOnTask` tells parked work of, if one picks up. */
+async function ownRunOf(end: {
+  ownThread: number | null;
+  ownRuns: boolean;
+}): Promise<{ work: string | null } | undefined> {
+  if (!end.ownRuns) return undefined;
+  const [own] = end.ownThread
+    ? await db.select({ title: threads.title }).from(threads).where(eq(threads.id, end.ownThread))
+    : [];
+  return { work: own?.title ?? null };
+}
+
 export async function finishTask(id: number, done: boolean, note: string | null): Promise<void> {
   const [t] = await db
     .update(tasks)
@@ -2987,30 +3071,13 @@ export async function finishTask(id: number, done: boolean, note: string | null)
     reason: t.note,
     taskId: t.id
   });
-  // A tool's connect task belongs to the access ask it came from.
-  const from = t.askId ? await ask(t.askId) : undefined;
-  const effects: readonly TaskEffect[] = !done
-    ? OWNER_ANSWERS.task.dropped
-    : !t.staffId
-      ? OWNER_ANSWERS.task.done.noOdd
-      : from?.kind === 'access'
-        ? OWNER_ANSWERS.task.done.fromAccess
-        : OWNER_ANSWERS.task.done.other;
+  const end = await taskEnd(t);
+  const { from, effects } = end;
   // Read before the effects: waking the parked work clears what parks it. Its
   // lead's run on the task's own work picks up in the same moment, so each run
   // is told the other has its part, or both do the parked work.
   const parked = await parkedWork(t.id);
-  const ownThread = t.threadId ?? from?.threadId;
-  const ownRuns = effects.some(
-    (e) =>
-      typeof e === 'string' &&
-      (OWN_RUN[e] === 'always' || (OWN_RUN[e] === 'on its work' && !!ownThread))
-  );
-  const [own] =
-    parked.length && ownThread && ownRuns
-      ? await db.select({ title: threads.title }).from(threads).where(eq(threads.id, ownThread))
-      : [];
-  const ownRun = ownRuns ? { work: own?.title ?? null } : undefined;
+  const ownRun = parked.length ? await ownRunOf(end) : undefined;
   const pickedUp = parked.length ? parked.map((p) => p.title) : undefined;
   for (const effect of effects) {
     if (typeof effect === 'object') continue;

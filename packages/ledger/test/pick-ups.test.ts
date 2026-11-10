@@ -991,6 +991,138 @@ test("a task's end that wakes parked work leaves its pick-up no wait to end", as
 });
 
 /**
+ * Work parked on a task of `title`, whose lead's pick-up of a hand-back ended
+ * the park as it started: that pick-up as listed, before its claim, still running.
+ */
+async function liftedPark(name: string, title: string) {
+  const { lead, h, work } = await ownWork(name);
+  const task = await aTask(lead, title);
+  await parksOn(lead, work, task.id);
+  await runs(h, 'done', 'Drew it.');
+  const [back] = await onThread(work, 'handed_back');
+  assert.deepEqual((await O.startFollowUp(back.id))?.unparked, { task: title });
+  return { lead, work, task, back };
+}
+/** A run cut off as a sign-in lapse cuts one off. */
+const fails = (f: Row) => O.finishFollowUp(f, 'work', 'failed', 'Claude Code is signed out.');
+
+test('a lead run that ended a park on a task and then fails parks the work on that task again, and its end wakes it once', async () => {
+  const { lead, work, task, back } = await liftedPark('fails-open', 'Sign the flyer');
+  assert.equal((await threadOf(work)).resumeOnTask, null, 'the claim ended the park');
+  await fails(back);
+  const after = await threadOf(work);
+  assert.equal(after.resumeOnTask, task.id);
+  assert.equal(after.status, 'open');
+  assert.equal(after.endedAt, null);
+  const card = (await T.threadsFor(lead)).find((t) => t.id === work);
+  // What the chat's card reads to say who picks it up and when (`workLine` in the office).
+  assert.equal(card?.parkedOn, 'Sign the flyer');
+  assert.equal(card?.stage, 'under_way');
+  assert.equal(card?.holder, card?.hub);
+  await O.finishTask(task.id, true, null);
+  await O.finishTask(task.id, true, null);
+  const woken = await onThread(work, 'resume');
+  assert.equal(woken.length, 1);
+  assert.match(
+    woken[0].note ?? '',
+    /finished "Sign the flyer", the task you parked this work on\./
+  );
+});
+
+test('a lead run that ended a park on a task fails after the task was finished: the work wakes once, told it was finished', async () => {
+  const { work, task, back } = await liftedPark('fails-finished', 'Proof the flyer');
+  await O.finishTask(task.id, true, 'Looks right.');
+  assert.deepEqual(await onThread(work, 'resume'), [], 'nothing was parked on it as it ended');
+  await fails(back);
+  const woken = await onThread(work, 'resume');
+  assert.equal(woken.length, 1);
+  assert.match(
+    woken[0].note ?? '',
+    /finished "Proof the flyer", the task you parked this work on\. Another run of yours picks up from that task too and carries its own part: do only this work's here\. Pick it up now: Looks right\.$/
+  );
+  const after = await threadOf(work);
+  assert.equal(after.resumeOnTask, null);
+  assert.equal(after.endedAt, null);
+  await O.finishTask(task.id, true, null);
+  assert.equal((await onThread(work, 'resume')).length, 1);
+});
+
+test('a lead run that ended a park on a task fails after the task was dropped: the work wakes once, told it was dropped', async () => {
+  const { work, task, back } = await liftedPark('fails-dropped', 'Print the flyer');
+  await O.finishTask(task.id, false, null);
+  await fails(back);
+  const woken = await onThread(work, 'resume');
+  assert.equal(woken.length, 1);
+  assert.match(
+    woken[0].note ?? '',
+    /dropped "Print the flyer", the task you parked this work on, so it will not be finished\. Decide what comes of the work now\.$/
+  );
+  assert.equal((await threadOf(work)).resumeOnTask, null);
+});
+
+test('a lead run that ended a park and parked again before it failed keeps the park it made, on another task or a time', async () => {
+  const onTask = await liftedPark('fails-reparked', 'Sign the menu');
+  const other = await aTask(onTask.lead, 'Price the menu');
+  await parksOn(onTask.lead, onTask.work, other.id);
+  await fails(onTask.back);
+  assert.equal((await threadOf(onTask.work)).resumeOnTask, other.id);
+
+  const onTime = await liftedPark('fails-retimed', 'Sign the card');
+  const at = new Date(Date.now() + 3_600_000);
+  assert.ok(await T.parkThread(onTime.lead, onTime.work, at));
+  await fails(onTime.back);
+  const timed = await threadOf(onTime.work);
+  assert.equal(timed.resumeOnTask, null);
+  assert.equal(timed.resumeAt?.getTime(), at.getTime());
+});
+
+test('a lead run that ended a park on a task fails after the owner stopped the work: it stays stopped, parked on nothing', async () => {
+  const { work, back } = await liftedPark('fails-stopped', 'Sign the poster');
+  // As the owner's no to more hand-offs stops it (`answerHandOffs`).
+  await db
+    .update(threads)
+    .set({ status: 'stopped', endedAt: new Date() })
+    .where(eq(threads.id, work));
+  await fails(back);
+  const after = await threadOf(work);
+  assert.equal(after.status, 'stopped');
+  assert.equal(after.resumeOnTask, null);
+});
+
+test('a lead run that ended no park and fails ends the work failed, parked on nothing', async () => {
+  const { h, work } = await ownWork('fails-unparked');
+  await runs(h, 'done', 'Drew it.');
+  const [back] = await onThread(work, 'handed_back');
+  assert.equal((await O.startFollowUp(back.id))?.unparkedTask, null);
+  await fails(back);
+  const after = await threadOf(work);
+  assert.equal(after.status, 'failed');
+  assert.equal(after.resumeOnTask, null);
+});
+
+test('a lead run on work the usage window holds that fails leaves the hold as it was and parks on no task', async () => {
+  const { lead, colleague, work } = await ownWork('fails-held');
+  const { ask: hold } = await O.raiseAsk(lead, {
+    title: 'Hold the failed run for the window',
+    why: 'w',
+    ifApproved: 'i'
+  });
+  const reset = new Date(Date.now() + 3_600_000);
+  await db
+    .update(threads)
+    .set({ heldBy: hold.id, resumeAt: reset, resumeOnTask: null })
+    .where(eq(threads.id, work));
+  const pickUp = await toldLead(colleague, work);
+  assert.ok(await O.startFollowUp(pickUp.id));
+  await fails(pickUp);
+  const after = await threadOf(work);
+  assert.equal(after.heldBy, hold.id);
+  assert.equal(after.resumeAt?.getTime(), reset.getTime());
+  assert.equal(after.resumeOnTask, null);
+  assert.equal(after.status, 'open');
+});
+
+/**
  * A lead's own work with a task given on it, and, unless `parked` is false, a
  * second piece of work of the same lead parked on that task, as in the run
  * where both picked up at once and did the parked work twice.
