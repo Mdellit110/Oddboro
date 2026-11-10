@@ -22,7 +22,7 @@ import { TEMP_IN_APPDATA } from './store-states.ts';
 
 const { connectors, goals, grants, staff, threads } = await import('../src/schema.ts');
 const { eq, inArray } = await import('drizzle-orm');
-const { OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
+const { isOffered, OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
 const { HAND_OFF_LIMIT, LEADS_NONE } = await import('../src/threads.ts');
 afterEach(() => oneThreadPerGoal(sql, MANAGER_ROLE));
@@ -545,8 +545,8 @@ for (const [id, holds] of Object.entries(HOLDERS))
 
 // The test above reads each row's conditions to work out what a run gets, so
 // a condition dropped from a row changes what it expects too. These hold the
-// rows themselves.
-test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never a tool', () => {
+// rows themselves, and that `isOffered` never offers a `prompt` row.
+test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never offered, even to a chat holding it', () => {
   const where = (field: 'inChat' | 'notToManager' | 'prompt') =>
     OFFICE_TOOLS.filter((t) => t[field]).map((t) => t.id);
   assert.deepEqual(where('inChat'), [
@@ -558,6 +558,10 @@ test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait
   ]);
   assert.deepEqual(where('notToManager'), ['leave_office']);
   assert.deepEqual(where('prompt'), ['see_office']);
+  assert.equal(
+    isOffered(['see_office'], 'see_office', { chat: true, manager: false, gmail: false }),
+    false
+  );
 });
 
 test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {
