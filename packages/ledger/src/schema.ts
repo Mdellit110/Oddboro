@@ -753,6 +753,12 @@ export const followUps = pgTable('follow_ups', {
   edit: jsonb().$type<FileEdit>(),
   /** The owner's words: their reason, what to change, their feedback, or their note on a task. */
   note: text(),
+  /**
+   * On a `task_done` follow-up, the titles of other work parked on the task,
+   * which picked up on its own as the task ended, so this run leaves it alone.
+   * Office text, never the owner's words: it stays out of `note`.
+   */
+  pickedUp: text().array(),
   /** The owner ticked "Report when done": success goes on their desk too. A failure always does. */
   reportWhenDone: boolean().notNull().default(false),
   createdAt: created(),

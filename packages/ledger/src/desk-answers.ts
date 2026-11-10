@@ -29,6 +29,14 @@ export function taskSaid(t: { steps: Step[]; note: string | null }): string {
   );
 }
 
+/**
+ * What the run that hears a task ended is told of other work parked on that
+ * task. That work picks up in its own run at the same moment (`wakeOnTask`),
+ * so without this line both runs did the parked work.
+ */
+export const pickedUpLine = (title: string): string =>
+  `"${flat(title)}" was waiting on this task and has picked up on its own; leave that work to it.`;
+
 /** How each end of an ask or task reads to an Odd. */
 export const SAID_AS: Record<Exclude<AskStatus, 'open'> | Exclude<TaskStatus, 'open'>, string> = {
   approved: 'approved',

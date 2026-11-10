@@ -12,7 +12,7 @@ import {
   switchesSaid
 } from '@oddboro/ledger';
 import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow } from '@oddboro/ledger';
-import { ownerAnswers } from '@oddboro/ledger/desk-answers';
+import { ownerAnswers, pickedUpLine } from '@oddboro/ledger/desk-answers';
 import { workPath } from '@oddboro/ledger/work-paths';
 import { filterWords } from '@oddboro/ledger/filters';
 import { ACT_WRITE } from './house.ts';
@@ -165,6 +165,7 @@ function taskDoneBrief(
           `- Attached, with anything they filled in: ${t.files.map((f) => (workPath(f) ? home(f) : f)).join(', ')}. Read each one first.`
         ]
       : []),
+    ...(f.pickedUp ?? []).map((title) => `- ${pickedUpLine(title)}`),
     '',
     '1. Read what they gave you: the files above, their answers and their note.',
     `2. Do the next step you told them would follow, now. When it needs their yes, such as a hire, a change outside the office ${ACT_WRITE}, or a new job, raise it with the tool for it (propose_goal_plan for a goal, propose_hire, raise_ask and the rest).`,

@@ -37,7 +37,7 @@ import {
   servesNoThread
 } from './hand-offs.ts';
 import { answerWindow } from './usage-window.ts';
-import { wakeOnTask } from './task-parking.ts';
+import { parkedWork, wakeOnTask } from './task-parking.ts';
 import {
   addFollowUp,
   answerHandOffs,
@@ -124,6 +124,7 @@ import {
   ASK_REPLACED,
   ownerAnswers,
   OWNER_ANSWERS,
+  pickedUpLine,
   taskSaid,
   type AskAnswer,
   type AskEffect,
@@ -1806,6 +1807,7 @@ async function followUp(
     reportId?: number;
     taskId?: number;
     note: string | null;
+    pickedUp?: string[];
     reportWhenDone?: boolean;
   }
 ): Promise<void> {
@@ -2958,6 +2960,19 @@ export async function finishTask(id: number, done: boolean, note: string | null)
       : from?.kind === 'access'
         ? OWNER_ANSWERS.task.done.fromAccess
         : OWNER_ANSWERS.task.done.other;
+  // Read before the effects: waking the parked work clears what parks it. Its
+  // lead's run on the task's own work picks up in the same moment, so each run
+  // is told the other has its part, or both do the parked work.
+  const parked = await parkedWork(t.id);
+  const ownThread = t.threadId ?? from?.threadId;
+  const ownPicksUp = effects.some(
+    (e) => e === 'task_done' || e === 'carry_out' || e === 'answer_back'
+  );
+  const [own] =
+    parked.length && ownThread && ownPicksUp
+      ? await db.select({ title: threads.title }).from(threads).where(eq(threads.id, ownThread))
+      : [];
+  const pickedUp = parked.length ? parked.map((p) => p.title) : undefined;
   for (const effect of effects) {
     if (typeof effect === 'object') continue;
     switch (effect) {
@@ -2969,7 +2984,10 @@ export async function finishTask(id: number, done: boolean, note: string | null)
             threadId: t.threadId ?? from?.threadId ?? null
           },
           done ? 'done' : 'failed',
-          `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`
+          [
+            `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`,
+            ...parked.map((p) => pickedUpLine(p.title))
+          ].join(' ')
         );
         break;
       // The owner finished connecting a tool an Odd asked for: it can start the
@@ -2980,11 +2998,12 @@ export async function finishTask(id: number, done: boolean, note: string | null)
       // Any other task an Odd gave them: the Odd picks up whatever waited on
       // it, such as hiring from an intake the owner just filled in.
       case 'task_done':
-        if (t.staffId) await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note });
+        if (t.staffId)
+          await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note, pickedUp });
         break;
       // Work on another thread that waited on this task, whoever gave it.
       case 'wake_parked':
-        await wakeOnTask(t, { done, owner });
+        await wakeOnTask(t, { done, owner, ownWork: own?.title });
         break;
       default:
         effect satisfies never;

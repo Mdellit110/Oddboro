@@ -109,3 +109,29 @@ test('every follow-up kind gets its own brief, and feedback gets the feedback br
   assert.match(briefOf('goal', { t: task })[0], FEEDBACK);
   assert.match(briefOf('task_done', { g: goal })[0], FEEDBACK);
 });
+
+test("a finished task's brief names each work that picked up on its own, and is the same as before when none did", () => {
+  const alone = followUpBrief({ ...followUp('task_done'), pickedUp: null }, ask, report, task);
+  const told = followUpBrief(
+    { ...followUp('task_done'), pickedUp: ['Print\nrun', 'Frame it'] },
+    ask,
+    report,
+    task
+  );
+  const lines = [
+    '- "Print run" was waiting on this task and has picked up on its own; leave that work to it.',
+    '- "Frame it" was waiting on this task and has picked up on its own; leave that work to it.'
+  ];
+  assert.deepEqual(
+    told.filter((l) => !lines.includes(l)),
+    alone,
+    'the lines are the only change'
+  );
+  const note = told.indexOf('- Their note: Their words');
+  assert.deepEqual(
+    lines.map((l) => told.indexOf(l)),
+    [note + 1, note + 2],
+    'each line sits with what the owner gave, before the steps'
+  );
+  assert.ok(!alone.some((l) => l.includes('picked up on its own')));
+});

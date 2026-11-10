@@ -861,3 +861,67 @@ test("a parked thread's lead is told what it waits on", async () => {
   await parksOn(lead, work, check.id);
   assert.equal((await threadOf(work)).resumeAt, null, 'a task replaces the time');
 });
+
+/**
+ * A lead's own work with a task given on it, and, unless `parked` is false, a
+ * second piece of work of the same lead parked on that task, as in the run
+ * where both picked up at once and did the parked work twice.
+ */
+async function taskOnOwnWork(name: string, parked = true) {
+  const { lead, colleague, work } = await ownWork(name);
+  const task = await O.giveTask(lead, {
+    title: `Approve\nthe ${name} copy`,
+    why: 'w',
+    steps: ['Approve it'],
+    threadId: work
+  });
+  const other = parked
+    ? await H.handOff({
+        from: lead,
+        to: colleague,
+        work: { title: `Print of ${name}`, brief: 'Print it.' },
+        thread: { title: `Print\nrun of ${name}` }
+      })
+    : undefined;
+  const otherWork = other && 'id' in other ? ((await byId(other.id)).threadId ?? 0) : undefined;
+  if (otherWork) await parksOn(lead, otherWork, task.id);
+  return { work, otherWork, task: task.id, owner: await O.ownerName() };
+}
+
+test('a finished task tells its own work which parked work picked up, so the lead leaves it to that work', async () => {
+  const { work, otherWork, task } = await taskOnOwnWork('told-own');
+  await O.finishTask(task, true, 'Looks right.\nShip it.');
+  const [done] = await onThread(work, 'task_done');
+  assert.deepEqual(done.pickedUp, ['Print\nrun of told-own']);
+  assert.equal(done.note, 'Looks right.\nShip it.', "the note stays the owner's words alone");
+  const [woken] = await onThread(otherWork ?? 0, 'resume');
+  assert.match(
+    woken.note ?? '',
+    /"Work on told-own", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here\. Pick it up now: Looks right\. Ship it\.$/
+  );
+});
+
+test('a finished task with nothing parked on it gives its own work the note alone', async () => {
+  const { work, task } = await taskOnOwnWork('alone', false);
+  await O.finishTask(task, true, 'Looks right.\nShip it.');
+  const [done] = await onThread(work, 'task_done');
+  assert.equal(done.pickedUp, null);
+  assert.equal(done.note, 'Looks right.\nShip it.');
+});
+
+test('a dropped task tells its own work which parked work picked up, and the parked work hears of its own', async () => {
+  const { work, otherWork, task, owner } = await taskOnOwnWork('dropped-own');
+  await O.finishTask(task, false, 'Not needed.');
+  const [answer] = await onThread(work, 'resume');
+  assert.equal(
+    answer.note,
+    `${owner} dropped "Approve\nthe dropped-own copy": Not needed. "Print run of dropped-own" was waiting on this task and has picked up on its own; leave that work to it.`
+  );
+  const [woken] = await onThread(otherWork ?? 0, 'resume');
+  assert.match(woken.note ?? '', /"Work on dropped-own", the work that task was given on/);
+
+  const lone = await taskOnOwnWork('dropped-alone', false);
+  await O.finishTask(lone.task, false, 'Not needed.');
+  const [alone] = await onThread(lone.work, 'resume');
+  assert.equal(alone.note, `${owner} dropped "Approve\nthe dropped-alone copy": Not needed.`);
+});

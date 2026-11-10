@@ -1,5 +1,5 @@
 {
-  "id": "bd18d285-42c9-492a-8437-83a6e1eaacbe",
+  "id": "2fce6e57-0fe5-4f2e-9adf-e9f73e79ba9b",
   "prevId": "795062f0-527c-4d50-b0de-6823713bbef6",
   "version": "7",
   "dialect": "postgresql",
@@ -664,6 +664,12 @@
         "note": {
           "name": "note",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "picked_up": {
+          "name": "picked_up",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": false
         },
