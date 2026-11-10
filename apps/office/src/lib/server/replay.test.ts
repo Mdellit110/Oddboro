@@ -82,7 +82,7 @@ test('retold files count inside the budget, and an older line goes with its file
       name: `20261104-090000-ab${line}-picture.png`,
       mediaType: 'image/png',
       size: 1,
-      path: `/Users/someone/.oddboro/staff/odd/attachments/20261104-090000-ab${line}-${n}-picture.png`
+      path: `/office/staff/odd/attachments/20261104-090000-ab${line}-${n}-picture.png`
     }));
   const chat = Array.from({ length: 200 }, (_, i) => ({
     ...owner(`Look at these, ${i}.`),
