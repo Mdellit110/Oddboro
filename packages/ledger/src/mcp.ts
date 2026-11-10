@@ -68,7 +68,6 @@ import { currentPlatform } from './platform.ts';
 import {
   FOLDER_SAID,
   grantWorks,
-  levelAtMost,
   LEVELS,
   NOT_OWN_TOOLS,
   OWN_SWITCHES,

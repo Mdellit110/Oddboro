@@ -117,9 +117,9 @@ result naming the work and saying when it starts a new round, `tell_lead` for
 a goal hire, the refusal of a goal's work in its chat, a lead naming the
 thread an ask is for, every tool refusing a key it does not take, every tool it registers being listed or riding with a listed one, each Odd's tools being exactly the ones every Odd has, the ones it holds and those riding with them, and a hire proposal naming every tool the owner can give; the second, the office's day in `my_goals`. `test/goal-statuses.test.ts` holds which goals a lead's chat and `my_goals` count as live, and `test/schedule-rule.test.ts` an Odd's schedule limit, through the tool server too.
 `test/named-tools.test.ts` runs the tool server for an Odd holding no office
-tool the owner gives and for one holding each alone, in a run and in a chat, and fails when a tool's
-description names an office tool that Odd does not hold, unless `NAMES_UNHELD`
-declares it with the Linear row that owes the fix; the office's
+tool the owner gives and for one holding each alone, in a run and in a chat,
+and fails when a tool's description names an office tool that Odd does not
+hold, unless `NAMES_UNHELD` declares it with the Linear row that owes the fix; the office's
 `named-tools.test.ts` holds house() and every brief to the same rule.
 `test/grantable.test.ts` holds each line an Odd hears when it lacks a grant,
 word for word, through each function that says it, each PATCH key's class,
@@ -662,9 +662,9 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   `bringBack`, which turns on the jobs in `jobs_off` from now. What it had open
   stays closed. An Odd asks to leave with `leave_office` (every Odd's), and the
   Office Manager asks with `remove_odd` and `bring_back_odd`; each is offered
-  only in a chat (`OWNER_SAID`; `inChat` on its row in `tools.ts`), `leave_office` never
-  to the manager (`notToManager`), and each only raises the ask. Both kinds take yes
-  or no only (`yesOrNo`), and `decide` refuses a yes `leavingRefused` turns
+  only in a chat (`OWNER_SAID`; `inChat` on its row in `tools.ts`),
+  `leave_office` never to the manager (`notToManager`), and each only raises
+  the ask. Both kinds take yes or no only (`yesOrNo`), and `decide` refuses a yes `leavingRefused` turns
   down: the manager never leaves, and an Odd whose look a later hire took
   comes back only once one of them is redrawn. `test/leaving.test.ts` holds it,
   the tools included.
