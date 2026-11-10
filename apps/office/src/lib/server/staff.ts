@@ -133,6 +133,8 @@ import {
   type OwnTools,
   chatSession,
   home,
+  OFFICE_FILE_NAMES,
+  OFFICE_FILES,
   rulePath,
   effortFor,
   MANAGER_ROLE,
@@ -289,7 +291,7 @@ function homeOf(id: string): string {
   return dir;
 }
 
-const chatFile = (id: string) => join(homeOf(id), 'chat.jsonl');
+const chatFile = (id: string) => join(homeOf(id), OFFICE_FILES.chat);
 const addToChat = (id: string, line: ChatEntry) =>
   appendFileSync(chatFile(id), JSON.stringify(line) + '\n');
 
@@ -1377,7 +1379,12 @@ export async function chat(
           ? [
               replay(
                 past,
-                changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable)
+                changedSince(
+                  homeOf(id),
+                  since,
+                  OFFICE_FILE_NAMES.map((f) => join(homeOf(id), f)),
+                  writable
+                )
               )
             ]
           : []),

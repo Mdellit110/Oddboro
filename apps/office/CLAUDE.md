@@ -294,7 +294,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    reads as its work's title and its path there, never a thread's number or
    folder. It comes from `/api/staff/[id]/storage`
    (`oddStorage` in `src/lib/server/storage.ts`): never the office's own
-   `chat.jsonl` and `session.json`, an instruction file, a hidden entry or a
+   files (`OFFICE_FILES` in the ledger's `home.ts`), an instruction file, a hidden entry or a
    link, and at most 5,000 entries across both, which it says. A file opens
    in the viewer. It is read when the tab opens and when the office says something
    changed. The Odd's name in the header, with an info icon beside
