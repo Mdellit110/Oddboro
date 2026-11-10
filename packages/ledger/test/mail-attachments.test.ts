@@ -4,7 +4,15 @@
 // below the top goes. The folders are fake, in the test's own home. Run with
 // `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, win32 } from 'node:path';
 import { after, test } from 'node:test';
@@ -50,6 +58,19 @@ const ivy = home('staff', 'ivy');
 mkdirSync(join(ivy, 'drafts'), { recursive: true });
 writeFileSync(join(ivy, 'drafts', 'intake.md'), 'intake');
 linkFolder(join(ivy, 'drafts'), join(ivy, 'notes'));
+
+// Lea's accented name, stored composed in `drafts` and decomposed in
+// `letters`, as an unzip or a download may leave it.
+const composed = 'Résumé.pdf';
+const decomposed = composed.normalize('NFD');
+const lea = home('staff', 'lea');
+mkdirSync(join(lea, 'drafts'), { recursive: true });
+mkdirSync(join(lea, 'letters'), { recursive: true });
+writeFileSync(join(lea, 'drafts', composed), 'cv');
+writeFileSync(join(lea, 'letters', decomposed), 'cv');
+// A Mac's disk opens a name in either form. Linux's and Windows's keep the
+// two forms as separate names, so there the other form names no file.
+const foldsForms = existsSync(join(lea, 'drafts', decomposed));
 
 test("an office file named at the top of the Odd's folder is refused", () => {
   assert.deepEqual(mailAttachment('mia', OFFICE_FILES.chat), refused(OFFICE_FILES.chat));
@@ -137,3 +158,18 @@ test("an ordinary file named by its full path in the Odd's folder attaches", () 
     size: 'intake'.length
   });
 });
+
+// Where the disk keeps both forms apart, no file has that name: refused as missing.
+const attachesInOtherForm = (named: string) =>
+  assert.deepEqual(
+    mailAttachment('lea', named),
+    foldsForms
+      ? { path: named, name: named.split('/')[1], mediaType: 'application/pdf', size: 'cv'.length }
+      : refused(named)
+  );
+
+test('an accented name stored composed and named decomposed attaches where the disk opens either form', () =>
+  attachesInOtherForm(`drafts/${decomposed}`));
+
+test('an accented name stored decomposed and named composed attaches where the disk opens either form', () =>
+  attachesInOtherForm(`letters/${composed}`));

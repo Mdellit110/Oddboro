@@ -65,7 +65,10 @@ const lowerOfficeFiles = OFFICE_FILE_NAMES.map((n) => n.toLowerCase());
 export const isOfficeFile = (realInside: string): boolean =>
   lowerOfficeFiles.includes(realInside.toLowerCase());
 
-const asNamed = (p: string): string => normalize(p).replace(/\\/g, '/').toLowerCase();
+// A Mac's disk opens an accented name in either Unicode form, and the real path
+// gives the form it stored, so both sides are compared composed.
+const asNamed = (p: string): string =>
+  normalize(p).normalize('NFC').replace(/\\/g, '/').toLowerCase();
 /**
  * Whether a file an Odd named by a path inside its folder really is there:
  * `realInside` is the path from the folder's real path to the file's. A link

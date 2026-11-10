@@ -635,7 +635,8 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   (`mailAttachments` in `src/mail-attachments.ts`), kept on the ask as
   `reply.attachments`; a file that fails the check refuses the call. A file
   goes only where it really is: its real path inside the Odd's real folder
-  must be the path it was named by, in any letter case (`isWhereNamed` in
+  must be the path it was named by, in any letter case and either Unicode
+  form, since a Mac's disk opens an accented name in both (`isWhereNamed` in
   `src/home.ts`, which `hand_off` shares), so a symbolic link or junction on
   the way, to a hidden folder, back to the top or onto another drive, is
   refused, and the Odd is told to name the file itself. The office's own
