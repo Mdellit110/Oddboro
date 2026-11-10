@@ -4,8 +4,9 @@
 // owner decided and tasks they finished, since the session last heard. Without
 // it, an answer to a new manager's hello, or "How did the call go?" after a
 // poke, means nothing to the session.
-import { SAID_AS } from '@oddboro/ledger/desk-answers';
+import { flat, SAID_AS } from '@oddboro/ledger/desk-answers';
 import type { ChatEntry } from '../staff/chat.ts';
+import { cut } from './run-env.ts';
 
 /** A line the session never saw: a poke the office delivered, a line it said in the staffer's name, or a failed run's error. */
 const unseen = (e: ChatEntry) => e.poke || e.told || e.failed;
@@ -22,6 +23,30 @@ const howItEnded = (d: Landed) => `"${d.title}" ${said[d.status ?? ''] ?? d.stat
  * lines of `past` at `replayed` word for word (`replay` in replay.ts).
  */
 export type Session = 'resumed' | { replayed: Set<number> };
+
+/** The most of one chat line `lastExchange` carries, in UTF-16 units. */
+const EXCHANGE_LINE_MAX = 300;
+
+/**
+ * The last Odd line before the owner's message and the owner line before it,
+ * as one line, each cut to `EXCHANGE_LINE_MAX`, for tell_lead. A told or poke
+ * line counts as the Odd's: the owner read it just before replying, whichever
+ * way it was written. Without an owner line before it (a hello, a first
+ * question) it is the Odd's half alone.
+ */
+export function lastExchange(
+  past: ChatEntry[],
+  who: { owner: string; odd: string }
+): string | undefined {
+  const spoken = past.filter((e) => !e.failed && flat(e.text));
+  const odd = spoken.findLastIndex((e) => e.from === 'staff');
+  if (odd < 0) return undefined;
+  const quoted = (e: ChatEntry) => `"${cut(flat(e.text), EXCHANGE_LINE_MAX)}"`;
+  const owner = spoken.slice(0, odd).findLast((e) => e.from === 'owner');
+  return owner
+    ? `Just before, ${who.owner} said: ${quoted(owner)}. ${who.odd} replied: ${quoted(spoken[odd])}.`
+    : `Just before, ${who.odd} said: ${quoted(spoken[odd])}.`;
+}
 
 /**
  * Each told, poke and failed run's owner line since the owner last wrote is

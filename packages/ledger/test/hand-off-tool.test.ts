@@ -203,7 +203,7 @@ test('continuing a finished thread starts a new round with its whole limit', asy
 });
 
 // A goal's thread, led by Mo, that Pia (no job) and Jo (a job) serve.
-const { asks, jobs, staffGoals, tasks } = await import('../src/schema.ts');
+const { asks, followUps, jobs, staffGoals, tasks } = await import('../src/schema.ts');
 await db
   .insert(staff)
   .values([
@@ -250,6 +250,38 @@ test("a goal hire with no job is offered tell_lead in chat, and raising the goal
   });
   assert.equal(t.isError, true);
   assert.deepEqual(await raisedBy('pia'), { asks: [], tasks: [] });
+});
+
+test('tell_lead requires a reading', async () => {
+  const c = await toolServer('pia', { ...chat, RUN_KEY: 'k-pia-reading' });
+  const tool = (await c.listTools()).tools.find((t) => t.name === 'tell_lead');
+  assert.ok(tool?.inputSchema.required?.includes('reading'), "the lead reads it as the Odd's");
+  assert.match(tool?.description ?? '', /work it out in chat and pass nothing on/);
+});
+
+test("tell_lead hands the lead the chat's last exchange, as the office set it", async () => {
+  await db.insert(staff).values(odd('tam', 'Tam'));
+  const [fence] = await db.insert(goals).values({ title: 'Paint the fence' }).returning();
+  const [paint] = await db
+    .insert(threads)
+    .values({ title: fence.title, goalId: fence.id, hubId: 'mo', holderId: 'mo' })
+    .returning();
+  await db.insert(staffGoals).values({ staffId: 'tam', goalId: fence.id, part: 'The paint' });
+  const c = await toolServer('tam', {
+    OWNER_SAID: 'Tam, use green.',
+    CHAT_EXCHANGE: 'Just before, Tam said: "Which colour?".',
+    RUN_KEY: 'k-tam'
+  });
+  const r = await c.callTool({
+    name: 'tell_lead',
+    arguments: { work: paint.id, words: 'use green.', reading: 'They want green paint.' }
+  });
+  assert.equal(r.isError, undefined, said(r));
+  const [wake] = await db.select().from(followUps).where(eq(followUps.threadId, paint.id));
+  assert.match(
+    wake.note ?? '',
+    /They want green paint\. Just before, Tam said: "Which colour\?"\.$/
+  );
 });
 
 test('a goal hire with no job opens no work and puts nothing on the desk, whatever tool it reaches for', async () => {

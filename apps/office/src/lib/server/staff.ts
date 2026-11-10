@@ -163,7 +163,7 @@ import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
 import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
 import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
-import { chatPreface } from './chat-preface.ts';
+import { chatPreface, lastExchange } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { runEnv, toolServerEnv } from './run-env-allow.ts';
 import { firstDayOf } from './first-day.ts';
@@ -831,6 +831,8 @@ async function run(
     extra?: string;
     /** The owner's own message, when this is a chat. */
     ownerSaid?: string;
+    /** That chat as it stood before the owner's message: `tell_lead` passes on its last exchange. */
+    chatBefore?: ChatEntry[];
     /** The ask the owner approved that this run carries out: the only one its self-edits may cite. */
     approvedAsk?: number;
     /** The owner's note a follow-up carries out, which a lesson may quote. */
@@ -949,6 +951,7 @@ async function run(
     officeEnv({
       key,
       ownerSaid: opts.ownerSaid,
+      chatExchange: opts.chatBefore && lastExchange(opts.chatBefore, { owner, odd: who.name }),
       approvedAsk: opts.approvedAsk,
       signedOut: caps.outside
         .filter((a) => a.heldBack === 'sign-in ran out')
@@ -1359,6 +1362,7 @@ export async function chat(
       r = await run(who, prompt, {
         kind: 'chat',
         ownerSaid: message,
+        chatBefore: past,
         sessionFile: chatSession(id),
         timeoutMs: CHAT_TIMEOUT_MS,
         onEvent

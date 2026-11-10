@@ -2,13 +2,47 @@
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chatPreface } from './chat-preface.ts';
+import { chatPreface, lastExchange } from './chat-preface.ts';
 import type { ChatEntry } from '../staff/chat.ts';
 
 const owner = (at: string, text: string): ChatEntry => ({ at, from: 'owner', text });
 const reply = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text });
 const told = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, told: true });
 const poke = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, poke: true });
+
+test('the last exchange is the last Odd line and the owner line before it, on one line', () => {
+  const who = { owner: 'Sam', odd: 'Bram' };
+  const at = '2026-11-03T09:00:00Z';
+  assert.equal(
+    lastExchange([owner(at, 'First.'), owner(at, 'Which\nfile?'), reply(at, 'The\n  brief.')], who),
+    'Just before, Sam said: "Which file?". Bram replied: "The brief.".'
+  );
+  for (const line of [told, poke])
+    assert.equal(
+      lastExchange([owner(at, 'Hi.'), line(at, 'How did it go?')], who),
+      'Just before, Sam said: "Hi.". Bram replied: "How did it go?".'
+    );
+  const failedLine: ChatEntry = { at, from: 'staff', text: 'It broke.', failed: true };
+  const blank = reply(at, ' ');
+  assert.equal(
+    lastExchange(
+      [owner(at, 'Hi.'), reply(at, 'Hello.'), owner(at, 'Well?'), failedLine, blank],
+      who
+    ),
+    'Just before, Sam said: "Hi.". Bram replied: "Hello.".'
+  );
+  assert.equal(
+    lastExchange([told(at, 'Three questions?')], who),
+    'Just before, Bram said: "Three questions?".'
+  );
+  assert.equal(lastExchange([owner(at, 'Hi.')], who), undefined);
+  assert.equal(lastExchange([], who), undefined);
+  const long = 'a'.repeat(299) + '😀' + 'b';
+  assert.equal(
+    lastExchange([owner(at, long), reply(at, long)], who),
+    `Just before, Sam said: "${'a'.repeat(299)}". Bram replied: "${'a'.repeat(299)}".`
+  );
+});
 
 test("a line the office said in the staffer's name since the owner last wrote is told to the session", () => {
   const lines = chatPreface([told('2026-11-03T09:00:00Z', 'Three questions?')], [], 'resumed');

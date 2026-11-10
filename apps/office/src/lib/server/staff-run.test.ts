@@ -1467,7 +1467,8 @@ test("a lead woken by a colleague's tell_lead is told the work is its to decide 
     threadId: h.thread,
     owner: 'Sam',
     said,
-    words: said
+    words: said,
+    reading: 'They want red paint.'
   });
   assert.deepEqual(told, { lead: 'Lena' });
   const [wake] = await L.pg<{ id: number }[]>`
@@ -1476,8 +1477,16 @@ test("a lead woken by a colleague's tell_lead is told the work is its to decide 
   const { system } = await runOf(wake.id);
   assert.match(
     system,
-    /- Paige passed you what Sam told them in chat about this work\. You decide what comes of it and hand on any work it needs; Paige does nothing more with it\. Sam's words: Make the barn red\./
+    /- Paige passed you what Sam told them in chat about this work\. You decide what comes of it and hand on any work it needs; Paige does nothing more with it\. Sam's words: Make the barn red\. Paige's own reading, which is not Sam's words: They want red paint\./
   );
+});
+
+test("a chat's tool server gets the exchange from before the owner's message, for tell_lead", async () => {
+  const { sayInChat } = await import('./staff.ts');
+  await L.pg`insert into staff ${L.pg([odd('nell', 'Nell')])}`;
+  sayInChat('nell', 'Which colour did you want?');
+  const run = await chatOf('nell', 'Red, please.');
+  assert.equal(run.env.CHAT_EXCHANGE, 'Just before, Nell said: "Which colour did you want?".');
 });
 
 test('no test reached the keychain', () => {

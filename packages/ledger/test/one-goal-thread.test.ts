@@ -213,7 +213,8 @@ test("what the owner tells a colleague in chat about the goal wakes the lead, an
     threadId: goalThread,
     owner: OWNER,
     said,
-    words: 'use the Game of Life glider for the spin.'
+    words: 'use the Game of Life glider for the spin.',
+    reading: 'They want the spin to use the glider.'
   });
   assert.deepEqual(r, { lead: 'Marshall' });
   const wake = (await pending('marshall')).find((f) => f.kind === 'resume');

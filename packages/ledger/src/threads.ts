@@ -702,6 +702,14 @@ export const nextIsLeads = (lead: string): string =>
   `Say what you did. Do not say what happens next or who does it: ${lead} decides.`;
 
 /**
+ * What a colleague passes to a lead and what it keeps in chat. A lead once
+ * read an answer to a colleague's own question as the owner's ruling on the
+ * work, so the tool and the chat's instructions say this in the same words.
+ */
+export const PASS_ONLY_WORK =
+  'Only pass on what asks for work or changes it. When they are only clarifying something you asked, such as which file they mean, work it out in chat and pass nothing on.';
+
+/**
  * The section of a colleague's chat instructions that lists the threads it
  * works on and does not lead, so what {owner} says there about one reaches
  * its lead (`tellLead`). Empty when it is on none.
@@ -716,7 +724,7 @@ export function threadsOnBrief(rows: ThreadOn[]): string {
     '',
     ...rows.map((t) => `- Work ${t.id}: ${t.title}, led by ${t.lead} (${LISTED[t.stage]}).`),
     '',
-    `You may answer {owner}'s questions about this work and talk it through. When they ask for work on one of these, such as a fix, a change or a next step, pass their words to its lead with tell_lead, then tell {owner} you passed it to the lead, who decides the next step. Never do that work here, and never raise an ask or give {owner} a task about it: its lead hands each piece on. ${nextIsLeads('its lead')}`,
+    `You may answer {owner}'s questions about this work and talk it through. ${PASS_ONLY_WORK} When they ask for work on one of these, such as a fix, a change or a next step, pass their words to its lead with tell_lead, then tell {owner} you passed it to the lead, who decides the next step. Never do that work here, and never raise an ask or give {owner} a task about it: its lead hands each piece on. ${nextIsLeads('its lead')}`,
     ''
   ].join('\n');
 }
@@ -726,7 +734,10 @@ export function threadsOnBrief(rows: ThreadOn[]): string {
  * does not lead: their words go to the thread's lead, which picks the thread
  * back up with them (`answerThread`). `said` is the owner's whole message, set
  * by the office, and `words` the part about this thread, which must be in it,
- * so only the owner's own words reach the lead this way.
+ * so only the owner's own words reach the lead as theirs. `reading` is what the
+ * colleague understood them to mean, which goes labelled as the colleague's,
+ * since a lead cannot judge a clarifying "no" from the bare word. `exchange` is
+ * the last two lines of that chat, as the office set them.
  */
 export async function tellLead(t: {
   staffId: string;
@@ -734,12 +745,21 @@ export async function tellLead(t: {
   owner: string;
   said: string;
   words: string;
+  reading: string;
+  exchange?: string;
 }): Promise<{ lead: string } | { problem: string }> {
   const words = flat(t.words);
   if (!words || !flat(t.said).includes(words))
     return {
       problem: `Pass ${t.owner}'s own words in words, copied exactly from their message. Your own go in your reply to them.`
     };
+  // The whole note stays on one line: `answers` reads each line as its own word.
+  const reading = flat(t.reading);
+  if (!reading)
+    return {
+      problem: `Say in reading what you understood ${t.owner} to mean, in your own words. Nothing was passed on.`
+    };
+  const exchange = flat(t.exchange ?? '');
   const [row] = await db
     .select({ hubId: threads.hubId, status: threads.status, lead: staff.name })
     .from(threads)
@@ -767,7 +787,7 @@ export async function tellLead(t: {
   // A lead once read this as the colleague taking it on, and sent no work.
   await answerThread(
     t.threadId,
-    `${name} passed you what ${t.owner} told them in chat about this work. You decide what comes of it and hand on any work it needs; ${name} does nothing more with it. ${t.owner}'s words: ${words}`
+    `${name} passed you what ${t.owner} told them in chat about this work. You decide what comes of it and hand on any work it needs; ${name} does nothing more with it. ${t.owner}'s words: ${words} ${name}'s own reading, which is not ${t.owner}'s words: ${reading}${exchange ? ` ${exchange}` : ''}`
   );
   return { lead: row.lead };
 }

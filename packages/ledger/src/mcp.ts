@@ -92,6 +92,7 @@ import {
   notLed,
   parkThread,
   recentThreads,
+  PASS_ONLY_WORK,
   tellLead,
   threadsOn,
   workFile
@@ -1681,23 +1682,39 @@ if (HANDS_OFF.tool) {
 }
 
 // Only in a chat, where the office set the owner's words, and only for threads
-// this Odd works on and does not lead: their words reach the lead, not its own.
+// this Odd works on and does not lead: their words reach the lead as theirs,
+// and the Odd's own only as its reading.
 if (said && workingOn.length)
   tool(
     'tell_lead',
     {
-      description: `Pass what ${OWNER} just told you about work you are on to the Odd who leads it, which picks it back up with their words. Copy the part of their message about that work exactly: it goes as theirs. Then tell ${OWNER} you passed it on. The work you are on:\n${workingOn.map((t) => `- ${t.id}: ${t.title}, led by ${t.lead}`).join('\n')}`,
+      description: `Pass what ${OWNER} just told you about work you are on to the Odd who leads it, which picks it back up with their words. Copy the part of their message about that work exactly: it goes as theirs. Then tell ${OWNER} you passed it on. ${PASS_ONLY_WORK} The work you are on:\n${workingOn.map((t) => `- ${t.id}: ${t.title}, led by ${t.lead}`).join('\n')}`,
       inputSchema: {
         work: z.number().int().describe('The number of the work, from the list.'),
         words: z
           .string()
           .min(1)
           .max(4000)
-          .describe(`The part of ${OWNER}'s message about this work, copied exactly.`)
+          .describe(`The part of ${OWNER}'s message about this work, copied exactly.`),
+        reading: z
+          .string()
+          .min(1)
+          .max(600)
+          .describe(
+            'What you understood them to mean, in your own words. The lead reads it as yours, never as theirs.'
+          )
       }
     },
-    async ({ work, words }) => {
-      const r = await tellLead({ staffId: ME, threadId: work, owner: OWNER, said, words });
+    async ({ work, words, reading }) => {
+      const r = await tellLead({
+        staffId: ME,
+        threadId: work,
+        owner: OWNER,
+        said,
+        words,
+        reading,
+        exchange: process.env.CHAT_EXCHANGE || undefined
+      });
       return text(
         'problem' in r
           ? r.problem

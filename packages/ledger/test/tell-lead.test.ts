@@ -41,8 +41,9 @@ const presets = await onThread('cole', 'bram', 'Presets for the sim');
 const ownThread = await onThread('bram', 'rex', 'Bram leads this one');
 
 const said = 'Thanks Bram. On the presets: make the colours warmer.\nAlso, lunch at one?';
+const reading = 'Sam wants the presets in warmer colours.';
 const tell = (staffId: string, threadId: number, words = 'make the colours warmer.') =>
-  tellLead({ staffId, threadId, owner: 'Sam', said, words });
+  tellLead({ staffId, threadId, owner: 'Sam', said, words, reading });
 const resumes = (id: number) =>
   db
     .select()
@@ -61,16 +62,43 @@ test("a colleague's chat lists the threads it works on and does not lead, with e
   assert.equal(threadsOnBrief(await threadsOn('cole')), '');
 });
 
-test("tell_lead writes one resume for the lead, carrying the owner's own words", async () => {
-  const r = await tell('bram', presets);
+test("tell_lead writes one resume for the lead, with the owner's words, the colleague's reading labelled as not theirs, and the last exchange, on one line", async () => {
+  const r = await tellLead({
+    staffId: 'bram',
+    threadId: presets,
+    owner: 'Sam',
+    said,
+    words: 'make the colours warmer.',
+    reading: 'Sam wants the presets\nin warmer colours.',
+    exchange: 'Just before, Sam said: "Done yet?".\nBram replied: "Nearly.".'
+  });
   assert.deepEqual(r, { lead: 'Cole' });
   const [wake, ...more] = await resumes(presets);
   assert.equal(more.length, 0);
   assert.equal(wake.staffId, 'cole');
   assert.equal(
     wake.note,
-    "Bram passed you what Sam told them in chat about this work. You decide what comes of it and hand on any work it needs; Bram does nothing more with it. Sam's words: make the colours warmer."
+    'Bram passed you what Sam told them in chat about this work. You decide what comes of it and hand on any work it needs; Bram does nothing more with it. Sam\'s words: make the colours warmer. Bram\'s own reading, which is not Sam\'s words: Sam wants the presets in warmer colours. Just before, Sam said: "Done yet?". Bram replied: "Nearly.".'
   );
+});
+
+test('a tell_lead with no reading is refused', async () => {
+  const quiet = await onThread('cole', 'bram', 'Presets with no reading');
+  const r = await tellLead({
+    staffId: 'bram',
+    threadId: quiet,
+    owner: 'Sam',
+    said,
+    words: 'make the colours warmer.',
+    reading: ' \n '
+  });
+  assert.ok('problem' in r && r.problem.includes('in reading'), JSON.stringify(r));
+  assert.equal((await resumes(quiet)).length, 0);
+});
+
+test("a colleague's chat is told to work out a clarification in chat and pass nothing on", async () => {
+  const rows = await threadsOn('bram');
+  assert.match(threadsOnBrief(rows), /work it out in chat and pass nothing on/);
 });
 
 test("words that are not the owner's are refused, so nothing else reaches the lead as theirs", async () => {
