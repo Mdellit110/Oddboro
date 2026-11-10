@@ -35,6 +35,8 @@ import {
   searchLedger,
   setDescription,
   staffer,
+  anyStaffer,
+  formerStaff,
   type GoAhead,
   record,
   roster,
@@ -75,6 +77,8 @@ import {
   switchesSaid
 } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
+import { leavesLine, leavingRefused } from './leaving.ts';
+import { MANAGER_ROLE } from './managers.ts';
 import {
   APPLIES_TO_MAX,
   CITE_FIRST,
@@ -150,6 +154,25 @@ const HOME = home('staff', ME);
  * the staffer, so a change made "because the owner asked" carries their real words.
  */
 const OWNER_SAID = process.env.OWNER_SAID || undefined;
+// Each Gmail account is a connector of its own. With more than one, the Odd
+// names the one the email came to, and the reply goes out from it.
+const mailboxes = (await grantsFor(ME))
+  .filter((g) => g.connector.config.google === 'gmail')
+  .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
+/**
+ * Whether this run is offered `tool`: the Odd holds it, and each condition its
+ * row in OFFICE_TOOLS sets holds (`withGmail`, `inChat`, `notToManager`). A
+ * tool with a condition is registered behind this, never behind a rule of its own.
+ */
+const offered = (tool: OfficeToolId) => {
+  const row = OFFICE_TOOLS.find((t) => t.id === tool);
+  return (
+    has(tool) &&
+    (!row?.withGmail || mailboxes.length > 0) &&
+    (!row?.inChat || OWNER_SAID !== undefined) &&
+    (!row?.notToManager || me.role !== MANAGER_ROLE)
+  );
+};
 /**
  * The owner's note a follow-up carries out: their reason on an ask, what to
  * change, or their note on a task. Lessons may quote it; it is no go-ahead.
@@ -491,7 +514,7 @@ if (has('search_ledger'))
 // In a chat, the threads this Odd works on and does not lead (`threadsOn`):
 // what the owner asks there about one goes to its lead with tell_lead.
 const said = OWNER_SAID;
-const workingOn = said && has('tell_lead') ? await threadsOn(ME) : [];
+const workingOn = offered('tell_lead') ? await threadsOn(ME) : [];
 const goalRule = await goalWork(ME, workingOn);
 // A hub in a run on no thread, such as a chat or a job, names the thread an ask
 // or task is for, or null, so what it raises about a thread lands there.
@@ -664,11 +687,6 @@ const address = z
   .min(3)
   .max(320)
   .regex(/^[^\r\n,;]+$/, 'One address each, on one line.');
-// Each Gmail account is a connector of its own. With more than one, the Odd
-// names the one the email came to, and the reply goes out from it.
-const mailboxes = (await grantsFor(ME))
-  .filter((g) => g.connector.config.google === 'gmail')
-  .map((g) => ({ id: g.connectorId, account: g.connector.config.account }));
 const mailboxIds = mailboxes.map((m) => m.id) as [string, ...string[]];
 const mailboxArg = mailboxes.length
   ? (() => {
@@ -697,11 +715,8 @@ function mailbox(
     };
   return { connector: m.id, account: m.account };
 }
-/** Whether the Odd holds `tool` and, when its row says `withGmail`, a Gmail account. */
-const hasWithMail = (tool: OfficeToolId) =>
-  has(tool) && (mailboxes.length > 0 || !OFFICE_TOOLS.some((t) => t.id === tool && t.withGmail));
 
-if (hasWithMail('propose_reply'))
+if (offered('propose_reply'))
   tool(
     'propose_reply',
     {
@@ -780,7 +795,7 @@ if (hasWithMail('propose_reply'))
 // then the office creates it in Gmail. Only for an Odd that holds Gmail at any
 // level, since it files mail the Odd read there.
 const filterText = z.string().trim().max(500).optional();
-if (hasWithMail('propose_filter'))
+if (offered('propose_filter'))
   tool(
     'propose_filter',
     {
@@ -1659,7 +1674,7 @@ if (HANDS_OFF.tool) {
     );
 }
 
-// Only in a chat, where the office set the owner's words, and only for threads
+// Only in a chat (`inChat` on its row), and only for threads
 // this Odd works on and does not lead: their words reach the lead, not its own.
 if (said && workingOn.length)
   tool(
@@ -1776,6 +1791,112 @@ if (has('propose_hire'))
       return text(`Ask ${ask.id} is on ${OWNER}'s desk.`);
     }
   );
+
+// Leaving the office (leaving.ts). Each only in a chat, on the owner's own
+// words (`inChat` on its row in tools.ts), and each only raises an ask: the
+// Odd leaves or comes back on the owner's yes alone.
+const leaveNote = `It lands on ${OWNER}'s desk as an ask, and nothing happens until they say yes. Use it only when ${OWNER} told you so in this chat, never on your own.`;
+
+if (offered('leave_office'))
+  tool(
+    'leave_office',
+    {
+      description: `${OWNER} told you to leave the office: ask them to confirm. On their yes you leave at once: off the floor, your jobs off, and what you have open on their desk withdrawn. Your history stays, and the ${MANAGER_ROLE} can bring you back. ${leaveNote}`,
+      inputSchema: {
+        why: z
+          .string()
+          .max(600)
+          .describe(
+            `What ${OWNER} said, in their words, and anything they should know before you go.`
+          )
+      }
+    },
+    async ({ why }) => {
+      const held = await leavingRefused('remove', ME);
+      if (held) return refused(held);
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'remove',
+        odd: ME,
+        title: `Let ${me.name} go from the office`,
+        why,
+        ifApproved: leavesLine(me.name)
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. Tell them you go once they say yes there, and not before.`
+      );
+    }
+  );
+
+if (offered('remove_odd')) {
+  // Listed here, as bring_back_odd lists the Odds that left, so the tool names
+  // no other tool the Odd may not hold to find an id.
+  const here = (await roster()).filter((p) => p.id !== ME && p.role !== MANAGER_ROLE);
+  tool(
+    'remove_odd',
+    {
+      description: `${OWNER} told you to let another Odd go: ask them to confirm. On their yes it leaves at once: off the floor, its jobs off, its open work handed back or withdrawn. Its history stays${offered('bring_back_odd') ? ', and you can bring it back with bring_back_odd' : ''}. Never the ${MANAGER_ROLE}. ${leaveNote} ${
+        here.length
+          ? `Odds you can ask about: ${here.map((p) => `${p.id} (${p.name}, ${p.role})`).join('; ')}.`
+          : 'No other Odd works here.'
+      }`,
+      inputSchema: {
+        odd: z.string().describe('The id of the Odd to let go, from the list above.'),
+        why: z.string().max(600).describe(`What ${OWNER} said, in their words.`)
+      }
+    },
+    async ({ odd, why }) => {
+      const held = await leavingRefused('remove', odd);
+      if (held) return refused(held);
+      const who = (await staffer(odd))!;
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'remove',
+        odd,
+        title: `Let ${who.name} go from the office`,
+        why,
+        ifApproved: leavesLine(who.name)
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. ${who.name} goes once they say yes there, and not before.`
+      );
+    }
+  );
+}
+
+if (offered('bring_back_odd')) {
+  const gone = await formerStaff();
+  tool(
+    'bring_back_odd',
+    {
+      description: `${OWNER} told you to bring back an Odd that left the office: ask them to confirm. On their yes it comes back as it was, with its jobs on again. What it had open when it left stays closed. ${leaveNote} ${
+        gone.length
+          ? `Odds that left, latest first: ${gone.map((p) => `${p.id} (${p.name}, ${p.role})`).join('; ')}.`
+          : 'No Odd has left this office.'
+      }`,
+      inputSchema: {
+        odd: z.string().describe('The id of the Odd to bring back, from the list above.'),
+        why: z.string().max(600).describe(`What ${OWNER} said, in their words.`)
+      }
+    },
+    async ({ odd, why }) => {
+      const held = await leavingRefused('bring_back', odd);
+      if (held) return refused(held);
+      const who = (await anyStaffer(odd))!;
+      const { ask } = await raiseAsk(ME, {
+        ...RAISED_ON,
+        kind: 'bring_back',
+        odd,
+        title: `Bring ${who.name} back to the office`,
+        why,
+        ifApproved: `${who.name} comes back as it was: its job description, tools, folders, lessons and files, with its jobs on again.`
+      });
+      return text(
+        `Ask ${ask.id} is on ${OWNER}'s desk. ${who.name} comes back once they say yes there, and not before.`
+      );
+    }
+  );
+}
 
 if (has('office_report'))
   tool(

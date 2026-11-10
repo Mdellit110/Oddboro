@@ -14,6 +14,7 @@ import {
   L,
   currentOffice,
   goal,
+  odd,
   onPlatform,
   ownerHome,
   request,
@@ -254,6 +255,12 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
         portraitPx: l.portraitPx
       }
     });
+  },
+  // An Odd of its own with nothing open, so leaving writes its one row and no
+  // later row loses an Odd it uses.
+  'DELETE /api/staff/[id]': async (send) => {
+    await L.pg`insert into staff ${L.pg(odd('tess', 'Tess'))}`;
+    await send({ params: { id: 'tess' } });
   },
   'PATCH /api/staff/[id]#permission': (send) =>
     send({ params: { id: 'sam' }, body: { permission: 'draft' } }),

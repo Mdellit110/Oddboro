@@ -232,10 +232,35 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
     approve: { cell: ['answer_window'], onThread: ['resume:ada'] },
     deny: { cell: ['answer_window'], onThread: [] },
     iterate: REFUSED
+  },
+  // Ada asks about another Odd, so the one that leaves or comes back is never Ada.
+  remove: {
+    approve: {
+      cell: ['answer_back', OFF_A_THREAD, 'odd_leaves'],
+      onThread: ['resume:ada'],
+      onNone: []
+    },
+    deny: NO,
+    iterate: REFUSED
+  },
+  bring_back: {
+    approve: {
+      cell: ['answer_back', OFF_A_THREAD, 'odd_returns'],
+      onThread: ['resume:ada'],
+      onNone: []
+    },
+    deny: NO,
+    iterate: REFUSED
   }
 };
 
 type Raised = { id: number };
+/** A new Odd for one remove or bring_back ask, at work or gone, so each ask names its own. */
+async function another(gone: boolean): Promise<string> {
+  const id = `odd-${++raised}`;
+  await db.insert(staff).values({ ...odd(id, `Odd ${raised}`), leftAt: gone ? new Date() : null });
+  return id;
+}
 /** Makes each email, filter and folder asked for its own, as the office refuses a second of one. */
 let raised = 0;
 /** An open ask of each kind, raised as the office raises it, on a thread of Ada's or on none. */
@@ -399,6 +424,32 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       threadId
     });
     return { id: ask.id };
+  },
+  remove: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    const odd = await another(false);
+    const { ask } = await raiseAsk('ada', {
+      kind: 'remove',
+      odd,
+      title: `Let ${odd} go`,
+      why: 'w',
+      ifApproved: 'i',
+      threadId
+    });
+    return { id: ask.id };
+  },
+  bring_back: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    const odd = await another(true);
+    const { ask } = await raiseAsk('ada', {
+      kind: 'bring_back',
+      odd,
+      title: `Bring ${odd} back`,
+      why: 'w',
+      ifApproved: 'i',
+      threadId
+    });
+    return { id: ask.id };
   }
 };
 /** The owner's decision, through the function the office answers each with. */
@@ -476,12 +527,16 @@ const SILENT_OFF_A_THREAD: readonly (readonly [AskKind, Decision])[] = [
   ['filter', 'deny'],
   ['folder', 'deny'],
   ['switch', 'deny'],
-  ['call', 'deny']
+  ['call', 'deny'],
+  ['remove', 'approve'],
+  ['remove', 'deny'],
+  ['bring_back', 'approve'],
+  ['bring_back', 'deny']
 ];
 const namesNew1715 = (kind: AskKind, decision: Decision) =>
   effectsOf(cellOf(kind, decision)).some((e) => typeof e === 'object' && e.none === 'NEW-1715');
 
-test('a yes to a hire, a goal, a reply or a filter, or a no with no reason, to an ask raised on no thread tells the Odd nothing, and only those rows name NEW-1715', async () => {
+test('a yes to a hire, a goal, a reply, a filter, letting an Odd go or bringing one back, or a no with no reason, to an ask raised on no thread tells the Odd nothing, and only those rows name NEW-1715', async () => {
   for (const [kind, decision] of SILENT_OFF_A_THREAD) {
     const where = `${kind} ${decision}`;
     const { id } = await raise[kind](false);

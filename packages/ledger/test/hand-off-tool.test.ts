@@ -449,8 +449,11 @@ await db
 await db.insert(grants).values({ staffId: 'tot', connectorId: 'gmail', level: 'read' });
 const RUNS = { chat, thread: { THREAD_ID: String(sale.id) } };
 type Run = keyof typeof RUNS;
-/** A tool offered in one kind of run only, whoever holds it. */
-const ONLY_IN: Record<string, Run> = { tell_lead: 'chat', resume_at: 'thread' };
+/**
+ * A tool that rides with a listed one and is offered in one kind of run only.
+ * A listed tool says so on its own row (`inChat`), which the test reads.
+ */
+const RIDES_ONLY_IN: Partial<Record<keyof typeof RIDES_WITH, Run>> = { resume_at: 'thread' };
 const registered = async (staffId: string, run: Run) => {
   const c = await toolServer(staffId, { ...RUNS[run], RUN_KEY: `k-${staffId}-${run}` });
   return (await c.listTools()).tools.map((t) => t.name).sort();
@@ -469,16 +472,21 @@ test('every tool the server registers is a listed office tool or rides with one'
 // One test per tool server: each takes seconds to start, and a test has 15.
 for (const [id, holds] of Object.entries(HOLDERS))
   for (const run of ['chat', 'thread'] as const)
-    test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them`, async () => {
+    test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them, as each row's conditions allow`, async () => {
+      // None of these Odds is the Office Manager, so `notToManager` takes nothing away.
       const offered = new Set<string>(
         OFFICE_TOOLS.filter(
-          (t) => (t.always || holds.includes(t.id)) && (!t.withGmail || id === 'tot')
+          (t) =>
+            (t.always || holds.includes(t.id)) &&
+            (!t.withGmail || id === 'tot') &&
+            (!t.inChat || run === 'chat')
         ).map((t) => t.id)
       );
-      const riding = Object.entries(RIDES_WITH).filter(([, rides]) => offered.has(rides));
-      const want = [...offered, ...riding.map(([name]) => name)]
-        .filter((name) => (ONLY_IN[name] ?? run) === run)
-        .sort();
+      // A cast only to name the keys: Object.keys types them as strings.
+      const riding = (Object.keys(RIDES_WITH) as (keyof typeof RIDES_WITH)[]).filter(
+        (name) => offered.has(RIDES_WITH[name]) && (RIDES_ONLY_IN[name] ?? run) === run
+      );
+      const want = [...offered, ...riding].sort();
       assert.deepEqual(await registered(id, run), want, `${id} in a ${run}`);
     });
 

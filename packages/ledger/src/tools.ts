@@ -13,6 +13,14 @@ export type OfficeTool = {
   always?: boolean;
   /** Offered only while the Odd holds Gmail (`mailboxes` in mcp.ts), even by `always`. */
   withGmail?: boolean;
+  /**
+   * Offered only in a chat, where the office sets the owner's words
+   * (`OWNER_SAID` in mcp.ts), even by `always`: the tool acts on what the
+   * owner just said, and a job or a follow-up has no such words.
+   */
+  inChat?: boolean;
+  /** Never offered to the Office Manager, even by `always`: the manager never leaves. */
+  notToManager?: boolean;
 };
 
 const TOOLS = [
@@ -38,6 +46,14 @@ const TOOLS = [
     always: true
   },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
+  {
+    id: 'leave_office',
+    name: 'Ask to leave',
+    does: 'Asks you to let it go from the office, when you tell it to leave. It goes only on your yes.',
+    always: true,
+    inChat: true,
+    notToManager: true
+  },
   {
     id: 'keep_lesson',
     name: 'Keep lessons',
@@ -66,7 +82,8 @@ const TOOLS = [
     id: 'tell_lead',
     name: 'Tell the lead',
     does: 'Passes what you tell it in chat about work another Odd leads to that Odd, in your words.',
-    always: true
+    always: true,
+    inChat: true
   },
   {
     id: 'search_ledger',
@@ -151,6 +168,18 @@ const TOOLS = [
     does: 'Brings you one plan per goal: who to hire and what Odds already here take on.'
   },
   {
+    id: 'remove_odd',
+    name: 'Remove Odds',
+    does: 'Asks you to let another Odd go from the office. It goes only on your yes.',
+    inChat: true
+  },
+  {
+    id: 'bring_back_odd',
+    name: 'Bring Odds back',
+    does: 'Asks you to bring back an Odd that left the office, as it was. It comes back only on your yes.',
+    inChat: true
+  },
+  {
     id: 'update_goal',
     name: 'Update goals',
     does: 'Marks a goal met or paused, or rewords it, when you ask in chat or approve an ask.'
@@ -196,8 +225,9 @@ export const hasTool = (granted: readonly string[], id: string) =>
 export const tickable = (s: Step) => !s.action || s.action.kind === 'oauth';
 
 /**
- * Asks the office raises itself, not an Odd: the owner answers yes or no, and
- * nobody could rework one sent back, so they take no Iterate.
+ * Asks the owner answers yes or no, with no Iterate: the office raised it
+ * itself, so nobody could rework one sent back, or it lets an Odd go or
+ * brings one back, which has nothing to rework.
  */
 export const yesOrNo = (kind: AskKind | undefined): boolean =>
   kind !== undefined && OWNER_ANSWERS.ask[kind].iterate === 'refused';

@@ -126,8 +126,10 @@ change.
   `packages/ledger/src/tools.ts`, and register it in `mcp.ts` behind
   `has()`. A tool registered only alongside another, never granted alone
   (such as `my_pokes` with `poke_owner`), goes in `RIDES_WITH` instead,
-  under the tool it rides with. An `always` row with `withGmail` is offered
-  only while the Odd holds Gmail.
+  under the tool it rides with. When it is offered is a field on its row,
+  never a rule in `mcp.ts`, which registers such a tool behind `offered()`:
+  `withGmail` only while the Odd holds Gmail, `inChat` only in a chat on the
+  owner's words, `notToManager` never to the Office Manager.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in

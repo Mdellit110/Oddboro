@@ -127,6 +127,11 @@ export const OWNER_ACTIONS = {
   'PATCH /api/services/[id]': { records: 'access' },
   'POST /api/services/[id]': { none: NO_ROW },
   'POST /api/staff': { records: 'hire' },
+  // The owner's Remove: the Odd leaves (`removeOdd`), one `hire` row. What
+  // it had open closes with a row each, as that item's own end would write:
+  // a `decision` per ask of it or about it withdrawn, a `work` per open task
+  // dropped and per follow-up it had yet to start, which fails.
+  'DELETE /api/staff/[id]': { records: 'hire' },
   'PATCH /api/staff/[id]#permission': { records: 'access' },
   'PATCH /api/staff/[id]#agent': { records: 'access' },
   'PATCH /api/staff/[id]#tool': { records: 'access' },

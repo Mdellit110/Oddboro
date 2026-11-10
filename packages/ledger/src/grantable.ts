@@ -101,7 +101,10 @@ export const HIRE_DEFAULTS: {
       'list_goals',
       'propose_goal',
       'propose_goal_plan',
-      'update_goal'
+      'update_goal',
+      // 0016_leaving gives these to every manager hired before them.
+      'remove_odd',
+      'bring_back_odd'
     ]
   },
   // A persona's hands draft for its voice, so they start a level above a staff hire.
