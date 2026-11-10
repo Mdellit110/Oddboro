@@ -633,8 +633,11 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   `src/mail-footer.ts`) unless it already says it; the owner may delete it.
   `propose_reply` takes `attachments`: files in the Odd's own folder by path
   (`mailAttachments` in `src/mail-attachments.ts`), kept on the ask as
-  `reply.attachments`; a file that fails the check refuses the call.
-  `test/replies.test.ts` holds it, two runs at once included.
+  `reply.attachments`; a file that fails the check refuses the call. The
+  office's own files are found by real path in any letter case
+  (`isOfficeFile` in `src/home.ts`, which `hand_off` shares), so no link or
+  full path carries one. `test/replies.test.ts` holds it, two runs at once
+  included, and `test/mail-attachments.test.ts` each way of naming one.
 - A `filter` ask carries one Gmail filter in `asks.filter` (`GmailFilter` in
   `src/filter-words.ts`, which says one in plain words), raised by
   `propose_filter`, offered and placed as `propose_reply` is. It only files

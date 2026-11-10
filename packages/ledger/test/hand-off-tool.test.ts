@@ -858,6 +858,28 @@ test("the office's own files at the top of the giver's folder never go with a ha
   ]);
 });
 
+test("the office's own files never go with a hand-off through a folder linked to the giver's own", async (t) => {
+  const { c, own, open, give } = await carrier('lin');
+  t.after(() => c.close());
+  const here = await open('Lin work');
+  for (const name of OFFICE_FILE_NAMES) own(name, '{}');
+  const mine = home('staff', 'lin');
+  // A junction on Windows, which needs no admin.
+  symlinkSync(mine, join(mine, 'notes'), process.platform === 'win32' ? 'junction' : 'dir');
+  const before = (await handedOn(here)).length;
+  for (const office of OFFICE_FILE_NAMES) {
+    const name = join('notes', office);
+    const r = await give(here, 'Use it', [name]);
+    assert.equal(r.isError, true, name);
+    assert.ok(
+      said(r).startsWith(`Nothing was handed off yet. ${name} is reached through a link`),
+      said(r)
+    );
+  }
+  assert.equal((await handedOn(here)).length, before);
+  assert.equal(existsSync(threadPart(here, 'lin')), false, 'an office file was copied');
+});
+
 test("a hidden file never goes with a hand-off, from the giver's folder or the work's", async (t) => {
   const { c, own, open, give } = await carrier('hid');
   t.after(() => c.close());

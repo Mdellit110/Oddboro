@@ -4,7 +4,7 @@
 // email and again when the office sends it, since the file may change.
 import { lstatSync, realpathSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, sep } from 'node:path';
-import { home, OFFICE_FILE_NAMES } from './home.ts';
+import { home, isOfficeFile } from './home.ts';
 
 /** One file on an email, by its path inside the Odd's folder. */
 export type MailAttachment = { path: string; name: string; mediaType: string; size: number };
@@ -59,18 +59,15 @@ export function mailAttachment(
   const rel = isAbsolute(named) ? relative(dir, named) : named;
   const parts = rel.split(/[\\/]/);
   if (!rel || isAbsolute(rel) || parts.some((p) => !p || p === '.' || p === '..')) return nope;
-  if (
-    parts.some((p) => p.startsWith('.')) ||
-    (parts.length === 1 && OFFICE_FILE_NAMES.includes(rel))
-  )
-    return nope;
+  if (parts.some((p) => p.startsWith('.'))) return nope;
   const path = join(dir, rel);
   try {
     const st = lstatSync(path);
     if (!st.isFile()) return nope;
-    // A folder on the way may be a link out of the Odd's folder.
-    const real = realpathSync.native(path);
-    if (relative(realpathSync.native(dir), real).split(sep)[0] === '..') return nope;
+    // A folder on the way may be a link out of the Odd's folder, or back to
+    // its top, where an office file sits under another name.
+    const inside = relative(realpathSync.native(dir), realpathSync.native(path));
+    if (inside.split(sep)[0] === '..' || isOfficeFile(inside)) return nope;
     if (!st.size) return { problem: `${named} is empty.` };
     return {
       path: parts.join('/'),

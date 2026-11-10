@@ -54,6 +54,17 @@ export const OFFICE_FILES = {
 } as const;
 export const OFFICE_FILE_NAMES: readonly string[] = Object.values(OFFICE_FILES);
 
+// A Mac's and Windows's disks read `Chat.jsonl` as `chat.jsonl`, so case does not count.
+const lowerOfficeFiles = OFFICE_FILE_NAMES.map((n) => n.toLowerCase());
+/**
+ * Whether a file is one of the office's own, given as the path from the Odd's
+ * real folder to the file's real path. Only that path decides, since a link
+ * to the folder, a full path or another letter case names the same file by
+ * another name. A path below the top never matches.
+ */
+export const isOfficeFile = (realInside: string): boolean =>
+  lowerOfficeFiles.includes(realInside.toLowerCase());
+
 /** An Odd's one chat session, which every chat resumes (staff.ts). */
 export const chatSession = (id: string): string => home('staff', id, OFFICE_FILES.session);
 

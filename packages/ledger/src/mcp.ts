@@ -144,7 +144,7 @@ import {
   type RIDES_WITH,
   type ToolRun
 } from './tools.ts';
-import { home, OFFICE_FILE_NAMES } from './home.ts';
+import { home, isOfficeFile } from './home.ts';
 
 const ME = process.env.STAFF_ID ?? '';
 const me = await staffer(ME);
@@ -352,9 +352,6 @@ function officeName(p: string): string {
   return work ? `${THREADS_DIR}/${work.split(sep).join('/')}` : p;
 }
 
-// A Mac's and Windows's disks read `Chat.jsonl` as `chat.jsonl`, so case does not count.
-const lowerOfficeFiles = OFFICE_FILE_NAMES.map((n) => n.toLowerCase());
-
 /**
  * The files a hand_off names, as paths inside the folder of work `on` for
  * those already there, and what to copy there for the rest, or why the
@@ -392,7 +389,7 @@ async function filesForHandOff(
       return {
         problem: `${p} is a hidden file, and those never go with a hand-off. Name another file, or leave it out, and call hand_off again.`
       };
-    if (!inWork && steps.length === 1 && lowerOfficeFiles.includes(file.name.toLowerCase()))
+    if (!inWork && isOfficeFile(file.name))
       return {
         problem: `${p} is one of the office's own files, and those never go with a hand-off. Say what your colleague needs in the brief, and call hand_off again.`
       };
