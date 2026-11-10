@@ -430,7 +430,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    22rem (a container query). Office, Folders and Services each have a search
    box over their list, which filters it as the owner types and clears on a
    tab change. Office lists two switches, Run
-   commands and Browse the web, above the office's own tools; Folders
+   commands and Browse the web, above the office tools the owner gives, then
+   under Always on, with no switch, each office tool every Odd has (both lists
+   split from `OFFICE_TOOLS` by `toolGroups` in `src/lib/ui/tool-groups.ts`,
+   and filtered by the same search); Folders
    (`FoldersList.svelte`) lists each folder with Can read and Can write side
    by side; Services holds the outside tools, each with Read only and Read and write side by side, changed in place (`setGrantLevel`, PATCH on the access route): the tool stays signed in, and only Revoke forgets it. Choose a folder asks
    `/api/folders/pick`, which opens the system's own picker on this computer
