@@ -10,9 +10,9 @@ import { opendirSync, statSync, type Dir } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { OFFICE_FILES, shownFolder } from '@oddboro/ledger';
 import type { ChatEntry } from '../staff/chat.ts';
-import { retoldLine, type RetoldEntry } from './chat-preface.ts';
+import { retoldFiles, retoldLine, type RetoldEntry } from './chat-preface.ts';
 
-/** At most this many characters of chat text go into one replay. */
+/** At most this many characters of chat text, and the files retold under it, go into one replay. */
 export const REPLAY_CHARS = 24_000;
 /** At most this many changed files are named; the rest are counted. */
 export const REPLAY_FILES = 30;
@@ -29,20 +29,25 @@ export type Changed = { files: string[]; granted: boolean };
  */
 const said = (e: ChatEntry) => !!e.text && !e.failed;
 
+/** What a line takes of the budget: its text and the files retold under it, which go or stay with it. */
+const cost = (e: RetoldEntry) => e.text.length + retoldFiles(e).length;
+
 /**
  * The lines a replay holds, oldest first: the newest lines said (`said`)
- * whose text fits the budget together. A newest line over the budget alone
- * keeps its end, after a `…`.
+ * whose text and retold files fit the budget together. A newest line over
+ * the budget alone keeps its files and the end of its text that fits beside
+ * them, after a `…`.
  */
-export function replayed<E extends ChatEntry>(entries: E[], budget = REPLAY_CHARS): E[] {
+export function replayed<E extends RetoldEntry>(entries: E[], budget = REPLAY_CHARS): E[] {
   const lines = entries.filter(said);
   let total = 0;
   let from = lines.length;
-  while (from > 0 && total + lines[from - 1].text.length <= budget)
-    total += lines[--from].text.length;
+  while (from > 0 && total + cost(lines[from - 1]) <= budget) total += cost(lines[--from]);
   const newest = lines.at(-1);
-  if (from === lines.length && newest)
-    return [{ ...newest, text: `…${newest.text.slice(-budget)}` }];
+  if (from === lines.length && newest) {
+    const room = Math.max(0, budget - retoldFiles(newest).length);
+    return [{ ...newest, text: `…${newest.text.slice(newest.text.length - room)}` }];
+  }
   return lines.slice(from);
 }
 

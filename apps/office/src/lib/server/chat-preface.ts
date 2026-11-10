@@ -20,7 +20,7 @@ export const fileLine = (f: KeptFile): string =>
     : `- [${f.tag}]: ${f.path} (${f.mediaType})`;
 
 /** The files under an owner line the office retells, as they are now, or nothing when it has none. */
-const retoldFiles = (e: RetoldEntry): string =>
+export const retoldFiles = (e: RetoldEntry): string =>
   e.now?.length
     ? [
         '\n(Files attached, each kept in your folder and named by its tag in brackets. Read each one the answer needs.',
