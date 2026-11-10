@@ -27,6 +27,7 @@ import {
   OUTDOOR_GLOW,
   GLOW_STOPS,
   nightTint,
+  PASS,
   skyAt,
   TILE,
   type DrawCmd,
@@ -58,6 +59,8 @@ const AMBIENT_FPS = 12;
 const BLOCK = 16 * TILE;
 /** How long after the last wheel event the zoom settles on a crisp level. */
 const SETTLE_MS = 140;
+/** Milliseconds a sliding door shows each frame on its way open or shut. */
+const DOOR_STEP_MS = 70;
 
 /** A sprite the ambient clock animates, with its box in world pixels. */
 type Anim = { s: Sprite; frames: Texture[]; fps: number; start: number; box: Box };
@@ -271,7 +274,20 @@ export class Floor {
   /** Called when the user takes the camera by dragging or zooming. */
   onRelease: (() => void) | undefined;
   private resizeObserver: ResizeObserver;
-  private doors: { s: Sprite; open: Texture; closed: Texture; tiles: Set<number> }[] = [];
+  /**
+   * Each door that opens: its sprite and the glow drawn over it, its frames
+   * from closed to open (a sliding door's `slide-N` frames between), each lit,
+   * glowing and unlit, the one it shows, and milliseconds until its next step.
+   */
+  private doors: {
+    s: Sprite;
+    e?: Sprite;
+    obj?: string;
+    frames: { lit: Texture; e?: Texture; off?: Texture }[];
+    at: number;
+    wait: number;
+    tiles: Set<number>;
+  }[] = [];
   private switches = new Map<string, Switch>();
   /** Called when the owner taps a prop that can be switched, with its id. */
   onTap: ((obj: string) => void) | undefined;
@@ -503,7 +519,7 @@ export class Floor {
         });
       if (meta.tags.includes('shelf') && meta.tags.includes('library'))
         this.shelves.push({ box, rank: i });
-      // A door with open and closed frames swings open when staff come near.
+      // A door with open and closed frames opens when staff come near.
       if (
         meta.tags.includes('door') &&
         meta.frames.includes('open') &&
@@ -516,10 +532,21 @@ export class Floor {
         const tiles = new Set<number>();
         for (let x = tx; x < tx + meta.footprint[0]; x++)
           for (let y = ty - 2; y <= ty; y++) tiles.add(y * world.width + x);
+        const slides = meta.frames
+          .filter((f) => /^slide-\d+$/.test(f))
+          .sort((a, b) => Number(a.slice(6)) - Number(b.slice(6)));
+        const tex = atlas.sheet.textures;
         this.doors.push({
           s,
-          open: atlas.sheet.textures[`${prefix}/open`],
-          closed: atlas.sheet.textures[`${prefix}/closed`],
+          e,
+          obj: d.obj,
+          frames: ['closed', ...slides, 'open'].map((f) => ({
+            lit: tex[`${prefix}/${f}`],
+            e: tex[`${prefix}/${f}~e`],
+            off: tex[`${prefix}/${f}~off`]
+          })),
+          at: 0,
+          wait: 0,
           tiles
         });
       }
@@ -598,9 +625,9 @@ export class Floor {
   }
 
   /**
-   * The meadow's own things: the street's road rows carried out to the edges
-   * on both sides, and trees, bushes and tufts scattered over the grass, kept
-   * clear of the road and of the world's own grounds. Drawn once per world, in
+   * The meadow's own things: the street's road rows and the river carried out
+   * to its edges, and trees, bushes and tufts scattered over the grass, kept
+   * clear of the road, the water and the world's own grounds. Drawn once per world, in
    * the same order every time.
    */
   private countryside(): Container {
@@ -641,6 +668,48 @@ export class Floor {
         strip.position.set(from * TILE, y * TILE);
         add(strip);
       }
+    const W = world.width;
+    const H = world.height;
+    // Any other ground at the world's edge that is not grass (the river) runs
+    // straight on to the meadow's edge, tile by tile from the edge cell's own
+    // draws, so the water keeps its ripple and its banks. Only a bank along
+    // the way it runs carries on.
+    const edgeDraws = new Map<number, DrawCmd[]>();
+    for (const d of world.draws) {
+      const [x, y] = [d.x / TILE, d.y / TILE];
+      if (d.pass !== PASS.floor || (x > 0 && x < W - 1 && y > 0 && y < H - 1)) continue;
+      const key = y * W + x;
+      edgeDraws.set(key, [...(edgeDraws.get(key) ?? []), d]);
+    }
+    const wet = new Set<string>();
+    const sides = [
+      { cells: H, at: (i: number) => [0, i], step: [-1, 0], banks: ['n', 's'] },
+      { cells: H, at: (i: number) => [W - 1, i], step: [1, 0], banks: ['n', 's'] },
+      { cells: W, at: (i: number) => [i, 0], step: [0, -1], banks: ['e', 'w'] },
+      { cells: W, at: (i: number) => [i, H - 1], step: [0, 1], banks: ['e', 'w'] }
+    ];
+    for (const { cells, at, step, banks } of sides)
+      for (let i = 0; i < cells; i++) {
+        const [x, y] = at(i);
+        const m = material(x, y);
+        if (!m || m === grass || (step[1] === 0 && road.has(y))) continue;
+        const draws = (edgeDraws.get(y * W + x) ?? []).filter(
+          (d) =>
+            d.sprite === `floor-${m}` || (d.sprite === `fx-edge-${m}` && banks.includes(d.frame))
+        );
+        for (let k = 1; k <= MEADOW; k++) {
+          const [tx, ty] = [x + step[0] * k, y + step[1] * k];
+          wet.add(`${tx},${ty}`);
+          for (const d of draws) {
+            const s = makeSprite(atlas, { ...d, x: tx * TILE, y: ty * TILE }, this.anims);
+            if (!s) continue;
+            // Under every tree, whatever row it stands in.
+            s.zIndex = -Number.MAX_SAFE_INTEGER;
+            add(s);
+            this.addToBlock(s, [s.x, s.y, TILE, TILE]);
+          }
+        }
+      }
     // Scatter, deterministic by tile so the meadow never changes between visits.
     const hash = (x: number, y: number) => {
       let h = (x * 374761393 + y * 668265263) >>> 0;
@@ -648,14 +717,18 @@ export class Floor {
       return (h ^ (h >>> 16)) / 4294967296;
     };
     const near = (y: number) => [...road].some((r) => Math.abs(r - y) <= 2);
-    const W = world.width;
-    const H = world.height;
+    // A tree stands a tile clear of the water, its trunk and its width.
+    const ashore = (x: number, y: number) => {
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -2; dx <= 3; dx++) if (wet.has(`${x + dx},${y + dy}`)) return false;
+      return true;
+    };
     for (let y = -MEADOW + 2; y < H + MEADOW - 1; y++)
       for (let x = -MEADOW; x < W + MEADOW - 2; x++) {
         // Stay off the world itself and a few tiles from it, so nothing tall
-        // reaches over its edge, and off the road.
+        // reaches over its edge, and off the road and the water.
         if (x > -4 && x < W + 1 && y > -1 && y < H + 4) continue;
-        if (near(y)) continue;
+        if (near(y) || !ashore(x, y)) continue;
         const r = hash(x, y);
         if (r > 0.05) continue;
         const name = PLANTS[Math.floor((r / 0.05) * PLANTS.length)];
@@ -1221,18 +1294,36 @@ export class Floor {
 
   /**
    * Open each door a staffer is about to walk through or is standing in, and
-   * close the rest. Sitting on the bench beside a door does not open it.
+   * close the rest. Sitting on the bench beside a door does not open it. A
+   * sliding door steps through its frames, one each `DOOR_STEP_MS`; under
+   * reduced motion, and for a door with no frames between, it is a cut.
    */
   updateDoors(steps: [number, number][]) {
     const w = this.world.width;
     const keys = steps.map(([x, y]) => y * w + x);
+    const dt = this.app.ticker.deltaMS;
     for (const d of this.doors) {
-      const through = keys.some((k) => d.tiles.has(k));
-      const tex = through ? d.open : d.closed;
-      if (d.s.texture !== tex) {
-        d.s.texture = tex;
-        this.dirty = true;
+      const want = keys.some((k) => d.tiles.has(k)) ? d.frames.length - 1 : 0;
+      if (d.at === want) {
+        d.wait = 0;
+        continue;
       }
+      d.wait -= dt;
+      if (d.wait > 0) continue;
+      d.wait = DOOR_STEP_MS;
+      d.at = this.reduceMotion.matches ? want : d.at + Math.sign(want - d.at);
+      // The glow over the glass and the unlit frame move with the door, and
+      // a switch turned later shows this frame, not the shut one.
+      const f = d.frames[d.at];
+      const sw = d.obj ? this.switches.get(d.obj) : undefined;
+      const part = sw?.parts.find((p) => p.s === d.s);
+      if (part) {
+        part.lit = f.lit;
+        part.off = f.off;
+      }
+      d.s.texture = sw && !sw.on && f.off ? f.off : f.lit;
+      if (d.e && f.e) d.e.texture = f.e;
+      this.dirty = true;
     }
   }
 

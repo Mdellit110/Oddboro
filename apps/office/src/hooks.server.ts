@@ -1,8 +1,8 @@
 // Once, when the office server starts: the office's own database if .env names
 // no other (copied aside first on a new version's first start), the tables
 // brought up to date, the update row reset, then the job clock, the follow-up
-// watcher, and the office's address in the owner's Caddy if it uses theirs
-// (never in the app, which has no address).
+// watcher, one read of the New Altitude personas, and the office's address in
+// the owner's Caddy if it uses theirs (never in the app, which has no address).
 // In the app (ODDBORO_APP) it also quits when the app does: on SIGTERM, once
 // the HTTP server has closed, and when the app's stdin pipe closes, which
 // happens however the app ends, Force Quit included. On a Mac it keeps its
@@ -22,6 +22,7 @@ import { startFollowUps } from '#lib/server/follow-ups.ts';
 import { stopRuns } from '#lib/server/staff.ts';
 import { startClock } from '#lib/server/jobs.ts';
 import { guardOffice } from '#lib/server/owner-page.ts';
+import { syncPersonas } from '#lib/server/persona.ts';
 import { loadUpdate } from '#lib/server/update.ts';
 
 // The guard first, so a refused request reaches neither Sentry nor a route.
@@ -46,5 +47,7 @@ export const init: ServerInit = async () => {
   startFollowUps();
   // An Odd that leaves the office stops what it is running at once.
   whenOddLeaves(stopRuns);
+  // Never awaited: an office offline or signed out starts as fast as any.
+  void syncPersonas().catch((e) => console.error('[persona] sync at start', e));
   void keepAddress();
 };

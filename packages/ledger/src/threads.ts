@@ -625,13 +625,29 @@ const worksOn = (staffId: string) =>
     )
   );
 
-/** Whether `staffId` leads thread `id` or works on it (`worksOn`), so reads all of its folder. */
+/** A thread `staffId` leads or works on (`worksOn`), so reads all of its folder. */
+const onThread = (staffId: string) => or(eq(threads.hubId, staffId), worksOn(staffId));
+
+/** Whether `staffId` leads thread `id` or works on it. */
 export async function isOnThread(staffId: string, id: number): Promise<boolean> {
   const [row] = await db
     .select({ id: threads.id })
     .from(threads)
-    .where(and(eq(threads.id, id), or(eq(threads.hubId, staffId), worksOn(staffId))));
+    .where(and(eq(threads.id, id), onThread(staffId)));
   return !!row;
+}
+
+/**
+ * The titles, by id, of those of `ids` that `staffId` leads or works on now,
+ * by the test `workFile` uses, so a file Storage lists is one that opens.
+ */
+export async function workTitles(staffId: string, ids: number[]): Promise<Map<number, string>> {
+  if (!ids.length) return new Map();
+  const rows = await db
+    .select({ id: threads.id, title: threads.title })
+    .from(threads)
+    .where(and(inArray(threads.id, ids), onThread(staffId)));
+  return new Map(rows.map((r) => [r.id, r.title]));
 }
 
 /**

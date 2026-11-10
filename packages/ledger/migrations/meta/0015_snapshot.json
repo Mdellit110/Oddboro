@@ -1,5 +1,5 @@
 {
-  "id": "9293a9af-0314-4c35-a602-9c1809b855cb",
+  "id": "75887648-c64b-4315-b52c-0895f44708ff",
   "prevId": "d716beff-a5d5-4326-aeb7-b985fda547a2",
   "version": "7",
   "dialect": "postgresql",
@@ -300,12 +300,6 @@
         "switches": {
           "name": "switches",
           "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "odd": {
-          "name": "odd",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -2165,6 +2159,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "package": {
+          "name": "package",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "hired_at": {
           "name": "hired_at",
           "type": "timestamp with time zone",
@@ -2175,12 +2175,6 @@
         "left_at": {
           "name": "left_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "jobs_off": {
-          "name": "jobs_off",
-          "type": "integer[]",
           "primaryKey": false,
           "notNull": false
         }
