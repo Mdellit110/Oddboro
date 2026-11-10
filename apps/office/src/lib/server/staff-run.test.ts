@@ -1321,6 +1321,28 @@ test("a lead woken by a colleague's tell_lead is told the work is its to decide 
   );
 });
 
+test("a lead's pick-up on a thread is not told the other work it leads, since it hands on only there", async () => {
+  // Other work Lena leads, which her runs on no thread are told of.
+  await L.pg`insert into threads (title, hub_id, holder_id) values ('Sweep the yard', 'lead', 'lead')`;
+  const h = await L.handOff({
+    from: 'lead',
+    to: 'paige',
+    work: { title: 'Count the cones', brief: 'Count them.' },
+    thread: { title: 'The fete' }
+  });
+  assert.ok('id' in h, JSON.stringify(h));
+  const f = await L.startFollowUp(h.id);
+  assert.ok(f, "Paige's hand-off could not start");
+  await L.finishFollowUp(f, 'Count the cones', 'done', 'Twelve cones.');
+  const [back] = await L.pg<{ id: number }[]>`
+    select id from follow_ups where staff_id = 'lead' and kind = 'handed_back' and thread_id = ${h.thread}`;
+  assert.ok(back, "Paige's result woke no pick-up");
+  const pickUp = await runOf(back.id);
+  assert.match(pickUp.system, /Count the cones/);
+  assert.doesNotMatch(pickUp.system, /## Work you lead/);
+  assert.doesNotMatch(pickUp.system, /Sweep the yard/);
+});
+
 test('no test reached the keychain', () => {
   assertKeychainUntouched();
 });
