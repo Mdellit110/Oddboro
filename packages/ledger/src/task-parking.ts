@@ -68,11 +68,13 @@ export async function parkedWork(taskId: number): Promise<{ id: number; title: s
  * The task ended: every thread parked on it picks up, with what happened.
  * `ownRun` is there when a run on the task's own work picks up too, with the
  * title of the work it is on, or null for a task on no work: each parked
- * thread is told that run carries its own part.
+ * thread is told that run carries its own part. `earlier` when that run
+ * started before this wake, as the task ended, and was not told of this work:
+ * a failed run gave the park back after the task ended (`finishFollowUp`).
  */
 export async function wakeOnTask(
   t: { id: number; title: string; note: string | null },
-  how: { done: boolean; owner: string; ownRun?: { work: string | null } }
+  how: { done: boolean; owner: string; ownRun?: { work: string | null; earlier?: true } }
 ): Promise<void> {
   const parked = await db
     .update(threads)
@@ -86,11 +88,16 @@ export async function wakeOnTask(
     : `${how.owner} dropped "${title}", the task you parked this work on, so it will not be finished.`;
   // A task on no work can be parked on only by the Odd that gave it
   // (`parkOnTask`), so its own run is this Odd's.
-  const own = !how.ownRun
+  const run = how.ownRun;
+  const own = !run
     ? ''
-    : how.ownRun.work === null
-      ? " Another run of yours picks up from that task too and carries its own part: do only this work's here."
-      : ` "${flat(how.ownRun.work)}", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here.`;
+    : run.work === null
+      ? run.earlier
+        ? " Another run of yours started from that task when it ended and carries its own part: do only this work's part here."
+        : " Another run of yours picks up from that task too and carries its own part: do only this work's here."
+      : run.earlier
+        ? ` A run on "${flat(run.work)}", the work that task was given on, started when the task ended, and its lead carries that work's own part: do only this work's part here.`
+        : ` "${flat(run.work)}", the work that task was given on, picks up too, and its lead carries that work's own part: do only this work's here.`;
   const next = how.done ? 'Pick it up now' : 'Decide what comes of the work now';
   const said = `${ended}${own} ${next}`;
   for (const { id } of parked) await answerThread(id, note ? `${said}: ${note}` : `${said}.`);

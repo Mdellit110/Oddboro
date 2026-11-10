@@ -2127,10 +2127,13 @@ export async function finishFollowUp(
   });
   if (finished && finished.ended) {
     const t = finished.ended;
+    // The task's own run started when the task ended, while the park was
+    // lifted, so it was not told of this work and does not pick up now.
+    const own = await ownRunOf(await taskEnd(t));
     await wakeOnTask(t, {
       done: t.status === 'done',
       owner: await ownerName(),
-      ownRun: await ownRunOf(await taskEnd(t))
+      ownRun: own && { ...own, earlier: true }
     });
   }
   // The ledger row embeds its text first, which can take a while: outside the transaction.
@@ -2151,7 +2154,8 @@ export async function finishFollowUp(
  * work ended. The task is locked, as `parkOnTask` locks it, so it cannot end
  * between this look and the park and wake nothing. Returns the task when it
  * ended during the run: the park is back so the work stays open, and
- * `wakeOnTask` then wakes it as the task's end would have. A time that passed
+ * `wakeOnTask` then wakes it as the task's end would have, but told the task's
+ * own run started back when the task ended. A time that passed
  * during the run comes back as it was, so the clock's next look wakes the work,
  * once, since `wakeThread` claims the time as it wakes.
  */
@@ -3033,7 +3037,7 @@ export async function tickKey(key: string): Promise<void> {
 /**
  * What an ended task starts (`OWNER_ANSWERS`), and whether a run on the task's
  * own work picks up among it (`OWN_RUN`). `finishTask` and a failed run giving
- * a wait back (`finishFollowUp`) both read it, so parked work is told the same.
+ * a wait back (`finishFollowUp`) both read it, so parked work hears of the same run.
  */
 async function taskEnd(t: TaskRow) {
   // A tool's connect task belongs to the access ask it came from.

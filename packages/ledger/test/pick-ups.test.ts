@@ -1029,7 +1029,7 @@ test('a lead run that ended a park on a task and then fails parks the work on th
   );
 });
 
-test('a lead run that ended a park on a task fails after the task was finished: the work wakes once, told it was finished', async () => {
+test('a lead run that ended a park on a task fails after the task was finished: the work wakes once, told it was finished and that its other run started back then', async () => {
   const { work, task, back } = await liftedPark('fails-finished', 'Proof the flyer');
   await O.finishTask(task.id, true, 'Looks right.');
   assert.deepEqual(await onThread(work, 'resume'), [], 'nothing was parked on it as it ended');
@@ -1038,7 +1038,7 @@ test('a lead run that ended a park on a task fails after the task was finished: 
   assert.equal(woken.length, 1);
   assert.match(
     woken[0].note ?? '',
-    /finished "Proof the flyer", the task you parked this work on\. Another run of yours picks up from that task too and carries its own part: do only this work's here\. Pick it up now: Looks right\.$/
+    /finished "Proof the flyer", the task you parked this work on\. Another run of yours started from that task when it ended and carries its own part: do only this work's part here\. Pick it up now: Looks right\.$/
   );
   const after = await threadOf(work);
   assert.equal(after.resumeOnTask, null);
@@ -1058,6 +1058,34 @@ test('a lead run that ended a park on a task fails after the task was dropped: t
     /dropped "Print the flyer", the task you parked this work on, so it will not be finished\. Decide what comes of the work now\.$/
   );
   assert.equal((await threadOf(work)).resumeOnTask, null);
+});
+
+test('a lead run that ended a park on a task and ends waiting on the owner leaves the park ended, so the task wakes nothing', async () => {
+  const { lead, work, task, back } = await liftedPark('waits', 'Sign the leaflet');
+  // What the run waits on, which brings its lead back once the owner answers.
+  await O.raiseAsk(lead, { title: 'Which leaflet?', why: 'w', ifApproved: 'i', threadId: work });
+  await O.finishFollowUp(back, 'work', 'waiting', 'Asked which leaflet first.');
+  const after = await threadOf(work);
+  assert.equal(after.resumeOnTask, null);
+  assert.equal(after.endedAt, null);
+  await O.finishTask(task.id, true, null);
+  assert.deepEqual(await onThread(work, 'resume'), [], "the task's end woke nothing");
+});
+
+test("a colleague's run claimed on parked work that fails after its lead's run ended the park gives nothing back", async () => {
+  const { lead, colleague, h, work } = await ownWork('colleague-fails');
+  const task = await aTask(lead, 'Sign the brochure');
+  await parksOn(lead, work, task.id);
+  assert.ok(await O.startFollowUp(h.id));
+  const goAhead = await toldLead(colleague, work);
+  assert.deepEqual((await O.startFollowUp(goAhead.id))?.unparked, { task: 'Sign the brochure' });
+  await O.finishFollowUp(goAhead, 'work', 'done', 'Went ahead.');
+  await fails(h);
+  const after = await threadOf(work);
+  assert.equal(after.resumeOnTask, null, 'the park its lead ended stays ended');
+  assert.equal(after.endedAt, null);
+  await O.finishTask(task.id, true, null);
+  assert.equal((await onThread(work, 'resume')).length, 1, "the task's end woke nothing");
 });
 
 test('a lead run that ended a park and parked again before it failed keeps the park it made, on another task or a time', async () => {
@@ -1255,6 +1283,26 @@ test('a dropped task tells its own work which parked work picked up, and the par
   await O.finishTask(lone.task, false, 'Not needed.');
   const [alone] = await onThread(lone.work, 'resume');
   assert.equal(alone.note, `${owner} dropped "Approve\nthe dropped-alone copy": Not needed.`);
+});
+
+test('a lead run that ended a park on a task given on other work fails after the task was finished: the work hears a run on that work started back then', async () => {
+  const { work, otherWork = 0, task } = await taskOnOwnWork('fails-own');
+  const [h] = await onThread(otherWork, 'hand_off');
+  await runs(h, 'done', 'Printed a proof.');
+  const [back] = await onThread(otherWork, 'handed_back');
+  assert.deepEqual((await O.startFollowUp(back.id))?.unparked, {
+    task: 'Approve\nthe fails-own copy'
+  });
+  await O.finishTask(task, true, null);
+  const [done] = await onThread(work, 'task_done');
+  assert.equal(done.pickedUp, null, 'the park was lifted, so that run was told of no parked work');
+  await fails(back);
+  const woken = await onThread(otherWork, 'resume');
+  assert.equal(woken.length, 1);
+  assert.match(
+    woken[0].note ?? '',
+    /the task you parked this work on\. A run on "Work on fails-own", the work that task was given on, started when the task ended, and its lead carries that work's own part: do only this work's part here\. Pick it up now\.$/
+  );
 });
 
 /**
