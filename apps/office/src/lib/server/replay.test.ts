@@ -23,6 +23,7 @@ import {
   replaySince,
   replayed
 } from './replay.ts';
+import { OFFICE_FILES } from '@oddboro/ledger/home';
 import type { ChatEntry } from '../staff/chat.ts';
 
 const owner = (text: string): ChatEntry => ({
@@ -41,8 +42,7 @@ const poke = (text: string): ChatEntry => ({ ...reply(text), poke: true });
 const item: ChatEntry = { ...reply(''), item: { kind: 'ask', id: 1, title: 'A', status: 'open' } };
 /** No files changed. */
 const none = { files: [], granted: false };
-const OLDER =
-  '(The chat goes back further. All of it is in chat.jsonl in your folder, one line per message, oldest first. Read it when something earlier matters.)';
+const OLDER = `(The chat goes back further. All of it is in ${OFFICE_FILES.chat} in your folder, one line per message, oldest first. Read it when something earlier matters.)`;
 const HEAD =
   '(This is a new session, so you do not remember your chat with {owner} so far. Here is the latest of it, word for word, oldest first:)';
 
@@ -71,6 +71,11 @@ test('replay keeps the newest whole lines within the budget, and says where the 
     replay([reply(long)], none),
     `${HEAD}\n\nYou: …${'w'.repeat(REPLAY_CHARS)}\n\n${OLDER}`
   );
+});
+
+test('a cut replay sends the session to the chat log by the name the office keeps it under', () => {
+  const said = replay([owner('older'), reply('newest')], none, 6);
+  assert.equal(said.match(/All of it is in (\S+) in your folder/)?.[1], OFFICE_FILES.chat);
 });
 
 /** A file under `dir`, last changed at `at`. */

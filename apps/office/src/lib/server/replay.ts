@@ -8,7 +8,7 @@
 // there. Server only.
 import { opendirSync, statSync, type Dir } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { shownFolder } from '@oddboro/ledger';
+import { OFFICE_FILES, shownFolder } from '@oddboro/ledger';
 import type { ChatEntry } from '../staff/chat.ts';
 import { retoldLine, type RetoldEntry } from './chat-preface.ts';
 
@@ -86,7 +86,7 @@ export function replay(entries: RetoldEntry[], changed: Changed, budget = REPLAY
     lines.join('\n'),
     ...(older
       ? [
-          '(The chat goes back further. All of it is in chat.jsonl in your folder, one line per message, oldest first. Read it when something earlier matters.)'
+          `(The chat goes back further. All of it is in ${OFFICE_FILES.chat} in your folder, one line per message, oldest first. Read it when something earlier matters.)`
         ]
       : []),
     ...(changed.files.length ? [list] : [])
