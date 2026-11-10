@@ -12,10 +12,12 @@
 // thread. Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -795,6 +797,98 @@ test('a file named twice is carried once', async () => {
   assert.deepEqual((await handedAs(here, 'Use it'))?.handOff?.files, ['gus/d.md']);
 });
 
+/** Each file in a part of the work with its words, or null when the part is not there. */
+const partNow = (part: string) =>
+  existsSync(part)
+    ? Object.fromEntries(
+        readdirSync(part)
+          .sort()
+          .map((name) => [name, readFileSync(join(part, name), 'utf8')])
+      )
+    : null;
+
+test('a carried file never replaces a different file already in the work, and nothing in the hand-off is copied', async (t) => {
+  const { c, own, open, give } = await carrier('ivy');
+  // Each tool server holds up to 5 of the office database's 64 connections
+  // until it stops, and a later test's server is cut off once they run out.
+  t.after(() => c.close());
+  const here = await open('Ivy work');
+  const part = threadPart(here, 'ivy');
+  put(join(part, 'notes.md'), 'DRAFT BUILT ON THE WORK');
+  own('notes.md', 'old scratch in own folder');
+  own('fresh.md', 'new');
+  const before = (await handedOn(here)).length;
+  for (const files of [['notes.md'], ['fresh.md', 'notes.md']]) {
+    const r = await give(here, 'Use the notes', files);
+    assert.equal(r.isError, true, said(r));
+    assert.ok(said(r).startsWith('Nothing was handed off yet.'), said(r));
+    assert.ok(said(r).includes(join('staff', 'ivy', 'notes.md')), said(r));
+    assert.ok(said(r).includes(workName(here, 'ivy/notes.md')), said(r));
+  }
+  assert.deepEqual(partNow(part), { 'notes.md': 'DRAFT BUILT ON THE WORK' });
+  assert.equal((await handedOn(here)).length, before);
+});
+
+test('a carried file with the same words as the one already in the work is not copied again, and the hand-off goes', async (t) => {
+  const { c, own, open, give } = await carrier('jay');
+  t.after(() => c.close());
+  const here = await open('Jay work');
+  own('same.md', 'the same words');
+  const first = await give(here, 'First', ['same.md']);
+  assert.equal(first.isError, undefined, said(first));
+  const again = await give(here, 'Again', ['same.md']);
+  assert.equal(again.isError, undefined, said(again));
+  assert.deepEqual((await handedAs(here, 'Again'))?.handOff?.files, ['jay/same.md']);
+  assert.deepEqual(partNow(threadPart(here, 'jay')), { 'same.md': 'the same words' });
+});
+
+test(
+  'a hand-off naming a file the office cannot open is refused by its name in the office, and the work is left as it was',
+  {
+    skip:
+      (process.platform === 'win32' && 'Windows keeps letting the owner read a file after chmod') ||
+      (process.getuid?.() === 0 && 'root reads a file with no permissions')
+  },
+  async (t) => {
+    const { c, own, open, give } = await carrier('kit');
+    t.after(() => c.close());
+    const here = await open('Kit work');
+    const part = threadPart(here, 'kit');
+    const locked = join(home('staff', 'kit'), 'locked.md');
+    own('a.md', 'readable');
+    own('locked.md', 'the earlier words');
+    const before = (await handedOn(here)).length;
+    const refused = async (files: string[]) => {
+      const r = await give(here, 'Use it', files);
+      assert.equal(r.isError, true, said(r));
+      assert.ok(said(r).startsWith('Nothing was handed off yet.'), said(r));
+      assert.ok(said(r).includes(join('staff', 'kit', 'locked.md')), said(r));
+      for (const full of [home(), realpathSync(home())])
+        assert.ok(!said(r).includes(full), `a full path: ${said(r)}`);
+      assert.doesNotMatch(said(r), /EACCES/);
+    };
+    try {
+      chmodSync(locked, 0o000);
+      await refused(['locked.md']);
+      await refused(['a.md', 'locked.md']);
+      assert.equal(partNow(part), null, 'a refused hand-off made the part or copied into it');
+
+      chmodSync(locked, 0o644);
+      const first = await give(here, 'First', ['locked.md']);
+      assert.equal(first.isError, undefined, said(first));
+      const handed = (await handedOn(here)).length;
+      own('locked.md', 'the new words');
+      chmodSync(locked, 0o000);
+      await refused(['a.md', 'locked.md']);
+      assert.deepEqual(partNow(part), { 'locked.md': 'the earlier words' });
+      assert.equal((await handedOn(here)).length, handed);
+      assert.equal(handed, before + 1);
+    } finally {
+      chmodSync(locked, 0o644);
+    }
+  }
+);
+
 test(
   "a hand-off never copies through a link in the sender's part of the work",
   { skip: TEMP_IN_APPDATA },
@@ -810,9 +904,9 @@ test(
       mkdirSync(part, { recursive: true });
       symlinkSync(target, join(part, 'e.md'));
       const r = await give(here, 'Through a file link', ['e.md']);
-      assert.equal(r.isError, undefined, said(r));
+      assert.equal(r.isError, true, said(r));
       assert.equal(readFileSync(target, 'utf8'), 'untouched');
-      assert.equal(lstatSync(join(part, 'e.md')).isSymbolicLink(), false);
+      assert.equal(lstatSync(join(part, 'e.md')).isSymbolicLink(), true, 'the link was changed');
 
       rmSync(part, { recursive: true });
       symlinkSync(outside, part);

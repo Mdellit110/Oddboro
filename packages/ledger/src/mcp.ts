@@ -76,7 +76,7 @@ import {
   SWITCH_NAMES,
   switchesSaid
 } from './access-words.ts';
-import { handOff } from './hand-offs.ts';
+import { handOff, type CarriedFile } from './hand-offs.ts';
 import { parkOnTask } from './task-parking.ts';
 import {
   APPLIES_TO_MAX,
@@ -318,9 +318,9 @@ const isInstructionFile = (name: string): boolean =>
 async function filesForHandOff(
   named: string[],
   on: number | undefined
-): Promise<{ here: string[]; carry: { real: string; name: string }[] } | { problem: string }> {
+): Promise<{ here: string[]; carry: CarriedFile[] } | { problem: string }> {
   const here: string[] = [];
-  const carry: { real: string; name: string }[] = [];
+  const carry: CarriedFile[] = [];
   const landing = new Map<string, string>();
   for (const p of named) {
     const file = await readableFile(p);
