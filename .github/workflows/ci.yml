@@ -77,13 +77,18 @@ jobs:
 
       - run: npm run check-types
 
+      # Each suite exits on its own, with no --test-force-exit, so a handle a
+      # test leaks would hold the job to its 45 minutes. Each test step stops
+      # at 10 instead; the slowest took under 3 on a runner.
       - name: Ledger tests
+        timeout-minutes: 10
         run: npx turbo run test --filter=@oddboro/ledger
 
       # The test office's stand-in AI tools are scripts that start through
       # their first line, which Windows is taken not to do.
       - name: Office tests
         if: runner.os != 'Windows'
+        timeout-minutes: 10
         run: npx turbo run test --filter=@oddboro/office
 
       # A schema change with no migration makes db:generate write one. git
