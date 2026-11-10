@@ -658,18 +658,33 @@ test("two given folders with one name, or a drive's top, name nothing, and a fil
   }
 });
 
-test("a given folder its runs no longer get, holding keys or gone from the disk, opens nothing and gives no hire's intake", async () => {
+test("a given folder its runs no longer get, holding keys or gone from the disk, opens nothing, says why by its name alone and gives no hire's intake", async () => {
   const oldMac = join(folder, 'old-mac');
   const notes = put(join(oldMac, 'notes.md'), 'From the old Mac.');
+  put(join(oldMac, 'plan.md'), 'The old plan.');
   const keys = join(oldMac, '.ssh');
   put(join(keys, 'known_hosts'), 'host key');
   put(own('folders/old-mac/notes.md'), "Paige's own notes.");
   const page = put(join(site, 'index.html'));
   const gone = join(folder, 'gone');
   try {
-    await give([{ path: oldMac, write: false }]);
-    assert.equal(await refusal(notes), 'No file at notes.md');
-    assert.deepEqual(await opens(notes), [null]);
+    await give([
+      { path: oldMac, write: false },
+      { path: site, write: false }
+    ]);
+    // By its full path and by its name in the office, the folder's name alone.
+    assert.equal(
+      await refusal(notes),
+      'notes.md is in old-mac, which holds keys or sign-ins, so Paige no longer gets it.'
+    );
+    assert.equal(
+      await refusal('folders/old-mac/plan.md'),
+      'plan.md is in old-mac, which holds keys or sign-ins, so Paige no longer gets it.'
+    );
+    assert.equal(await refusal(join(oldMac, 'missing.md')), 'No file at missing.md');
+    assert.equal(await refusal('folders/old-mac/missing.md'), 'No file at missing.md');
+    assert.deepEqual(await opens(notes, page), [null, 'folders/site/index.html']);
+    assert.equal((await open('paige:folders/site/index.html')).path, 'folders/site/index.html');
     await giveIntake('paige', 'folders/old-mac/notes.md', 'lena');
     assert.equal(
       readFileSync(join(L.home('staff', 'lena'), 'notes', 'intake.md'), 'utf8'),

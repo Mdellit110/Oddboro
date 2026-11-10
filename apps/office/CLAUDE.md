@@ -982,7 +982,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     path into), which opens that one file in any part of the
     folder while the Odd is on that thread (`workFile` in the ledger). A folder
     it may not read hides only what is in it. An error the owner reads names
-    only the file's bare name (`ownerMessage`); the rest goes to the log. It
+    only the file's bare name (`ownerMessage`); the rest goes to the log. A
+    file that is there, in a given folder its runs no longer get, says so by
+    the folder's name alone ("notes.md is in old-mac, which holds keys or
+    sign-ins, so Paige no longer gets it."; `noFile`). It
     refuses a save if the Odd changed the file
     since the owner opened it, and records each save in the ledger. A save
     that changed the file starts an `edited` follow-up (`learnFromEdit`): the
