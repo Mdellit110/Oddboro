@@ -310,9 +310,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    it: the run gets the item in full, and a reply about a report marks it read
    and goes in the ledger as the owner's feedback (`replyToReport`). A
    colleague's chat also lists the threads it works on and does not lead,
-   those it was handed work on and those of a goal it serves, and `tell_lead`
-   passes what the owner says there about one to its lead, who decides the
-   next step. Raising a goal's work there itself is refused, pointing to
+   those it was handed work on and those of a goal it serves, tells it each
+   one's story and what the owner said on it, and `tell_lead` passes what the
+   owner says there about one to its lead, who decides the next step. Raising a goal's work there itself is refused, pointing to
    `tell_lead`. Each
    message also tells the session what no run of it wrote (`chatPreface` in
    `src/lib/server/chat-preface.ts`): what the Odd delivered, and the asks
@@ -523,8 +523,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    file tools reach it through `search_tool` and `use_tool`. On a Mac and
    Linux a kernel sandbox profile per Odd (per run on a thread) holds the
    whole run, the office's file server included, as a second wall, built on
-   Grok's `strict`, which reads the Odd's folders (a lead's chat also its live
-   goals' folders, in the Odd's own profile), the owner's data folder, the
+   Grok's `strict`, which reads the Odd's folders (a chat also the folders of the
+   work it leads or is on, in the Odd's own profile), the owner's data folder, the
    folders the owner gave it and the tool server's code, writes the given
    folders it may change (`readWrite`), and
    shuts `~/Library`, `/Library`, `/tmp` and `/var`; Windows has none. Grok
@@ -627,8 +627,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    Code's sessions folder for its own folder, where long
    tool results land, on a thread, the thread's folder, and the folders the
    owner gave it. A lead's chat reads
-   the folder of each live (active or paused) goal it leads, and is told where
-   each stands, as its pick-ups there are (`readable` in `staff.ts`; Read rules cover Glob and Grep,
+   the folder of each live (active or paused) goal it leads and of its latest
+   other work, and a colleague's chat the folder of each piece of work it is on;
+   each is told where the work stands, as its pick-ups there are (`readable` in `staff.ts`; Read rules cover Glob and Grep,
    and `dontAsk` turns down every other path). Deny rules beat any allow,
    the owner's own Claude Code settings included, so `unreadable` names what
    stays shut whatever else allows it: the secret stores in `SECRET_STORES`
@@ -868,7 +869,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     desk as a report when the job says so. Each run records its trigger:
     `schedule` when the timer started it, `manual` when the owner pressed Run now.
     A thread its hub parked with `resume_at` wakes at that time: the clock
-    starts the hub's `resume` follow-up. So does a thread the usage window
+    starts the hub's `resume` follow-up. One parked on a task (`after_task`)
+    wakes when that task is done or dropped, with no clock. So does a thread the usage window
     held, at the window's reset (`usage-window.ts` in the ledger).
     A manual run leaves the schedule where it was, and the Office Manager's report data
     (office times) tells the two apart. The Jobs tab edits a job in place, and opens the Odd's job description
