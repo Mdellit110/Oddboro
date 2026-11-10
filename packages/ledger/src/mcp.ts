@@ -97,7 +97,7 @@ import {
   threadsOn,
   workFile
 } from './threads.ts';
-import { THREADS_DIR, workName, workPath } from './work-paths.ts';
+import { INSTRUCTIONS, THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { withFooter } from './mail-footer.ts';
 import {
   doesSomething,
@@ -245,6 +245,17 @@ const attachArg = z
     `Files that go with it: one in your folder, e.g. ['notes/intake.md'], or one in the folder of a goal or work you are on, by its path from ${THREADS_DIR}/, e.g. ['${workName(12, 'paige/index.html')}']. Attach the file itself, never a copy. ${OWNER} sees them on their desk and edits a Markdown one from your folder right there, so do not tell them where to find it.`
   );
 
+/** A file an Odd names on a tool call: its office name and real path, or undefined when it cannot read it. */
+async function readableFile(p: string): Promise<{ name: string; real: string } | undefined> {
+  if (isAbsolute(p)) return undefined;
+  if (workPath(p)) {
+    const real = await workFile(ME, p);
+    return real ? { name: p, real } : undefined;
+  }
+  const name = ownFile(p);
+  return name ? { name, real: resolve(realpathSync(HOME), name) } : undefined;
+}
+
 /**
  * The attachments as names the owner's viewer opens (`workPath` for a file in
  * a thread's folder, else a path inside this staffer's folder), or why one is
@@ -255,11 +266,7 @@ async function attachable(
 ): Promise<{ paths: string[] } | { problem: string }> {
   const out: string[] = [];
   for (const p of paths) {
-    const name = isAbsolute(p)
-      ? undefined
-      : workPath(p)
-        ? (await workFile(ME, p)) && p
-        : ownFile(p);
+    const name = (await readableFile(p))?.name;
     if (!name)
       return {
         problem: `No file at ${p} that you can attach. Name a file in your folder by its path inside it, e.g. notes/intake.md, or one in the folder of a goal or work you are on from ${THREADS_DIR}/, e.g. ${workName(12, 'paige/index.html')}, never by its full path. Write it first if it is not there.`
@@ -294,6 +301,52 @@ function ownFile(path: string): string | undefined {
     // Nothing at that path.
     return undefined;
   }
+}
+
+// `ownFile` gives the system's separator, so a step is split on both. A Mac's
+// and Windows's disks read `claude.md` as `CLAUDE.md`, so case does not count.
+const lowerInstructions = INSTRUCTIONS.map((n) => n.toLowerCase());
+const isInstructionFile = (name: string): boolean =>
+  name.split(/[\\/]/).some((step) => lowerInstructions.includes(step.toLowerCase()));
+
+/**
+ * The files a hand_off names, as paths inside the folder of work `on` for
+ * those already there, and what to copy there for the rest, or why the
+ * hand-off cannot go.
+ */
+async function filesForHandOff(
+  named: string[],
+  on: number | undefined
+): Promise<{ here: string[]; carry: { real: string; name: string }[] } | { problem: string }> {
+  const here: string[] = [];
+  const carry: { real: string; name: string }[] = [];
+  const landing = new Map<string, string>();
+  for (const p of named) {
+    const file = await readableFile(p);
+    if (!file)
+      return {
+        problem: `You cannot read ${p}. Name a file in your folder by its path inside it, or one in the folder of work you are on from ${THREADS_DIR}/, never by its full path, and call hand_off again.`
+      };
+    if (isInstructionFile(file.name))
+      return {
+        problem: `${p} is an instruction file, and those never go with a hand-off. Say what your colleague needs in the brief, and call hand_off again.`
+      };
+    const inWork = workPath(file.name);
+    const inside = inWork && inWork.thread === on ? inWork.inside : undefined;
+    const name = file.name.replace(/[\\/]/g, '-');
+    // Lower case, since a Mac's and Windows's disks hold those as one file.
+    const lands = (inside ?? `${ME}/${name}`).toLowerCase();
+    const first = landing.get(lands);
+    if (first === file.name) continue;
+    if (first)
+      return {
+        problem: `Two of these files would land under one name: ${first} and ${file.name}. Rename one and call hand_off again.`
+      };
+    landing.set(lands, file.name);
+    if (inside) here.push(inside);
+    else carry.push({ real: file.real, name });
+  }
+  return { here, carry };
 }
 
 /** What propose_hire and propose_goal_plan both take to describe one hire. */
@@ -1576,7 +1629,14 @@ if (HANDS_OFF.tool) {
           .string()
           .min(1)
           .max(4000)
-          .describe('What to do, why, and what to send back, with full paths to any files.'),
+          .describe('What to do, why, and what to send back. Name any files in files.'),
+        files: z
+          .array(z.string())
+          .max(5)
+          .optional()
+          .describe(
+            `Files the work needs, named as for attach: one in your folder, or one in the folder of work you are on, from ${THREADS_DIR}/. They land in this work for your colleague. Never one from a tool your colleague lacks, without ${OWNER}'s yes.`
+          ),
         request: z
           .string()
           .min(1)
@@ -1606,7 +1666,7 @@ if (HANDS_OFF.tool) {
             })
       }
     },
-    async ({ to, title, brief, request, goal, continue_work }) => {
+    async ({ to, title, brief, files, request, goal, continue_work }) => {
       if (continue_work !== undefined && (request !== undefined || goal !== undefined))
         return notHanded(
           `Work ${continue_work} keeps its own request and goal. Leave out request and goal, put what is new in the brief, and call hand_off again.`
@@ -1620,12 +1680,15 @@ if (HANDS_OFF.tool) {
         const opens = await placed({});
         if ('problem' in opens) return notHanded(opens.problem);
       }
+      const picked = await filesForHandOff(files ?? [], on);
+      if ('problem' in picked) return notHanded(picked.problem);
       const r = await handOff({
         from: ME,
         to,
-        work: { title, brief },
+        work: { title, brief, ...(picked.here.length ? { files: picked.here } : {}) },
         thread: on !== undefined ? { id: on } : { title: request ?? title, goalId: goal },
-        run: RUN_KEY
+        run: RUN_KEY,
+        carry: picked.carry
       });
       if ('problem' in r) return notHanded(r.problem);
       const name = colleagues.find((c) => c.id === to)?.name ?? to;

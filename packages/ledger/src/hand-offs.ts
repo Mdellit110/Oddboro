@@ -5,6 +5,8 @@
 // polls. Every hand-off is a step in a thread (threads.ts): the colleague's run
 // cannot hand off (mcp.ts), the hub's pick-up may hand on in the same thread,
 // and both work at Draft at most (staff.ts in the office app).
+import { copyFileSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from './db.ts';
 import {
@@ -32,6 +34,26 @@ import {
 type FollowUpRow = typeof followUps.$inferSelect;
 
 /**
+ * Copy the files a hand-off carries into the sender's part of its thread. A
+ * later copy under the same name replaces the earlier one.
+ */
+function carryFiles(thread: number, from: string, carry: { real: string; name: string }[]): void {
+  const part = threadPart(thread, from);
+  mkdirSync(part, { recursive: true });
+  // The sender's runs write in its part, and the tool server copying here is
+  // outside their walls: a link left in the part must not take the copy elsewhere.
+  if (realpathSync(part) !== join(realpathSync(threadFolder(thread)), from))
+    throw new Error(
+      'Nothing was handed off yet. Your part of this work is a link, so files cannot land in it.'
+    );
+  for (const { real, name } of carry) {
+    const to = join(part, name);
+    rmSync(to, { force: true });
+    copyFileSync(real, to);
+  }
+}
+
+/**
  * Hand `to` a piece of work from `from`, opening a thread or going on in one
  * `from` leads. Returns the hand-off's id, its thread and the hand-offs left
  * this round, why it cannot go, or the ask that holds it until the owner's yes.
@@ -39,10 +61,12 @@ type FollowUpRow = typeof followUps.$inferSelect;
 export async function handOff(h: {
   from: string;
   to: string;
-  work: { title: string; brief: string };
+  work: { title: string; brief: string; files?: string[] };
   thread: ThreadFor;
   /** The key of the run handing it off (`runsGoing`). */
   run?: string;
+  /** Files from outside this work to copy into the sender's part of it, under `name`. */
+  carry?: { real: string; name: string }[];
 }): Promise<
   | { id: number; thread: number; left: number }
   | { problem: string }
@@ -58,15 +82,22 @@ export async function handOff(h: {
     .where(and(eq(staff.id, h.to), isNull(staff.leftAt)));
   if (!colleague)
     return { problem: `Nobody called "${h.to}" works here. Use a colleague's id from the list.` };
+  const carry = h.carry ?? [];
+  // On the work before takeHandOff, which writes a held hand-off from it.
+  const files = [...(h.work.files ?? []), ...carry.map((c) => `${h.from}/${c.name}`)];
+  const work = files.length ? { ...h.work, files } : h.work;
   return db.transaction(async (tx) => {
     // Past the round's limit, the ask holds this hand-off and the owner's yes starts it.
-    const t = await takeHandOff(tx, h);
-    if ('problem' in t || 'asked' in t) return t;
+    const t = await takeHandOff(tx, { ...h, work });
+    if ('problem' in t) return t;
+    // In the transaction, so a copy that fails takes the hand-off back with it.
+    if (carry.length) carryFiles('asked' in t ? t.thread : t.id, h.from, carry);
+    if ('asked' in t) return t;
     const id = await addFollowUp(tx, {
       staffId: h.to,
       kind: 'hand_off',
       note: null,
-      handOff: await sharing(tx, { from: h.from, to: h.to, ...h.work, threadId: t.id }),
+      handOff: await sharing(tx, { from: h.from, to: h.to, ...work, threadId: t.id }),
       threadId: t.id
     });
     return { id, thread: t.id, left: HAND_OFF_LIMIT - t.handOffsUsed };
@@ -455,6 +486,12 @@ export function handOffBrief(b: {
       '',
       h.brief,
       '',
+      ...(h.files?.length
+        ? [
+            `- Files for this work, in reach: ${h.files.map((f) => join(folder, f)).join(', ')}.`,
+            ''
+          ]
+        : []),
       ...(goal
         ? [
             `It is for {owner}'s goal "${goal.title}".`,

@@ -7,6 +7,7 @@
 // with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { and, eq } from 'drizzle-orm';
 import {
@@ -238,6 +239,19 @@ test("the lead's other runs on its thread wait for its pick-up too", async () =>
   assert.equal(await O.startFollowUp(carry.id), undefined);
   await O.finishFollowUp(back, 'Order the cake', 'done', 'Checked the order.');
   assert.ok(await O.startFollowUp(carry.id));
+});
+
+test("a hand-off's brief lists each file carried for it, at its full path", () => {
+  const brief = H.handOffBrief({
+    kind: 'hand_off',
+    h: { from: 'lead', title: 'Piece', brief: 'Do it.', files: ['lead/x.md', 'paige/y.md'] },
+    colleague: { id: 'lead', name: 'Lena' },
+    me: 'paige',
+    result: null,
+    thread: 7
+  }).join('\n');
+  const paths = [join(T.threadFolder(7), 'lead', 'x.md'), join(T.threadFolder(7), 'paige', 'y.md')];
+  assert.ok(brief.includes(`- Files for this work, in reach: ${paths.join(', ')}.`), brief);
 });
 
 test('a pick-up brief names each result it takes, and a lone one reads as it always did', () => {

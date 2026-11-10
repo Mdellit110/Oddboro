@@ -29,32 +29,14 @@ import {
   workFile
 } from '@oddboro/ledger';
 import { fixedError, isFixedError } from '@oddboro/ledger/errors';
-import { workPath } from '@oddboro/ledger/work-paths';
+import { INSTRUCTIONS, workPath } from '@oddboro/ledger/work-paths';
 import { PAGE } from '#lib/pages.ts';
 
 const HOMES = home('staff');
 /** The folder every thread's folder sits in. */
 const THREADS = dirname(threadFolder(0));
 const MAX_BYTES = 1_000_000;
-/**
- * Claude Code, Grok, Codex and Gemini load these from a run's folder, so an
- * Odd may not rewrite its own instructions, hooks, skills, settings or MCP
- * servers. Every Odd gets the whole list, whichever tool it runs on: it can be
- * moved to another one, and its folder stays its folder.
- */
-export const INSTRUCTIONS = [
-  'CLAUDE.md',
-  'CLAUDE.local.md',
-  '.claude',
-  '.grok',
-  'AGENTS.md',
-  '.mcp.json',
-  'AGENTS.override.md',
-  '.codex',
-  '.agents',
-  'GEMINI.md',
-  '.gemini'
-];
+export { INSTRUCTIONS };
 
 /**
  * git's usual places for code that runs the next time git runs in a

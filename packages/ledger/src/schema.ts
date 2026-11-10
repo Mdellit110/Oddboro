@@ -711,6 +711,8 @@ export type HandOff = {
   withheld?: string[];
   /** The colleague's own tools that someone else on the thread lacks: it must not write their contents there. */
   kept?: string[];
+  /** The files named for this work, as paths inside the thread's folder. */
+  files?: string[];
   outcome?: Outcome;
   id?: number;
   answered?: boolean;
@@ -721,7 +723,7 @@ export type HandOff = {
  * the colleague it goes to. What it carries is worked out at the yes
  * (`sharing`), since access can change while the ask waits.
  */
-export type HeldHandOff = Pick<HandOff, 'from' | 'title' | 'brief'> & { to: string };
+export type HeldHandOff = Pick<HandOff, 'from' | 'title' | 'brief' | 'files'> & { to: string };
 
 /**
  * The owner saved an edit to a staffer's file: its path inside the staffer's

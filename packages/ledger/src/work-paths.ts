@@ -40,3 +40,24 @@ export const workName = (thread: number, inside: string): string =>
  */
 export const shownPath = (path: string): string =>
   workPath(path) ? path.slice(path.lastIndexOf('/') + 1) : path;
+
+/**
+ * Claude Code, Grok, Codex and Gemini load these from a run's folder, so an
+ * Odd may not rewrite its own instructions, hooks, skills, settings or MCP
+ * servers, and none crosses in a hand-off. Every Odd gets the whole list,
+ * whichever tool it runs on: it can be moved to another one, and its folder
+ * stays its folder.
+ */
+export const INSTRUCTIONS = [
+  'CLAUDE.md',
+  'CLAUDE.local.md',
+  '.claude',
+  '.grok',
+  'AGENTS.md',
+  '.mcp.json',
+  'AGENTS.override.md',
+  '.codex',
+  '.agents',
+  'GEMINI.md',
+  '.gemini'
+];

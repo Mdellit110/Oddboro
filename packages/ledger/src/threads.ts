@@ -285,7 +285,7 @@ export async function takeHandOff(
     to: string;
     thread: ThreadFor;
     run?: string;
-    work: { title: string; brief: string };
+    work: { title: string; brief: string; files?: string[] };
   }
 ): Promise<Taken> {
   const held: HeldHandOff = { from: h.from, to: h.to, ...h.work };
@@ -379,13 +379,13 @@ export async function startHeld(
   if (!a.held || !a.threadId) return;
   // Only what the lead chose: an ask held by an earlier build also stored
   // what it carried then, which access may have changed since.
-  const { from, to, title, brief } = a.held;
+  const { from, to, title, brief, files } = a.held;
   await tx.update(threads).set({ handOffsUsed: 1 }).where(eq(threads.id, a.threadId));
   await addFollowUp(tx, {
     staffId: to,
     kind: 'hand_off',
     note: null,
-    handOff: await sharing(tx, { from, to, title, brief, threadId: a.threadId }),
+    handOff: await sharing(tx, { from, to, title, brief, files, threadId: a.threadId }),
     threadId: a.threadId
   });
 }

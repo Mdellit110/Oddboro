@@ -11,9 +11,19 @@
 // old parameter name does nothing. After every test each goal still has one
 // thread. Run with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, test } from 'node:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { db, sql, toolServer } from './tool-server.ts';
@@ -30,10 +40,11 @@ const {
   threads
 } = await import('../src/schema.ts');
 const { ASK_REPLACED } = await import('../src/desk-answers.ts');
-const { eq, inArray } = await import('drizzle-orm');
+const { and, eq, inArray } = await import('drizzle-orm');
+const { workName } = await import('../src/work-paths.ts');
 const { OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
-const { HAND_OFF_LIMIT, LEADS_NONE } = await import('../src/threads.ts');
+const { HAND_OFF_LIMIT, LEADS_NONE, threadPart } = await import('../src/threads.ts');
 afterEach(() => oneThreadPerGoal(sql, MANAGER_ROLE));
 
 const odd = (id: string, name: string) => ({
@@ -627,6 +638,192 @@ test(
       await db.delete(staff).where(inArray(staff.id, ['wes', 'fay']));
       await db.update(staff).set({ web: false, folders: [] }).where(eq(staff.id, 'lead'));
       rmSync(home, { recursive: true, force: true });
+    }
+  }
+);
+
+const put = (path: string, text: string) => {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+};
+/** An Odd of the test's own, with its own folder and its own work, so no test sees another's files. */
+async function carrier(id: string) {
+  await db.insert(staff).values({ ...odd(id, id), tools: [...STARTER_TOOLS] });
+  const c = await toolServer(id, { RUN_KEY: `k-${id}` });
+  return {
+    c,
+    /** Writes a file in this Odd's own folder. */
+    own: (path: string, text = 'mine') => put(join(home('staff', id), path), text),
+    /** New work this Odd leads, opened by handing Paige its first piece. */
+    open: async (title: string) => {
+      const r = await c.callTool({
+        name: 'hand_off',
+        arguments: { to: 'paige', title, brief: 'Start it.' }
+      });
+      assert.equal(r.isError, undefined, said(r));
+      const [t] = await db.select().from(threads).where(eq(threads.title, title));
+      return t.id;
+    },
+    /** Hands Paige a piece of `work`, naming `files`. */
+    give: (work: number, title: string, files: string[]) =>
+      c.callTool({
+        name: 'hand_off',
+        arguments: { to: 'paige', title, brief: 'Do it.', continue_work: work, files }
+      })
+  };
+}
+const handedOn = (work: number) =>
+  db
+    .select()
+    .from(followUps)
+    .where(and(eq(followUps.threadId, work), eq(followUps.kind, 'hand_off')));
+const handedAs = async (work: number, title: string) =>
+  (await handedOn(work)).find((f) => f.handOff?.title === title);
+
+test("a hand-off carrying a file from other work the sender is on puts it in this work's folder", async () => {
+  const { open, give } = await carrier('ann');
+  const other = await open('Ann other work');
+  const here = await open('Ann this work');
+  put(join(threadPart(other, 'ann'), 'x.md'), 'from the other work');
+  const r = await give(here, 'Use the notes', [workName(other, 'ann/x.md')]);
+  assert.equal(r.isError, undefined, said(r));
+  const name = `threads-${other}-ann-x.md`;
+  assert.equal(readFileSync(join(threadPart(here, 'ann'), name), 'utf8'), 'from the other work');
+  assert.deepEqual((await handedAs(here, 'Use the notes'))?.handOff?.files, [`ann/${name}`]);
+});
+
+test('a hand-off naming a file the sender cannot read is refused with an error, and nothing is handed on', async () => {
+  const { c, own, open, give } = await carrier('bea');
+  const here = await open('Bea work');
+  own('full-path.md');
+  const { open: openTheirs } = await carrier('bea-other');
+  const theirs = await openTheirs('Work Bea is not on');
+  put(join(threadPart(theirs, 'bea-other'), 'x.md'), 'not for Bea');
+  const before = (await handedOn(here)).length;
+  const shut = [
+    'nope.md',
+    join(home('staff', 'bea'), 'full-path.md'),
+    workName(theirs, 'bea-other/x.md')
+  ];
+  for (const name of shut) {
+    const r = await give(here, 'Use it', [name]);
+    assert.equal(r.isError, true, name);
+    assert.ok(said(r).startsWith('Nothing was handed off yet.'), said(r));
+    assert.ok(said(r).includes(name), said(r));
+  }
+  assert.equal((await handedOn(here)).length, before);
+  const works = await workCount();
+  const opening = await c.callTool({
+    name: 'hand_off',
+    arguments: { to: 'paige', title: 'Bea new work', brief: 'Do it.', files: ['nope.md'] }
+  });
+  assert.equal(opening.isError, true);
+  assert.equal(await workCount(), works, 'a refused hand-off opened new work');
+});
+
+test('a hand-off naming an instruction file is refused', async () => {
+  const { own, open, give } = await carrier('cat');
+  const here = await open('Cat work');
+  // The last is a backslash in a name on a Mac and Linux, and the Windows path on Windows.
+  const names = ['CLAUDE.md', join('.claude', 'x'), join('.Claude', 'y'), '.claude\\w'];
+  for (const name of names) own(name);
+  const inWork = join(threadPart(here, 'paige'), '.claude', 'z');
+  put(inWork, 'in the work');
+  const before = (await handedOn(here)).length;
+  for (const name of [...names, workName(here, 'paige/.claude/z')]) {
+    const r = await give(here, 'Use it', [name]);
+    assert.equal(r.isError, true, name);
+    assert.ok(said(r).includes(name), said(r));
+  }
+  assert.equal((await handedOn(here)).length, before);
+  assert.equal(existsSync(threadPart(here, 'cat')), false, 'an instruction file was copied');
+});
+
+test("a file already in this work's folder is listed for the colleague and not copied", async () => {
+  const { open, give } = await carrier('dee');
+  const here = await open('Dee work');
+  put(join(threadPart(here, 'paige'), 'y.md'), 'already here');
+  const r = await give(here, 'Check it', [workName(here, 'paige/y.md')]);
+  assert.equal(r.isError, undefined, said(r));
+  assert.deepEqual((await handedAs(here, 'Check it'))?.handOff?.files, ['paige/y.md']);
+  assert.equal(existsSync(threadPart(here, 'dee')), false, 'the file was copied');
+});
+
+test('a hand-off naming two files that would land under one name is refused and names both', async () => {
+  const { own, open, give } = await carrier('eve');
+  const here = await open('Eve work');
+  const nested = join('a', 'b.md');
+  own('a-b.md');
+  own(nested);
+  const before = (await handedOn(here)).length;
+  const r = await give(here, 'Use both', ['a-b.md', nested]);
+  assert.equal(r.isError, true);
+  assert.ok(said(r).includes('a-b.md') && said(r).includes(nested), said(r));
+  // A backslash too: `ownFile` gives Windows's separator there. And case, which
+  // a Mac's and Windows's disks do not tell apart.
+  own('a\\c.md');
+  own('a-c.md');
+  own('Q-r.md');
+  own(join('q', 'r.md'));
+  for (const pair of [
+    ['a-c.md', 'a\\c.md'],
+    ['Q-r.md', join('q', 'r.md')]
+  ]) {
+    const again = await give(here, 'Use both', pair);
+    assert.equal(again.isError, true, said(again));
+  }
+  assert.equal(existsSync(threadPart(here, 'eve')), false, 'a file was copied');
+  assert.equal((await handedOn(here)).length, before);
+});
+
+test('a hand-off is refused when a carried file would land on a file it names from this work', async () => {
+  const { own, open, give } = await carrier('fox');
+  const here = await open('Fox work');
+  own('c.md', 'from the folder');
+  put(join(threadPart(here, 'fox'), 'c.md'), 'already here');
+  const r = await give(here, 'Use both', ['c.md', workName(here, 'fox/c.md')]);
+  assert.equal(r.isError, true);
+  assert.equal(readFileSync(join(threadPart(here, 'fox'), 'c.md'), 'utf8'), 'already here');
+});
+
+test('a file named twice is carried once', async () => {
+  const { own, open, give } = await carrier('gus');
+  const here = await open('Gus work');
+  own('d.md');
+  const r = await give(here, 'Use it', ['d.md', join('.', 'd.md')]);
+  assert.equal(r.isError, undefined, said(r));
+  assert.deepEqual((await handedAs(here, 'Use it'))?.handOff?.files, ['gus/d.md']);
+});
+
+test(
+  "a hand-off never copies through a link in the sender's part of the work",
+  { skip: TEMP_IN_APPDATA },
+  async () => {
+    const { own, open, give } = await carrier('hal');
+    const here = await open('Hal work');
+    const outside = realpathSync(mkdtempSync(join(tmpdir(), 'oddboro-carry-')));
+    try {
+      own('e.md', 'the new words');
+      const target = join(outside, 'target.md');
+      writeFileSync(target, 'untouched');
+      const part = threadPart(here, 'hal');
+      mkdirSync(part, { recursive: true });
+      symlinkSync(target, join(part, 'e.md'));
+      const r = await give(here, 'Through a file link', ['e.md']);
+      assert.equal(r.isError, undefined, said(r));
+      assert.equal(readFileSync(target, 'utf8'), 'untouched');
+      assert.equal(lstatSync(join(part, 'e.md')).isSymbolicLink(), false);
+
+      rmSync(part, { recursive: true });
+      symlinkSync(outside, part);
+      const before = (await handedOn(here)).length;
+      const linked = await give(here, 'Through a folder link', ['e.md']);
+      assert.equal(linked.isError, true);
+      assert.ok(said(linked).startsWith('Nothing was handed off yet.'), said(linked));
+      assert.equal(existsSync(join(outside, 'e.md')), false, 'copied through the link');
+      assert.equal((await handedOn(here)).length, before, 'the hand-off was not taken back');
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
     }
   }
 );
