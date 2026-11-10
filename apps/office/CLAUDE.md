@@ -958,8 +958,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     viewer and the Ledger still show only the bare name.
     `src/lib/server/files.ts` serves only text files up to 1 MB that already
     exist inside that Odd's own folder, its parts of thread folders, or a
-    folder the owner gave it (`givenFile`), never through a link to a file or
-    a folder. It takes a bare name, or a path
+    folder the owner gave it that its runs still get (`givenFile`, through the
+    ledger's `ownTools`: never one gone from the disk or in or holding a secret
+    store, so a proposed hire's intake never copies a file from one), never
+    through a link to a file or a folder. It takes a bare name, or a path
     inside the Odd's own folder such as `site/index.html`, which opens only
     when its real path lands inside that folder; never a full path but one
     into a folder the owner gave it, which opens that one path, by the

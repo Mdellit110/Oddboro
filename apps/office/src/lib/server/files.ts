@@ -9,7 +9,6 @@ import {
   closeSync,
   constants,
   type Dirent,
-  existsSync,
   lstatSync,
   mkdirSync,
   openSync,
@@ -23,8 +22,10 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   type StaffRow,
+  currentPlatform,
   learnFromEdit,
   openFile,
+  ownTools,
   record,
   staffer,
   home,
@@ -198,9 +199,12 @@ type Found = { file: string; path: string; given?: true };
 const isFull = (path: string): boolean => isAbsolute(path) || path.startsWith('~/');
 
 /**
- * A file in a folder the owner gave `who` and that is still on the disk,
- * named by its full path (from `~` or from the top) or by its name in the
- * office (`givenName`). Only a file whose real path stays inside the real path
+ * A file in a folder the owner gave `who` that its runs still get (`ownTools`:
+ * on the disk and in no secret store), named by its full path (from `~` or
+ * from the top) or by its name in the office (`givenName`). A folder its runs
+ * no longer get is no way in either: the owner's hire from a proposal copies
+ * the file an Odd names (`giveIntake`), so a refused folder's file would reach
+ * the new hire's runs. Only a file whose real path stays inside the real path
  * of that folder, so a link never leads out, and only by the one path named:
  * nothing is searched for, since a folder the owner gave can be a whole
  * drive. It goes by the innermost given folder that holds it. A folder with no
@@ -208,8 +212,8 @@ const isFull = (path: string): boolean => isAbsolute(path) || path.startsWith('~
  * given folder names nothing, since its files' names would not lead back to it.
  */
 function givenFile(who: StaffRow, path: string): Found | undefined {
-  const folders = who.folders
-    .filter((f) => existsSync(f.path))
+  const { granted } = ownTools(who, currentPlatform());
+  const folders = granted
     .map((f) => ({ name: basename(f.path), as: resolve(f.path), real: realpathSync(f.path) }))
     .filter((f, _, all) => f.name && all.filter((g) => g.name === f.name).length === 1);
   const inside = (real: string, rel: string): string | undefined => {
