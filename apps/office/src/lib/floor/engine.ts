@@ -27,6 +27,7 @@ import {
   OUTDOOR_GLOW,
   GLOW_STOPS,
   nightTint,
+  PASS,
   skyAt,
   TILE,
   type DrawCmd,
@@ -624,9 +625,9 @@ export class Floor {
   }
 
   /**
-   * The meadow's own things: the street's road rows carried out to the edges
-   * on both sides, and trees, bushes and tufts scattered over the grass, kept
-   * clear of the road and of the world's own grounds. Drawn once per world, in
+   * The meadow's own things: the street's road rows and the river carried out
+   * to its edges, and trees, bushes and tufts scattered over the grass, kept
+   * clear of the road, the water and the world's own grounds. Drawn once per world, in
    * the same order every time.
    */
   private countryside(): Container {
@@ -667,6 +668,48 @@ export class Floor {
         strip.position.set(from * TILE, y * TILE);
         add(strip);
       }
+    const W = world.width;
+    const H = world.height;
+    // Any other ground at the world's edge that is not grass (the river) runs
+    // straight on to the meadow's edge, tile by tile from the edge cell's own
+    // draws, so the water keeps its ripple and its banks. Only a bank along
+    // the way it runs carries on.
+    const edgeDraws = new Map<number, DrawCmd[]>();
+    for (const d of world.draws) {
+      const [x, y] = [d.x / TILE, d.y / TILE];
+      if (d.pass !== PASS.floor || (x > 0 && x < W - 1 && y > 0 && y < H - 1)) continue;
+      const key = y * W + x;
+      edgeDraws.set(key, [...(edgeDraws.get(key) ?? []), d]);
+    }
+    const wet = new Set<string>();
+    const sides = [
+      { cells: H, at: (i: number) => [0, i], step: [-1, 0], banks: ['n', 's'] },
+      { cells: H, at: (i: number) => [W - 1, i], step: [1, 0], banks: ['n', 's'] },
+      { cells: W, at: (i: number) => [i, 0], step: [0, -1], banks: ['e', 'w'] },
+      { cells: W, at: (i: number) => [i, H - 1], step: [0, 1], banks: ['e', 'w'] }
+    ];
+    for (const { cells, at, step, banks } of sides)
+      for (let i = 0; i < cells; i++) {
+        const [x, y] = at(i);
+        const m = material(x, y);
+        if (!m || m === grass || (step[1] === 0 && road.has(y))) continue;
+        const draws = (edgeDraws.get(y * W + x) ?? []).filter(
+          (d) =>
+            d.sprite === `floor-${m}` || (d.sprite === `fx-edge-${m}` && banks.includes(d.frame))
+        );
+        for (let k = 1; k <= MEADOW; k++) {
+          const [tx, ty] = [x + step[0] * k, y + step[1] * k];
+          wet.add(`${tx},${ty}`);
+          for (const d of draws) {
+            const s = makeSprite(atlas, { ...d, x: tx * TILE, y: ty * TILE }, this.anims);
+            if (!s) continue;
+            // Under every tree, whatever row it stands in.
+            s.zIndex = -Number.MAX_SAFE_INTEGER;
+            add(s);
+            this.addToBlock(s, [s.x, s.y, TILE, TILE]);
+          }
+        }
+      }
     // Scatter, deterministic by tile so the meadow never changes between visits.
     const hash = (x: number, y: number) => {
       let h = (x * 374761393 + y * 668265263) >>> 0;
@@ -674,14 +717,18 @@ export class Floor {
       return (h ^ (h >>> 16)) / 4294967296;
     };
     const near = (y: number) => [...road].some((r) => Math.abs(r - y) <= 2);
-    const W = world.width;
-    const H = world.height;
+    // A tree stands a tile clear of the water, its trunk and its width.
+    const ashore = (x: number, y: number) => {
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -2; dx <= 3; dx++) if (wet.has(`${x + dx},${y + dy}`)) return false;
+      return true;
+    };
     for (let y = -MEADOW + 2; y < H + MEADOW - 1; y++)
       for (let x = -MEADOW; x < W + MEADOW - 2; x++) {
         // Stay off the world itself and a few tiles from it, so nothing tall
-        // reaches over its edge, and off the road.
+        // reaches over its edge, and off the road and the water.
         if (x > -4 && x < W + 1 && y > -1 && y < H + 4) continue;
-        if (near(y)) continue;
+        if (near(y) || !ashore(x, y)) continue;
         const r = hash(x, y);
         if (r > 0.05) continue;
         const name = PLANTS[Math.floor((r / 0.05) * PLANTS.length)];
