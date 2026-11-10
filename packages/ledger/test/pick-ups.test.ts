@@ -1113,13 +1113,84 @@ test('a lead run on work the usage window holds that fails leaves the hold as it
     .set({ heldBy: hold.id, resumeAt: reset, resumeOnTask: null })
     .where(eq(threads.id, work));
   const pickUp = await toldLead(colleague, work);
-  assert.ok(await O.startFollowUp(pickUp.id));
+  const claimed = await O.startFollowUp(pickUp.id);
+  assert.equal(claimed?.unparkedAt, null, 'the hold is not a time the run lifted');
   await fails(pickUp);
   const after = await threadOf(work);
   assert.equal(after.heldBy, hold.id);
   assert.equal(after.resumeAt?.getTime(), reset.getTime());
   assert.equal(after.resumeOnTask, null);
   assert.equal(after.status, 'open');
+});
+
+/**
+ * Work its lead parked until `at`, whose lead's pick-up of the owner's words
+ * ended the park as it started: that pick-up as listed, before its claim, still running.
+ */
+async function liftedTime(name: string, at: Date) {
+  const { lead, colleague, h, work } = await ownWork(name);
+  await runs(h, 'done', 'Drew it.');
+  const [back] = await onThread(work, 'handed_back');
+  assert.ok(await O.startFollowUp(back.id));
+  assert.ok(await T.parkThread(lead, work, at));
+  await O.finishFollowUp(back, 'work', 'done', 'Parked it till later.');
+  const early = await toldLead(colleague, work);
+  const claimed = await O.startFollowUp(early.id);
+  assert.equal(claimed?.unparked && 'at' in claimed.unparked && +claimed.unparked.at, +at);
+  assert.equal((await threadOf(work)).resumeAt, null, 'the claim ended the park');
+  return { lead, work, early };
+}
+
+test('a lead run that ended a park on a time still to come and then fails parks the work until that time again', async () => {
+  const at = new Date(Date.now() + 3_600_000);
+  const { lead, work, early } = await liftedTime('fails-timed', at);
+  await fails(early);
+  const after = await threadOf(work);
+  assert.equal(after.resumeAt?.getTime(), at.getTime());
+  assert.equal(after.resumeOnTask, null);
+  assert.equal(after.heldBy, null);
+  assert.equal(after.status, 'open');
+  const parked = (await T.parkedThreads()).find((p) => p.id === work);
+  assert.equal(parked?.resumeAt.getTime(), at.getTime(), 'the clock wakes it at that time');
+  // What the chat's card reads to say when its lead picks it up (`workLine` in the office).
+  const card = (await T.threadsFor(lead)).find((t) => t.id === work);
+  assert.equal(card?.resumeAt?.getTime(), at.getTime());
+  const waking = (await onThread(work, 'resume')).filter((f) => f.startedAt === null);
+  assert.deepEqual(waking, [], 'nothing wakes it before then');
+});
+
+test('a lead run that ended a park on a time that passed while it ran, then fails, leaves the work for the clock to wake once', async () => {
+  const at = new Date(Date.now() + 200);
+  const { work, early } = await liftedTime('fails-time-passed', at);
+  while (Date.now() <= at.getTime()) await new Promise((r) => setTimeout(r, 20));
+  const before = (await onThread(work, 'resume')).length;
+  await fails(early);
+  assert.equal((await onThread(work, 'resume')).length, before, 'the failure itself wakes nothing');
+  const due = (await T.parkedThreads()).find((p) => p.id === work);
+  assert.ok(due && due.resumeAt <= new Date(), 'the clock finds it due');
+  // Two looks of the clock at once, as a change to threads and its timer can bring.
+  await Promise.all([T.wakeThread(work), T.wakeThread(work)]);
+  const woken = await onThread(work, 'resume');
+  assert.equal(woken.length, before + 1);
+  assert.equal(woken.at(-1)?.startedAt, null);
+  assert.equal((await threadOf(work)).resumeAt, null);
+  assert.ok(!(await T.parkedThreads()).some((p) => p.id === work), 'nothing is left to wake');
+});
+
+test('a lead run that ended a park on a time and parked again before it failed keeps the park it made, on another time or a task', async () => {
+  const later = new Date(Date.now() + 7_200_000);
+  const onTime = await liftedTime('timed-retimed', new Date(Date.now() + 3_600_000));
+  assert.ok(await T.parkThread(onTime.lead, onTime.work, later));
+  await fails(onTime.early);
+  assert.equal((await threadOf(onTime.work)).resumeAt?.getTime(), later.getTime());
+
+  const onTask = await liftedTime('timed-retasked', new Date(Date.now() + 3_600_000));
+  const task = await aTask(onTask.lead, 'Sign the timetable');
+  await parksOn(onTask.lead, onTask.work, task.id);
+  await fails(onTask.early);
+  const tasked = await threadOf(onTask.work);
+  assert.equal(tasked.resumeOnTask, task.id);
+  assert.equal(tasked.resumeAt, null);
 });
 
 /**

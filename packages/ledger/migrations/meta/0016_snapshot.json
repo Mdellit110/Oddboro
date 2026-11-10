@@ -1,5 +1,5 @@
 {
-  "id": "064c63b9-3ac1-44cb-a614-1701072939ec",
+  "id": "b892e0d7-5480-4a95-949b-14092235457c",
   "prevId": "795062f0-527c-4d50-b0de-6823713bbef6",
   "version": "7",
   "dialect": "postgresql",
@@ -676,6 +676,12 @@
         "unparked_task": {
           "name": "unparked_task",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unparked_at": {
+          "name": "unparked_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

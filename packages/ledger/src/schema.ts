@@ -762,9 +762,14 @@ export const followUps = pgTable('follow_ups', {
   /**
    * The task the thread was parked on when this run's claim ended the park
    * (`startFollowUp`). Kept so a run that fails can give the wait back
-   * (`finishFollowUp`): only a run that ends without failing, or the task's end, ends it.
+   * (`finishFollowUp`): only a run that ends without failing, or the wait's own end, ends it.
    */
   unparkedTask: integer().references(() => tasks.id),
+  /**
+   * The time the thread was parked until when this run's claim ended the park,
+   * kept for the same give-back. Never a usage-window hold's reset, which the claim leaves.
+   */
+  unparkedAt: at('unparked_at'),
   /** The owner ticked "Report when done": success goes on their desk too. A failure always does. */
   reportWhenDone: boolean().notNull().default(false),
   createdAt: created(),

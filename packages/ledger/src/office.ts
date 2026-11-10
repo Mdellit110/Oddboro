@@ -1947,8 +1947,8 @@ export type Unparked = { task: string } | { at: Date };
  * owner's words picked up stayed parked on a task that might never end, and
  * that task's end woke the finished work again. A colleague's run leaves the
  * lead's park alone, and so does a usage-window hold, which is the office's.
- * The claimed row keeps the task it lifted (`unparkedTask`), so a run that
- * then fails gives that wait back (`finishFollowUp`).
+ * The claimed row keeps the task or time it lifted (`unparkedTask`,
+ * `unparkedAt`), so a run that then fails gives that wait back (`finishFollowUp`).
  */
 export async function startFollowUp(
   id: number
@@ -1972,15 +1972,19 @@ export async function startFollowUp(
           .where(eq(threads.id, on.threadId))
           .for('update')
       : [];
-    // Only the lead's own run ends its park, so only it records the task it lifted.
+    // Only the lead's own run ends its park, so only it records the wait it lifted.
     const leads = t !== undefined && on?.staffId === t.hubId;
+    const timed = leads && t.heldBy === null ? t.resumeAt : null;
     const [claimed] = await tx
       .update(followUps)
-      .set({ startedAt: new Date(), unparkedTask: leads ? t.resumeOnTask : null })
+      .set({
+        startedAt: new Date(),
+        unparkedTask: leads ? t.resumeOnTask : null,
+        unparkedAt: timed
+      })
       .where(and(eq(followUps.id, id), isNull(followUps.startedAt), not(waitsOnOwnRun())))
       .returning();
     if (!claimed?.threadId || !leads) return claimed;
-    const timed = t.heldBy === null ? t.resumeAt : null;
     if (t.resumeOnTask === null && timed === null) return claimed;
     const [task] = t.resumeOnTask
       ? await tx.select({ title: tasks.title }).from(tasks).where(eq(tasks.id, t.resumeOnTask))
@@ -2076,12 +2080,16 @@ export async function finishFollowUp(
       .update(followUps)
       .set({ outcome, result, doneAt: now })
       .where(and(eq(followUps.id, f.id), isNull(followUps.outcome)))
-      .returning({ id: followUps.id, unparkedTask: followUps.unparkedTask });
+      .returning({
+        id: followUps.id,
+        unparkedTask: followUps.unparkedTask,
+        unparkedAt: followUps.unparkedAt
+      });
     if (!row) return false;
     // Read from the row, not `f`: the claim wrote it after `f` may have been read.
     const ended =
-      outcome === 'failed' && row.unparkedTask !== null && f.threadId
-        ? await giveWaitBack(tx, f.threadId, row.unparkedTask)
+      outcome === 'failed' && (row.unparkedTask !== null || row.unparkedAt !== null) && f.threadId
+        ? await giveWaitBack(tx, f.threadId, row)
         : undefined;
     if (joined.length)
       await tx
@@ -2137,23 +2145,29 @@ export async function finishFollowUp(
 }
 
 /**
- * A lead's run that ended a park on a task failed, so the wait comes back: only
- * a run that ends without failing, or the task's end, ends one. Not when the
- * run parked the work again, on a task or a time, or the work ended. The task
- * is locked, as `parkOnTask` locks it, so it cannot end between this look and
- * the park and wake nothing. Returns the task when it ended during the run:
- * the park is back so the work stays open, and `wakeOnTask` then wakes it as
- * the task's end would have.
+ * A lead's run that ended a park failed, so the wait comes back, on its task or
+ * its time: only a run that ends without failing, or the wait's own end, ends
+ * one. Not when the run parked the work again, on a task or a time, or the
+ * work ended. The task is locked, as `parkOnTask` locks it, so it cannot end
+ * between this look and the park and wake nothing. Returns the task when it
+ * ended during the run: the park is back so the work stays open, and
+ * `wakeOnTask` then wakes it as the task's end would have. A time that passed
+ * during the run comes back as it was, so the clock's next look wakes the work,
+ * once, since `wakeThread` claims the time as it wakes.
  */
 async function giveWaitBack(
   tx: Tx,
   threadId: number,
-  taskId: number
+  lifted: Pick<FollowUpRow, 'unparkedTask' | 'unparkedAt'>
 ): Promise<TaskRow | undefined> {
-  const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).for('update');
+  const [task] =
+    lifted.unparkedTask === null
+      ? []
+      : await tx.select().from(tasks).where(eq(tasks.id, lifted.unparkedTask)).for('update');
+  // A claim lifts a task or a time, never both, so one of these is null.
   const [back] = await tx
     .update(threads)
-    .set({ resumeOnTask: taskId })
+    .set({ resumeOnTask: lifted.unparkedTask, resumeAt: lifted.unparkedAt })
     .where(
       and(
         eq(threads.id, threadId),
