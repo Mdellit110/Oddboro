@@ -689,7 +689,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    in `~/.oddboro` besides `staff/` and `data/` (and `threads/<id>/` for a
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
-   With Run commands, `--settings` adds Claude Code's sandbox (`claudeSandbox`
+   The rules, the sandbox and the system prompt reach Claude Code in files
+   beside the run's MCP file (`--settings`, `--append-system-prompt-file`),
+   never on the command line: one deny for each folder in `~/.claude/projects`
+   passed Windows' 32,767 characters for an owner who uses Claude Code a lot.
+   With Run commands, the settings add Claude Code's sandbox (`claudeSandbox`
    in `src/lib/server/sandbox.ts`): commands read what the run reads, plus
    their temp folder, node when it sits in the home folder, the owner's
    developer tool folders, and the system's own folders outside `/Users` and
