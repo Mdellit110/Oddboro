@@ -668,7 +668,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    A chat that starts a new session (after a move to another tool, or with
    `session.json` gone or unreadable: `sessionIdIn`) opens with the latest of
    the chat instead, word for word, oldest first: the newest lines whose text
-   fits in 24,000 characters (`REPLAY_CHARS`), never a failed run's error, and the files changed since
+   and retold files fit in 24,000 characters (`REPLAY_CHARS`), never a failed run's error, and the files changed since
    the oldest of them (since the owner line before it, when that is the Odd's
    reply: `replaySince`) in the Odd's own folder and the folders the owner
    gave it to change, among the first 2,000 entries of each, 30 named and the
