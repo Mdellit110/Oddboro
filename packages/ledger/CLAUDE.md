@@ -76,7 +76,8 @@ test that runs past 15 seconds (`--test-timeout=15000`), or 45 seconds for the
 one test that sets its own limit (the three-server `propose_filter` test in
 `test/filters.test.ts`, 15 seconds per server), so a test past its timeout
 fails. A run that never exits, from a handle a test left open, CI ends at the
-job's timeout (`timeout-minutes: 45` in `.github/workflows/ci.yml`). The
+test step's timeout (`timeout-minutes: 10` on each test step in
+`.github/workflows/ci.yml`). The
 script never passes `--test-force-exit`: under it a run once reported 1,015 of
 its 1,058 tests and still exited 0. Of the others, the slowest stays under the cap with every
 suite running at once, so a busy Mac has room. A hang holds the database, so every later test in its file
@@ -667,7 +668,9 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   the ask. Both kinds take yes or no only (`yesOrNo`), and `decide` refuses a yes `leavingRefused` turns
   down: the manager never leaves, and an Odd whose look a later hire took
   comes back only once one of them is redrawn. `test/leaving.test.ts` holds it,
-  the tools included.
+  with what each tool raises and `leave_office` offered only in a chat and
+  never to the manager. `test/hand-off-tool.test.ts` pins which rows are
+  `inChat` and `notToManager`.
 - A hire ask carries its proposal in `asks.hire`. It is approved only by
   hiring, never by a follow-up run. A proposal may name an intake file, which
   the hire gets a copy of as `notes/intake.md`, and a goal it serves. The

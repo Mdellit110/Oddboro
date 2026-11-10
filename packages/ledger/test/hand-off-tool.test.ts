@@ -451,7 +451,8 @@ const RUNS = { chat, thread: { THREAD_ID: String(sale.id) } };
 type Run = keyof typeof RUNS;
 /**
  * A tool that rides with a listed one and is offered in one kind of run only.
- * A listed tool says so on its own row (`inChat`), which the test reads.
+ * A listed tool says so on its own row (`inChat`), which the test reads and a
+ * test below pins.
  */
 const RIDES_ONLY_IN: Partial<Record<keyof typeof RIDES_WITH, Run>> = { resume_at: 'thread' };
 const registered = async (staffId: string, run: Run) => {
@@ -489,6 +490,16 @@ for (const [id, holds] of Object.entries(HOLDERS))
       const want = [...offered, ...riding].sort();
       assert.deepEqual(await registered(id, run), want, `${id} in a ${run}`);
     });
+
+// The test above reads each row's conditions to work out what a run gets, so
+// a condition dropped from a row changes what it expects too. These hold the
+// rows themselves.
+test('only leave_office, tell_lead, remove_odd and bring_back_odd wait for a chat, and only leave_office is kept from the manager', () => {
+  const where = (field: 'inChat' | 'notToManager') =>
+    OFFICE_TOOLS.filter((t) => t[field]).map((t) => t.id);
+  assert.deepEqual(where('inChat'), ['leave_office', 'tell_lead', 'remove_odd', 'bring_back_odd']);
+  assert.deepEqual(where('notToManager'), ['leave_office']);
+});
 
 test('a hire proposal names every office tool the owner can give, and none every Odd has', async () => {
   const c = await toolServer('tot', { RUN_KEY: 'k-tot-hint' });
