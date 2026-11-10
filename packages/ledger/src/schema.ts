@@ -22,6 +22,7 @@ import { STARTER_TOOLS } from './tools.ts';
 import type { Agent, Effort, GrantedFolder } from './agents.ts';
 import type { FolderAccess, Level, OwnSwitch } from './access-words.ts';
 import type { GmailFilter } from './filter-words.ts';
+import type { MailAttachment } from './mail-attachments.ts';
 import type { PersonaLink } from './personas.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
@@ -159,6 +160,8 @@ export type ReplyDraft = {
   body: string;
   /** The Odd's one or two lines on the email it answers. */
   summary: string;
+  /** Files from the Odd's folder that go with it (`mail-attachments.ts`); the owner may drop any. */
+  attachments?: MailAttachment[];
   /** The Gmail connector it goes out through: the account the email came to. */
   connector?: string;
   /** That account's address, as the desk shows it. */
@@ -176,6 +179,14 @@ export type HeldCall = {
   connector: string;
   tool: string;
   arguments: Record<string, unknown>;
+  /** What it does in the owner's words, from the call alone ("Archive: 26 emails"): the ask's title. */
+  said?: string;
+  /**
+   * Each thing it acts on, read from the service as it was held (an email's
+   * subject, sender and date). Words from strangers: the page shows them,
+   * and no Odd's prompt or brief ever carries them.
+   */
+  shown?: string[];
   /** Set once the office made the call: whether the tool took it, and its words. */
   result?: { ok: boolean; text: string; at: string };
 };
@@ -720,6 +731,12 @@ export type HandOff = {
   withheld?: string[];
   /** The colleague's own tools that someone else on the thread lacks: it must not write their contents there. */
   kept?: string[];
+  /**
+   * Files from the giver's own folder, by path there (`mailAttachments`
+   * checks them), which the office copies into the giver's part of the
+   * thread's folder, under `handed/`, as the colleague's run starts.
+   */
+  files?: string[];
   outcome?: Outcome;
   id?: number;
   answered?: boolean;
@@ -730,7 +747,7 @@ export type HandOff = {
  * the colleague it goes to. What it carries is worked out at the yes
  * (`sharing`), since access can change while the ask waits.
  */
-export type HeldHandOff = Pick<HandOff, 'from' | 'title' | 'brief'> & { to: string };
+export type HeldHandOff = Pick<HandOff, 'from' | 'title' | 'brief' | 'files'> & { to: string };
 
 /**
  * The owner saved an edit to a staffer's file: its path inside the staffer's

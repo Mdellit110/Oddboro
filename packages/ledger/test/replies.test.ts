@@ -9,6 +9,8 @@
 // propose_reply store the colleague the office names in `VIA`. Run with
 // `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { db, sql, toolServer } from './tool-server.ts';
@@ -77,6 +79,44 @@ test('propose_reply is offered to every Odd that holds Gmail, at any level, what
     await offered(await toolServer('tess', { RUN_KEY: 'k-tess' })),
     'a hire list cannot leave it out'
   );
+});
+
+test("a reply carries files from the Odd's own folder only, each under the name a recipient sees", async () => {
+  const { home } = await import('../src/home.ts');
+  const dir = join(home('staff', 'paige'), 'attachments');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, '20261110-081108-35bc-image.png'), 'png');
+  writeFileSync(join(home('staff', 'paige'), 'chat.jsonl'), '{}');
+  mkdirSync(home('staff', 'nora'), { recursive: true });
+  writeFileSync(join(home('staff', 'nora'), 'notes.md'), 'Nora’s');
+  const c = await toolServer('paige', { RUN_KEY: 'k-files' });
+  const withFiles = (attachments: string[], thread: string) =>
+    c.callTool({
+      name: 'propose_reply',
+      arguments: { ...REPLY, gmail_thread_id: thread, in_reply_to: `m-${thread}`, attachments }
+    });
+  const r = await withFiles(['attachments/20261110-081108-35bc-image.png'], 't-files');
+  assert.notEqual(r.isError, true, said(r));
+  assert.deepEqual((await ask(idOf(said(r))))?.reply?.attachments, [
+    {
+      path: 'attachments/20261110-081108-35bc-image.png',
+      name: 'image.png',
+      mediaType: 'image/png',
+      size: 3
+    }
+  ]);
+  // Another Odd's file, the office's own, a hidden one and a missing one never go.
+  for (const [n, bad] of [
+    '../nora/notes.md',
+    join(home('staff', 'nora'), 'notes.md'),
+    'chat.jsonl',
+    '.claude/settings.json',
+    'nope.png'
+  ].entries()) {
+    const no = await withFiles([bad], `t-bad-${n}`);
+    assert.equal(no.isError, true, bad);
+    assert.match(said(no), /is not a file in your folder/, bad);
+  }
 });
 
 test('each call raises one reply ask with the email, and the owner sees it on the desk', async () => {

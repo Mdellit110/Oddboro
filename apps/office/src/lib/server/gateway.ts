@@ -33,7 +33,8 @@ import {
   type HeldCall,
   type Level
 } from '@oddboro/ledger';
-import { upstream } from './access.ts';
+import { heldWordsFor, upstream } from './access.ts';
+import { ODD_META } from './google/http.ts';
 
 export const GATEWAY_PATH = '/api/gateway';
 
@@ -167,9 +168,15 @@ async function hold(
       `This run only reads, so it cannot ask to use ${name}. Say what you would change in your reply.`
     );
   const owner = await ownerName();
+  const words = await heldWordsFor(c, name, args);
   const { ask, already } = await raiseCall(
     place,
-    { connector: c.id, tool: name, arguments: args },
+    {
+      connector: c.id,
+      tool: name,
+      arguments: args,
+      ...(words ? { said: words.title, shown: words.items } : {})
+    },
     c.name
   );
   return {
@@ -183,19 +190,33 @@ async function hold(
 }
 
 /**
+ * Which Odd a call is for, told only to the office's own Google servers
+ * (`ODD_META`), never to an outside one. The call is built here, so whatever
+ * `_meta` the run sent never passes.
+ */
+const forOdd = (c: ConnectorRow, staffId: string | undefined) =>
+  c.kind === 'builtin' && staffId ? { _meta: { [ODD_META]: staffId } } : {};
+
+/**
  * The owner said yes to a held call: the office makes that exact call, as
  * the run would have, and returns what came back. A failure to reach the
  * service throws, so the ask stays open to try again; a tool that answers
  * with an error is a result like any other.
  */
-export async function makeCall(call: HeldCall): Promise<NonNullable<HeldCall['result']>> {
+export async function makeCall(
+  call: HeldCall,
+  /** The Odd whose call it was. */
+  staffId: string
+): Promise<NonNullable<HeldCall['result']>> {
   const c = await connector(call.connector);
   if (!c) throw new Error('That service is no longer in the office');
   const client = await upstream(c);
   try {
-    const r = (await client.callTool({ name: call.tool, arguments: call.arguments }, undefined, {
-      timeout: 5 * 60_000
-    })) as CallToolResult;
+    const r = (await client.callTool(
+      { name: call.tool, arguments: call.arguments, ...forOdd(c, staffId) },
+      undefined,
+      { timeout: 5 * 60_000 }
+    )) as CallToolResult;
     const text = r.content
       .map((p) => (p.type === 'text' ? p.text : `[${p.type}]`))
       .join('\n')
@@ -232,9 +253,11 @@ export async function gateway(request: Request, id: string): Promise<Response> {
     if (h.waits && !onlyReads(c, tool)) return hold(c, name, req.params.arguments ?? {}, run.place);
     const client = await clientOf(c, h);
     // As long as the run itself may take: the run's own time limit ends it first.
-    return (await client.callTool({ name, arguments: req.params.arguments }, undefined, {
-      timeout: Math.max(60_000, run.until - Date.now())
-    })) as CallToolResult;
+    return (await client.callTool(
+      { name, arguments: req.params.arguments, ...forOdd(c, run.place?.staffId) },
+      undefined,
+      { timeout: Math.max(60_000, run.until - Date.now()) }
+    )) as CallToolResult;
   });
   // A new server and transport per request, with no session: the run's state
   // (its token, connections and tool list) lives here, not in the transport.

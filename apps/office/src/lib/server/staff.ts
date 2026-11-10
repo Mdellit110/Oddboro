@@ -40,6 +40,7 @@ import {
   capabilities,
   capped,
   handOffBrief,
+  handFiles,
   handOffContext,
   handOffsFor,
   resultsToJoin,
@@ -72,6 +73,7 @@ import {
   liveLessons,
   outsideLines,
   ownerName,
+  roster,
   ownerNoteOf,
   firstQuestionIn,
   FIRST_QUESTIONS,
@@ -173,11 +175,13 @@ import { chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, stoppedWhy, streamTools, type Launch } from './cli.ts';
-import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups } from './launch.ts';
+import { NOT_SIGNED_IN, shellEnv, SIGN_IN_WHERE, stopGroups, type RunImage } from './launch.ts';
+import { isPicture, type ChatFile } from '#lib/attachments.ts';
+import { splitChoices } from '#lib/choices.ts';
 import { tooOldLine } from './versions.ts';
 import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
 import { agentCommand } from './agent-sign-in.ts';
-import { ACT_WRITE, house, stillOnDeskSection } from './house.ts';
+import { ACT_WRITE, house, stillOnDeskSection, whoIsHereSection } from './house.ts';
 import { OUTCOME_LINE, personaRun, voiced } from './persona-run.ts';
 
 /** The owner's data folder, which every staffer may read, whatever tool it runs on. */
@@ -212,11 +216,15 @@ export type ChatEntry = {
   thread?: { line: ThreadLine; steps: HandOffLine[] };
   /** On a reply a chat run wrote: milliseconds from the owner's message to the reply. */
   took?: number;
+  /** On the owner's line: the files they attached, kept in the Odd's `attachments/`. */
+  files?: ChatFile[];
+  /** On a reply: the choices it ended with (`splitChoices`), which the page shows as buttons. */
+  choices?: string[];
 };
 export type ChatEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool'; name: string }
-  | { type: 'done'; text: string }
+  | { type: 'done'; text: string; choices?: string[] }
   | { type: 'error'; message: string };
 
 /**
@@ -681,6 +689,14 @@ async function prompt(
     who.desk +
     '\n' +
     (await whoFor(who, dir)) +
+    (hasTool(who.tools, 'see_office')
+      ? whoIsHereSection(
+          (await roster())
+            .filter((o) => o.id !== who.id)
+            .map((o) => ({ id: o.id, name: o.name, role: o.role, persona: !!o.package })),
+          hasTool(who.tools, 'hand_off')
+        )
+      : '') +
     (await taught(who)) +
     // A chat is told each live goal it leads in full (`goalsLedBrief`), so its list leaves them out.
     (leads
@@ -861,6 +877,8 @@ export type RunOpts = {
   via?: string;
   /** The hand-backs this run's brief already holds in full, so its lead's story leaves them out. */
   shown?: number[];
+  /** Pictures the owner attached in a chat, for a tool that cannot open one with its own tools (Codex). */
+  images?: RunImage[];
   timeoutMs: number;
   onEvent?: (e: ChatEvent) => void;
 };
@@ -1164,7 +1182,10 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
           network: own.network,
           effort,
           model,
-          account
+          account,
+          // Claude Code, Grok and Gemini open a picture with their file tools;
+          // Codex has no such tool (`view_image` is off), so it gets them with the message.
+          ...(who.agent === 'codex' && opts.images?.length ? { images: opts.images } : {})
         });
   if ('refused' in launch) {
     opts.onEvent?.({ type: 'error', message: launch.refused });
@@ -1311,12 +1332,23 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   });
 }
 
+/** What a chat run is told about the files the owner attached: where each is, by its tag. */
+function attachedBrief(files: (ChatFile & { path: string })[]): string {
+  return [
+    `({owner} attached ${files.length === 1 ? 'a file' : `${files.length} files`} to this message. Each is kept in your folder, and each tag in brackets in their message names one. Look at each picture and read each file before you answer. A picture already shown with this message needs no opening.`,
+    ...files.map((f) => `- [${f.tag}]: ${f.path} (${f.mediaType})`),
+    ')'
+  ].join('\n');
+}
+
 /** Send one chat message. Resolves when the reply is complete; events stream through `onEvent`. */
 export async function chat(
   id: string,
   message: string,
   onEvent: (e: ChatEvent) => void,
-  replyTo?: Pick<ChatRef, 'kind' | 'id'>
+  replyTo?: Pick<ChatRef, 'kind' | 'id'>,
+  /** Files the owner attached, already kept in the Odd's attachments folder (`attachedFiles`). */
+  files: (ChatFile & { path: string })[] = []
 ): Promise<void> {
   if (chatting.has(id)) throw new Error(`${id} is already replying`);
   const who = await staffer(id);
@@ -1330,7 +1362,8 @@ export async function chat(
     // answer runs the manager, which reads all three in the chat.
     const last = history(id).at(-1);
     const asked = last?.from === 'staff' ? firstQuestionIn(last.text) : -1;
-    if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1) {
+    const attached = files.map(({ path: _, ...f }) => f);
+    if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1 && !files.length) {
       const next = FIRST_QUESTIONS[asked + 1].ask;
       addToChat(id, { at: sent, from: 'owner', text: message });
       addToChat(id, { at: new Date().toISOString(), from: 'staff', text: next, told: true });
@@ -1366,24 +1399,41 @@ export async function chat(
         landed
       ),
       ...(re ? [re.brief] : []),
-      message
+      message,
+      ...(files.length ? [attachedBrief(files)] : [])
     ].join('\n\n');
     const r = await run(who, prompt, {
       kind: 'chat',
       ownerSaid: message,
+      images: files
+        .filter((f) => isPicture(f.mediaType))
+        .map((f) => ({ path: f.path, mediaType: f.mediaType })),
       sessionFile: chatSession(id),
       timeoutMs: CHAT_TIMEOUT_MS,
-      onEvent
+      // The choices a reply ends with go to the page beside its text, as buttons.
+      onEvent: (e) => {
+        if (e.type !== 'done') return onEvent(e);
+        const { text, choices } = splitChoices(e.text);
+        onEvent({ type: 'done', text, ...(choices.length ? { choices } : {}) });
+      }
     });
     if (r.ok) {
-      addToChat(id, { at: sent, from: 'owner', text: message, re: re?.ref });
+      const { text, choices } = splitChoices(r.text);
+      addToChat(id, {
+        at: sent,
+        from: 'owner',
+        text: message,
+        re: re?.ref,
+        ...(attached.length ? { files: attached } : {})
+      });
       // `took`: how long the owner waited for this reply, from when they sent.
       const at = new Date();
       addToChat(id, {
         at: at.toISOString(),
         from: 'staff',
-        text: r.text,
-        took: at.getTime() - Date.parse(sent)
+        text,
+        took: at.getTime() - Date.parse(sent),
+        ...(choices.length ? { choices } : {})
       });
       if (re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
     }
@@ -1832,7 +1882,12 @@ export async function followThrough(
               result: f.note,
               thread: thread.id,
               goal: goalServed,
-              joined
+              joined,
+              // Copied now, before the run starts, so the colleague's run reads them.
+              files:
+                handed.kind === 'hand_off' && handed.files?.length
+                  ? handFiles(handed, thread.id)
+                  : undefined
             })
           : edit
             ? editBrief(edit.path, edit.shown)
