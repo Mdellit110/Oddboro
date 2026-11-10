@@ -19,6 +19,7 @@
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
   import { account } from '#lib/ui/account.svelte.ts';
+  import { personaNews } from '#lib/ui/persona-offers.svelte.ts';
   import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
   import LedgerPanel from '#lib/ui/LedgerPanel.svelte';
   import ServicesPanel from '#lib/ui/ServicesPanel.svelte';
@@ -135,8 +136,18 @@
   let following = $state<string | undefined>();
   /** The light on the floor: the office's clock, or held at day or night for this viewer. */
   let light = $state<Light>('auto');
-  /** On the first run, a new hire stays off the floor until the bus brings them. */
+  /** Odds on the floor or stepping off the bus. Any other hire stays off the floor until the bus brings it. */
   const arrived = new Set<string>();
+  /** Hires on a bus that has not pulled up yet, so a second sync books no second seat. */
+  const riding = new Set<string>();
+  /** One bus at a time: a hire made during a ride takes the next one. */
+  let busLine = Promise.resolve();
+  /**
+   * The camera while a hire comes in: held on the whole office while the bus
+   * comes (nothing to follow), then on the hire. The owner taking the camera
+   * ends it.
+   */
+  let watching: (() => [number, number] | undefined) | undefined;
   const openSetup = () => open({ id: 'setup', kind: 'setup' });
   let working = $state<Record<string, string>>({});
   /** Each staffer's work in progress. */
@@ -180,6 +191,7 @@
     selected = id;
     railAsked = false;
     letGo = false;
+    wins.raised = !id;
     if (id) rightCollapsed = false;
   }
 
@@ -435,9 +447,17 @@
     actors = actors.filter((a) => staff.some((p) => p.id === a.profile.id));
     // A redraw: the staffer changes clothes where they stand.
     for (const a of actors) a.wear(wearing[a.profile.id]);
+    const boarding: string[] = [];
     for (const p of staff) {
       if (actors.some((a) => a.profile.id === p.id) || !atlasCatalog[p.sprite]) continue;
       if (firstRun && !arrived.has(p.id)) continue;
+      // Every hire after the office opened, an Odd or a persona, comes by bus.
+      if (opened && !arrived.has(p.id)) {
+        if (!riding.has(p.id)) boarding.push(p.id);
+        riding.add(p.id);
+        continue;
+      }
+      arrived.add(p.id);
       const a = new F!.StaffActor(floor, p, start);
       a.wear(wearing[p.id]);
       a.sprite.on('pointertap', () => select(p.id));
@@ -455,6 +475,39 @@
       actors.push(a);
     }
     opened = true;
+    if (boarding.length) busLine = busLine.then(() => ride(boarding));
+  }
+
+  /**
+   * The bus brings hires in: it pulls up at the stop, they step off and walk
+   * to work, and it drives on. As on the first run, the camera shows the
+   * whole office while the bus comes, then steps in on the first hire as it
+   * gets off and follows it to its spot, unless the owner takes the camera. Nothing waits on
+   * them, so each is on the floor, and can be tapped, from the moment it
+   * steps off.
+   */
+  async function ride(ids: string[]) {
+    if (!floor || !F) return;
+    const bus = F.bus(floor);
+    watching = () => undefined;
+    floor.overview();
+    await bus.arrive();
+    bus.open();
+    await new Promise((r) => setTimeout(r, 800));
+    for (const id of ids) {
+      riding.delete(id);
+      arrived.add(id);
+    }
+    await syncActors();
+    const hire = actors.find((a) => a.profile.id === ids[0]);
+    // Then the hire, to its spot, if the camera is still the ride's.
+    const follow = (): [number, number] | undefined => {
+      if (hire?.moving && hire.visible) return [hire.x, hire.y - TILE];
+      if (watching === follow) watching = undefined;
+    };
+    if (watching) watching = follow;
+    await new Promise((r) => setTimeout(r, 2500));
+    await bus.leave();
   }
 
   /** The mode the office puts a staffer in: outside the owner's door, at its job, or free. */
@@ -647,6 +700,9 @@
         actors.find((a) => a.profile.id === e.staff)?.pop(LESSON_POP[e.kind]);
         return;
       }
+      // Only the persona offers hear this: the floor meets a persona Odd, or
+      // sees it go quiet, through the staff table's change, as any hire.
+      if (e.type === 'persona') return void personaNews(e);
       const page = ON_CHANGE.get(e.table) ?? [];
       // A move into another layout rebuilds the whole floor.
       // During the first run, and until its last drawn pieces land, the floor
@@ -710,7 +766,10 @@
             });
         };
 
-        floor.onRelease = () => (letGo = true);
+        floor.onRelease = () => {
+          letGo = true;
+          watching = undefined;
+        };
         floor.onTap = flip;
         floor.onShelf = () => openLessons('all');
 
@@ -756,7 +815,10 @@
           // Centre the camera on the floor left between the two panels, and fit the office there.
           floor.viewOffsetX = centreOffset();
           floor.viewCover = leftSpace + rightSpace;
-          if (lead && lead.visible) floor.focus(lead.x, lead.y - TILE);
+          if (watching) {
+            const seen = watching();
+            if (seen) floor.focus(seen[0], seen[1]);
+          } else if (lead && lead.visible) floor.focus(lead.x, lead.y - TILE);
           floor.updateDoors(actors.filter((a) => a.visible).flatMap((a) => a.steps));
         });
         ready = true;
@@ -985,8 +1047,10 @@
     }
   });
 
+  // The end of the first run is a change too: the Odds it held back walk on then.
   $effect(() => {
     void staff;
+    void firstRun;
     if (floorReady) void syncActors();
   });
 </script>
@@ -1169,6 +1233,7 @@
       min={340}
       max={Math.max(760, Math.round(innerWidth * 0.4))}
       storageKey="oddboro.panel.start"
+      onTop={wins.raised}
     >
       <div class="flex h-full min-h-0 flex-col">
         <div class="pb-2">{@render plate(true)}</div>
@@ -1188,7 +1253,10 @@
                 role="tab"
                 aria-selected={wins.active === w.id}
                 class="flex max-w-44 items-center gap-1.5 truncate py-1.5 ps-2.5 pe-1 text-xs"
-                onclick={() => (wins.active = w.id)}
+                onclick={() => {
+                  wins.active = w.id;
+                  wins.raised = true;
+                }}
                 >{#if wins.busy[w.id]}<span class="busy" aria-label="drawing"></span>{/if}{winTitle(
                   w
                 )}{#if w.kind === 'desk' && deskCount}<span class="text-ember">{deskCount}</span
@@ -1255,7 +1323,11 @@
                   onhired={(p) => {
                     close(w.id, true);
                     refresh();
-                    selected = p.id;
+                    select(p.id);
+                  }}
+                  ondone={() => {
+                    close(w.id, true);
+                    refresh();
                   }}
                 />
               {:else if w.kind === 'report'}

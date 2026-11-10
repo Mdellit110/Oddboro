@@ -61,6 +61,8 @@ const { agentCommand } = await import('./agent-sign-in.ts');
 const { configServers } = await import('./launch.ts');
 const { LAUNCHES } = await import('./cli.ts');
 const { deniedEdits } = await import('./files.ts');
+// The model an Odd with none of its own runs on each tool, which the picker sends for its Office default card.
+const { shownOfficeModel } = await import('./claude.ts');
 
 test("a colleague's run on a hand-off works at Draft, and its key is held while it goes and only then", async () => {
   const h = await L.handOff({
@@ -869,14 +871,16 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           name: 'Claude Code',
           installed: true,
           signIn: { how: 'browser', installing: false, signedIn: false },
-          commandsHow: L.commandsHow('claude', 'darwin')
+          commandsHow: L.commandsHow('claude', 'darwin'),
+          officeModel: shownOfficeModel('claude')
         },
         {
           id: 'grok',
           name: 'Grok',
           installed: false,
           signIn: { how: 'browser', installing: false, signedIn: false },
-          commandsHow: L.commandsHow('grok', 'darwin')
+          commandsHow: L.commandsHow('grok', 'darwin'),
+          officeModel: shownOfficeModel('grok')
         },
         // The office under test's Codex home holds a sign-in file with no account in it.
         {
@@ -884,7 +888,8 @@ test('the "Runs on" picker hears only of the tools on this Mac', async () => {
           name: 'Codex',
           installed: false,
           signIn: { how: 'browser', installing: false, signedIn: true },
-          commandsHow: L.commandsHow('codex', 'darwin')
+          commandsHow: L.commandsHow('codex', 'darwin'),
+          officeModel: shownOfficeModel('codex')
         }
       ]
     });
@@ -938,7 +943,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
       name: 'Grok',
       installed: false,
       signIn: out,
-      commandsHow: L.commandsHow('grok', 'win32')
+      commandsHow: L.commandsHow('grok', 'win32'),
+      officeModel: shownOfficeModel('grok')
     },
     {
       id: 'codex',
@@ -946,7 +952,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
       installed: false,
       // The office's Codex home is signed in under test.
       signIn: { ...out, signedIn: true },
-      commandsHow: L.commandsHow('codex', 'win32')
+      commandsHow: L.commandsHow('codex', 'win32'),
+      officeModel: shownOfficeModel('codex')
     }
   ];
   const installed = [
@@ -956,6 +963,7 @@ require(${JSON.stringify(join(bin, 'claude'))});
       installed: true,
       signIn: out,
       commandsHow,
+      officeModel: shownOfficeModel('claude'),
       version: '2.1.318'
     },
     ...others
@@ -976,7 +984,8 @@ require(${JSON.stringify(join(bin, 'claude'))});
               name: 'Claude Code',
               installed: false,
               signIn: { how: 'browser', installing: false, signedIn: false },
-              commandsHow
+              commandsHow,
+              officeModel: shownOfficeModel('claude')
             },
             ...others
           ],
@@ -996,7 +1005,14 @@ require(${JSON.stringify(join(bin, 'claude'))});
         assert.deepEqual(agentCommand('claude'), [join(native, 'claude.exe'), []]);
         // Installed. This Mac cannot run a stand-in claude.exe, so it has no version to say.
         assert.deepEqual((await picker()).tools, [
-          { id: 'claude', name: 'Claude Code', installed: true, signIn: out, commandsHow },
+          {
+            id: 'claude',
+            name: 'Claude Code',
+            installed: true,
+            signIn: out,
+            commandsHow,
+            officeModel: shownOfficeModel('claude')
+          },
           ...others
         ]);
       })

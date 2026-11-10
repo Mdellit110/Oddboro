@@ -54,7 +54,9 @@ export const OWNER_ACTIONS = {
   'POST /api/diagnostics/envelope': {
     notAnAction: "Passes the page's error report through the office's filter; nothing is kept."
   },
-  'GET /account/callback': { notAnAction: SETUP },
+  // The account's sign-in is setup. A persona's comes back here too, and
+  // wakes its quiet Odd or adds it, whose hire writes its own ledger row.
+  'GET /account/callback': { none: "Finishes a persona's sign-in: wakes or adds its Odd." },
   'POST /api/accounts': { records: 'access' },
   'PATCH /api/accounts': { records: 'access' },
   'DELETE /api/accounts': { records: 'access' },
@@ -101,6 +103,16 @@ export const OWNER_ACTIONS = {
   'POST /api/office/layouts/[id]': { records: 'work' },
   'POST /api/office/move-in': { records: 'work' },
   'POST /api/onboarding': { records: 'hire' },
+  // Reads New Altitude's list and brings each persona Odd in line with it:
+  // quiet, speaking again, or on a newer package, whose update writes its own
+  // ledger row.
+  'GET /api/personas': {
+    none: "Sets each persona Odd's quiet and package to New Altitude's list."
+  },
+  // Add and Reconnect. A kept sign-in that still holds finishes at once, as
+  // the callback does.
+  'POST /api/personas/[slug]': { none: "Starts a persona's sign-in: wakes or adds its Odd." },
+  'DELETE /api/personas/[slug]': { none: "Ends a persona's sign-in and makes its Odd quiet." },
   'POST /api/pokes/[id]': { none: NO_ROW },
   'DELETE /api/pokes/[id]': { none: NO_ROW },
   'POST /api/reports/[id]': { none: NO_ROW },

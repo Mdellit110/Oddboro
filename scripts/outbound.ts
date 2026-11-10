@@ -107,10 +107,18 @@ export const OUTBOUND: readonly Outbound[] = [
   {
     file: 'apps/office/src/lib/server/oauth.ts',
     calls: 2,
-    to: "A connector's sign-in server, GitHub for a server that signs in through New Altitude's GitHub app, Google to read which account a Gmail or Drive sign-in is, and New Altitude's site for the owner's account (account.ts's calls go through this file's `steadyFetch`).",
+    to: "A connector's sign-in server, GitHub for a server that signs in through New Altitude's GitHub app, Google to read which account a Gmail or Drive sign-in is, and New Altitude's site for the owner's account, each persona's sign-in and the list of personas the account is offered (account.ts's and persona.ts's calls go through this file's `steadyFetch`).",
     sends:
-      "The office's sign-in requests and tokens for that connector or account, the token asking New Altitude who is signed in, and the sign-out's token to revoke.",
-    yes: 'The owner signing a connector in, or signing in to their New Altitude account.'
+      "The office's sign-in requests and tokens for that connector, account or persona, the token asking New Altitude who is signed in and which personas it offers, and the sign-out's token to revoke.",
+    yes: "The owner signing a connector in, signing in to their New Altitude account, or a persona's Add or Reconnect."
+  },
+  {
+    file: 'apps/office/src/lib/server/persona-door.ts',
+    calls: 1,
+    to: "A persona's door on New Altitude, at its account's sign-in server.",
+    sends:
+      "The persona's own sign-in token, and for each chat, job or follow-up of that persona Odd, a hand-off from another Odd included: the owner's name, what it was asked and its hands' report, cut to the door's limit, with a chat's earlier exchanges.",
+    yes: "The owner's Add on that persona, which lets each of those runs answer through its door."
   },
   {
     file: 'apps/office/src/instrumentation.server.ts',

@@ -78,8 +78,9 @@ export type OwnerGrant<K extends GrantKind> = {
 type Starts = { permission: Level; tools: OfficeToolId[] };
 /**
  * What a hire starts with when the owner picks nothing: the schema's column
- * defaults, `hire()`, the Office Manager's hire, the hire drawer and each
- * grant's `atHire` read it, so it comes before `OWNER_GRANTS`.
+ * defaults, `hire()`, the Office Manager's hire, a persona's hire
+ * (`hirePersona`), the hire drawer and each grant's `atHire` read it, so it
+ * comes before `OWNER_GRANTS`.
  * The rest have homes that work them out: the tool is the office's own
  * (`officeAgent()` in office.ts), the account its Office account and the
  * model the office's (both null), and thinking `DEFAULT_EFFORT`, never below
@@ -88,6 +89,7 @@ type Starts = { permission: Level; tools: OfficeToolId[] };
 export const HIRE_DEFAULTS: {
   staff: Starts & { commands: boolean; web: boolean; folders: GrantedFolder[] };
   manager: Starts;
+  persona: Starts;
 } = {
   staff: { permission: 'read', tools: STARTER_TOOLS, commands: false, web: false, folders: [] },
   manager: {
@@ -101,7 +103,9 @@ export const HIRE_DEFAULTS: {
       'propose_goal_plan',
       'update_goal'
     ]
-  }
+  },
+  // A persona's hands draft for its voice, so they start a level above a staff hire.
+  persona: { permission: 'draft', tools: STARTER_TOOLS }
 };
 
 /** Every grant the owner can make, and how an Odd learns it lacks one. */

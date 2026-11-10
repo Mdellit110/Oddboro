@@ -16,8 +16,8 @@ import {
   writeFileSync
 } from 'node:fs';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
 import { after, mock, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { ownerWords } from '../../../../../packages/ledger/test/owner-words.ts';
@@ -542,5 +542,118 @@ test('an Odd that no longer serves the goal opens nothing from its folder', asyn
     assert.equal((await click(name, { staff: 'paige' })).status, 404);
   } finally {
     await L.pg`insert into staff_goals (staff_id, goal_id, part) values ('paige', ${goal.id}, 'Builds it')`;
+  }
+});
+
+// Folders the owner gave Paige, beside the office's own folder.
+const projects = join(folder, 'projects');
+const site = join(projects, 'site');
+const give = (folders: { path: string; write: boolean }[]) =>
+  L.pg`update staff set folders = ${JSON.stringify(folders)}::jsonb where id = 'paige'`;
+/** The owner's save through the files route, and its refusal if it has one. */
+async function save(path: string, mtime: number): Promise<string> {
+  const request = new Request('http://office/api/files', {
+    method: 'PUT',
+    body: JSON.stringify({ staff: 'paige', path, content: 'Changed.', mtime })
+  });
+  try {
+    await fileRoute.PUT({ request } as FileEvent);
+  } catch (e) {
+    return (e as { body: { message: string } }).body.message;
+  }
+  return 'saved';
+}
+
+test("a full path into a folder the owner gave links by that folder's name, opens to read only, and opens in the browser", async () => {
+  const page = put(join(site, 'index.html'), '<h1>Site</h1>');
+  const plan = put(join(site, 'docs', 'plan.md'), 'Plan.');
+  await give([{ path: site, write: true }]);
+  try {
+    assert.deepEqual(await opens(page, `~/${relative(homedir(), plan)}`), [
+      'folders/site/index.html',
+      'folders/site/docs/plan.md'
+    ]);
+    const reply = `Built ${page}, with the plan in \`${plan}\`.`;
+    await askAbout(renderMarkdown(reply, 'paige').unknown);
+    const html = renderMarkdown(reply, 'paige').html;
+    assert.match(html, /data-file="paige:folders\/site\/index\.html"/);
+    assert.equal(
+      visibleText(html),
+      'Built site/index.htmlOpen in browser, with the plan in site/docs/plan.md.'
+    );
+    const opened = await open('paige:folders/site/docs/plan.md');
+    assert.equal(opened.content, 'Plan.');
+    assert.deepEqual(offers({ staff: 'paige', path: 'folders/site/docs/plan.md' }), {
+      shown: 'site/docs/plan.md',
+      edit: false,
+      browser: false
+    });
+    assert.equal(
+      whose({ staff: 'paige', path: 'folders/site/docs/plan.md' }, () => 'Paige'),
+      'Your folder · site/docs/plan.md'
+    );
+    assert.equal(
+      await save('folders/site/docs/plan.md', opened.mtime),
+      'plan.md opens here to read only'
+    );
+    assert.equal(readFileSync(plan, 'utf8'), 'Plan.');
+    assert.deepEqual(await openPage('folders/site/index.html'), [[realpathSync(page)]]);
+  } finally {
+    await give([]);
+  }
+});
+
+test('a file in a given folder never opens through a link out, from outside it, or once the folder is taken back', async () => {
+  const page = put(join(site, 'index.html'));
+  const beside = put(join(projects, 'beside.md'));
+  const secret = put(join(folder, 'elsewhere', 'given-secret.md'));
+  symlinkSync(secret, join(site, 'out.md'));
+  symlinkSync(dirname(secret), join(site, 'away'));
+  await give([{ path: site, write: false }]);
+  try {
+    assert.deepEqual(
+      await opens(
+        join(site, 'out.md'),
+        join(site, 'away', 'given-secret.md'),
+        beside,
+        join(site, '..', 'beside.md'),
+        'folders/site/../beside.md',
+        'folders/site/out.md',
+        secret
+      ),
+      [null, null, null, null, null, null, null]
+    );
+    assert.equal(await refusal(secret), 'No file at given-secret.md');
+    assert.deepEqual(await opens(page), ['folders/site/index.html']);
+    await give([]);
+    assert.deepEqual(await opens(page, 'folders/site/index.html'), [null, null]);
+  } finally {
+    await give([]);
+  }
+});
+
+test("two given folders with one name, or a drive's top, name nothing, and a file in two given folders goes by the inner one", async () => {
+  const page = put(join(site, 'index.html'));
+  const twin = join(folder, 'other', 'site');
+  put(join(twin, 'index.html'));
+  const beside = put(join(projects, 'beside.md'));
+  try {
+    await give([
+      { path: site, write: false },
+      { path: twin, write: false }
+    ]);
+    assert.deepEqual(await opens(page, 'folders/site/index.html'), [null, null]);
+    await give([
+      { path: projects, write: false },
+      { path: site, write: false }
+    ]);
+    assert.deepEqual(await opens(page, beside), [
+      'folders/site/index.html',
+      'folders/projects/beside.md'
+    ]);
+    await give([{ path: '/', write: false }]);
+    assert.deepEqual(await opens(page), [null]);
+  } finally {
+    await give([]);
   }
 });
