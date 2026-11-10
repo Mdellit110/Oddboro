@@ -112,6 +112,31 @@ const fileOf = (name: string) => {
 };
 
 /**
+ * Work Lead handed on and then parked until task `taskId` ends, as resume_at's
+ * `after_task` leaves it: its thread. A task's end wakes such work, so a route
+ * that ends a task is driven with one, or a row the wake writes goes unseen.
+ */
+async function parkedOn(taskId: number, title: string): Promise<number> {
+  const h = await L.handOff({
+    from: 'lead',
+    to: 'paige',
+    work: { title, brief: 'Do it.' },
+    thread: { title }
+  });
+  assert.ok('id' in h, JSON.stringify(h));
+  await L.pg`update threads set resume_on_task = ${taskId} where id = ${h.thread}`;
+  return h.thread;
+}
+/** Whether the work parked on `thread` woke: no longer parked, and its lead's pick-up waiting. */
+async function woke(thread: number): Promise<boolean> {
+  const [t] = await L.pg<{ parked: number | null; resumes: number }[]>`
+    select resume_on_task as parked,
+      (select count(*)::int from follow_ups where kind = 'resume' and thread_id = ${thread}) as resumes
+    from threads where id = ${thread}`;
+  return t.parked === null && t.resumes > 0;
+}
+
+/**
  * Gmail signed in for Paige, and `send` with Gmail answering as a stand-in, so
  * a reply or a filter the owner sends reaches its ledger row.
  */
@@ -417,6 +442,16 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
       { id: string }[]
     >`select id from connectors where id like 'example-org%'`;
     await send({ params: { id: 'paige' }, query: { connector: c.id } });
+    // A tool still connecting, with work parked on its connect task: revoking
+    // drops that task, which wakes the work.
+    await grant('lead', 'https://parked.example.org/mcp');
+    const [p] = await L.pg<{ id: string }[]>`
+      select id from connectors where id like 'parked-example-org%'`;
+    const [k] = await L.pg<{ id: number }[]>`
+      select id from tasks where staff_id = 'lead' and status = 'open' order by id desc limit 1`;
+    const thread = await parkedOn(k.id, 'Read the board after it connects');
+    await send({ params: { id: 'lead' }, query: { connector: p.id } });
+    assert.ok(await woke(thread), 'the work parked on the connect task did not wake');
   },
   'PUT /api/staff/[id]/description': async (send) =>
     send({
@@ -434,9 +469,18 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
     >`select id from connectors where id like 'renamed-example-org%'`;
     await send({ params: { id: c.id }, body: { name: 'Open Brain' } });
   },
+  // Then a task with work parked on it, finished and then dropped: the work
+  // wakes, and the task's end is still the one row.
   'POST /api/tasks/[id]#finish': async (send) => {
     const t = await L.giveTask('lead', { title: 'Sign the form', why: 'w', steps: ['Sign it'] });
     await send({ params: { id: String(t.id) }, body: { op: 'finish', note: 'Done.' } });
+    for (const done of [true, false]) {
+      const title = done ? 'Sign the lease' : 'Sign the deed';
+      const k = await L.giveTask('lead', { title, why: 'w', steps: ['Sign it'] });
+      const thread = await parkedOn(k.id, `Move in after ${title}`);
+      await send({ params: { id: String(k.id) }, body: { op: 'finish', done, note: 'Done.' } });
+      assert.ok(await woke(thread), `the work parked on "${title}" did not wake`);
+    }
   }
 };
 
