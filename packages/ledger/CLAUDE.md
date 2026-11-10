@@ -498,7 +498,9 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   on the hub's run and a usage-window hold leave it; when that run ends failed having parked
   nothing again, the park comes back on its task or its time (`follow_ups.unparked_task`,
   `follow_ups.unparked_at`, `finishFollowUp`): had the task ended during the run, it wakes the
-  work as `wakeOnTask` would have, and a time that passed is left for the clock's `wakeThread`,
+  work as `wakeOnTask` would have, except that a task its Odd took off the desk with `withdraw`
+  reads as dropped (the task's row keeps only done or dropped, and `endedAs` tells a withdrawal
+  apart only by the task's Odd having left by then), and a time that passed is left for the clock's `wakeThread`,
   which wakes it once), or by the owner answering an ask or task raised on it
   (`asks.thread_id`, `tasks.thread_id`; `answerThread` when no run follows,
   carrying the ask, so an approved goal plan starts the hub leading its work).

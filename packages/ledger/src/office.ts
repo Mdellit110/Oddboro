@@ -2247,7 +2247,7 @@ export async function finishFollowUp(
     // lifted, so it was not told of this work and does not pick up now.
     const own = await ownRunOf(await taskEnd(t));
     await wakeOnTask(t, {
-      ended: t.status === 'done' ? 'done' : 'dropped',
+      ended: await endedAs(t),
       owner: await ownerName(),
       ownRun: own && { ...own, earlier: true }
     });
@@ -2298,6 +2298,18 @@ async function giveWaitBack(
     )
     .returning({ id: threads.id });
   return back && task && task.status !== 'open' ? task : undefined;
+}
+
+/**
+ * How a task that ended during a run reads to the work that run gives the park
+ * back to. The row keeps only done or dropped, so a task that ended once its Odd
+ * had left was taken off the desk by that leaving (`removeOdd`), not dropped by
+ * the owner; one the owner dropped before the Odd left still reads as dropped.
+ */
+async function endedAs(t: TaskRow): Promise<TaskEnded> {
+  if (t.status === 'done') return 'done';
+  const odd = t.staffId ? await anyStaffer(t.staffId) : undefined;
+  return odd?.leftAt && t.doneAt && t.doneAt >= odd.leftAt ? 'withdrawn' : 'dropped';
 }
 
 /** The result of a run a restart cut off. */

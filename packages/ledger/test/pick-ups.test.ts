@@ -1189,6 +1189,100 @@ test('a lead run that ended a park on a task fails after the owner stopped the w
   assert.equal(after.resumeOnTask, null);
 });
 
+test('a lead run that ended a park on a task fails after its lead left the office: no park comes back and nothing wakes', async () => {
+  const { lead, work, back } = await liftedPark('lead-leaves-mid-run', 'Sign the sticker');
+  assert.equal(await L.removeOdd(lead), undefined);
+  // As the office's stop of the run going (`whenOddLeaves`) ends it.
+  await fails(back);
+  const after = await threadOf(work);
+  assert.equal(after.status, 'stopped');
+  assert.equal(after.resumeOnTask, null, 'no park comes back on work its lead left');
+  assert.deepEqual(await onThread(work, 'resume'), []);
+});
+
+/**
+ * `parkedOnColleaguesTask`, with the parker's pick-up of its helper's result
+ * ending the park as it started: that pick-up as listed, still running.
+ */
+async function liftedColleaguesPark(name: string) {
+  const parked = await parkedOnColleaguesTask(name);
+  const [step] = await onThread(parked.parked, 'hand_off');
+  await runs(step, 'done', 'Laid it out.');
+  const [back] = await onThread(parked.parked, 'handed_back');
+  assert.deepEqual((await O.startFollowUp(back.id))?.unparked, { task: `Check the ${name} copy` });
+  return { ...parked, back };
+}
+
+test("a lead run that ended a park on another Odd's task fails after that Odd left the office: the work wakes once, told the task was taken off the desk, never that the owner dropped it", async () => {
+  const { hub, parked, back, owner } = await liftedColleaguesPark('hub-leaves-mid-run');
+  assert.equal(await L.removeOdd(hub), undefined);
+  assert.deepEqual(await onThread(parked, 'resume'), [], 'nothing was parked on it as it ended');
+  await fails(back);
+  const woken = await onThread(parked, 'resume');
+  assert.equal(woken.length, 1);
+  assert.equal(
+    woken[0].note,
+    `"Check the hub-leaves-mid-run copy", the task you parked this work on, was taken off ${owner}'s desk, so it will not be finished. Decide what comes of the work now: Lead hub-leaves-mid-run left the office, so this will not go ahead.`
+  );
+  assert.equal((await threadOf(parked)).resumeOnTask, null);
+});
+
+test("a lead run that ended a park on another Odd's task fails after the owner dropped it: the work is told it was dropped, even when that Odd left after the drop", async () => {
+  const plain = await liftedColleaguesPark('dropped-mid-run');
+  await O.finishTask(plain.task, false, 'Not this week.');
+  await fails(plain.back);
+  const told = await onThread(plain.parked, 'resume');
+  assert.equal(told.length, 1);
+  assert.equal(
+    told[0].note,
+    `${plain.owner} dropped "Check the dropped-mid-run copy", the task you parked this work on, so it will not be finished. A run on "Work on dropped-mid-run", the work that task was given on, was set going when the task ended, and its lead carries that work's own part: do only this work's part here. Decide what comes of the work now: Not this week.`
+  );
+
+  const thenLeft = await liftedColleaguesPark('dropped-then-left');
+  await O.finishTask(thenLeft.task, false, 'Not this week.');
+  const [ended] = await db.select().from(tasks).where(eq(tasks.id, thenLeft.task));
+  // The Odd leaves strictly after the drop, as two actions of the owner's do.
+  while (Date.now() <= (ended.doneAt?.getTime() ?? 0)) await new Promise((r) => setTimeout(r, 5));
+  assert.equal(await L.removeOdd(thenLeft.hub), undefined);
+  await fails(thenLeft.back);
+  const heard = await onThread(thenLeft.parked, 'resume');
+  assert.equal(heard.length, 1);
+  // No run on the task's own work is named: its lead left, so it runs nothing.
+  assert.equal(
+    heard[0].note,
+    `${thenLeft.owner} dropped "Check the dropped-then-left copy", the task you parked this work on, so it will not be finished. Decide what comes of the work now: Not this week.`
+  );
+});
+
+test('an Odd that leaves while its work is parked on its own task wakes nothing: taking that task off the desk finds no park', async () => {
+  const { lead, work } = await ownWork('own-task-leaves');
+  const task = await aTask(lead, 'Sign the badge');
+  await parksOn(lead, work, task.id);
+  assert.equal(await L.removeOdd(lead), undefined);
+  const [withdrawn] = await db.select().from(tasks).where(eq(tasks.id, task.id));
+  assert.equal(withdrawn.status, 'dropped', 'leaving took the task off the desk');
+  assert.deepEqual(await onThread(work, 'resume'), [], 'no wake for an Odd that left');
+  assert.equal(
+    (await threadOf(work)).resumeOnTask,
+    null,
+    "leaving ends the park, as the owner's stop does"
+  );
+});
+
+test('work its lead parked until a time, and then left the office, is never woken by the clock', async () => {
+  const { lead, work } = await ownWork('time-leaves');
+  assert.ok(await T.parkThread(lead, work, new Date(Date.now() + 3_600_000)));
+  assert.equal(await L.removeOdd(lead), undefined);
+  // The time comes after the Odd left.
+  await db
+    .update(threads)
+    .set({ resumeAt: new Date(Date.now() - 1000) })
+    .where(eq(threads.id, work));
+  assert.ok(!(await T.parkedThreads()).some((p) => p.id === work), 'the clock finds nothing due');
+  await T.wakeThread(work);
+  assert.deepEqual(await onThread(work, 'resume'), []);
+});
+
 test('a lead run that ended no park and fails ends the work failed, parked on nothing', async () => {
   const { h, work } = await ownWork('fails-unparked');
   await runs(h, 'done', 'Drew it.');
