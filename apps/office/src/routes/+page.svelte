@@ -184,6 +184,7 @@
     selected = id;
     railAsked = false;
     letGo = false;
+    wins.raised = !id;
     if (id) rightCollapsed = false;
   }
 
@@ -1248,6 +1249,7 @@
       min={340}
       max={Math.max(760, Math.round(innerWidth * 0.4))}
       storageKey="oddboro.panel.start"
+      onTop={wins.raised}
     >
       <div class="flex h-full min-h-0 flex-col">
         <div class="pb-2">{@render plate(true)}</div>
@@ -1267,7 +1269,10 @@
                 role="tab"
                 aria-selected={wins.active === w.id}
                 class="flex max-w-44 items-center gap-1.5 truncate py-1.5 ps-2.5 pe-1 text-xs"
-                onclick={() => (wins.active = w.id)}
+                onclick={() => {
+                  wins.active = w.id;
+                  wins.raised = true;
+                }}
                 >{#if wins.busy[w.id]}<span class="busy" aria-label="drawing"></span>{/if}{winTitle(
                   w
                 )}{#if w.kind === 'desk' && deskCount}<span class="text-ember">{deskCount}</span
@@ -1334,7 +1339,7 @@
                   onhired={(p) => {
                     close(w.id, true);
                     refresh();
-                    selected = p.id;
+                    select(p.id);
                   }}
                   ondone={() => {
                     close(w.id, true);
