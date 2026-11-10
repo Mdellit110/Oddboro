@@ -1862,8 +1862,9 @@ export async function withdrawAsk(id: number, line: string): Promise<void> {
 }
 
 /**
- * The Odd that gave the owner an open task left the office: the office drops
- * it, and `line` goes back where it came from, as a dropped task's answer does.
+ * The Odd that gave the owner an open task left the office, or took the task
+ * off the desk with its `withdraw` tool: the office drops it, and it ends as a
+ * dropped task does, `line` going back where it came from.
  */
 export async function withdrawTask(id: number, line: string): Promise<void> {
   const [t] = await db

@@ -487,9 +487,12 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   a `resume` follow-up), by `resume_at`'s `after_task` (`parkOnTask`, which takes
   only a task the hub gave or one on work it is on, any other reading as no
   task, sets `threads.resume_on_task` and clears the time; `wakeOnTask` wakes it when the
-  task is done or dropped, and says which, and when a run on the task's own
-  work picks up too, names that work, whose lead carries its own part, or for
-  a task on no work says another run of the hub's does; a stopped thread loses its park; and the
+  task is done or dropped, or taken off the desk (`withdrawTask`, as the task's Odd leaves
+  the office or through its `withdraw` tool), which wakes it as a drop does, and says which,
+  and when a run on the task's own work picks up too, names that work, whose lead carries its
+  own part (never a lead that left the office, which runs nothing), or for a task on no work
+  says another run of the hub's does; a stopped thread loses its park, whether the owner
+  stopped it or its hub left the office (`removeOdd`); and the
   hub's next run on the thread ends a park on a task or a time as it starts, whatever starts it,
   and is told the wait ended (`startFollowUp`), while a colleague's run, a pick-up still waiting
   on the hub's run and a usage-window hold leave it; when that run ends failed having parked

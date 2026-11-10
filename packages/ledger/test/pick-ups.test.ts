@@ -31,6 +31,7 @@ const O = await import('../src/office.ts');
 const T = await import('../src/threads.ts');
 const B = await import('../src/lead-brief.ts');
 const P = await import('../src/task-parking.ts');
+const L = await import('../src/leaving.ts');
 
 const odd = (id: string, name: string) => ({
   id,
@@ -829,6 +830,70 @@ test('a connect task the office drops wakes the work parked on it, and says it w
   assert.equal(woken.length, 1);
   assert.match(woken[0].note ?? '', /dropped "Connect the printer".+so it will not be finished/);
   assert.equal((await threadOf(work)).resumeOnTask, null);
+});
+
+test('a task its Odd takes off the desk wakes the work parked on it once, and says so', async () => {
+  const { lead, work } = await ownWork('withdrawn');
+  const task = await aTask(lead, 'Sign the form');
+  await parksOn(lead, work, task.id);
+  await O.withdrawTask(task.id, 'Not needed now.');
+  await O.withdrawTask(task.id, 'Not needed now.');
+  const woken = await onThread(work, 'resume');
+  assert.equal(woken.length, 1);
+  assert.match(
+    woken[0].note ?? '',
+    /^"Sign the form", the task you parked this work on, was taken off .+'s desk, so it will not be finished\. Decide what comes of the work now: Not needed now\.$/
+  );
+  assert.equal((await threadOf(work)).resumeOnTask, null);
+});
+
+/**
+ * Work `hub` leads, with `parker` handed a step on it. `hub` gives a task on
+ * that work, and `parker` parks work it leads elsewhere on that task, as an Odd
+ * on the task's work may.
+ */
+async function parkedOnColleaguesTask(name: string) {
+  const { lead: hub, colleague: parker, work } = await ownWork(name);
+  const helper = `helper-${name}`;
+  await db.insert(staff).values(odd(helper, `Helper ${name}`));
+  const task = await O.giveTask(hub, {
+    title: `Check the ${name} copy`,
+    why: 'w',
+    steps: ['Check it'],
+    threadId: work
+  });
+  const r = await H.handOff({
+    from: parker,
+    to: helper,
+    work: { title: `Layout of ${name}`, brief: 'Lay it out.' },
+    thread: { title: `Layout run of ${name}` }
+  });
+  assert.ok('id' in r, JSON.stringify(r));
+  const parked = (await byId(r.id)).threadId ?? 0;
+  await parksOn(parker, parked, task.id);
+  return { hub, parker, parked, task: task.id, owner: await O.ownerName() };
+}
+
+test("the task's Odd leaving takes the task off the desk: the work parked on it wakes once, told so, and is not left to the run of an Odd that left", async () => {
+  const { hub, parked, owner } = await parkedOnColleaguesTask('hub-leaves');
+  assert.equal(await L.removeOdd(hub), undefined);
+  const woken = await onThread(parked, 'resume');
+  assert.equal(woken.length, 1);
+  assert.equal(
+    woken[0].note,
+    `"Check the hub-leaves copy", the task you parked this work on, was taken off ${owner}'s desk, so it will not be finished. Decide what comes of the work now: Lead hub-leaves left the office, so this will not go ahead.`
+  );
+  assert.equal((await threadOf(parked)).resumeOnTask, null);
+});
+
+test("an Odd that leaves stops the work it parked on another's task, and that task's end wakes nothing", async () => {
+  const { parker, parked, task } = await parkedOnColleaguesTask('parker-leaves');
+  assert.equal(await L.removeOdd(parker), undefined);
+  const stopped = await threadOf(parked);
+  assert.equal(stopped.status, 'stopped');
+  assert.equal(stopped.resumeOnTask, null, "leaving ends the park, as the owner's stop does");
+  await O.finishTask(task, true, null);
+  assert.deepEqual(await onThread(parked, 'resume'), []);
 });
 
 test("a colleague's run leaves the lead's park, and a lead's run that parks again on the same task stays open and parked, and wakes once at the task's end", async () => {
