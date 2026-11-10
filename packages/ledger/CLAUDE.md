@@ -482,7 +482,10 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   task, sets `threads.resume_on_task` and clears the time; `wakeOnTask` wakes it when the
   task is done or dropped, and says which, and when a run on the task's own
   work picks up too, names that work, whose lead carries its own part, or for
-  a task on no work says another run of the hub's does; a stopped thread loses its park), or by the owner answering an ask or task raised on it
+  a task on no work says another run of the hub's does; a stopped thread loses its park; and the
+  hub's next run on the thread ends a park on a task or a time as it starts, whatever starts it,
+  and is told the wait ended (`startFollowUp`), while a colleague's run, a pick-up still waiting
+  on the hub's run and a usage-window hold leave it), or by the owner answering an ask or task raised on it
   (`asks.thread_id`, `tasks.thread_id`; `answerThread` when no run follows,
   carrying the ask, so an approved goal plan starts the hub leading its work).
   An answer that comes while the hub's `resume` has yet to start joins it as
