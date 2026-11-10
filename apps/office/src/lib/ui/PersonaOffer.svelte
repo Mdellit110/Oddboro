@@ -9,12 +9,12 @@
   import PersonaQuiet, { opened } from './PersonaQuiet.svelte';
 
   // The New Altitude personas offered to this owner, each with what it is and
-  // what it sends, and the one button for where it stands. The first-visit
-  // card and Setup's Account section both show this one. On the card a
-  // persona joins when the office opens; in Setup it joins at once, and can be
-  // disconnected.
-  type Props = { offers: PersonaOffers; where: 'onboarding' | 'setup' };
-  let { offers, where }: Props = $props();
+  // what it sends, and the one button for where it stands, in Setup's Account
+  // section. A persona joins once its own sign-in finishes, and can be
+  // disconnected. The hire window shows the offers as a grid of its own, and
+  // this one only for its lines when New Altitude sent no list.
+  type Props = { offers: PersonaOffers };
+  let { offers }: Props = $props();
 
   const dataLine = (name: string) =>
     `${name}'s replies come from New Altitude. What you and your Odds send ${name}, and what ${name}'s hands find in your office, goes to New Altitude, which keeps it.`;
@@ -56,22 +56,14 @@
             <div>{@render opened(mine.waiting, () => (personas[o.slug] = {}))}</div>
           {:else if o.joined === 'installed'}
             <p class="leading-relaxed text-ink">{o.name} works in your office.</p>
-            {#if where === 'setup'}
-              <button
-                class="self-start {button}"
-                disabled={mine?.busy}
-                onclick={() => disconnect(o.slug)}>Disconnect</button
-              >
-            {/if}
+            <button
+              class="self-start {button}"
+              disabled={mine?.busy}
+              onclick={() => disconnect(o.slug)}>Disconnect</button
+            >
             {@render problem(mine?.problem)}
-          {:else if o.joined === 'granted' && where === 'onboarding'}
-            {#if mine?.problem}
-              {@render problem(mine.problem)}
-            {:else}
-              <p class="leading-relaxed text-ink">{o.name} joins when your office opens.</p>
-            {/if}
           {:else}
-            <!-- In Setup a granted persona joins at once, so one still here could not: Add tries again. -->
+            <!-- A granted persona joins at once, so one still here could not: the button tries again. -->
             <button
               class="self-start {primary}"
               disabled={mine?.busy}

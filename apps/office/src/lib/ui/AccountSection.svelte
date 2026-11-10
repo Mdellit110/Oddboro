@@ -43,5 +43,5 @@
   {#if problem}
     <p class="rounded-lg bg-coral/15 px-3 py-2 text-coral" role="alert">{problem}</p>
   {/if}
-  <PersonaOffer offers={personas} where="setup" />
+  <PersonaOffer offers={personas} />
 </section>

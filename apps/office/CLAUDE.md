@@ -376,9 +376,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    install. `src/lib/server/staff.ts` runs `claude -p` on the owner's login for chats,
    job runs, follow-ups and drafts, or `grok -p` for an Odd that runs on Grok,
    `codex exec` for one on Codex, or `gemini` for one on Gemini (`staff.agent`;
-   each but Claude Code gets ready through `LAUNCHES` in `src/lib/server/cli.ts`). The owner picks under "Runs on" (`RunsOn.svelte`) in the hire
-   drawer, stored with the hire before its hello runs, and on the Settings tab
-   (`AccessTab.svelte`); both list the tools `/api/agents` finds on PATH
+   each but Claude Code gets ready through `LAUNCHES` in `src/lib/server/cli.ts`). The owner picks it in the hire
+   window's Model step, stored with the hire before its hello runs, and on the
+   Settings tab's Model tab (`AccessTab.svelte`), which both show
+   `ModelPicker.svelte`; both list the tools `/api/agents` finds on PATH
    (Grok in xAI's install folder `~/.grok/bin` too, and Claude Code where
    `claudeCommand` finds it on Windows, `agentCommand`),
    with each one's sign-in, which the owner starts beside the picker,
@@ -392,12 +393,13 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    session, and gets a 409 while the Odd is replying. A computer without the
    picked tool fails the run naming it; it never falls back to the other.
    On the Settings tab (named Access before it held the model too), the
-   Model tab picks the tool with the same square tiles as setup
+   Model tab (`ModelPicker.svelte`, the hire window's Model step too) picks
+   the tool with the same tiles as setup, all one height
    (`ToolTiles.svelte`), with the picked tool's install or update below
    them (`RunsOn` with `installOnly`), then the account it signs in with:
    a card for the tool's Office account and each one the owner added
    (accounts.ts in the ledger), "+ Add a sign-in", and one row of the same
-   buttons for the picked account (Sign in, Sign in again, Sign out,
+   buttons for the picked account (Sign in, Switch account, Sign out,
    and for an added one Rename and Remove). Every account is a folder of its own, `~/.oddboro/accounts/
 <tool>/<id>`, and a run points its tool at it (`GROK_HOME`, `CODEX_HOME`,
    `CLAUDE_CONFIG_DIR`); no run reads another account's folder. Claude Code's
@@ -859,8 +861,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     whose tool draws looks (`drawsLooks`, `/api/agents`) also offer drawing. The onboarding manager card offers the same, as "Build your own".
     Nobody is hired without a kept look; in the hire window a look built from parts is kept as it lands (`autoKeep` on `LookStudio`), so Next is the one click, and name and role share a line. While it draws,
     `src/lib/ui/PixelDrawing.svelte` paints a bust pixel by pixel beside the
-    stage and the time. Step three picks the level and the tool its runs go
-    through ("Runs on", Claude Code unless the owner picks another, item 9).
+    stage and the time. Step three picks the level. Step four, Model, picks
+    what its runs go through the way an Odd's Model tab does: the tool, the
+    account it signs in with, the model and how hard it thinks, each the
+    office's unless the owner picks another (item 9).
     Hiring grants no tools. The Odd asks for Run commands or Browse the web
     with `ask_for_switch` when a job needs one, and for outside tools with
     `ask_for_access`. A first job reports to the owner's desk unless they
@@ -873,8 +877,14 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     web or network, and goes when the run ends, pictures and all. A hire with
     no tool picked starts on the office's tool. Opened from a
     proposed hire, it starts filled in, reading the job description from the
-    proposer's file at that moment. Hiring writes a `staff` row; the Odd
-    walks in live. When the office opens, Odds do not walk in: each starts
+    proposer's file at that moment. Hiring writes a `staff` row, and the
+    hire comes by bus, an Odd or a persona alike: the bus pulls up at the
+    stop, the hire steps off and walks to work, and the bus drives on
+    (`ride` in `src/routes/+page.svelte`). The camera shows the whole office
+    while the bus comes, then steps in on the hire as it gets off and follows
+    it to its spot, as on the first run, unless the owner drags or zooms. Nothing waits on it: it can be
+    tapped from the moment it steps off. Only the first run's manager is
+    waited for. When the office opens, Odds do not walk in: each starts
     already at its spot (`StaffActor.arrive`), outside the owner's door if they owe
     it an answer, in its room if a job is running, anywhere else otherwise.
 13. **Files** an Odd attaches to an ask or a task are rows in the
@@ -1059,7 +1069,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     them. Picking a tile sets the office's tool (`OFFICE_AGENT`, PUT
     `/api/agents`). Each panel offers one action
     (`toolAction` in `src/lib/ui/tool-action.ts`: Install, nothing while
-    installing, Sign in, Cancel, Sign in again over a sign-in that may have
+    installing, Sign in, Cancel, Switch account over a sign-in that may have
     stopped working, or a key), and Sign out beside it when signed in and not
     installing (`offersSignOut`). An install that ends with the tool still not
     found says to restart Oddboro. Each list reads the tools when made, after
@@ -1352,8 +1362,11 @@ offers need it (see "A New Altitude persona as an Odd"); nothing else does.
 ## A New Altitude persona as an Odd
 
 New Altitude may offer a signed-in account a persona as an Odd. The owner
-adds it in Setup's Account section (`PersonaOffer.svelte`); the first visit
-does not offer it. It then works like any Odd, except that it speaks in
+adds it from Hire, whose first step asks Hire an Odd or Hire a persona (the
+persona path signs in to New Altitude first, then shows the offers as a grid
+with a Hire button each, and closes once the persona joins), or in Setup's
+Account section (`PersonaOffer.svelte`, with Disconnect). The first visit does
+not offer it. It then works like any Odd, except that it speaks in
 the persona's voice.
 
 1. The package. `GET /api/personas` asks New Altitude's `/api/personas/odds`
