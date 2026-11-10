@@ -704,9 +704,9 @@
       <FoldersList {profile} {find} />
     {:else if tab === 'office'}
       <section aria-label="In the office">
-        <h3 class="mb-1.5 text-xs font-semibold text-ink">In the office</h3>
-        <!-- An empty list would draw an empty box above Always on; with nothing found at all it holds the line saying so. -->
+        <!-- An empty list would draw an empty box and its heading above Always on; with nothing found at all it holds the line saying so. -->
         {#if switchesShown || !tools.alwaysOn.length}
+          <h3 class="mb-1.5 text-xs font-semibold text-ink">In the office</h3>
           <ul class="flex flex-col gap-1 rounded-xl bg-raise p-1.5">
             <!-- The label wraps only the switch's name, so the offer below it is a button of its own. -->
             {#if commandsShown}
@@ -788,7 +788,9 @@
           </ul>
         {/if}
         {#if tools.alwaysOn.length}
-          <h4 class="mt-3 mb-1.5 text-xs font-semibold text-ink">Always on</h4>
+          <h4 class="{switchesShown ? 'mt-3' : ''} mb-1.5 text-xs font-semibold text-ink">
+            Always on
+          </h4>
           <ul class="flex flex-col gap-1 rounded-xl bg-raise p-1.5">
             {#each tools.alwaysOn as t (t.id)}
               <li class="rounded-lg px-2 py-1.5">

@@ -34,10 +34,17 @@ test("work paused for the plan's window says when the window resets", () => {
   );
 });
 
-test('work parked on a task says it starts when the owner finishes it', () => {
+test('work parked on a task says the lead picks it up when the owner finishes or drops it', () => {
+  assert.equal(
+    workLine(work({ stage: 'under_way', holder: 'Marshall', parkedOn: 'Test the build' })).text,
+    'Marshall picks it up when you finish or drop "Test the build"'
+  );
+});
+
+test('parked work a colleague still has says who has it', () => {
   assert.equal(
     workLine(work({ stage: 'under_way', parkedOn: 'Test the build' })).text,
-    'Starts when you finish "Test the build"'
+    'With Priya'
   );
 });
 
@@ -60,7 +67,8 @@ test('no line the owner reads says thread, hand-off or a number', () => {
     for (const resumeAt of [undefined, at])
       for (const held of [false, true])
         for (const parkedOn of [undefined, 'Test the build'])
-          ownerWords(workLine(work({ stage, resumeAt, held, parkedOn })).text);
+          for (const holder of ['Priya', 'Marshall'])
+            ownerWords(workLine(work({ stage, resumeAt, held, parkedOn, holder })).text);
 });
 
 test('a next run says today, tomorrow, or the day, with its time, in the office time zone', () => {

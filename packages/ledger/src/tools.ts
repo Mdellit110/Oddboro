@@ -71,7 +71,7 @@ const TOOLS = [
   {
     id: 'tell_lead',
     name: 'Tell the lead',
-    does: 'Passes what you tell it in chat about work another Odd leads to that Odd, in your words.',
+    does: 'Passes what you tell it in chat about work another Odd leads to that Odd: your words, and what it understood you to mean.',
     always: true
   },
   {

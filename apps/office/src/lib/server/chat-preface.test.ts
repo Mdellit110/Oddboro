@@ -120,19 +120,27 @@ test('an ask the owner decided since the last reply is told, and one decided bef
   ]);
 });
 
-test('a task the owner finished since the last reply is told once, and not again', () => {
+test('each task the owner ended since the last reply is told once, finished or dropped, and not again', () => {
   const past = [owner('2026-11-03T09:00:00Z', 'hi'), reply('2026-11-03T09:01:00Z', 'hello')];
+  const at = new Date('2026-11-03T08:00:00Z');
   const landed = [
     {
       kind: 'task',
       title: 'Pick a blue',
-      at: new Date('2026-11-03T08:00:00Z'),
+      at,
       status: 'done',
       decidedAt: new Date('2026-11-03T09:30:00Z')
+    },
+    {
+      kind: 'task',
+      title: 'Sign the poster',
+      at,
+      status: 'dropped',
+      decidedAt: new Date('2026-11-03T09:35:00Z')
     }
   ];
   assert.deepEqual(chatPreface(past, landed, 'resumed'), [
-    '(Since your last reply, {owner} finished your tasks: "Pick a blue" finished. my_tasks has what they said.)'
+    '(Since your last reply, {owner} ended your tasks: "Pick a blue" finished, "Sign the poster" dropped. my_tasks has what they said.)'
   ]);
   const later = [
     ...past,

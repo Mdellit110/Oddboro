@@ -1322,6 +1322,15 @@ test("a lead's chat is told the latest of its work with no goal, by openings, ne
   assert.ok(!run.system.includes('The rest of the quote.'), 'the chat holds only the opening');
 });
 
+/** Ten answers at their longest on `thread`, from asks `staffId` raised: the most a story's "said" holds. */
+async function longestSaid(staffId: string, thread: number): Promise<void> {
+  await L.pg`
+    insert into asks (staff_id, title, why, if_approved, status, reason, thread_id, decided_at)
+    select ${staffId}, ${'t'.repeat(136)}::text || n, 'Why', 'Then', 'approved',
+      ${'r'.repeat(500)}::text, ${thread}::int, now()
+    from generate_series(1000, 1009) n`;
+}
+
 test('work whose story does not fit a chat keeps its line in the list, and its folder stays readable', async () => {
   const goals: number[] = [];
   const work: { thread: number; goal: string }[] = [];
@@ -1332,12 +1341,7 @@ test('work whose story does not fit a chat keeps its line in the list, and its f
       goals.push(goalId);
       const h = await gave('cleo', 'sam', { title, goalId });
       mkdirSync(L.threadFolder(h.thread), { recursive: true });
-      // Ten answers at their longest: the most a story's "said" holds.
-      await L.pg`
-        insert into asks (staff_id, title, why, if_approved, status, reason, thread_id, decided_at)
-        select 'cleo', ${'t'.repeat(136)}::text || n, 'Why', 'Then', 'approved',
-          ${'r'.repeat(500)}::text, ${h.thread}::int, now()
-        from generate_series(1000, 1009) n`;
+      await longestSaid('cleo', h.thread);
       work.push({ thread: h.thread, goal: title });
     }
     // Newer work with no goal fills the latest-work list, so the left-out goals' lines are their own.
@@ -1364,6 +1368,47 @@ test('work whose story does not fit a chat keeps its line in the list, and its f
     // A live goal's story is told in every later chat of Cleo's and Sam's.
     await L.pg`update goals set status = 'dropped' where id = any(${goals}::int[])`;
   }
+});
+
+test("a chat's stories of work it leads and of work it is on together keep to the chat's limit", async () => {
+  await L.pg`insert into staff ${L.pg([odd('rhea', 'Rhea'), odd('tom', 'Tom')])}`;
+  const longWork = async (from: string, to: string, title: string) => {
+    const h = await gave(from, to, { title });
+    await longestSaid(from, h.thread);
+  };
+  for (const n of [1, 2]) await longWork('rhea', 'tom', `Led work ${n}`);
+  for (const n of [1, 2]) await longWork('tom', 'rhea', `Other work ${n}`);
+  const led = await L.ledStories('rhea', 'chat');
+  const on = await L.onStories('rhea');
+  const ledSize = L.workLedBrief(led).length;
+  const onSize = L.workOnBrief(on).length;
+  assert.ok(
+    ledSize <= L.CHAT_STORIES_MAX && onSize <= L.CHAT_STORIES_MAX,
+    `each side alone passes the limit: ${ledSize} led, ${onSize} on`
+  );
+  assert.ok(
+    ledSize + onSize > L.CHAT_STORIES_MAX,
+    `the two sides fit the limit together at ${ledSize + onSize} characters`
+  );
+
+  const { system } = await chatOf('rhea', 'Where is it all up to?');
+  const told = (s: (typeof led)[number]) => system.includes(`## Work ${s.thread.id}\n`);
+  assert.ok(led.every(told), 'a story of work Rhea leads is left out');
+  assert.ok(on.some(told), 'no story of work Rhea is on is told in what the limit leaves');
+  const size = L.workLedBrief(led.filter(told)).length + L.workOnBrief(on.filter(told)).length;
+  assert.ok(size <= L.CHAT_STORIES_MAX, `the chat's stories come to ${size} characters`);
+});
+
+test('work with no goal whose story a chat is told keeps its line in the list, and the way to continue it', async () => {
+  await L.pg`insert into staff ${L.pg([odd('wren', 'Wren')])}`;
+  const h = await gave('wren', 'paige', { title: 'Mend the fence' });
+  const { system } = await chatOf('wren', 'How is the fence?');
+  assert.ok(system.includes(`## Work ${h.thread}\n`), 'the story is not told');
+  assert.ok(
+    system.includes(`- Work ${h.thread}: Mend the fence (under way).`),
+    'the work has no line in the list'
+  );
+  assert.match(system, /hand_off with continue_work set to its number/);
 });
 
 test("a Grok colleague's chat may read the folder of work it is on", async () => {

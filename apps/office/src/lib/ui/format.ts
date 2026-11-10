@@ -60,14 +60,17 @@ export type Work = {
 };
 
 const WORK: Record<ThreadStage, (w: Work) => { text: string; yours: boolean }> = {
+  // Parked work has always started, since only a run on it can park it. Who has
+  // it comes first while a colleague does: the park wakes only the lead.
   under_way: (w) => ({
-    text: w.parkedOn
-      ? `Starts when you finish "${w.parkedOn}"`
-      : !w.resumeAt
-        ? `With ${w.holder}`
-        : w.held
-          ? `Paused until your Claude plan's window resets at ${when(w.resumeAt)}`
-          : `${w.lead} picks it up at ${when(w.resumeAt)}`,
+    text:
+      w.parkedOn && w.holder === w.lead
+        ? `${w.lead} picks it up when you finish or drop "${w.parkedOn}"`
+        : !w.resumeAt
+          ? `With ${w.holder}`
+          : w.held
+            ? `Paused until your Claude plan's window resets at ${when(w.resumeAt)}`
+            : `${w.lead} picks it up at ${when(w.resumeAt)}`,
     yours: false
   }),
   waiting_on_you: () => ({ text: 'Waiting on you', yours: true }),
