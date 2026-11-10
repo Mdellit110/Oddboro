@@ -7,7 +7,8 @@
 // with `npm test -w @oddboro/ledger`.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { and, eq } from 'drizzle-orm';
 import {
@@ -243,6 +244,13 @@ test("the lead's other runs on its thread wait for its pick-up too", async () =>
 });
 
 test("a hand-off's brief lists each file carried for it, at its full path", () => {
+  // hand_off copies each file into the work's folder; the brief names only
+  // those still there, so the copies have to exist.
+  const paths = [join(T.threadFolder(7), 'lead', 'x.md'), join(T.threadFolder(7), 'paige', 'y.md')];
+  for (const p of paths) {
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, 'carried');
+  }
   const brief = H.handOffBrief({
     kind: 'hand_off',
     h: { from: 'lead', title: 'Piece', brief: 'Do it.', files: ['lead/x.md', 'paige/y.md'] },
@@ -251,7 +259,6 @@ test("a hand-off's brief lists each file carried for it, at its full path", () =
     result: null,
     thread: 7
   }).join('\n');
-  const paths = [join(T.threadFolder(7), 'lead', 'x.md'), join(T.threadFolder(7), 'paige', 'y.md')];
   assert.ok(brief.includes(`- Files for this work, in reach: ${paths.join(', ')}.`), brief);
 });
 
