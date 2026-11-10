@@ -88,6 +88,7 @@ import {
   stillOnDesk,
   report as reportById,
   staffer,
+  anyStaffer,
   task as taskById,
   taskFiles,
   type AskRow,
@@ -280,6 +281,17 @@ function show(id: string): void {
   if (now.length) working[id] = now.length > 1 ? `${now[0]} +${now.length - 1} more` : now[0];
   else delete working[id];
   emit({ type: 'working', working: { ...working }, inProgress: structuredClone(inProgress) });
+}
+
+/** Staffer id to a stop for each of its runs going now. */
+const stoppers: Record<string, Set<() => void>> = {};
+
+/**
+ * Stop every run of an Odd that left the office (`whenOddLeaves` in the
+ * ledger): its chat, jobs, follow-ups and drafts end now, as failed.
+ */
+export function stopRuns(id: string): void {
+  for (const stop of [...(stoppers[id] ?? [])]) stop();
 }
 
 export async function isStaff(id: string): Promise<boolean> {
@@ -1204,6 +1216,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       const line = NETWORK_REFUSED_LINE[opts.ownerSaid === undefined ? 'unsent' : 'sent'];
       const r = refused ? { ok: false, text: line.replaceAll('{name}', who.name) } : end;
       clearTimeout(timer);
+      stoppers[who.id]?.delete(leave);
       runsGoing.delete(key);
       launch.done();
       void closeGateway(gate);
@@ -1217,6 +1230,12 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       stop();
       finish({ ok: false, text: `No reply after ${opts.timeoutMs / 60_000} minutes.` });
     }, opts.timeoutMs);
+    // The Odd leaving the office stops this run at once (`stopRuns`).
+    const leave = () => {
+      stop();
+      finish({ ok: false, text: `${who.name} left the office, so this stopped.` });
+    };
+    (stoppers[who.id] ??= new Set()).add(leave);
 
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
@@ -1682,7 +1701,7 @@ export async function followThrough(
       : undefined;
   const colleague = handed && {
     id: handed.from,
-    name: (await staffer(handed.from))?.name ?? handed.from
+    name: (await anyStaffer(handed.from))?.name ?? handed.from
   };
   // The hand-off this run's work serves, if any: its own, or the one whose ask or
   // task the owner just answered. Its result goes back to the giver.
@@ -1690,7 +1709,7 @@ export async function followThrough(
   const giver = serves?.handOff
     ? {
         id: serves.handOff.from,
-        name: (await staffer(serves.handOff.from))?.name ?? serves.handOff.from
+        name: (await anyStaffer(serves.handOff.from))?.name ?? serves.handOff.from
       }
     : undefined;
   // The thread it works on. Every hand-off is a step in one, and its files cross
@@ -1708,7 +1727,7 @@ export async function followThrough(
     (await resultsToJoin(f)).flatMap(({ id, handOff: h, note }) =>
       h
         ? [
-            staffer(h.from).then((c) => ({
+            anyStaffer(h.from).then((c) => ({
               id,
               h,
               result: note,
@@ -1926,8 +1945,10 @@ export function sayInChat(id: string, text: string): void {
 export async function deliverPoke(p: PokeRow): Promise<void> {
   // More than 15 minutes late is missed, not counting time the app spent updating.
   const late = pokeMissed(p.at, new Date(), downtime());
-  if (!(await claimPoke(p.id, late)) || late) return;
+  // An Odd that left says nothing: leaving cancelled its pokes, and this is the second wall.
   const who = await staffer(p.staffId);
+  if (!who) return;
+  if (!(await claimPoke(p.id, late)) || late) return;
   addToChat(p.staffId, {
     at: new Date().toISOString(),
     from: 'staff',

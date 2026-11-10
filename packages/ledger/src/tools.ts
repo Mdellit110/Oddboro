@@ -36,6 +36,12 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
   },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
   {
+    id: 'leave_office',
+    name: 'Ask to leave',
+    does: 'Asks you to let it go from the office, when you tell it to leave. It goes only on your yes.',
+    always: true
+  },
+  {
     id: 'keep_lesson',
     name: 'Keep lessons',
     does: 'Remembers a correction you give it, so you never give it twice. You see each one in its chat, with Undo.',
@@ -146,6 +152,16 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     does: 'Brings you one plan per goal: who to hire and what Odds already here take on.'
   },
   {
+    id: 'remove_odd',
+    name: 'Remove Odds',
+    does: 'Asks you to let another Odd go from the office. It goes only on your yes.'
+  },
+  {
+    id: 'bring_back_odd',
+    name: 'Bring Odds back',
+    does: 'Asks you to bring back an Odd that left the office, as it was. It comes back only on your yes.'
+  },
+  {
     id: 'update_goal',
     name: 'Update goals',
     does: 'Marks a goal met or paused, or rewords it, when you ask in chat or approve an ask.'
@@ -175,8 +191,9 @@ export const hasTool = (granted: readonly string[], id: string) =>
 export const tickable = (s: Step) => !s.action || s.action.kind === 'oauth';
 
 /**
- * Asks the office raises itself, not an Odd: the owner answers yes or no, and
- * nobody could rework one sent back, so they take no Iterate.
+ * Asks the owner answers yes or no, with no Iterate: the office raised it
+ * itself, so nobody could rework one sent back, or it lets an Odd go or
+ * brings one back, which has nothing to rework.
  */
 export const yesOrNo = (kind: AskKind | undefined): boolean =>
-  kind === 'hand_offs' || kind === 'window';
+  kind === 'hand_offs' || kind === 'window' || kind === 'remove' || kind === 'bring_back';

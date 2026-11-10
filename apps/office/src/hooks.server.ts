@@ -13,12 +13,13 @@
 // Then Sentry's handle, which traces the request when the owner said yes to diagnostics.
 import { sequence, type ServerInit } from '@sveltejs/kit/hooks';
 import { handleErrorWithSentry, sentryHandle } from '@sentry/sveltekit';
-import { LOCAL } from '@oddboro/ledger';
+import { LOCAL, whenOddLeaves } from '@oddboro/ledger';
 import { startLocalDatabase } from '@oddboro/ledger/local-db';
 import { useShellSecrets } from '@oddboro/ledger/secrets';
 import { bringUpToDate } from '@oddboro/ledger/upgrade';
 import { keepAddress } from '#lib/server/address.ts';
 import { startFollowUps } from '#lib/server/follow-ups.ts';
+import { stopRuns } from '#lib/server/staff.ts';
 import { startClock } from '#lib/server/jobs.ts';
 import { guardOffice } from '#lib/server/owner-page.ts';
 import { syncPersonas } from '#lib/server/persona.ts';
@@ -44,6 +45,8 @@ export const init: ServerInit = async () => {
   await loadUpdate();
   startClock();
   startFollowUps();
+  // An Odd that leaves the office stops what it is running at once.
+  whenOddLeaves(stopRuns);
   // Never awaited: an office offline or signed out starts as fast as any.
   void syncPersonas().catch((e) => console.error('[persona] sync at start', e));
   void keepAddress();

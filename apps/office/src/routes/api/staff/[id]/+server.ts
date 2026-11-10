@@ -1,4 +1,7 @@
-// Change a staffer's permission level, coding tool, account, model or thinking level, grant or remove one
+// DELETE lets the Odd go from the office: the owner's Remove on its card,
+// after the page's own confirm (`removeOdd` in the ledger). It is soft: the
+// Office Manager can bring it back, with the owner's yes.
+// PATCH changes a staffer's permission level, coding tool, account, model or thinking level, grant or remove one
 // office tool, switch Run commands or Browse the web, or give or take back a
 // folder outside the office. Only the owner does this, from the card. A move
 // to another tool can turn Run commands on with it: the one click the Access
@@ -10,6 +13,7 @@ import {
   commandsHow,
   offeredAgent,
   parseLevel,
+  removeOdd,
   setAgent,
   setEffort,
   setModel,
@@ -127,5 +131,12 @@ export const PATCH: RequestHandler = async ({ params, request }) => {
   const permission = parseLevel(b.permission);
   if (!permission) error(400, 'Pick read, draft or act');
   await setPermission(params.id, permission);
+  return json({ ok: true });
+};
+
+export const DELETE: RequestHandler = async ({ params }) => {
+  if (!(await staffer(params.id))) error(404, 'No such Odd');
+  const left = await removeOdd(params.id);
+  if (left) error(400, left.refused);
   return json({ ok: true });
 };

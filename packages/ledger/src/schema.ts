@@ -66,8 +66,13 @@ export const staff = pgTable('staff', {
   /** Set for an Odd installed from a New Altitude persona: which, its version, its disclosure, and why it is quiet. */
   package: jsonb().$type<PersonaLink>(),
   hiredAt: created('hired_at'),
-  /** Set when the owner lets a staffer go. Its history stays. */
-  leftAt: at('left_at')
+  /**
+   * Set when the Odd left the office (`removeOdd`): it is off the floor and
+   * runs nothing, and its history stays. Bringing it back clears it.
+   */
+  leftAt: at('left_at'),
+  /** The jobs that were on when it left, which bringing it back turns on again. */
+  jobsOff: integer().array()
 });
 
 /**
@@ -100,7 +105,10 @@ export type AccountRow = typeof accounts.$inferSelect;
  * changes something, held by the gateway for an Odd at Draft (`asks.call`):
  * on the owner's yes the office makes that exact call. `switch` asks for the
  * owner's Run commands or Browse the web switch, or both (`asks.switches`):
- * the owner's yes turns them on.
+ * the owner's yes turns them on. `remove` asks to let an Odd go (`asks.odd`):
+ * an Odd asking to leave names itself, and the Office Manager names another.
+ * `bring_back` is the manager's ask to bring back an Odd that left. The owner's
+ * yes does it (`removeOdd`, `bringBack`).
  */
 export type AskKind =
   | 'approval'
@@ -114,7 +122,9 @@ export type AskKind =
   | 'filter'
   | 'folder'
   | 'switch'
-  | 'call';
+  | 'call'
+  | 'remove'
+  | 'bring_back';
 /** `revise` means the owner sent it back to be reworked. */
 export type AskStatus = 'open' | 'approved' | 'denied' | 'revise';
 /**
@@ -305,6 +315,8 @@ export const asks = pgTable('asks', {
   call: jsonb().$type<HeldCall>(),
   /** A switch ask's switches, Run commands or Browse the web, to turn on (`ask_for_switch`). */
   switches: jsonb().$type<OwnSwitch[]>(),
+  /** A remove or bring_back ask's Odd (a staff id). */
+  odd: text(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
