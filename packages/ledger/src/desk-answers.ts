@@ -70,6 +70,8 @@ export const askReplaced = (a: { status: AskStatus; reason: string | null }): bo
  * - `rework`: a `rework` follow-up, with what to change.
  * - `denied_lesson`: a `denied` follow-up, when the no carries a reason.
  * - `task_done`: a `task_done` follow-up, to pick up what waited on the task.
+ * - `wake_parked`: the work a lead parked on the task picks up, told how the
+ *   task ended (`wakeOnTask`).
  */
 export type Effect =
   | 'approval_work'
@@ -84,11 +86,12 @@ export type Effect =
   | 'rework'
   | 'denied_lesson'
   | 'task_done'
+  | 'wake_parked'
   | { none: string };
-export type AskEffect = Exclude<Effect, 'task_done'>;
+export type AskEffect = Exclude<Effect, 'task_done' | 'wake_parked'>;
 export type TaskEffect = Extract<
   Effect,
-  'carry_out' | 'task_done' | 'answer_back' | { none: string }
+  'carry_out' | 'task_done' | 'answer_back' | 'wake_parked' | { none: string }
 >;
 
 export type AskAnswer = {
@@ -168,12 +171,12 @@ export const OWNER_ANSWERS = {
   task: {
     done: {
       /** The owner finished connecting a tool an Odd asked for: the work that waited on it starts. */
-      fromAccess: ['carry_out'],
-      other: ['task_done'],
+      fromAccess: ['carry_out', 'wake_parked'],
+      other: ['task_done', 'wake_parked'],
       /** A task no Odd gave the owner. */
-      noOdd: []
+      noOdd: ['wake_parked']
     },
-    dropped: ['answer_back', { none: 'NEW-1703' }]
+    dropped: ['answer_back', 'wake_parked', { none: 'NEW-1703' }]
   } satisfies {
     done: Record<'fromAccess' | 'other' | 'noOdd', readonly TaskEffect[]>;
     dropped: readonly TaskEffect[];

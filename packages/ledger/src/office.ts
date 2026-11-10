@@ -37,6 +37,7 @@ import {
   servesNoThread
 } from './hand-offs.ts';
 import { answerWindow } from './usage-window.ts';
+import { wakeOnTask } from './task-parking.ts';
 import {
   addFollowUp,
   answerHandOffs,
@@ -2608,13 +2609,21 @@ async function dropConnectTasks(id: string, staffId?: string): Promise<void> {
     .where(
       staffId ? and(eq(tasks.status, 'open'), eq(tasks.staffId, staffId)) : eq(tasks.status, 'open')
     );
-  const stale = open
-    .filter((t) =>
-      t.steps.some((s) => s.action && 'connector' in s.action && s.action.connector === id)
-    )
-    .map((t) => t.id);
-  if (stale.length)
-    await db.update(tasks).set({ status: 'dropped' }).where(inArray(tasks.id, stale));
+  const stale = open.filter((t) =>
+    t.steps.some((s) => s.action && 'connector' in s.action && s.action.connector === id)
+  );
+  if (!stale.length) return;
+  await db
+    .update(tasks)
+    .set({ status: 'dropped' })
+    .where(
+      inArray(
+        tasks.id,
+        stale.map((t) => t.id)
+      )
+    );
+  const owner = await ownerName();
+  for (const t of stale) await wakeOnTask(t, { done: false, owner });
 }
 
 /**
@@ -2972,6 +2981,10 @@ export async function finishTask(id: number, done: boolean, note: string | null)
       // it, such as hiring from an intake the owner just filled in.
       case 'task_done':
         if (t.staffId) await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note });
+        break;
+      // Work on another thread that waited on this task, whoever gave it.
+      case 'wake_parked':
+        await wakeOnTask(t, { done, owner });
         break;
       default:
         effect satisfies never;

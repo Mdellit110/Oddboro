@@ -657,6 +657,8 @@ export const threads = pgTable('threads', {
    * `resumeAt` is then the window's reset, and the owner's yes wakes it sooner.
    */
   heldBy: integer().references(() => asks.id),
+  /** The task whose end wakes this thread (`wakeOnTask`). Never set alongside `resumeAt`. */
+  resumeOnTask: integer().references(() => tasks.id),
   /**
    * The key of each run that put work here from outside the thread: a hand-off,
    * held or not, or a goal's plan (`keepRun` in threads.ts).

@@ -25,6 +25,7 @@ import {
   thread,
   threadFolder,
   threadPart,
+  parkedTitles,
   waitingFor,
   workCalled,
   waitingOn,
@@ -33,6 +34,7 @@ import {
   type ThreadWaiting
 } from './threads.ts';
 import { THREADS_DIR, workName } from './work-paths.ts';
+import { clockTime, zoneName } from './time.ts';
 import { GOAL_IS_LIVE } from './goal-words.ts';
 
 /** One hand-off in a thread, as the hub's brief tells it. */
@@ -67,6 +69,8 @@ export type ThreadStory = {
   said: OwnerSaid[];
   /** The name of the Odd that leads it. */
   lead: string;
+  /** The title of the task whose end wakes it. */
+  parkedOn?: string;
 };
 
 /** The one place a decision becomes what an Odd reads: a colleague reads nothing of an ask beyond this. */
@@ -189,7 +193,8 @@ export async function threadStory(t: ThreadRow): Promise<ThreadStory> {
       : undefined,
     serving: serving?.map((s) => `${s.name}: ${s.part}`),
     said: await saidOn(t.id),
-    lead: name(t.hubId)
+    lead: name(t.hubId),
+    parkedOn: (await parkedTitles([t])).get(t.id)
   };
 }
 
@@ -250,6 +255,16 @@ function standsLines(t: ThreadRow): string[] {
   return t.status !== 'open' ? [`Where it stands: ${LISTED[t.status]}.`, ''] : [];
 }
 
+/** What the work waits for. Without it, a pick-up cannot tell parked work from stalled work. */
+function parkedLines(t: ThreadRow, parkedOn: string | undefined): string[] {
+  if (parkedOn)
+    return [
+      `It is parked until {owner} finishes or drops "${flat(parkedOn)}". You pick it up then.`,
+      ''
+    ];
+  return t.resumeAt ? [`It picks back up at ${clockTime(t.resumeAt)} ${zoneName()}.`, ''] : [];
+}
+
 /**
  * What a lead knows of a thread it leads, from its story: what it is for,
  * whether it has ended, the history, bounded to each step's title, outcome and
@@ -263,7 +278,7 @@ export function threadKnown(b: {
   shown?: number[];
   lastSteps?: number;
 }): string[] {
-  const { thread: t, steps, latest, goal, waiting, plan, serving, said } = b.story;
+  const { thread: t, steps, latest, goal, waiting, plan, serving, said, parkedOn } = b.story;
   return [
     '',
     `## Work ${t.id}`,
@@ -273,6 +288,7 @@ export function threadKnown(b: {
     `You lead this work: you started it, and you pick each next step and who does it.${goal ? ` It serves the goal "${goal}".` : ''}`,
     '',
     ...standsLines(t),
+    ...parkedLines(t, parkedOn),
     'Steps so far:',
     '',
     ...stepLines(steps, b.lastSteps),
@@ -338,7 +354,7 @@ export function threadBrief(b: { story: ThreadStory; shown?: number[] }): string
     'Move it on one of these ways, then finish this run:',
     '',
     `1. hand_off the next piece to a colleague; it goes on ${called}, and you pick up when they finish. To check work, prefer a reviewer who did not do it. End with "Outcome: done": this run's part is done, and ${called} stays open.`,
-    '2. resume_at a time, when the next step should wait for one. End with "Outcome: done" too.',
+    '2. resume_at a time, when the next step should wait for one, or resume_at after_task, when it waits on a task {owner} has on other work. End with "Outcome: done" too.',
     '3. raise_ask or give_owner_a_task, when it needs {owner}. Their answer brings you back here. End with "Outcome: waiting", since it now waits on them.',
     '4. If the work is done, say what came of it and end with "Outcome: done".',
     ''

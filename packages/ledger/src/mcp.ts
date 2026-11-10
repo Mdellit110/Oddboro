@@ -77,6 +77,7 @@ import {
   switchesSaid
 } from './access-words.ts';
 import { handOff } from './hand-offs.ts';
+import { parkOnTask } from './task-parking.ts';
 import {
   APPLIES_TO_MAX,
   CITE_FIRST,
@@ -510,6 +511,11 @@ const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
  */
 const notHanded = (why: string) => ({
   ...text(`Nothing was handed off yet. ${why}`),
+  isError: true
+});
+/** A resume_at that parked nothing: an error, so the Odd cannot read it as parked. */
+const notParked = (why: string) => ({
+  ...text(`This work was not parked. ${why}`),
   isError: true
 });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -1712,7 +1718,7 @@ if (HANDS_OFF.tool) {
     tool(
       'resume_at',
       {
-        description: `Pick work ${THREAD_ID} back up at a time you set: the office starts a fresh run of yours on it then, with its history. Use it when the next step has to wait for a time, not for a colleague or for ${OWNER}. A new time replaces the old. Then finish this run.`,
+        description: `Pick work ${THREAD_ID} back up at a time you set, or when a task ends: the office starts a fresh run of yours on it then, with its history. Use it when the next step has to wait for a time, or for a task on ${OWNER}'s desk on other work, not for a colleague or for ${OWNER} on this work. A new time or task replaces the old. Then finish this run.`,
         inputSchema: {
           at: z.string().optional().describe(`${ZONE}: "18:50" for today, or "2026-11-02 18:50".`),
           in_minutes: z
@@ -1721,10 +1727,26 @@ if (HANDS_OFF.tool) {
             .min(1)
             .max(10_080)
             .optional()
-            .describe('Instead of at: how many minutes from now.')
+            .describe('Instead of at: how many minutes from now.'),
+          after_task: z
+            .number()
+            .int()
+            .optional()
+            .describe(
+              `Instead of a time: the number of a task on ${OWNER}'s desk that is on other work. You pick this work up when they finish it or drop it.`
+            )
         }
       },
-      async ({ at, in_minutes }) => {
+      async ({ at, in_minutes, after_task }) => {
+        if (after_task !== undefined) {
+          if (at !== undefined || in_minutes !== undefined)
+            return notParked('Give after_task alone, or a time alone, not both.');
+          const parked = await parkOnTask(ME, THREAD_ID, after_task);
+          if ('problem' in parked) return notParked(parked.problem);
+          return text(
+            `Work ${THREAD_ID} picks back up when ${OWNER} finishes or drops "${parked.title}".`
+          );
+        }
         const when =
           in_minutes !== undefined
             ? new Date(Date.now() + in_minutes * 60_000)

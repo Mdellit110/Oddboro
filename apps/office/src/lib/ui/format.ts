@@ -55,15 +55,19 @@ export type Work = {
   resumeAt?: string | Date;
   /** Paused for the plan's usage window, not by the lead's own choice. */
   held: boolean;
+  /** The title of the owner's task it waits on. */
+  parkedOn?: string;
 };
 
 const WORK: Record<ThreadStage, (w: Work) => { text: string; yours: boolean }> = {
   under_way: (w) => ({
-    text: !w.resumeAt
-      ? `With ${w.holder}`
-      : w.held
-        ? `Paused until your Claude plan's window resets at ${when(w.resumeAt)}`
-        : `${w.lead} picks it up at ${when(w.resumeAt)}`,
+    text: w.parkedOn
+      ? `Starts when you finish "${w.parkedOn}"`
+      : !w.resumeAt
+        ? `With ${w.holder}`
+        : w.held
+          ? `Paused until your Claude plan's window resets at ${when(w.resumeAt)}`
+          : `${w.lead} picks it up at ${when(w.resumeAt)}`,
     yours: false
   }),
   waiting_on_you: () => ({ text: 'Waiting on you', yours: true }),

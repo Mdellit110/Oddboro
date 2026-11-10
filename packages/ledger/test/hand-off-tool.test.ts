@@ -850,3 +850,53 @@ test("an Odd that names GitHub's address with a key header gets the catalog's Gi
   const byAddress = (await db.select().from(connectors)).filter((x) => x.id !== 'github');
   assert.ok(!byAddress.some((x) => x.config.url?.includes('githubcopilot')));
 });
+
+test("resume_at after_task parks on another work's open task, and refuses one done, on this work, or missing", async () => {
+  await db.insert(staff).values(odd('tess', 'Tess'));
+  const work = async (title: string) =>
+    (await db.insert(threads).values({ title, hubId: 'tess', holderId: 'tess' }).returning())[0];
+  const mine = await work('Plan the menu');
+  const other = await work('Book the caterer');
+  const task = async (title: string, threadId: number, status: 'open' | 'done' = 'open') =>
+    (
+      await db
+        .insert(tasks)
+        .values({ staffId: 'tess', title, why: 'w', steps: [], threadId, status })
+        .returning()
+    )[0];
+  const open = await task('Proof the menu', other.id);
+  const done = await task('Print the menu', other.id, 'done');
+  const onThis = await task('Taste the soup', mine.id);
+  const c = await toolServer('tess', { RUN_KEY: 'k-tess', THREAD_ID: String(mine.id) });
+  const park = (after_task: number, more: Record<string, unknown> = {}) =>
+    c.callTool({ name: 'resume_at', arguments: { after_task, ...more } });
+  const parkedOn = async (id: number) =>
+    (await db.select().from(threads).where(eq(threads.id, id)))[0].resumeOnTask;
+
+  const refusals: [Awaited<ReturnType<typeof park>>, RegExp][] = [
+    [await park(done.id), /Already finished: do it now, in this run\./],
+    [await park(onThis.id), /That task is on this work/],
+    [await park(999_999), /There is no task 999999\./],
+    [await park(open.id, { in_minutes: 5 }), /after_task alone/],
+    [await park(open.id, { at: '18:50' }), /after_task alone/]
+  ];
+  for (const [r, why] of refusals) {
+    assert.equal(r.isError, true, said(r));
+    assert.match(said(r), why);
+    assert.equal(await parkedOn(mine.id), null, said(r));
+  }
+
+  const r = await park(open.id);
+  assert.ok(!r.isError, said(r));
+  assert.match(
+    said(r),
+    new RegExp(`Work ${mine.id} picks back up when .+ drops "Proof the menu"\\.`)
+  );
+  assert.equal(await parkedOn(mine.id), open.id);
+
+  const notMine = await toolServer('tess', { RUN_KEY: 'k-tess-2', THREAD_ID: String(sale.id) });
+  const led = await notMine.callTool({ name: 'resume_at', arguments: { after_task: open.id } });
+  assert.equal(led.isError, true, said(led));
+  assert.match(said(led), /has ended, or is not work you lead/);
+  assert.equal(await parkedOn(sale.id), null);
+});

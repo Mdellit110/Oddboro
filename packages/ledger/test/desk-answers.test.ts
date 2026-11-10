@@ -502,8 +502,12 @@ test('a yes to a hire, a goal, a reply or a filter, or a no with no reason, to a
 
 test("a done or dropped task, a done task with no Odd, and a goal's pause, met or drop have the rows pinned here and reach the Odd as pinned, and a none names its Linear row", async () => {
   assert.deepEqual(OWNER_ANSWERS.task, {
-    done: { fromAccess: ['carry_out'], other: ['task_done'], noOdd: [] },
-    dropped: ['answer_back', { none: 'NEW-1703' }]
+    done: {
+      fromAccess: ['carry_out', 'wake_parked'],
+      other: ['task_done', 'wake_parked'],
+      noOdd: ['wake_parked']
+    },
+    dropped: ['answer_back', 'wake_parked', { none: 'NEW-1703' }]
   });
   const steps: Step[] = [{ text: 'Do it', done: false }];
   // A connect task from Ada's access ask.

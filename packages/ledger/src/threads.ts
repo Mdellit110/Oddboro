@@ -2,8 +2,8 @@
 // hand_off opens one with that Odd as the hub, and so does work it starts on
 // its own for a goal, or a plan it raises for one (`goalThread`). Only the hub's runs hand off
 // again, so it stays hub and spoke and never nests. The hub picks how it moves
-// on: a colleague finishing, a time it sets (the office clock wakes it), or the
-// owner answering something raised on it, or telling a colleague in its chat
+// on: a colleague finishing, a time it sets (the office clock wakes it), a task
+// on the owner's desk it parks on (task-parking.ts), or the owner answering something raised on it, or telling a colleague in its chat
 // something about the thread (`tellLead`). The server holds the limit. From a
 // chat or a job, the hub may continue a thread it leads instead of opening
 // one, even a finished one, which reopens for a new round of work. A round
@@ -98,7 +98,7 @@ export async function addFollowUp(q: Db, values: typeof followUps.$inferInsert):
 
 /**
  * Where a thread stands, from its runs: open while one has yet to end, the
- * hub parked it until a time, or an ask or task raised on it is still open,
+ * hub parked it until a time or a task's end, or an ask or task raised on it is still open,
  * else as its latest run ended, and open before any has. Its holder is
  * whoever has the newest run still to end, else the hub. An ended thread
  * stays as it ended. The one place a thread's status is worked out.
@@ -124,6 +124,7 @@ export async function settleThread(q: Db, id: number): Promise<void> {
   const status: ThreadStatus =
     pending ||
     t.resumeAt ||
+    t.resumeOnTask ||
     !last?.outcome ||
     last.outcome === 'waiting' ||
     (await waitingOn(q, [id])).length
@@ -404,7 +405,9 @@ export async function answerHandOffs(
   if (!approved) {
     await db
       .update(threads)
-      .set({ status: 'stopped', endedAt: new Date() })
+      // The park goes with the round the owner stopped: a later plan reopens
+      // this work afresh, and must not find it still waiting on that task.
+      .set({ status: 'stopped', endedAt: new Date(), resumeOnTask: null })
       .where(eq(threads.id, a.threadId));
     return answerThread(
       a.threadId,
@@ -430,12 +433,13 @@ export async function answerHandOffs(
 
 /**
  * The hub sets when it picks the thread back up. Undefined when it is not the
- * hub's or has ended. The hub's own time replaces a hold for the usage window.
+ * hub's or has ended. The hub's own time replaces a hold for the usage window
+ * and a park on a task.
  */
 export async function parkThread(hubId: string, id: number, at: Date): Promise<Date | undefined> {
   const [row] = await db
     .update(threads)
-    .set({ resumeAt: at, heldBy: null })
+    .set({ resumeAt: at, heldBy: null, resumeOnTask: null })
     .where(and(eq(threads.id, id), eq(threads.hubId, hubId), isNull(threads.endedAt)))
     .returning({ at: threads.resumeAt });
   return row?.at ?? undefined;
@@ -809,6 +813,8 @@ export type ThreadLine = {
   resumeAt?: Date;
   /** Parked until the usage window resets, not at a time the hub set. */
   held: boolean;
+  /** The title of the task whose end wakes it. */
+  parkedOn?: string;
   waiting: ThreadWaiting[];
   runs: ThreadRun[];
 };
@@ -916,6 +922,20 @@ const STAGE: Record<ThreadStatus, ThreadStage> = {
 export const stageOf = (status: ThreadStatus, waiting: ThreadWaiting[]): ThreadStage =>
   waiting.length ? 'waiting_on_you' : STAGE[status];
 
+/** The title of the task each of these threads is parked on, by thread. */
+export async function parkedTitles(
+  rows: Pick<ThreadRow, 'id' | 'resumeOnTask'>[]
+): Promise<Map<number, string>> {
+  const parked = rows.filter((t) => t.resumeOnTask !== null).map((t) => t.id);
+  if (!parked.length) return new Map();
+  const found = await db
+    .select({ id: threads.id, title: tasks.title })
+    .from(threads)
+    .innerJoin(tasks, eq(threads.resumeOnTask, tasks.id))
+    .where(inArray(threads.id, parked));
+  return new Map(found.map((f) => [f.id, f.title]));
+}
+
 /**
  * A thread as the Goals window lists it, under its goal or in other work.
  * `hubId` leads it, `holderId` has it now, and `waiting` is what it raised
@@ -931,6 +951,8 @@ export type GoalThread = {
   resumeAt?: Date;
   /** Parked until the usage window resets, not at a time the hub set. */
   held: boolean;
+  /** The title of the task whose end wakes it. */
+  parkedOn?: string;
   waiting: ThreadWaiting[];
 };
 
@@ -945,6 +967,7 @@ export async function goalThreads(): Promise<GoalThread[]> {
   if (!rows.length) return [];
   const ids = rows.map((t) => t.id);
   const waiting = await waitingOn(db, ids);
+  const titles = await parkedTitles(rows);
   return rows.map((t) => {
     const its = waitingFor(waiting, t.id);
     return {
@@ -956,6 +979,7 @@ export async function goalThreads(): Promise<GoalThread[]> {
       stage: stageOf(t.status, its),
       resumeAt: t.resumeAt ?? undefined,
       held: t.heldBy !== null,
+      parkedOn: titles.get(t.id),
       waiting: its
     };
   });
@@ -974,6 +998,7 @@ export async function threadsFor(hubId: string, limit = 50): Promise<ThreadLine[
   const people = await db.select({ id: staff.id, name: staff.name }).from(staff);
   const name = (id: string) => people.find((p) => p.id === id)?.name ?? id;
   const waiting = await waitingOn(db, ids);
+  const titles = await parkedTitles(rows);
   const runs = await db
     .select()
     .from(followUps)
@@ -994,6 +1019,7 @@ export async function threadsFor(hubId: string, limit = 50): Promise<ThreadLine[
     stage: stageOf(t.status, waitingFor(waiting, t.id)),
     resumeAt: t.resumeAt ?? undefined,
     held: t.heldBy !== null,
+    parkedOn: titles.get(t.id),
     waiting: waitingFor(waiting, t.id),
     runs: runs
       .filter((f) => f.threadId === t.id)
