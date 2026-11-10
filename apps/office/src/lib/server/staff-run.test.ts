@@ -48,6 +48,7 @@ import {
   onPlatform,
   onWindows,
   ownerData,
+  ownerHome,
   plain,
   hide,
   rgBin,
@@ -180,15 +181,10 @@ test("the colleague's run a yes to keep going starts is handed the held work as 
   assert.match(told, /Plan it\./);
 });
 
-test("a Claude Code Odd's chat gets the arguments it always had, with the office's file tools in place of its own, plus the new instruction files' denies", async () => {
+test("a Claude Code Odd's chat gets the arguments it always had, with its rules, sandbox and system prompt in files, the office's file tools in place of its own, plus the new instruction files' denies", async () => {
   const run = await chatOf('cleo');
   const { args } = run;
-  const shown = plain(hide(args, '--mcp-config', '--settings', '--append-system-prompt'))
-    // The sessions folder Claude Code names after the Odd's folder, and what the
-    // home folder holds, differ from Mac to Mac.
-    .filter((a, i, all) => !(a.startsWith('Read(') && all.indexOf('--disallowedTools') < i))
-    .map((a) => (/^Read\(\/~\/\.claude\/projects\/[^/]+\/\*\*\)$/.test(a) ? '<sessions>' : a));
-  assert.deepEqual(shown, [
+  assert.deepEqual(plain(hide(args, '--mcp-config', '--settings', '--append-system-prompt-file')), [
     '-p',
     '--output-format',
     'stream-json',
@@ -197,35 +193,6 @@ test("a Claude Code Odd's chat gets the arguments it always had, with the office
     // The office carries its files, and it has no shell or web: no tool of its own at all.
     '--tools',
     '',
-    '--allowedTools',
-    'Read(/<home>/staff/cleo/**)',
-    'Read(/<home>/data/**)',
-    '<sessions>',
-    'Edit(/<home>/staff/cleo/**)',
-    'mcp__office',
-    'mcp__files',
-    '--disallowedTools',
-    // cb54187's instruction-file denies, plus Grok's, Codex's and Gemini's for an Odd that
-    // might move to one, each as the path and everything under it (`denyRules`).
-    ...[
-      'CLAUDE.md',
-      'CLAUDE.local.md',
-      '.claude',
-      '.grok',
-      'AGENTS.md',
-      '.mcp.json',
-      'AGENTS.override.md',
-      '.codex',
-      '.agents',
-      'GEMINI.md',
-      '.gemini'
-    ].flatMap((f) =>
-      [`/<home>/staff/cleo/${f}`, `/<home>/staff/cleo/**/${f}`].flatMap((p) => [
-        `Edit(${p})`,
-        `Edit(${p}/**)`
-      ])
-    ),
-    // No repository's hooks or config: those are refused only in a folder the owner gave it (`repoRunPaths`).
     '--permission-mode',
     'dontAsk',
     '--setting-sources',
@@ -243,13 +210,53 @@ test("a Claude Code Odd's chat gets the arguments it always had, with the office
     // No level picked: Medium (`effortFor`).
     '--effort',
     'medium',
-    '--append-system-prompt',
-    '<append-system-prompt>',
+    '--append-system-prompt-file',
+    '<append-system-prompt-file>',
     '--session-id',
     '<id>'
   ]);
-  // Each read deny, compared above only by its place, holds the folder itself and what is in it.
-  const denied = plain(args.slice(args.indexOf('--disallowedTools')));
+  const { allow, deny } = run.claudeSettings!.permissions;
+  // The sessions folder Claude Code names after the Odd's folder differs from Mac to Mac.
+  assert.deepEqual(
+    plain(allow).map((a) =>
+      /^Read\(\/~\/\.claude\/projects\/[^/]+\/\*\*\)$/.test(a) ? '<sessions>' : a
+    ),
+    [
+      'Read(/<home>/staff/cleo/**)',
+      'Read(/<home>/data/**)',
+      '<sessions>',
+      'Edit(/<home>/staff/cleo/**)',
+      'mcp__office',
+      'mcp__files'
+    ]
+  );
+  // What the home folder holds differs from Mac to Mac, so the read denies are compared apart.
+  assert.deepEqual(
+    plain(deny).filter((a) => !a.startsWith('Read(')),
+    // cb54187's instruction-file denies, plus Grok's, Codex's and Gemini's for an Odd that
+    // might move to one, each as the path and everything under it (`denyRules`).
+    [
+      'CLAUDE.md',
+      'CLAUDE.local.md',
+      '.claude',
+      '.grok',
+      'AGENTS.md',
+      '.mcp.json',
+      'AGENTS.override.md',
+      '.codex',
+      '.agents',
+      'GEMINI.md',
+      '.gemini'
+    ].flatMap((f) =>
+      [`/<home>/staff/cleo/${f}`, `/<home>/staff/cleo/**/${f}`].flatMap((p) => [
+        `Edit(${p})`,
+        `Edit(${p}/**)`
+      ])
+    )
+    // No repository's hooks or config: those are refused only in a folder the owner gave it (`repoRunPaths`).
+  );
+  // Each read deny holds the folder itself and what is in it.
+  const denied = plain(deny);
   assert.ok(denied.includes('Read(/~/.ssh)') && denied.includes('Read(/~/.ssh/**)'));
   // The office's file server, under this Node, holds the folders the rules above name.
   const dir = join(folder, 'staff', 'cleo');
@@ -264,6 +271,19 @@ test("a Claude Code Odd's chat gets the arguments it always had, with the office
     }
   });
 });
+
+test("a Claude Code run for an owner with hundreds of Claude Code projects fits on Windows' command line, each project's deny in its settings file", () =>
+  ownerHome(async (home) => {
+    const projects = join(home, '.claude', 'projects');
+    const named = (i: number) =>
+      join(projects, `-Users-someone-code-a-project-with-a-long-name-${i}`);
+    for (let i = 0; i < 400; i++) mkdirSync(named(i), { recursive: true });
+    const run = await chatOf('cleo');
+    // Windows quotes each argument and parts them with a space, 32,767 characters in all.
+    const line = run.args.reduce((n, a) => n + a.length + 3, 0);
+    assert.ok(line < 4_000, `the command line takes ${line} characters`);
+    assert.ok(run.claudeSettings!.permissions.deny.includes(`Read(${L.rulePath(named(399))}/**)`));
+  }));
 
 test("a Grok Odd's chat on a Mac starts grok sandboxed in its own folder, with no file, shell, web or image tool of its own, and only the office's MCP tools, its file tools among them", async () => {
   const run = await onPlatform('darwin', () => chatOf('gus'));
@@ -1156,14 +1176,12 @@ test("a lead's chat is told where its goal stands as it starts, and reads the go
   );
   assert.doesNotMatch(before.system, /^0$/m, 'an Odd that serves no goal gets no stray 0');
   assert.match(before.system, /Answer .+ from it, over anything you said earlier in this chat\./);
-  assert.ok(
-    before.args.includes(`Read(/${folder}/**)`),
-    "the lead's chat may read the goal's folder"
-  );
+  const { allow, deny } = before.claudeSettings!.permissions;
+  assert.ok(allow.includes(`Read(/${folder}/**)`), "the lead's chat may read the goal's folder");
   assert.ok(before.args.includes(folder), "the goal's folder is added to the lead's chat");
-  assert.ok(!before.args.includes(`Read(/${L.home('threads')})`), 'no deny rule covers it');
+  assert.ok(!deny.includes(`Read(/${L.home('threads')})`), 'no deny rule covers it');
   assert.ok(
-    !before.args.some((a) => a.startsWith(`Edit(/${folder}`)),
+    !allow.some((a) => a.startsWith(`Edit(/${folder}`)),
     "the lead's chat writes nothing there"
   );
 
@@ -1419,7 +1437,7 @@ test("an Odd signs in through the account it is on: its own folder for each, the
     const onWork = await chatOf('sam');
     assert.equal(onWork.configDir, join(accounts, 'claude', work.id));
     // Its own sessions stay readable; every other account's folder does not.
-    const denied = plain(onWork.args.slice(onWork.args.indexOf('--disallowedTools')));
+    const denied = plain(onWork.claudeSettings!.permissions.deny);
     assert.ok(denied.includes('Read(/<home>/accounts/codex)'), denied.join(' '));
     assert.ok(denied.includes('Read(/<home>/accounts/claude/office)'), denied.join(' '));
 

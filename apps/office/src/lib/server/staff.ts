@@ -1053,7 +1053,40 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   // The owner's pick for this Odd, or Medium; never below Medium for the Office Manager.
   const model = modelFor(who.agent, who.model);
   const effort = effortFor(who.agent, who.effort, who.role === MANAGER_ROLE, model);
-  function claudeArgs(env: NodeJS.ProcessEnv): string[] {
+  /** The run's permission rules, plugins and sandbox, as Claude Code reads them from `--settings`. */
+  function runSettings(env: NodeJS.ProcessEnv) {
+    return {
+      permissions: {
+        allow: [
+          ...readable(dir, reads, extraReads, claudeDir).map((p) => `Read(${rulePath(p)}/**)`),
+          // Edit rules cover every file-writing tool; Claude Code ignores Write(path).
+          ...writes.map((w) => `Edit(${rulePath(w)}/**)`),
+          ...(own.commands ? ['Bash'] : []),
+          ...(own.web ? ['WebSearch', 'WebFetch'] : []),
+          ...allowed
+        ],
+        deny: [
+          ...unreadable(who.id, dir, reads, extraReads, claudeDir),
+          ...denied.flatMap((p) => denyRules(['Edit'], rulePath(p)))
+        ]
+      },
+      enabledPlugins: pluginsOff(),
+      ...(tmp
+        ? {
+            sandbox: claudeSandbox({
+              reads: readable(dir, reads, extraReads, claudeDir).filter(
+                (p) => p !== DATA || data.length
+              ),
+              tmp,
+              denyWrite: [...data, ...denied],
+              network: own.network,
+              env
+            })
+          }
+        : {})
+    };
+  }
+  function claudeArgs(): string[] {
     return [
       '-p',
       '--output-format',
@@ -1068,68 +1101,53 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
         ...(own.commands ? ['Bash'] : []),
         ...(own.web ? ['WebSearch,WebFetch'] : [])
       ].join(','),
-      '--allowedTools',
-      ...readable(dir, reads, extraReads, claudeDir).map((p) => `Read(${rulePath(p)}/**)`),
-      // Edit rules cover every file-writing tool; Claude Code ignores Write(path).
-      ...writes.map((w) => `Edit(${rulePath(w)}/**)`),
-      ...(own.commands ? ['Bash'] : []),
-      ...(own.web ? ['WebSearch', 'WebFetch'] : []),
-      ...allowed,
-      '--disallowedTools',
-      ...unreadable(who.id, dir, reads, extraReads, claudeDir),
-      ...denied.flatMap((p) => denyRules(['Edit'], rulePath(p))),
       '--permission-mode',
       'dontAsk',
       '--setting-sources',
       'user',
       '--strict-mcp-config',
       '--mcp-config',
-      mcpFile,
+      runFiles.mcp,
       '--disable-slash-commands',
       '--settings',
-      JSON.stringify({
-        enabledPlugins: pluginsOff(),
-        ...(tmp
-          ? {
-              sandbox: claudeSandbox({
-                reads: readable(dir, reads, extraReads, claudeDir).filter(
-                  (p) => p !== DATA || data.length
-                ),
-                tmp,
-                denyWrite: [...data, ...denied],
-                network: own.network,
-                env
-              })
-            }
-          : {})
-      }),
+      runFiles.settings,
       ...workIn.flatMap((p) => ['--add-dir', p]),
       // The Odd's own model, or the office's Opus or Sonnet from setup.
       ...(model ? ['--model', model] : modelArgs()),
       ...(effort ? ['--effort', effort] : []),
-      '--append-system-prompt',
-      system.replaceAll(NOW, time),
+      '--append-system-prompt-file',
+      runFiles.prompt,
       ...(prior ? ['--resume', prior] : ['--session-id', randomUUID()])
     ];
   }
   const input = preface + say(message);
   /**
-   * The run's servers, the gateway's token among them, go to Claude Code in a
-   * file only the owner can read, in a folder no run reads, removed when the
-   * run ends: on the command line any program on this computer could read
-   * them with `ps`, an Odd's own commands included.
+   * The run's servers, settings and system prompt go to Claude Code in files
+   * only the owner can read, in a folder no run reads, removed when the run
+   * ends. On the command line, any program on this computer could read the
+   * servers' tokens with `ps`, an Odd's own commands included. And the read
+   * rules grow with every folder in Claude Code's own `projects`, which on
+   * Windows passed the 32,767 characters a command line may hold.
    */
-  const mcpFile = home('mcp', `${key}.json`);
-  function writeMcpFile(): () => void {
+  const runFiles = {
+    mcp: home('mcp', `${key}.json`),
+    settings: home('mcp', `${key}.settings.json`),
+    prompt: home('mcp', `${key}.prompt.md`)
+  };
+  function writeRunFiles(env: NodeJS.ProcessEnv): () => void {
     mkdirSync(home('mcp'), { recursive: true, mode: 0o700 });
-    writeFileSync(mcpFile, JSON.stringify({ mcpServers: servers }), { mode: 0o600 });
-    return () => rmSync(mcpFile, { force: true });
+    const mode = { mode: 0o600 };
+    writeFileSync(runFiles.mcp, JSON.stringify({ mcpServers: servers }), mode);
+    writeFileSync(runFiles.settings, JSON.stringify(runSettings(env)), mode);
+    writeFileSync(runFiles.prompt, system.replaceAll(NOW, time), mode);
+    return () => {
+      for (const f of Object.values(runFiles)) rmSync(f, { force: true });
+    };
   }
   /** A Claude Code run; with commands, their temp folder and the git template in it, made now and removed when the run ends. */
   function claudeLaunch(): Launch {
     const env = staffEnv(toolDir || undefined);
-    const dropMcp = writeMcpFile();
-    if (!tmp) return { args: claudeArgs(env), env, stdin: input, done: dropMcp };
+    if (!tmp) return { args: claudeArgs(), env, stdin: input, done: writeRunFiles(env) };
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
     const shell = shellEnv(tmp);
     mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
@@ -1137,12 +1155,13 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
     // own node options, which every node a command starts would take as its own.
     delete env.NODE_OPTIONS;
     Object.assign(env, { CLAUDE_CODE_TMPDIR: tmp, ...shell });
+    const dropFiles = writeRunFiles(env);
     return {
-      args: claudeArgs(env),
+      args: claudeArgs(),
       env,
       stdin: input,
       done: () => {
-        dropMcp();
+        dropFiles();
         rmSync(tmp, { recursive: true, force: true });
       }
     };
