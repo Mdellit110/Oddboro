@@ -1933,12 +1933,24 @@ function waitsOnOwnRun(): SQL {
  */
 export const runsGoing = new Set<string>();
 
+/** The wait a lead's run ended as it started: the task's title, or the time it was parked until. */
+export type Unparked = { task: string } | { at: Date };
+
 /**
  * Claim a follow-up, and return it as claimed: an answer that joined it after
  * it was listed is in its note (`answerThread`). Undefined when something else
  * already started it, or it waits (`waitsOnOwnRun`).
+ *
+ * A thread stays parked only while no run of its lead's on it has started
+ * since it parked, so the claim of one ends the park, and returns the wait it
+ * ended for the run's brief (`unparked`). Without it, work a hand-back or the
+ * owner's words picked up stayed parked on a task that might never end, and
+ * that task's end woke the finished work again. A colleague's run leaves the
+ * lead's park alone, and so does a usage-window hold, which is the office's.
  */
-export async function startFollowUp(id: number): Promise<FollowUpRow | undefined> {
+export async function startFollowUp(
+  id: number
+): Promise<(FollowUpRow & { unparked?: Unparked }) | undefined> {
   return db.transaction(async (tx) => {
     // The thread is locked, so two claims on it at once cannot each miss the
     // other's run starting, and both go.
@@ -1946,18 +1958,37 @@ export async function startFollowUp(id: number): Promise<FollowUpRow | undefined
       .select({ threadId: followUps.threadId })
       .from(followUps)
       .where(eq(followUps.id, id));
-    if (on?.threadId)
-      await tx
-        .select({ id: threads.id })
-        .from(threads)
-        .where(eq(threads.id, on.threadId))
-        .for('update');
+    const [t] = on?.threadId
+      ? await tx
+          .select({
+            hubId: threads.hubId,
+            resumeOnTask: threads.resumeOnTask,
+            resumeAt: threads.resumeAt,
+            heldBy: threads.heldBy
+          })
+          .from(threads)
+          .where(eq(threads.id, on.threadId))
+          .for('update')
+      : [];
     const [claimed] = await tx
       .update(followUps)
       .set({ startedAt: new Date() })
       .where(and(eq(followUps.id, id), isNull(followUps.startedAt), not(waitsOnOwnRun())))
       .returning();
-    return claimed;
+    if (!claimed?.threadId || !t || claimed.staffId !== t.hubId) return claimed;
+    const timed = t.heldBy === null ? t.resumeAt : null;
+    if (t.resumeOnTask === null && timed === null) return claimed;
+    const [task] = t.resumeOnTask
+      ? await tx.select({ title: tasks.title }).from(tasks).where(eq(tasks.id, t.resumeOnTask))
+      : [];
+    await tx
+      .update(threads)
+      .set({ resumeOnTask: null, ...(timed ? { resumeAt: null } : {}) })
+      .where(eq(threads.id, claimed.threadId));
+    return {
+      ...claimed,
+      unparked: task ? { task: task.title } : timed ? { at: timed } : undefined
+    };
   });
 }
 

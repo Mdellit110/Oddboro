@@ -3,19 +3,37 @@
 // says what its run is told.
 import {
   callResultText,
+  clockTime,
   FOLDER_SAID,
   goalWhen,
   home,
   modelSection,
   shownFolder,
   SWITCH_NAMES,
-  switchesSaid
+  switchesSaid,
+  zoneName
 } from '@oddboro/ledger';
-import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow } from '@oddboro/ledger';
-import { ownerAnswers, pickedUpLine } from '@oddboro/ledger/desk-answers';
+import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow, Unparked } from '@oddboro/ledger';
+import { flat, ownerAnswers, pickedUpLine } from '@oddboro/ledger/desk-answers';
 import { workPath } from '@oddboro/ledger/work-paths';
 import { filterWords } from '@oddboro/ledger/filters';
 import { ACT_WRITE } from './house.ts';
+
+/**
+ * The wait this run's start ended (`startFollowUp`). The run is told, or it
+ * would trust a park the office no longer holds and wait for a wake that never
+ * comes.
+ */
+export function waitEnded(u: Unparked): string[] {
+  const until =
+    'task' in u
+      ? `{owner} finished or dropped "${flat(u.task)}"`
+      : `${clockTime(u.at)} ${zoneName()}`;
+  return [
+    `This work was parked until ${until}. That wait ended as this run started, so nothing brings you back for it now. If the work still needs to wait, park it again with resume_at.`,
+    ''
+  ];
+}
 
 /** The owner's answers a hub picks its thread up with, one a line (`answerThread`). */
 const answers = (note: string | null): string[] =>

@@ -118,6 +118,7 @@ import {
   type Agent,
   type StaffRow,
   type UsageKind,
+  type Unparked,
   clockTime,
   pokeMissed,
   zone,
@@ -181,7 +182,7 @@ import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.
 import { sandboxPaths } from './sandbox-paths.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house, stillOnDeskSection } from './house.ts';
-import { followUpBrief } from './follow-up-brief.ts';
+import { followUpBrief, waitEnded } from './follow-up-brief.ts';
 
 /** The owner's data folder, which every staffer may read, whatever tool it runs on. */
 const DATA = home('data');
@@ -1436,7 +1437,7 @@ function editBrief(path: string, shown: EditShown): string[] {
  * counts as failed, so the owner hears about it.
  */
 export async function followThrough(
-  f: FollowUpRow,
+  f: FollowUpRow & { unparked?: Unparked },
   a?: AskRow,
   r?: ReportRow,
   t?: TaskRow,
@@ -1569,6 +1570,8 @@ export async function followThrough(
         '',
         '{owner} is not in a chat with you.',
         '',
+        // Here, before the kind's own brief, so every kind of run that ended a park says so.
+        ...(f.unparked ? waitEnded(f.unparked) : []),
         ...(handed && colleague && thread
           ? handOffBrief({
               kind: handed.kind,

@@ -754,7 +754,7 @@ export const followUps = pgTable('follow_ups', {
   /** The owner's words: their reason, what to change, their feedback, or their note on a task. */
   note: text(),
   /**
-   * On a `task_done` follow-up, the titles of other work parked on the task,
+   * On a `task_done` or `carry_out` follow-up, the titles of other work parked on the task,
    * which picked up on its own as the task ended, so this run leaves it alone.
    * Office text, never the owner's words: it stays out of `note`.
    */

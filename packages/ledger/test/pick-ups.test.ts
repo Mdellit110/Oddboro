@@ -671,6 +671,12 @@ async function parksOn(lead: string, work: number, task: number) {
   const parked = await P.parkOnTask(lead, work, task);
   assert.ok('title' in parked, JSON.stringify(parked));
 }
+/** The lead's run on `f`, which parks its work on `task` as it goes, as resume_at does, then ends done. */
+async function runsAndParks(f: Row, task: number) {
+  assert.ok(await O.startFollowUp(f.id), `follow-up ${f.id} could not start`);
+  await parksOn(f.staffId, f.threadId ?? 0, task);
+  await O.finishFollowUp(f, 'work', 'done', 'Parked it.');
+}
 // A task the lead gave, on no work: the one kind on no work it may park on (`parkOnTask`).
 const aTask = (lead: string, title: string) =>
   O.giveTask(lead, { title, why: 'w', steps: ['Do it'] });
@@ -722,9 +728,8 @@ async function stoppedWhileParked(name: string) {
     .returning();
   const { lead, colleague, h, work } = await ownWork(name, goal.id);
   const task = await aTask(lead, `Task of ${name}`);
-  await parksOn(lead, work, task.id);
   await runs(h, 'done', 'Did it.');
-  await runs((await onThread(work, 'handed_back'))[0], 'done', 'Read it.');
+  await runsAndParks((await onThread(work, 'handed_back'))[0], task.id);
   await db.update(threads).set({ handOffsUsed: T.HAND_OFF_LIMIT }).where(eq(threads.id, work));
   const more = await H.handOff({
     from: lead,
@@ -735,8 +740,10 @@ async function stoppedWhileParked(name: string) {
   assert.ok('asked' in more, JSON.stringify(more));
   await O.decideAsk(more.asked, 'deny', null);
   assert.equal((await threadOf(work)).status, 'stopped');
+  // Read before the lead's pick-up, whose claim would end the park anyway.
+  const parkAfterStop = (await threadOf(work)).resumeOnTask;
   await runs((await onThread(work, 'resume'))[0], 'done', 'Said where it stands.');
-  return { lead, colleague, goalId: goal.id, work, task: task.id };
+  return { lead, colleague, goalId: goal.id, work, task: task.id, parkAfterStop };
 }
 type Stopped = Awaited<ReturnType<typeof stoppedWhileParked>>;
 
@@ -766,8 +773,8 @@ async function notHeldByPark(stopped: Stopped, plan: { id: number }) {
 }
 
 test('stopping work parked on a task stops it waiting on that task', async () => {
-  const { work } = await stoppedWhileParked('stop-clears');
-  assert.equal((await threadOf(work)).resumeOnTask, null);
+  const { parkAfterStop } = await stoppedWhileParked('stop-clears');
+  assert.equal(parkAfterStop, null);
 });
 
 test('work reopened by a plan while its task is still open is not held by the park the owner stopped', async () => {
@@ -817,16 +824,19 @@ test('a connect task the office drops wakes the work parked on it, and says it w
   assert.equal((await threadOf(work)).resumeOnTask, null);
 });
 
-test('a thread parked on a task stays open when its run ends done', async () => {
+test("a colleague's run leaves the lead's park, and a lead's run that parks again on the same task stays open and parked, and wakes once at the task's end", async () => {
   const { lead, h, work } = await ownWork('stays-open');
   const sign = await aTask(lead, 'Sign the banner');
   await parksOn(lead, work, sign.id);
   await runs(h, 'done', 'Drew it.');
+  assert.equal((await threadOf(work)).resumeOnTask, sign.id, "a colleague's run lifts no park");
   const [back] = await onThread(work, 'handed_back');
-  await runs(back, 'done', 'Parked it on the signing.');
+  await runsAndParks(back, sign.id);
   const after = await threadOf(work);
+  assert.equal(after.resumeOnTask, sign.id, 'a park made during the run outlives its claim');
   assert.equal(after.status, 'open');
   assert.equal(after.endedAt, null);
+  await O.finishTask(sign.id, true, null);
   await O.finishTask(sign.id, true, null);
   assert.equal((await onThread(work, 'resume')).length, 1, 'the wake found it still open');
 });
@@ -862,6 +872,122 @@ test("a parked thread's lead is told what it waits on", async () => {
 
   await parksOn(lead, work, check.id);
   assert.equal((await threadOf(work)).resumeAt, null, 'a task replaces the time');
+});
+
+/** The owner's words reaching `work`'s lead from its colleague's chat (`tellLead`): the lead's pick-up still to start. */
+async function toldLead(colleague: string, work: number): Promise<Row> {
+  const said = 'Go ahead without the signing.';
+  const told = await T.tellLead({
+    staffId: colleague,
+    threadId: work,
+    owner: 'Sam',
+    said,
+    words: said,
+    reading: 'Sam wants it done now.'
+  });
+  assert.ok('lead' in told, JSON.stringify(told));
+  const pickUp = (await onThread(work, 'resume')).find((f) => f.startedAt === null);
+  assert.ok(pickUp, "the owner's words started no pick-up");
+  return pickUp;
+}
+const parkedLine = async (work: number) =>
+  B.threadKnown({ story: await B.threadStory(await threadOf(work)) }).find((l) =>
+    l.startsWith('It is parked until')
+  );
+
+test("work parked on a task that the owner's words pick up ends when that run ends done, waits on nothing, and the task's later end wakes nothing", async () => {
+  const { lead, colleague, h, work } = await ownWork('go-ahead');
+  const sign = await aTask(lead, 'Sign\nthe poster');
+  await runs(h, 'done', 'Drew it.');
+  await runsAndParks((await onThread(work, 'handed_back'))[0], sign.id);
+  const goAhead = await toldLead(colleague, work);
+  const claimed = await O.startFollowUp(goAhead.id);
+  assert.deepEqual(claimed?.unparked, { task: 'Sign\nthe poster' });
+  assert.equal(await parkedLine(work), undefined, 'the run is not told it is still parked');
+  await O.finishFollowUp(goAhead, 'work', 'done', 'Went ahead.');
+  const after = await threadOf(work);
+  assert.equal(after.resumeOnTask, null);
+  assert.equal(after.status, 'done');
+  assert.notEqual(after.endedAt, null);
+  const card = (await T.threadsFor(lead)).find((t) => t.id === work);
+  assert.equal(card?.parkedOn, undefined);
+  assert.equal(card?.stage, 'done');
+  await O.finishTask(sign.id, false, null);
+  assert.equal((await onThread(work, 'resume')).length, 1, "the task's end woke nothing");
+});
+
+test('a hand-back that picks up work parked on a task ends the park, and its claim names the wait it ended', async () => {
+  const { lead, h, work } = await ownWork('hand-back');
+  const sign = await aTask(lead, 'Sign the flyer');
+  await parksOn(lead, work, sign.id);
+  await runs(h, 'done', 'Drew it.');
+  const [back] = await onThread(work, 'handed_back');
+  assert.deepEqual((await O.startFollowUp(back.id))?.unparked, { task: 'Sign the flyer' });
+  assert.equal((await threadOf(work)).resumeOnTask, null);
+  assert.equal(await parkedLine(work), undefined);
+});
+
+test('work parked on a time that the owner picks up early is parked no more, so the clock never wakes it', async () => {
+  const { lead, colleague, h, work } = await ownWork('early');
+  await runs(h, 'done', 'Drew it.');
+  const [back] = await onThread(work, 'handed_back');
+  assert.ok(await O.startFollowUp(back.id));
+  const at = new Date(Date.now() + 3_600_000);
+  assert.ok(await T.parkThread(lead, work, at));
+  await O.finishFollowUp(back, 'work', 'done', 'Parked it till later.');
+  const early = await toldLead(colleague, work);
+  const claimed = await O.startFollowUp(early.id);
+  assert.equal(claimed?.unparked && 'at' in claimed.unparked && +claimed.unparked.at, +at);
+  assert.equal((await threadOf(work)).resumeAt, null);
+  assert.ok(!(await T.parkedThreads()).some((p) => p.id === work), 'the clock has no wake for it');
+});
+
+test("work the usage window holds stays held whatever picks it up: the hold is the office's, not the lead's", async () => {
+  const { lead, colleague, work } = await ownWork('held');
+  const { ask: hold } = await O.raiseAsk(lead, {
+    title: 'Hold for the window',
+    why: 'w',
+    ifApproved: 'i'
+  });
+  const reset = new Date(Date.now() + 3_600_000);
+  await db
+    .update(threads)
+    .set({ heldBy: hold.id, resumeAt: reset, resumeOnTask: null })
+    .where(eq(threads.id, work));
+  const pickUp = await toldLead(colleague, work);
+  assert.equal((await O.startFollowUp(pickUp.id))?.unparked, undefined);
+  const after = await threadOf(work);
+  assert.equal(after.heldBy, hold.id);
+  assert.equal(after.resumeAt?.getTime(), reset.getTime());
+});
+
+test("a pick-up that waits on the lead's run still going ends no park, so the park that run made stands", async () => {
+  const { lead, colleague, h, work } = await ownWork('queued');
+  const sign = await aTask(lead, 'Sign the menu');
+  await runs(h, 'done', 'Drew it.');
+  const [back] = await onThread(work, 'handed_back');
+  assert.ok(await O.startFollowUp(back.id));
+  await parksOn(lead, work, sign.id);
+  const waiting = await toldLead(colleague, work);
+  assert.equal(await O.startFollowUp(waiting.id), undefined, 'it waits for the run going');
+  assert.equal((await threadOf(work)).resumeOnTask, sign.id);
+  await O.finishFollowUp(back, 'work', 'done', 'Parked it.');
+  assert.equal(
+    (await threadOf(work)).resumeOnTask,
+    sign.id,
+    'a pick-up never started ends no park'
+  );
+});
+
+test("a task's end that wakes parked work leaves its pick-up no wait to end", async () => {
+  const { lead, work } = await ownWork('woken');
+  const proof = await aTask(lead, 'Proof the menu');
+  await parksOn(lead, work, proof.id);
+  await O.finishTask(proof.id, true, null);
+  const [woken] = await onThread(work, 'resume');
+  const claimed = await O.startFollowUp(woken.id);
+  assert.ok(claimed);
+  assert.equal(claimed.unparked, undefined);
 });
 
 /**

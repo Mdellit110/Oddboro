@@ -1733,7 +1733,7 @@ if (HANDS_OFF.tool) {
             .int()
             .optional()
             .describe(
-              `Instead of a time: the number of a task on ${OWNER}'s desk that is on other work. You pick this work up when they finish it or drop it.`
+              `Instead of a time: the number of a task on ${OWNER}'s desk, on other work, that you gave or that is on work you are on. You pick this work up when they finish it or drop it.`
             )
         }
       },
