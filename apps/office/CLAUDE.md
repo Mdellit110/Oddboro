@@ -861,7 +861,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    one at a time per sign-in (`once`), since a service may end a sign-in whose
    refresh token arrives twice. For the same reason `steadyFetch` retries only
    a request that never left this computer; one whose answer was lost is not
-   retried within one request. The same provider signs the owner in to New
+   retried within one request. GitHub refuses a token request with 200 and its
+   error in the body, which the SDK would drop without a word, so `githubRefusal`
+   hands the SDK a 400 and logs GitHub's reason, and `freshAccess` logs any
+   renewal that did not take. The same provider signs the owner in to New
    Altitude (see "A New Altitude account"). Gmail and Google
    Drive are `builtin` connectors (migration `0009_google`): the office serves
    their tools itself (`src/lib/server/google/`, connected in-process by
