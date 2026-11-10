@@ -211,7 +211,7 @@ test("at Draft, Read and write passes reads on and holds each change for the own
   // A plain Approve never makes the call: only the office's own, from the desk.
   await assert.rejects(L.approveAsk(calls[0].id, null, {}), /Approve the call from its card/);
   // On the owner's yes the office makes that exact call, and the Odd carries on with the result.
-  const result = await makeCall(calls[0].call);
+  const result = await makeCall(calls[0].call, calls[0].staffId);
   assert.deepEqual({ ok: result.ok, text: result.text }, { ok: true, text: 'captured' });
   assert.equal(await L.approveCall(calls[0].id, { ...calls[0].call, result }), true);
   const [carry] = await L.pg`select kind from follow_ups where ask_id = ${calls[0].id}`;

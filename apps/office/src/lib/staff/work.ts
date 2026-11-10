@@ -80,6 +80,7 @@ export const OFFICE_TOOL_WORDS: Record<string, string> = {
   my_goals: 'Checking its goals',
   my_jobs: 'Checking its jobs',
   leave_office: 'Asking you to let it leave',
+  withdraw: 'Taking things off your desk',
   my_pokes: 'Checking its pokes',
   office_report: 'Reading the office report',
   poke_owner: 'Setting a poke for you',

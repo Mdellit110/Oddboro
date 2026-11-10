@@ -5,8 +5,11 @@
 // polls. Every hand-off is a step in a thread (threads.ts): the colleague's run
 // cannot hand off (mcp.ts), the hub's pick-up may hand on in the same thread,
 // and both work at Draft at most (staff.ts in the office app).
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from './db.ts';
+import { mailAttachment, mailAttachmentPath } from './mail-attachments.ts';
 import {
   asks,
   followUps,
@@ -39,7 +42,8 @@ type FollowUpRow = typeof followUps.$inferSelect;
 export async function handOff(h: {
   from: string;
   to: string;
-  work: { title: string; brief: string };
+  /** `files`: paths in the giver's own folder, already checked (`mailAttachments`). */
+  work: { title: string; brief: string; files?: string[] };
   thread: ThreadFor;
   /** The key of the run handing it off (`runsGoing`). */
   run?: string;
@@ -71,6 +75,30 @@ export async function handOff(h: {
     });
     return { id, thread: t.id, left: HAND_OFF_LIMIT - t.handOffsUsed };
   });
+}
+
+/**
+ * The files a hand-off carries, copied from the giver's own folder into its
+ * part of the thread's folder, under `handed/` at the same path, as the
+ * colleague's run starts: the office's own process does it, since a run's
+ * sandbox may not reach a thread opened after it began. Each is checked
+ * again, so a file gone or changed into a link since is left out. Gives each
+ * copy's full path, and each file no longer there.
+ */
+export function handFiles(h: HandOff, thread: number): { copied: string[]; missing: string[] } {
+  const out = { copied: [] as string[], missing: [] as string[] };
+  for (const p of h.files ?? []) {
+    const f = mailAttachment(h.from, p);
+    if ('problem' in f) {
+      out.missing.push(p);
+      continue;
+    }
+    const to = join(threadPart(thread, h.from), 'handed', f.path);
+    mkdirSync(dirname(to), { recursive: true });
+    copyFileSync(mailAttachmentPath(h.from, f), to);
+    out.copied.push(to);
+  }
+  return out;
 }
 
 /**
@@ -419,6 +447,8 @@ export function handOffBrief(b: {
   goal?: Pick<typeof goals.$inferSelect, 'title' | 'why' | 'doneWhen'>;
   /** On a pick-up, the other results it picks up too (`resultsToJoin`), oldest first. */
   joined?: Back[];
+  /** On a hand-off, the files it carries, as `handFiles` copied them. */
+  files?: { copied: string[]; missing: string[] };
 }): string[] {
   const { h, colleague, goal } = b;
   const folder = threadFolder(b.thread);
@@ -431,6 +461,19 @@ export function handOffBrief(b: {
       '',
       h.brief,
       '',
+      ...(b.files?.copied.length
+        ? [
+            `- Files ${colleague.name} handed you with it, to read:`,
+            ...b.files.copied.map((f) => `  - ${f}`),
+            ''
+          ]
+        : []),
+      ...(b.files?.missing.length
+        ? [
+            `- Files ${colleague.name} named that are no longer in their folder: ${b.files.missing.join(', ')}. Say so in your reply if the work needs them.`,
+            ''
+          ]
+        : []),
       ...(goal
         ? [
             `It is for {owner}'s goal "${goal.title}".`,

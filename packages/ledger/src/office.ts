@@ -116,7 +116,14 @@ import {
 } from './access-words.ts';
 import { filterWords, sameCriteria, type GmailFilter } from './filter-words.ts';
 import { nextRun, zone } from './time.ts';
-import { isGrantable, OFFICE_TOOLS, STARTER_TOOLS, tickable, yesOrNo } from './tools.ts';
+import {
+  isGrantable,
+  OFFICE_TOOLS,
+  ON_BY_DEFAULT,
+  STARTER_TOOLS,
+  tickable,
+  yesOrNo
+} from './tools.ts';
 import { lookSignature, type DrawnPart, type LookSpec } from '@oddboro/sprites/look';
 import type { PersonaLink } from './personas.ts';
 
@@ -743,7 +750,9 @@ export async function hire(h: Hire): Promise<StaffRow> {
   let id = base;
   // An Odd that left keeps its id, so it can come back as itself.
   for (let i = 2; await anyStaffer(id); i++) id = `${base}-${i}`;
-  const tools = h.tools?.filter(isGrantable);
+  // A hire that names its tools still starts with the ones on by default.
+  const named = h.tools?.filter(isGrantable);
+  const tools = named && [...new Set([...ON_BY_DEFAULT, ...named])];
   if (h.look) {
     const twin = await lookTaken(h.look);
     if (twin) throw new Error(`${twin.name} already looks exactly like that. Redraw first.`);
@@ -1376,7 +1385,7 @@ export async function raiseCall(
   if (there) return { ask: there, already: true };
   const { ask } = await raiseAsk(place.staffId, {
     kind: 'call',
-    title: `Use ${call.tool} in ${service}`,
+    title: call.said ? `${call.said} in ${service}` : `Use ${call.tool} in ${service}`,
     why: `Called while working at Drafts for your yes, so the office held it for you.`,
     ifApproved: `The office makes this exact call to ${service}, and the work carries on with what it returns.`,
     call,

@@ -10,6 +10,8 @@ export type OfficeTool = {
   /** What it lets a staffer do, for the owner. */
   does: string;
   always?: boolean;
+  /** It shapes the run's prompt (`see_office`) and is no tool the Odd calls. */
+  prompt?: boolean;
 };
 
 export const OFFICE_TOOLS: readonly OfficeTool[] = [
@@ -39,6 +41,12 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     id: 'leave_office',
     name: 'Ask to leave',
     does: 'Asks you to let it go from the office, when you tell it to leave. It goes only on your yes.',
+    always: true
+  },
+  {
+    id: 'withdraw',
+    name: 'Take things off your desk',
+    does: 'Takes its own open asks and tasks off your desk, when you tell it to in chat.',
     always: true
   },
   {
@@ -132,6 +140,12 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     does: 'Brings you a hire, ready to open in the hire window.'
   },
   {
+    id: 'see_office',
+    name: "Sees who's in the office",
+    does: 'Sees every Odd here by name and role, so it can hand work to the right one, or ask you which one you mean.',
+    prompt: true
+  },
+  {
     id: 'office_report',
     name: 'Office report',
     does: 'Sees what every Odd did: jobs, runs, asks and tasks.'
@@ -168,8 +182,16 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
   }
 ];
 
+/**
+ * Tools every new hire starts with, whatever tools its hire names, which the
+ * owner may then take off. Migration 0017 gave `see_office` to every Odd
+ * already hired.
+ */
+export const ON_BY_DEFAULT = ['see_office'];
+
 /** What a new hire starts with. The owner adds or removes from there. */
 export const STARTER_TOOLS = [
+  ...ON_BY_DEFAULT,
   'search_ledger',
   'give_owner_a_task',
   'find_connectors',

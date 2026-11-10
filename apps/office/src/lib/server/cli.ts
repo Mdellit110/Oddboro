@@ -64,7 +64,7 @@ export type CliRun = {
   allowed: string[];
   /** The longest the run may take before the office cuts it. */
   timeoutMs: number;
-  /** Pictures sent with the message: an office run's (`runAsOffice`), never an Odd's. */
+  /** Pictures sent with the message: an office run's (`runAsOffice`), or those the owner attached in a Codex Odd's chat. */
   images?: RunImage[];
   /** An office run: no tools to read with, and no MCP. */
   bare?: boolean;

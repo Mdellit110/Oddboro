@@ -112,6 +112,7 @@ export async function sharing(q: Db, h: HeldHandOff & { threadId: number }): Pro
     from: h.from,
     title: h.title,
     brief: h.brief,
+    ...(h.files?.length ? { files: h.files } : {}),
     ...(withheld.length ? { withheld } : {}),
     ...(kept.size ? { kept: [...kept.values()] } : {})
   };
