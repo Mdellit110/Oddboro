@@ -130,7 +130,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    it carry on instead, and no Odd reads a no to it. An access ask's Approve reads Connect: once
    approved, the same open card becomes the connect task it made (the decision's answer names
    it, `task`), so the owner goes straight on to Sign in. A task an Odd gave them, marked done, goes back to that Odd to
-   pick up from (an intake becomes the hire it was for). A report has Reply and
+   pick up from (an intake becomes the hire it was for). One given in a chat
+   brings the owner's message there too (`taskDoneBrief` in `src/lib/server/follow-up-brief.ts`). A report has Reply and
    Read: feedback is a reply in its writer's chat, not a form on the desk. Opening
    any item selects it in its sender's chat on the end side. Selecting text in a report offers Chat (`src/lib/ui/SelectToChat.svelte`):
    the owner picks any Odd, and its chat opens with the passage quoted as a
