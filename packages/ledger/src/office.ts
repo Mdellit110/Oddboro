@@ -3122,6 +3122,8 @@ export async function giveTask(
     run?: string;
     /** The colleague whose handed-back work the lead gave this from (`VIA`). */
     via?: string;
+    /** In a chat, the owner's message (`OWNER_SAID`), which the run that picks it up reads. */
+    ownerSaid?: string;
     /** The office gives it in the Odd's name (a plan's steps, a reconnect), so it may repeat a title. */
     byOffice?: true;
   }
@@ -3142,7 +3144,8 @@ export async function giveTask(
         steps,
         handOffId: t.handOffId,
         threadId: t.threadId,
-        via: t.via
+        via: t.via,
+        ownerSaid: t.ownerSaid
       })
       .returning();
     if (row.threadId) {

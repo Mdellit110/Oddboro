@@ -860,6 +860,7 @@ if (has('give_owner_a_task'))
         steps: all,
         attach: files.paths,
         via: VIA,
+        ownerSaid: OWNER_SAID,
         ...on
       });
       return text(`Task ${t.id} is on ${OWNER}'s desk. The ledger records it when they finish it.`);
