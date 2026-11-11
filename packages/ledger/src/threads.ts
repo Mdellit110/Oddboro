@@ -493,8 +493,15 @@ export async function wakeThread(id: number): Promise<void> {
  */
 export async function answerThread(id: number, answer: string, askId?: number): Promise<void> {
   await db.transaction(async (tx) => {
-    const [t] = await tx.select({ hubId: threads.hubId }).from(threads).where(eq(threads.id, id));
-    if (!t) return;
+    const [t] = await tx
+      .select({ hubId: threads.hubId, leftAt: staff.leftAt })
+      .from(threads)
+      .innerJoin(staff, eq(staff.id, threads.hubId))
+      .where(eq(threads.id, id));
+    // A lead that left the office runs nothing, so nothing wakes it: its
+    // pick-up would wait for ever, or run on work its leaving stopped once it
+    // came back (`removeOdd`).
+    if (!t || t.leftAt) return;
     // Locked, so a claim cannot start it between this look and the join: the
     // claim waits, then returns the joined note, or it went first and this
     // answer writes a pick-up of its own.

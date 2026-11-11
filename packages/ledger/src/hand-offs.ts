@@ -164,7 +164,8 @@ export async function handOff(h: {
 /**
  * When a hand-off ends, however it ended, its result goes back to the staffer
  * that handed it: the follow-up to write, in the same transaction as the
- * outcome. A restart that cut it off counts too, so nobody waits forever.
+ * outcome, unless that staffer left the office (`leadLeft`). A restart that
+ * cut it off counts too, so nobody waits forever.
  */
 export function handBack(
   f: FollowUpRow,
@@ -180,6 +181,22 @@ export function handBack(
     handOff: back,
     threadId: f.threadId
   };
+}
+
+/**
+ * The name of a lead that left the office, or undefined while it works here.
+ * No result goes back to one: it runs nothing, so the result would wait
+ * forever. The row is locked, so a removal under way either lands first, and
+ * this sees it, or waits for the hand-back to commit and then ends it
+ * (`removeOdd`).
+ */
+export async function leadLeft(q: Db, id: string): Promise<string | undefined> {
+  const [lead] = await q
+    .select({ name: staff.name, leftAt: staff.leftAt })
+    .from(staff)
+    .where(eq(staff.id, id))
+    .for('share');
+  return lead?.leftAt ? lead.name : undefined;
 }
 
 /**
@@ -300,7 +317,8 @@ export async function resultsToJoin(f: FollowUpRow): Promise<FollowUpRow[]> {
 
 /**
  * The owner answered something a hand-off put on the desk, and no run follows:
- * a denial, a dropped task, an approved hire. The answer itself goes back.
+ * a denial, a dropped task, an approved hire. The answer itself goes back,
+ * unless the lead left the office: then nothing would ever pick it up.
  */
 export async function handBackLater(
   handOffId: number,
@@ -312,8 +330,11 @@ export async function handBackLater(
     .from(followUps)
     .where(and(eq(followUps.id, handOffId), eq(followUps.kind, 'hand_off')));
   const back = origin && handBack(origin, outcome, answer);
-  if (back?.handOff)
-    await addFollowUp(db, { ...back, handOff: { ...back.handOff, answered: true } });
+  if (!back?.handOff) return;
+  const handOff = { ...back.handOff, answered: true };
+  await db.transaction(async (tx) => {
+    if (!(await leadLeft(tx, back.staffId))) await addFollowUp(tx, { ...back, handOff });
+  });
 }
 
 /** Where a hand-off stands: not started yet, being worked on, or how it ended. */
