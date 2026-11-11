@@ -683,6 +683,8 @@ export const threads = pgTable('threads', {
    * `resumeAt` is then the window's reset, and the owner's yes wakes it sooner.
    */
   heldBy: integer().references(() => asks.id),
+  /** The task whose end wakes this thread (`wakeOnTask`). Never set alongside `resumeAt`. */
+  resumeOnTask: integer().references(() => tasks.id),
   /**
    * The key of each run that put work here from outside the thread: a hand-off,
    * held or not, or a goal's plan (`keepRun` in threads.ts).
@@ -738,9 +740,9 @@ export type HandOff = {
   /** The colleague's own tools that someone else on the thread lacks: it must not write their contents there. */
   kept?: string[];
   /**
-   * Files from the giver's own folder, by path there (`mailAttachments`
-   * checks them), which the office copies into the giver's part of the
-   * thread's folder, under `handed/`, as the colleague's run starts.
+   * The files named for this work, as paths inside the thread's folder. A
+   * hand-off a v0.0.9 office stored holds paths in the giver's own folder
+   * instead; the colleague's brief names those as no longer there.
    */
   files?: string[];
   outcome?: Outcome;
@@ -781,6 +783,23 @@ export const followUps = pgTable('follow_ups', {
   edit: jsonb().$type<FileEdit>(),
   /** The owner's words: their reason, what to change, their feedback, or their note on a task. */
   note: text(),
+  /**
+   * On a `task_done` or `carry_out` follow-up, the titles of other work parked on the task,
+   * which picked up on its own as the task ended, so this run leaves it alone.
+   * Office text, never the owner's words: it stays out of `note`.
+   */
+  pickedUp: text().array(),
+  /**
+   * The task the thread was parked on when this run's claim ended the park
+   * (`startFollowUp`). Kept so a run that fails can give the wait back
+   * (`finishFollowUp`): only a run that ends without failing, or the wait's own end, ends it.
+   */
+  unparkedTask: integer().references(() => tasks.id),
+  /**
+   * The time the thread was parked until when this run's claim ended the park,
+   * kept for the same give-back. Never a usage-window hold's reset, which the claim leaves.
+   */
+  unparkedAt: at('unparked_at'),
   /** The owner ticked "Report when done": success goes on their desk too. A failure always does. */
   reportWhenDone: boolean().notNull().default(false),
   createdAt: created(),

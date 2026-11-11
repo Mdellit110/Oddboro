@@ -2,13 +2,47 @@
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chatPreface } from './chat-preface.ts';
+import { chatPreface, lastExchange } from './chat-preface.ts';
 import type { ChatEntry } from '../staff/chat.ts';
 
 const owner = (at: string, text: string): ChatEntry => ({ at, from: 'owner', text });
 const reply = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text });
 const told = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, told: true });
 const poke = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, poke: true });
+
+test("the last exchange is the owner line and then the last Odd line, each on a line of its own, the Odd's last", () => {
+  const who = { owner: 'Sam', odd: 'Bram' };
+  const at = '2026-11-03T09:00:00Z';
+  assert.equal(
+    lastExchange([owner(at, 'First.'), owner(at, 'Which\nfile?'), reply(at, 'The\n  brief.')], who),
+    'Just before, Sam said: "Which file?".\nBram replied: "The brief.".'
+  );
+  for (const line of [told, poke])
+    assert.equal(
+      lastExchange([owner(at, 'Hi.'), line(at, 'How did it go?')], who),
+      'Just before, Sam said: "Hi.".\nBram replied: "How did it go?".'
+    );
+  const failedLine: ChatEntry = { at, from: 'staff', text: 'It broke.', failed: true };
+  const blank = reply(at, ' ');
+  assert.equal(
+    lastExchange(
+      [owner(at, 'Hi.'), reply(at, 'Hello.'), owner(at, 'Well?'), failedLine, blank],
+      who
+    ),
+    'Just before, Sam said: "Hi.".\nBram replied: "Hello.".'
+  );
+  assert.equal(
+    lastExchange([told(at, 'Three questions?')], who),
+    'Just before, Bram said: "Three questions?".'
+  );
+  assert.equal(lastExchange([owner(at, 'Hi.')], who), undefined);
+  assert.equal(lastExchange([], who), undefined);
+  const long = 'a'.repeat(299) + '😀' + 'b';
+  assert.equal(
+    lastExchange([owner(at, long), reply(at, long)], who),
+    `Just before, Sam said: "${'a'.repeat(299)}".\nBram replied: "${'a'.repeat(299)}".`
+  );
+});
 
 test("a line the office said in the staffer's name since the owner last wrote is told to the session", () => {
   const lines = chatPreface([told('2026-11-03T09:00:00Z', 'Three questions?')], [], 'resumed');
@@ -84,6 +118,36 @@ test('an ask the owner decided since the last reply is told, and one decided bef
   assert.deepEqual(chatPreface(past, landed, 'resumed'), [
     '(Since your last reply, {owner} decided your asks: "Book the hall" approved, "Call the band" sent back. my_asks has their reasons.)'
   ]);
+});
+
+test('each task the owner ended since the last reply is told once, finished or dropped, and not again', () => {
+  const past = [owner('2026-11-03T09:00:00Z', 'hi'), reply('2026-11-03T09:01:00Z', 'hello')];
+  const at = new Date('2026-11-03T08:00:00Z');
+  const landed = [
+    {
+      kind: 'task',
+      title: 'Pick a blue',
+      at,
+      status: 'done',
+      decidedAt: new Date('2026-11-03T09:30:00Z')
+    },
+    {
+      kind: 'task',
+      title: 'Sign the poster',
+      at,
+      status: 'dropped',
+      decidedAt: new Date('2026-11-03T09:35:00Z')
+    }
+  ];
+  assert.deepEqual(chatPreface(past, landed, 'resumed'), [
+    '(Since your last reply, {owner} ended your tasks: "Pick a blue" finished, "Sign the poster" dropped. my_tasks has what they said.)'
+  ]);
+  const later = [
+    ...past,
+    owner('2026-11-03T09:40:00Z', 'Done that.'),
+    reply('2026-11-03T09:41:00Z', 'Thanks.')
+  ];
+  assert.deepEqual(chatPreface(later, landed, 'resumed'), []);
 });
 
 const failed = (at: string, text: string, inSession?: true): ChatEntry => ({

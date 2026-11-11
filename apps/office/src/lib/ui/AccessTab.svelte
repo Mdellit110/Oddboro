@@ -14,14 +14,13 @@
     type Level
   } from '@oddboro/ledger/access';
   import { AGENT_NAMES, OFFICE_ACCOUNT, type Agent, type Effort } from '@oddboro/ledger/agents';
-  import { OFFICE_TOOLS } from '@oddboro/ledger/tools';
   import { AgentTools } from './agent-tools.svelte.ts';
   import { call } from './api.ts';
   import FoldersList from './FoldersList.svelte';
   import ModelPicker from './ModelPicker.svelte';
   import ServiceActions from './ServiceActions.svelte';
+  import { findsIn, toolGroups } from './tool-groups.ts';
   import type { StaffProfile } from '../staff/roster.ts';
-  import type { AgentTool } from '../../routes/api/agents/+server.ts';
 
   type Grant = {
     connector: string;
@@ -184,7 +183,6 @@
   const allowed = (l: GrantLevel) => grantWorks(l, profile.permission);
   const isUrl = $derived(/^https:\/\/\S+$/.test(q.trim()));
 
-  const GRANTABLE = OFFICE_TOOLS.filter((t) => !t.always);
   async function setTool(tool: string, on: boolean) {
     problem = refused = '';
     try {
@@ -296,21 +294,19 @@
 
   /** What the owner typed to find an entry in the open list, as each list grows. */
   let find = $state('');
-  const matches = (...texts: string[]) => {
-    const f = find.trim().toLowerCase();
-    return !f || texts.some((t) => t.toLowerCase().includes(f));
-  };
+  const matches = (...texts: string[]) => findsIn(find, ...texts);
   const FIND_IN = {
     office: 'Find an office tool',
     folders: 'Find a folder',
     services: 'Find a service'
   } as const;
-  const officeTools = $derived(GRANTABLE.filter((t) => matches(t.name, t.does)));
+  const tools = $derived(toolGroups(find, profile));
   const shownGrants = $derived(grants.filter((g) => matches(g.name, GRANT_LABEL[g.level])));
   const commandsShown = $derived(
     matches(SWITCH_NAMES.commands, how.state === 'switch' ? '' : how.why)
   );
   const webShown = $derived(matches(SWITCH_NAMES.web, profile.webLine));
+  const switchesShown = $derived(commandsShown || webShown || tools.grantable.length > 0);
 
   async function setPermission(permission: Level) {
     problem = refused = '';
@@ -412,89 +408,102 @@
       <FoldersList {profile} {find} />
     {:else if tab === 'office'}
       <section aria-label="In the office">
-        <h3 class="mb-1.5 text-xs font-semibold text-ink">In the office</h3>
-        <ul class="flex flex-col gap-1 rounded-xl bg-raise p-1.5">
-          <!-- The label wraps only the switch's name, so the offer below it is a button of its own. -->
-          {#if commandsShown}
-            <li
-              class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 {how.state === 'switch'
-                ? 'hover:bg-night/40'
-                : ''}"
-            >
-              <input
-                id="commands-{profile.id}"
-                type="checkbox"
-                class="mt-0.5 {how.state === 'switch' ? 'cursor-pointer' : ''}"
-                checked={profile.reach.commands}
-                disabled={how.state !== 'switch'}
-                onchange={(e) => setOwnTool('commands', e.currentTarget)}
-              />
-              <span class="min-w-0 flex-1">
-                <label
-                  for="commands-{profile.id}"
-                  class="block text-sm {how.state === 'switch' ? 'cursor-pointer' : ''}"
-                  >{SWITCH_NAMES.commands}</label
-                >
-                {#if how.state !== 'switch'}
-                  <span class="block text-xs text-muted">{how.why}</span>
-                {/if}
-                {#if how.state === 'never' && how.offer}
-                  {@const offer = how.offer}
-                  <button
-                    class="mt-0.5 block text-start text-xs text-sea hover:text-ink"
-                    onclick={() => moveFor(offer)}
-                    >Switch {profile.name} to {AGENT_NAMES[offer]}?</button
+        <!-- An empty list would draw an empty box and its heading above Always on; with nothing found at all it holds the line saying so. -->
+        {#if switchesShown || !tools.alwaysOn.length}
+          <h3 class="mb-1.5 text-xs font-semibold text-ink">In the office</h3>
+          <ul class="flex flex-col gap-1 rounded-xl bg-raise p-1.5">
+            <!-- The label wraps only the switch's name, so the offer below it is a button of its own. -->
+            {#if commandsShown}
+              <li
+                class="flex items-start gap-2.5 rounded-lg px-2 py-1.5 {how.state === 'switch'
+                  ? 'hover:bg-night/40'
+                  : ''}"
+              >
+                <input
+                  id="commands-{profile.id}"
+                  type="checkbox"
+                  class="mt-0.5 {how.state === 'switch' ? 'cursor-pointer' : ''}"
+                  checked={profile.reach.commands}
+                  disabled={how.state !== 'switch'}
+                  onchange={(e) => setOwnTool('commands', e.currentTarget)}
+                />
+                <span class="min-w-0 flex-1">
+                  <label
+                    for="commands-{profile.id}"
+                    class="block text-sm {how.state === 'switch' ? 'cursor-pointer' : ''}"
+                    >{SWITCH_NAMES.commands}</label
                   >
-                  {#if refused}
-                    <span class="block text-xs text-muted">{refused}</span>
+                  {#if how.state !== 'switch'}
+                    <span class="block text-xs text-muted">{how.why}</span>
                   {/if}
-                {/if}
-              </span>
-            </li>
-          {/if}
-          {#if webShown}
-            <li>
-              <label
-                class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-night/40"
-              >
-                <input
-                  type="checkbox"
-                  class="mt-0.5"
-                  checked={profile.web}
-                  onchange={(e) => setOwnTool('web', e.currentTarget)}
-                />
-                <span class="min-w-0 flex-1">
-                  <span class="block text-sm">{SWITCH_NAMES.web}</span>
-                  <span class="block text-xs text-muted">{profile.webLine}</span>
+                  {#if how.state === 'never' && how.offer}
+                    {@const offer = how.offer}
+                    <button
+                      class="mt-0.5 block text-start text-xs text-sea hover:text-ink"
+                      onclick={() => moveFor(offer)}
+                      >Switch {profile.name} to {AGENT_NAMES[offer]}?</button
+                    >
+                    {#if refused}
+                      <span class="block text-xs text-muted">{refused}</span>
+                    {/if}
+                  {/if}
                 </span>
-              </label>
-            </li>
-          {/if}
-          {#each officeTools as t (t.id)}
-            <li>
-              <label
-                class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-night/40"
-              >
-                <input
-                  type="checkbox"
-                  class="mt-0.5"
-                  checked={profile.tools.includes(t.id)}
-                  onchange={(e) => setTool(t.id, e.currentTarget.checked)}
-                />
-                <span class="min-w-0 flex-1">
-                  <span class="block text-sm">{t.name}</span>
-                  <span class="block text-xs text-muted">{t.does}</span>
-                </span>
-              </label>
-            </li>
-          {/each}
-          {#if !commandsShown && !webShown && !officeTools.length}
-            <li class="px-2 py-1.5 text-sm text-muted">Nothing here matches "{find.trim()}".</li>
-          {/if}
-        </ul>
-        <p class="mt-1.5 text-[11px] text-faint">
-          Every Odd can also raise asks, see how you decided them, and see its own access.
-        </p>
+              </li>
+            {/if}
+            {#if webShown}
+              <li>
+                <label
+                  class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-night/40"
+                >
+                  <input
+                    type="checkbox"
+                    class="mt-0.5"
+                    checked={profile.web}
+                    onchange={(e) => setOwnTool('web', e.currentTarget)}
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-sm">{SWITCH_NAMES.web}</span>
+                    <span class="block text-xs text-muted">{profile.webLine}</span>
+                  </span>
+                </label>
+              </li>
+            {/if}
+            {#each tools.grantable as t (t.id)}
+              <li>
+                <label
+                  class="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-night/40"
+                >
+                  <input
+                    type="checkbox"
+                    class="mt-0.5"
+                    checked={profile.tools.includes(t.id)}
+                    onchange={(e) => setTool(t.id, e.currentTarget.checked)}
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span class="block text-sm">{t.name}</span>
+                    <span class="block text-xs text-muted">{t.does}</span>
+                  </span>
+                </label>
+              </li>
+            {/each}
+            {#if !switchesShown && !tools.alwaysOn.length}
+              <li class="px-2 py-1.5 text-sm text-muted">Nothing here matches "{find.trim()}".</li>
+            {/if}
+          </ul>
+        {/if}
+        {#if tools.alwaysOn.length}
+          <h4 class="{switchesShown ? 'mt-3' : ''} mb-1.5 text-xs font-semibold text-ink">
+            Always on
+          </h4>
+          <ul class="flex flex-col gap-1 rounded-xl bg-raise p-1.5">
+            {#each tools.alwaysOn as t (t.id)}
+              <li class="rounded-lg px-2 py-1.5">
+                <span class="block text-sm">{t.name}</span>
+                <span class="block text-xs text-muted">{t.does}</span>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       </section>
     {:else}
       <div class="mb-1.5 flex items-center justify-between">

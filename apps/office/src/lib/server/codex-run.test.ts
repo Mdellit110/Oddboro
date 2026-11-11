@@ -324,11 +324,24 @@ test("a Codex colleague's run on a thread reads the thread's folder and the owne
 test("a Codex lead's chat reads the folder of the goal it leads, and writes nothing there", async () => {
   const h = await gave('cody', 'cass', { title: 'Codex goal', goalId: await goal('Codex goal') });
   const thread = L.threadFolder(h.thread);
+  mkdirSync(thread, { recursive: true });
   const fs = (await chatOf('cody')).permissions?.filesystem ?? {};
   assert.equal(fs[thread], 'read');
   assert.ok(
     !Object.entries(fs).some(([p, v]) => p.startsWith(thread) && v === 'write'),
     'the chat writes in the goal folder'
+  );
+});
+
+test("a Codex colleague's chat reads the folder of work it is on, and writes nothing there", async () => {
+  const h = await gave('cody', 'cass', { title: 'Codex work' });
+  const thread = L.threadFolder(h.thread);
+  mkdirSync(thread, { recursive: true });
+  const fs = (await chatOf('cass')).permissions?.filesystem ?? {};
+  assert.equal(fs[thread], 'read');
+  assert.ok(
+    !Object.entries(fs).some(([p, v]) => p.startsWith(thread) && v === 'write'),
+    'the chat writes in the folder'
   );
 });
 

@@ -38,6 +38,7 @@ import {
   servesNoThread
 } from './hand-offs.ts';
 import { answerWindow } from './usage-window.ts';
+import { parkedWork, wakeOnTask, type TaskEnded } from './task-parking.ts';
 import {
   addFollowUp,
   answerHandOffs,
@@ -122,7 +123,12 @@ import { nextRun, zone } from './time.ts';
 import { isGrantable, OFFICE_TOOLS, ON_BY_DEFAULT, tickable, yesOrNo } from './tools.ts';
 import { HIRE_DEFAULTS } from './grantable.ts';
 import {
+  ASK_REPLACED,
+  OWN_RUN,
+  ownerAnswers,
   OWNER_ANSWERS,
+  pickedUpLine,
+  taskSaid,
   type AskAnswer,
   type AskEffect,
   type DeskItem,
@@ -1254,7 +1260,7 @@ export async function raiseAsk(
     if (a.revises)
       await tx
         .update(asks)
-        .set({ status: 'revise', reason: 'Replaced by a new version.', decidedAt: new Date() })
+        .set({ status: 'revise', reason: ASK_REPLACED, decidedAt: new Date() })
         .where(and(eq(asks.id, a.revises), eq(asks.staffId, staffId), eq(asks.status, 'open')));
     if (row.threadId) {
       // The thread keeps the run's key, so the owner's answer cannot start the
@@ -1368,10 +1374,14 @@ function carriedOutBy(together: AskRow[]): AskRow[] {
   return runs;
 }
 
-/** Start the carry-outs for asks one answer settled (`carriedOutBy`). */
-async function carryOutTogether(together: AskRow[]): Promise<void> {
+/**
+ * Start the carry-outs for asks one answer settled (`carriedOutBy`).
+ * `pickedUp` is the work parked on the connect task that just ended, which
+ * picks up in its own run (`finishTask`).
+ */
+async function carryOutTogether(together: AskRow[], pickedUp?: string[]): Promise<void> {
   for (const a of carriedOutBy(together))
-    await followUp(a.staffId, 'carry_out', { askId: a.id, note: null });
+    await followUp(a.staffId, 'carry_out', { askId: a.id, note: null, pickedUp });
 }
 
 /**
@@ -1852,8 +1862,9 @@ export async function withdrawAsk(id: number, line: string): Promise<void> {
 }
 
 /**
- * The Odd that gave the owner an open task left the office: the office drops
- * it, and `line` goes back where it came from, as a dropped task's answer does.
+ * The Odd that gave the owner an open task left the office, or took the task
+ * off the desk with its `withdraw` tool: the office drops it, and it ends as a
+ * dropped task does, `line` going back where it came from.
  */
 export async function withdrawTask(id: number, line: string): Promise<void> {
   const [t] = await db
@@ -1869,15 +1880,7 @@ export async function withdrawTask(id: number, line: string): Promise<void> {
     body: line,
     taskId: t.id
   });
-  const from = t.askId ? await ask(t.askId) : undefined;
-  await answerLater(
-    {
-      handOffId: t.handOffId ?? from?.handOffId ?? null,
-      threadId: t.threadId ?? from?.threadId ?? null
-    },
-    'failed',
-    line
-  );
+  await taskEnded(t, { ended: 'withdrawn', owner: await ownerName(), said: line });
 }
 
 /**
@@ -1925,6 +1928,7 @@ async function followUp(
     reportId?: number;
     taskId?: number;
     note: string | null;
+    pickedUp?: string[];
     reportWhenDone?: boolean;
   }
 ): Promise<void> {
@@ -2045,31 +2049,70 @@ function waitsOnOwnRun(): SQL {
  */
 export const runsGoing = new Set<string>();
 
+/** The wait a lead's run ended as it started: the task's title, or the time it was parked until. */
+export type Unparked = { task: string } | { at: Date };
+
 /**
  * Claim a follow-up, and return it as claimed: an answer that joined it after
  * it was listed is in its note (`answerThread`). Undefined when something else
  * already started it, or it waits (`waitsOnOwnRun`).
+ *
+ * A thread stays parked only while no run of its lead's on it has started
+ * since it parked, so the claim of one ends the park, and returns the wait it
+ * ended for the run's brief (`unparked`). Without it, work a hand-back or the
+ * owner's words picked up stayed parked on a task that might never end, and
+ * that task's end woke the finished work again. A colleague's run leaves the
+ * lead's park alone, and so does a usage-window hold, which is the office's.
+ * The claimed row keeps the task or time it lifted (`unparkedTask`,
+ * `unparkedAt`), so a run that then fails gives that wait back (`finishFollowUp`).
  */
-export async function startFollowUp(id: number): Promise<FollowUpRow | undefined> {
+export async function startFollowUp(
+  id: number
+): Promise<(FollowUpRow & { unparked?: Unparked }) | undefined> {
   return db.transaction(async (tx) => {
     // The thread is locked, so two claims on it at once cannot each miss the
     // other's run starting, and both go.
     const [on] = await tx
-      .select({ threadId: followUps.threadId })
+      .select({ threadId: followUps.threadId, staffId: followUps.staffId })
       .from(followUps)
       .where(eq(followUps.id, id));
-    if (on?.threadId)
-      await tx
-        .select({ id: threads.id })
-        .from(threads)
-        .where(eq(threads.id, on.threadId))
-        .for('update');
+    const [t] = on?.threadId
+      ? await tx
+          .select({
+            hubId: threads.hubId,
+            resumeOnTask: threads.resumeOnTask,
+            resumeAt: threads.resumeAt,
+            heldBy: threads.heldBy
+          })
+          .from(threads)
+          .where(eq(threads.id, on.threadId))
+          .for('update')
+      : [];
+    // Only the lead's own run ends its park, so only it records the wait it lifted.
+    const leads = t !== undefined && on?.staffId === t.hubId;
+    const timed = leads && t.heldBy === null ? t.resumeAt : null;
     const [claimed] = await tx
       .update(followUps)
-      .set({ startedAt: new Date() })
+      .set({
+        startedAt: new Date(),
+        unparkedTask: leads ? t.resumeOnTask : null,
+        unparkedAt: timed
+      })
       .where(and(eq(followUps.id, id), isNull(followUps.startedAt), not(waitsOnOwnRun())))
       .returning();
-    return claimed;
+    if (!claimed?.threadId || !leads) return claimed;
+    if (t.resumeOnTask === null && timed === null) return claimed;
+    const [task] = t.resumeOnTask
+      ? await tx.select({ title: tasks.title }).from(tasks).where(eq(tasks.id, t.resumeOnTask))
+      : [];
+    await tx
+      .update(threads)
+      .set({ resumeOnTask: null, ...(timed ? { resumeAt: null } : {}) })
+      .where(eq(threads.id, claimed.threadId));
+    return {
+      ...claimed,
+      unparked: task ? { task: task.title } : timed ? { at: timed } : undefined
+    };
   });
 }
 
@@ -2153,8 +2196,17 @@ export async function finishFollowUp(
       .update(followUps)
       .set({ outcome, result, doneAt: now })
       .where(and(eq(followUps.id, f.id), isNull(followUps.outcome)))
-      .returning({ id: followUps.id });
+      .returning({
+        id: followUps.id,
+        unparkedTask: followUps.unparkedTask,
+        unparkedAt: followUps.unparkedAt
+      });
     if (!row) return false;
+    // Read from the row, not `f`: the claim wrote it after `f` may have been read.
+    const ended =
+      outcome === 'failed' && (row.unparkedTask !== null || row.unparkedAt !== null) && f.threadId
+        ? await giveWaitBack(tx, f.threadId, row)
+        : undefined;
     if (joined.length)
       await tx
         .update(followUps)
@@ -2187,8 +2239,19 @@ export async function finishFollowUp(
     // The hand-back moves the thread on; with none, the outcome may end it.
     if (back) await addFollowUp(tx, back);
     else if (f.threadId) await settleThread(tx, f.threadId);
-    return true;
+    return { ended };
   });
+  if (finished && finished.ended) {
+    const t = finished.ended;
+    // The task's own run was set going when the task ended, while the park was
+    // lifted, so it was not told of this work and does not pick up now.
+    const own = await ownRunOf(await taskEnd(t));
+    await wakeOnTask(t, {
+      ended: await endedAs(t),
+      owner: await ownerName(),
+      ownRun: own && { ...own, earlier: true }
+    });
+  }
   // The ledger row embeds its text first, which can take a while: outside the transaction.
   if (finished)
     await record({
@@ -2198,6 +2261,55 @@ export async function finishFollowUp(
       body: result,
       askId: f.askId ?? undefined
     });
+}
+
+/**
+ * A lead's run that ended a park failed, so the wait comes back, on its task or
+ * its time: only a run that ends without failing, or the wait's own end, ends
+ * one. Not when the run parked the work again, on a task or a time, or the
+ * work ended. The task is locked, as `parkOnTask` locks it, so it cannot end
+ * between this look and the park and wake nothing. Returns the task when it
+ * ended during the run: the park is back so the work stays open, and
+ * `wakeOnTask` then wakes it as the task's end would have, but told the task's
+ * own run was set going back when the task ended. A time that passed
+ * during the run comes back as it was, so the clock's next look wakes the work,
+ * once, since `wakeThread` claims the time as it wakes.
+ */
+async function giveWaitBack(
+  tx: Tx,
+  threadId: number,
+  lifted: Pick<FollowUpRow, 'unparkedTask' | 'unparkedAt'>
+): Promise<TaskRow | undefined> {
+  const [task] =
+    lifted.unparkedTask === null
+      ? []
+      : await tx.select().from(tasks).where(eq(tasks.id, lifted.unparkedTask)).for('update');
+  // A claim lifts a task or a time, never both, so one of these is null.
+  const [back] = await tx
+    .update(threads)
+    .set({ resumeOnTask: lifted.unparkedTask, resumeAt: lifted.unparkedAt })
+    .where(
+      and(
+        eq(threads.id, threadId),
+        isNull(threads.resumeOnTask),
+        isNull(threads.resumeAt),
+        isNull(threads.endedAt)
+      )
+    )
+    .returning({ id: threads.id });
+  return back && task && task.status !== 'open' ? task : undefined;
+}
+
+/**
+ * How a task that ended during a run reads to the work that run gives the park
+ * back to. The row keeps only done or dropped, so a task that ended once its Odd
+ * had left was taken off the desk by that leaving (`removeOdd`), not dropped by
+ * the owner; one the owner dropped before the Odd left still reads as dropped.
+ */
+async function endedAs(t: TaskRow): Promise<TaskEnded> {
+  if (t.status === 'done') return 'done';
+  const odd = t.staffId ? await anyStaffer(t.staffId) : undefined;
+  return odd?.leftAt && t.doneAt && t.doneAt >= odd.leftAt ? 'withdrawn' : 'dropped';
 }
 
 /** The result of a run a restart cut off. */
@@ -2732,13 +2844,21 @@ async function dropConnectTasks(id: string, staffId?: string): Promise<void> {
     .where(
       staffId ? and(eq(tasks.status, 'open'), eq(tasks.staffId, staffId)) : eq(tasks.status, 'open')
     );
-  const stale = open
-    .filter((t) =>
-      t.steps.some((s) => s.action && 'connector' in s.action && s.action.connector === id)
-    )
-    .map((t) => t.id);
-  if (stale.length)
-    await db.update(tasks).set({ status: 'dropped' }).where(inArray(tasks.id, stale));
+  const stale = open.filter((t) =>
+    t.steps.some((s) => s.action && 'connector' in s.action && s.action.connector === id)
+  );
+  if (!stale.length) return;
+  await db
+    .update(tasks)
+    .set({ status: 'dropped' })
+    .where(
+      inArray(
+        tasks.id,
+        stale.map((t) => t.id)
+      )
+    );
+  const owner = await ownerName();
+  for (const t of stale) await wakeOnTask(t, { ended: 'dropped', owner });
 }
 
 /**
@@ -3046,6 +3166,48 @@ export async function tickKey(key: string): Promise<void> {
         .where(eq(tasks.id, t.id));
 }
 
+/**
+ * What an ended task starts (`OWNER_ANSWERS`), and whether a run on the task's
+ * own work picks up among it (`OWN_RUN`). `finishTask` and a failed run giving
+ * a wait back (`finishFollowUp`) both read it, so parked work hears of the same run.
+ */
+async function taskEnd(t: TaskRow) {
+  // A tool's connect task belongs to the access ask it came from.
+  const from = t.askId ? await ask(t.askId) : undefined;
+  const effects: readonly TaskEffect[] =
+    t.status !== 'done'
+      ? OWNER_ANSWERS.task.dropped
+      : !t.staffId
+        ? OWNER_ANSWERS.task.done.noOdd
+        : from?.kind === 'access'
+          ? OWNER_ANSWERS.task.done.fromAccess
+          : OWNER_ANSWERS.task.done.other;
+  const ownThread = t.threadId ?? from?.threadId ?? null;
+  const ownRuns = effects.some(
+    (e) =>
+      typeof e === 'string' &&
+      (OWN_RUN[e] === 'always' || (OWN_RUN[e] === 'on its work' && ownThread !== null))
+  );
+  return { from, effects, ownThread, ownRuns };
+}
+
+/** The run on an ended task's own work that `wakeOnTask` tells parked work of, if one picks up. */
+async function ownRunOf(end: {
+  ownThread: number | null;
+  ownRuns: boolean;
+}): Promise<{ work: string | null } | undefined> {
+  if (!end.ownRuns) return undefined;
+  const [own] = end.ownThread
+    ? await db
+        .select({ title: threads.title, hubId: threads.hubId })
+        .from(threads)
+        .where(eq(threads.id, end.ownThread))
+    : [];
+  // A lead that left the office runs nothing, so parked work must not leave its part to it.
+  if (own && !(await staffer(own.hubId))) return undefined;
+  return { work: own?.title ?? null };
+}
+
 export async function finishTask(id: number, done: boolean, note: string | null): Promise<void> {
   const [t] = await db
     .update(tasks)
@@ -3054,26 +3216,42 @@ export async function finishTask(id: number, done: boolean, note: string | null)
     .returning();
   if (!t) return;
   const owner = await ownerName();
-  const answers = t.steps
-    .filter((s) => s.answer && s.action?.kind === 'choice')
-    .map((s) => `${s.text} ${s.answer}`);
+  const answers = ownerAnswers(t.steps).map((a) => `${a.step} ${a.answer}`);
   await record({
     kind: 'work',
     actor: 'owner',
     title: `${done ? 'Done' : 'Dropped'} by ${owner}: ${t.title}`,
-    body: [t.why, ...answers].join('\n'),
+    // Answers first: search_ledger shows the first 400 characters, and a long why would cut them off.
+    body: [...answers, t.why].join('\n'),
     reason: t.note,
     taskId: t.id
   });
-  // A tool's connect task belongs to the access ask it came from.
-  const from = t.askId ? await ask(t.askId) : undefined;
-  const effects: readonly TaskEffect[] = !done
-    ? OWNER_ANSWERS.task.dropped
-    : !t.staffId
-      ? OWNER_ANSWERS.task.done.noOdd
-      : from?.kind === 'access'
-        ? OWNER_ANSWERS.task.done.fromAccess
-        : OWNER_ANSWERS.task.done.other;
+  await taskEnded(t, {
+    ended: done ? 'done' : 'dropped',
+    owner,
+    said: `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`
+  });
+}
+
+/**
+ * What a task's end starts, from its row in `OWNER_ANSWERS`, whoever ended it:
+ * the owner (`finishTask`), or the office or its Odd taking it off the desk
+ * (`withdrawTask`), which ends it as a drop. `said` is the line that goes back
+ * where the task came from when no run follows.
+ */
+async function taskEnded(
+  t: TaskRow,
+  how: { ended: TaskEnded; owner: string; said: string }
+): Promise<void> {
+  const done = how.ended === 'done';
+  const end = await taskEnd(t);
+  const { from, effects } = end;
+  // Read before the effects: waking the parked work clears what parks it. Its
+  // lead's run on the task's own work picks up in the same moment, so each run
+  // is told the other has its part, or both do the parked work.
+  const parked = await parkedWork(t.id);
+  const ownRun = parked.length ? await ownRunOf(end) : undefined;
+  const pickedUp = parked.length ? parked.map((p) => p.title) : undefined;
   for (const effect of effects) {
     if (typeof effect === 'object') continue;
     switch (effect) {
@@ -3085,18 +3263,24 @@ export async function finishTask(id: number, done: boolean, note: string | null)
             threadId: t.threadId ?? from?.threadId ?? null
           },
           done ? 'done' : 'failed',
-          `${owner} ${done ? 'finished' : 'dropped'} "${t.title}"${t.note ? `: ${t.note}` : '.'}`
+          [how.said, ...parked.map((p) => pickedUpLine(p.title))].join(' ')
         );
         break;
       // The owner finished connecting a tool an Odd asked for: it can start the
       // work that was waiting on it, once however many asks that one answer settled.
       case 'carry_out':
-        if (t.staffId && from) await carryOutTogether([from, ...(await answeredWith(from))]);
+        if (t.staffId && from)
+          await carryOutTogether([from, ...(await answeredWith(from))], pickedUp);
         break;
       // Any other task an Odd gave them: the Odd picks up whatever waited on
       // it, such as hiring from an intake the owner just filled in.
       case 'task_done':
-        if (t.staffId) await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note });
+        if (t.staffId)
+          await followUp(t.staffId, 'task_done', { taskId: t.id, note: t.note, pickedUp });
+        break;
+      // Work on another thread that waited on this task, whoever gave it.
+      case 'wake_parked':
+        await wakeOnTask(t, { ended: how.ended, owner: how.owner, ownRun });
         break;
       default:
         effect satisfies never;
@@ -3223,7 +3407,7 @@ export type Delivery = {
   at: Date;
   /** open, approved, denied, revise, done, dropped, or for a report new or read. */
   status: string;
-  /** When the owner decided it, for an ask. */
+  /** When the owner decided an ask or finished or dropped a task. */
   decidedAt?: Date | null;
 };
 
@@ -3243,7 +3427,13 @@ export async function deliveries(staffId: string, limit = 200): Promise<Delivery
       .orderBy(desc(asks.createdAt))
       .limit(limit),
     db
-      .select({ id: tasks.id, title: tasks.title, at: tasks.createdAt, status: tasks.status })
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        at: tasks.createdAt,
+        status: tasks.status,
+        decidedAt: tasks.doneAt
+      })
       .from(tasks)
       .where(eq(tasks.staffId, staffId))
       .orderBy(desc(tasks.createdAt))
@@ -3562,7 +3752,15 @@ export async function officeActivity(since: Date) {
     })),
     tasksForOwner: {
       open: openTasks.map((t) => ({ from: t.staffId, title: t.title, since: pt(t.createdAt) })),
-      done: doneTasks.map((t) => ({ from: t.staffId, title: t.title, status: t.status }))
+      done: doneTasks.map((t) => {
+        const said = taskSaid(t);
+        return {
+          from: t.staffId,
+          title: t.title,
+          status: t.status,
+          ...(said ? { answer: said } : {})
+        };
+      })
     }
   };
 }

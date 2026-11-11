@@ -2,10 +2,58 @@
 // a task or a report, and a goal's change of status. One row per kind and
 // answer, so a new kind fails the type check here until it says what its
 // answer does. Imports types only, so the page reads it too.
-import type { AskKind, GoalStatus } from './schema.ts';
+import type { AskKind, AskStatus, GoalStatus, Step, TaskStatus } from './schema.ts';
 
 export const DESK_ITEMS = ['ask', 'task', 'report'] as const;
 export type DeskItem = (typeof DESK_ITEMS)[number];
+
+/** The answer a step holds, when it is an answer the owner chose: a secret goes to the keychain, and `tickStep` accepts an answer on any step. */
+export const stepAnswer = (s: Step): string | undefined =>
+  s.answer && s.action?.kind === 'choice' ? s.answer : undefined;
+
+/** Text on one line, so what a brief or note carries cannot split a section (`sectionsOf`) or a note (`answers()`). */
+export const flat = (s: string): string => s.replace(/\s+/g, ' ').trim();
+
+/** What the owner chose on a task's steps. */
+export function ownerAnswers(steps: Step[]): { step: string; answer: string }[] {
+  return steps.flatMap((s) => {
+    const answer = stepAnswer(s);
+    return answer ? [{ step: s.text, answer }] : [];
+  });
+}
+
+/** What the owner said on a task, on one line: each `<step>: <answer>`, then their note, joined by spaces. Empty when they said nothing. */
+export function taskSaid(t: { steps: Step[]; note: string | null }): string {
+  return flat(
+    [...ownerAnswers(t.steps).map((a) => `${a.step}: ${a.answer}`), t.note ?? ''].join(' ')
+  );
+}
+
+/**
+ * What each run a task's end starts on the task's own work is told of other
+ * work parked on that task. That work picks up in its own run at the same
+ * moment (`wakeOnTask`), so without this line both runs did the parked work.
+ * "This", not "this task": a carry-out's brief speaks of the ask, not of the
+ * connect task that ended.
+ */
+export const pickedUpLine = (title: string): string =>
+  `"${flat(title)}" was waiting on this too and has picked up on its own; leave that work to it.`;
+
+/** How each end of an ask or task reads to an Odd. */
+export const SAID_AS: Record<Exclude<AskStatus, 'open'> | Exclude<TaskStatus, 'open'>, string> = {
+  approved: 'approved',
+  denied: 'turned down',
+  revise: 'sent back',
+  done: 'finished',
+  dropped: 'dropped'
+};
+
+/** The reason `raiseAsk` closes an ask with when the Odd raises a new version of it: the office's words, never the owner's. */
+export const ASK_REPLACED = 'Replaced by a new version.';
+
+/** Whether the Odd replaced this ask with a new version, so the owner never answered it. */
+export const askReplaced = (a: { status: AskStatus; reason: string | null }): boolean =>
+  a.status === 'revise' && a.reason === ASK_REPLACED;
 
 /**
  * What reaches the Odd when the owner answers. A `none` names the Linear row
@@ -32,6 +80,8 @@ export type DeskItem = (typeof DESK_ITEMS)[number];
  * - `rework`: a `rework` follow-up, with what to change.
  * - `denied_lesson`: a `denied` follow-up, when the no carries a reason.
  * - `task_done`: a `task_done` follow-up, to pick up what waited on the task.
+ * - `wake_parked`: the work a lead parked on the task picks up, told how the
+ *   task ended (`wakeOnTask`).
  * - `odd_leaves`: the Odd the ask names leaves the office (`removeOdd` in
  *   leaving.ts), after the answer went back, so leaving closes any run it started.
  * - `odd_returns`: the Odd the ask names comes back as it was (`bringBack`).
@@ -49,13 +99,30 @@ export type Effect =
   | 'rework'
   | 'denied_lesson'
   | 'task_done'
+  | 'wake_parked'
   | 'odd_leaves'
   | 'odd_returns'
   | { none: string };
-export type AskEffect = Exclude<Effect, 'task_done'>;
+export type AskEffect = Exclude<Effect, 'task_done' | 'wake_parked'>;
 export type TaskEffect = Extract<
   Effect,
-  'carry_out' | 'task_done' | 'answer_back' | { none: string }
+  'carry_out' | 'task_done' | 'answer_back' | 'wake_parked' | { none: string }
+>;
+
+/**
+ * Whether each effect of a task's end starts a run on the task's own work:
+ * always, only when the task is on a piece of work (an answer goes back there,
+ * and reaches nobody otherwise), or never. Each such run and the work parked
+ * on the task are told of each other (`finishTask`), or both do the parked work.
+ */
+export const OWN_RUN = {
+  carry_out: 'always',
+  task_done: 'always',
+  answer_back: 'on its work',
+  wake_parked: 'never'
+} as const satisfies Record<
+  Exclude<TaskEffect, { none: string }>,
+  'always' | 'on its work' | 'never'
 >;
 
 export type AskAnswer = {
@@ -144,12 +211,12 @@ export const OWNER_ANSWERS = {
   task: {
     done: {
       /** The owner finished connecting a tool an Odd asked for: the work that waited on it starts. */
-      fromAccess: ['carry_out'],
-      other: ['task_done'],
+      fromAccess: ['carry_out', 'wake_parked'],
+      other: ['task_done', 'wake_parked'],
       /** A task no Odd gave the owner. */
-      noOdd: []
+      noOdd: ['wake_parked']
     },
-    dropped: ['answer_back', { none: 'NEW-1703' }]
+    dropped: ['answer_back', 'wake_parked', { none: 'NEW-1703' }]
   } satisfies {
     done: Record<'fromAccess' | 'other' | 'noOdd', readonly TaskEffect[]>;
     dropped: readonly TaskEffect[];

@@ -3,18 +3,37 @@
 // says what its run is told.
 import {
   callResultText,
+  clockTime,
   FOLDER_SAID,
   goalWhen,
   home,
   modelSection,
   shownFolder,
   SWITCH_NAMES,
-  switchesSaid
+  switchesSaid,
+  zoneName
 } from '@oddboro/ledger';
-import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow } from '@oddboro/ledger';
+import type { AskRow, FollowUpRow, GoalRow, ReportRow, TaskRow, Unparked } from '@oddboro/ledger';
+import { flat, ownerAnswers, pickedUpLine } from '@oddboro/ledger/desk-answers';
 import { workPath } from '@oddboro/ledger/work-paths';
 import { filterWords } from '@oddboro/ledger/filters';
 import { ACT_WRITE } from './house.ts';
+
+/**
+ * The wait this run's start ended (`startFollowUp`). The run is told, or it
+ * would trust a park the office no longer holds and wait for a wake that never
+ * comes.
+ */
+export function waitEnded(u: Unparked): string[] {
+  const until =
+    'task' in u
+      ? `{owner} finished or dropped "${flat(u.task)}"`
+      : `${clockTime(u.at)} ${zoneName()}`;
+  return [
+    `This work was parked until ${until}. That wait ended as this run started, so nothing brings you back for it now. If the work still needs to wait, park it again with resume_at.`,
+    ''
+  ];
+}
 
 /** The owner's answers a hub picks its thread up with, one a line (`answerThread`). */
 const answers = (note: string | null): string[] =>
@@ -149,9 +168,9 @@ function taskDoneBrief(
   t?: { row: TaskRow; files: string[] }
 ): string[] {
   if (!t) return feedbackBrief(f, r);
-  const answers = t.row.steps
-    .filter((s) => s.answer)
-    .map((s) => `- They answered "${s.text}" with: ${s.answer}`);
+  const answers = ownerAnswers(t.row.steps).map(
+    (a) => `- They answered "${a.step}" with: ${a.answer}`
+  );
   return [
     `{owner} finished the task you gave them: "${t.row.title}". Pick up the work that waited on it now.`,
     '',
@@ -164,6 +183,7 @@ function taskDoneBrief(
           `- Attached, with anything they filled in: ${t.files.map((f) => (workPath(f) ? home(f) : f)).join(', ')}. Read each one first.`
         ]
       : []),
+    ...(f.pickedUp ?? []).map((title) => `- ${pickedUpLine(title)}`),
     '',
     '1. Read what they gave you: the files above, their answers and their note.',
     `2. Do the next step you told them would follow, now. When it needs their yes, such as a hire, a change outside the office ${ACT_WRITE}, or a new job, raise it with the tool for it (propose_goal_plan for a goal, propose_hire, raise_ask and the rest).`,
@@ -209,7 +229,8 @@ function askLinesOf(a?: AskRow): string[] {
 }
 
 function carryOutBrief(f: FollowUpRow, a: AskRow | undefined, also: AskRow[]): string[] {
-  const askLines = askLinesOf(a);
+  // A connect task's end starts this run and wakes the work parked on that task at once.
+  const askLines = [...askLinesOf(a), ...(f.pickedUp ?? []).map((t) => `- ${pickedUpLine(t)}`)];
   const alsoAnswers = (what: string) =>
     also.length
       ? [

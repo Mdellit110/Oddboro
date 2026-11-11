@@ -99,7 +99,7 @@ export async function removeOdd(
       .where(and(eq(pokes.staffId, id), eq(pokes.status, 'waiting')));
     await tx
       .update(threads)
-      .set({ status: 'stopped', endedAt: new Date() })
+      .set({ status: 'stopped', endedAt: new Date(), resumeOnTask: null })
       .where(and(eq(threads.hubId, id), ne(threads.status, 'stopped')));
     return on.length;
   });

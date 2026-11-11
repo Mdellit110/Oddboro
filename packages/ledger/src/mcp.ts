@@ -43,9 +43,11 @@ import {
   type GoAhead,
   record,
   roster,
+  tasksFrom,
   waitingPokes,
   type LedgerRow
 } from './office.ts';
+import { askReplaced, SAID_AS, taskSaid } from './desk-answers.ts';
 import {
   allGoals,
   goal,
@@ -78,9 +80,10 @@ import {
   SWITCH_NAMES,
   switchesSaid
 } from './access-words.ts';
-import { handOff } from './hand-offs.ts';
+import { handOff, type CarriedFile } from './hand-offs.ts';
 import { leavesLine, leavingRefused } from './leaving.ts';
 import { MANAGER_ROLE } from './managers.ts';
+import { parkOnTask } from './task-parking.ts';
 import {
   APPLIES_TO_MAX,
   CITE_FIRST,
@@ -96,13 +99,14 @@ import {
   notLed,
   parkThread,
   recentThreads,
+  PASS_ONLY_WORK,
   tellLead,
   threadsOn,
   workFile
 } from './threads.ts';
-import { THREADS_DIR, workName, workPath } from './work-paths.ts';
+import { INSTRUCTIONS, THREADS_DIR, workName, workPath } from './work-paths.ts';
 import { withFooter } from './mail-footer.ts';
-import { mailAttachments } from './mail-attachments.ts';
+import { MAIL_FILES_MAX, mailAttachments } from './mail-attachments.ts';
 import {
   doesSomething,
   filterWords,
@@ -140,7 +144,7 @@ import {
   type RIDES_WITH,
   type ToolRun
 } from './tools.ts';
-import { home } from './home.ts';
+import { home, isOfficeFile, isWhereNamed } from './home.ts';
 import { trustSystemCertificates } from './certificates.ts';
 
 trustSystemCertificates();
@@ -268,6 +272,17 @@ const attachArg = z
     `Files that go with it: one in your folder, e.g. ['notes/intake.md'], or one in the folder of a goal or work you are on, by its path from ${THREADS_DIR}/, e.g. ['${workName(12, 'paige/index.html')}']. Attach the file itself, never a copy. ${OWNER} sees them on their desk and edits a Markdown one from your folder right there, so do not tell them where to find it.`
   );
 
+/** A file an Odd names on a tool call: its office name and real path, or undefined when it cannot read it. */
+async function readableFile(p: string): Promise<{ name: string; real: string } | undefined> {
+  if (isAbsolute(p)) return undefined;
+  if (workPath(p)) {
+    const real = await workFile(ME, p);
+    return real ? { name: p, real } : undefined;
+  }
+  const name = ownFile(p);
+  return name ? { name, real: resolve(realpathSync(HOME), name) } : undefined;
+}
+
 /**
  * The attachments as names the owner's viewer opens (`workPath` for a file in
  * a thread's folder, else a path inside this staffer's folder), or why one is
@@ -278,11 +293,7 @@ async function attachable(
 ): Promise<{ paths: string[] } | { problem: string }> {
   const out: string[] = [];
   for (const p of paths) {
-    const name = isAbsolute(p)
-      ? undefined
-      : workPath(p)
-        ? (await workFile(ME, p)) && p
-        : ownFile(p);
+    const name = (await readableFile(p))?.name;
     if (!name)
       return {
         problem: `No file at ${p} that you can attach. Name a file in your folder by its path inside it, e.g. notes/intake.md, or one in the folder of a goal or work you are on from ${THREADS_DIR}/, e.g. ${workName(12, 'paige/index.html')}, never by its full path. Write it first if it is not there.`
@@ -317,6 +328,88 @@ function ownFile(path: string): string | undefined {
     // Nothing at that path.
     return undefined;
   }
+}
+
+// `ownFile` gives the system's separator, so a step is split on both. A Mac's
+// and Windows's disks read `claude.md` as `CLAUDE.md`, so case does not count.
+const lowerInstructions = INSTRUCTIONS.map((n) => n.toLowerCase());
+const isInstructionFile = (name: string): boolean =>
+  name.split(/[\\/]/).some((step) => lowerInstructions.includes(step.toLowerCase()));
+
+/**
+ * The office name of a file a hand_off names by its full path: in this Odd's
+ * folder, its path inside it; in the office's folder of threads, its work name,
+ * since a hand-off's brief lists the work's files at their full paths. Any
+ * other name stays as it is.
+ */
+function officeName(p: string): string {
+  if (!isAbsolute(p)) return p;
+  const inside = (root: string) => {
+    const r = relative(root, p);
+    return r && !isAbsolute(r) && r.split(sep)[0] !== '..' ? r : undefined;
+  };
+  const own = inside(HOME);
+  if (own) return own;
+  const work = inside(home(THREADS_DIR));
+  return work ? `${THREADS_DIR}/${work.split(sep).join('/')}` : p;
+}
+
+/**
+ * The files a hand_off names, as paths inside the folder of work `on` for
+ * those already there, and what to copy there for the rest, or why the
+ * hand-off cannot go.
+ */
+async function filesForHandOff(
+  named: string[],
+  on: number | undefined
+): Promise<{ here: string[]; carry: CarriedFile[] } | { problem: string }> {
+  const here: string[] = [];
+  const carry: CarriedFile[] = [];
+  // Each landing name to the file there: as the office found it, and as the Odd named it.
+  const landing = new Map<string, { name: string; named: string }>();
+  for (const p of named) {
+    const asked = officeName(p);
+    const file = await readableFile(asked);
+    if (!file)
+      return {
+        problem: `You cannot read ${p}. Name a file in your folder by its path inside it or its full path, or one in the folder of work you are on from ${THREADS_DIR}/, and call hand_off again.`
+      };
+    const inWork = workPath(file.name);
+    // `ownFile` names the file where its real path is, so a link on the way,
+    // such as an attachments folder swapped for one, names another file.
+    // `workFile` refuses a link in the work already.
+    if (!inWork && !isWhereNamed({ realInside: file.name, named: asked }))
+      return {
+        problem: `${p} is reached through a link, and a hand-off carries only a file where it really is. Name the file itself, and call hand_off again.`
+      };
+    if (isInstructionFile(file.name))
+      return {
+        problem: `${p} is an instruction file, and those never go with a hand-off. Say what your colleague needs in the brief, and call hand_off again.`
+      };
+    const steps = file.name.split(/[\\/]/);
+    if (steps.some((step) => step.startsWith('.')))
+      return {
+        problem: `${p} is a hidden file, and those never go with a hand-off. Name another file, or leave it out, and call hand_off again.`
+      };
+    if (!inWork && isOfficeFile(file.name))
+      return {
+        problem: `${p} is one of the office's own files, and those never go with a hand-off. Say what your colleague needs in the brief, and call hand_off again.`
+      };
+    const inside = inWork && inWork.thread === on ? inWork.inside : undefined;
+    const name = file.name.replace(/[\\/]/g, '-');
+    // Lower case, since a Mac's and Windows's disks hold those as one file.
+    const lands = (inside ?? `${ME}/${name}`).toLowerCase();
+    const first = landing.get(lands);
+    if (first?.name === file.name) continue;
+    if (first)
+      return {
+        problem: `Two of these files would land under one name: ${first.named} and ${p}. Rename one and call hand_off again.`
+      };
+    landing.set(lands, { name: file.name, named: p });
+    if (inside) here.push(inside);
+    else carry.push({ real: file.real, name, named: p });
+  }
+  return { here, carry };
 }
 
 /** What propose_hire and propose_goal_plan both take to describe one hire. */
@@ -482,6 +575,11 @@ const notHanded = (why: string) => ({
   ...text(`Nothing was handed off yet. ${why}`),
   isError: true
 });
+/** A resume_at that parked nothing: an error, so the Odd cannot read it as parked. */
+const notParked = (why: string) => ({
+  ...text(`This work was not parked. ${why}`),
+  isError: true
+});
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
 const day = (d: Date | string) => officeDay(new Date(d));
 /** "Oct 30", in the office's time zone. */
@@ -516,7 +614,6 @@ if (has('search_ledger'))
 
 // In a chat, the threads this Odd works on and does not lead (`threadsOn`):
 // what the owner asks there about one goes to its lead with tell_lead.
-const said = OWNER_SAID;
 const workingOn = offered('tell_lead') ? await threadsOn(ME) : [];
 const goalRule = await goalWork(ME, workingOn);
 // A hub in a run on no thread, such as a chat or a job, names the thread an ask
@@ -623,10 +720,31 @@ tool(
     if (!rows.length) return text('You have raised no asks.');
     return text(
       rows
-        .map(
-          (a) =>
-            `- #${a.id} ${a.status === 'revise' ? 'SENT BACK' : a.status.toUpperCase()}: ${a.title}${a.reason ? ` (${a.status === 'revise' ? 'change' : 'reason'}: ${a.reason})` : a.status === 'open' ? '' : ' (no reason given)'}`
+        .map((a) =>
+          askReplaced(a)
+            ? `- #${a.id} REPLACED: ${a.title}`
+            : `- #${a.id} ${a.status === 'revise' ? 'SENT BACK' : a.status.toUpperCase()}: ${a.title}${a.reason ? ` (${a.status === 'revise' ? 'change' : 'reason'}: ${a.reason})` : a.status === 'open' ? '' : ' (no reason given)'}`
         )
+        .join('\n')
+    );
+  }
+);
+
+tool(
+  'my_tasks',
+  {
+    description: `Each task you gave ${OWNER} and how it ended, with what they said on it.`,
+    inputSchema: {}
+  },
+  async () => {
+    const rows = await tasksFrom(ME);
+    if (!rows.length) return text('You have given no tasks.');
+    return text(
+      rows
+        .map((t) => {
+          const said = t.status === 'open' ? '' : taskSaid(t);
+          return `- #${t.id} ${(t.status === 'open' ? 'open' : SAID_AS[t.status]).toUpperCase()}: ${t.title}${said ? ` (${said})` : ''}`;
+        })
         .join('\n')
     );
   }
@@ -1583,13 +1701,13 @@ if (HANDS_OFF.tool) {
           .string()
           .min(1)
           .max(4000)
-          .describe('What to do, why, and what to send back, with full paths to any files.'),
+          .describe('What to do, why, and what to send back. Name any files in files.'),
         files: z
           .array(z.string())
-          .max(10)
+          .max(MAIL_FILES_MAX)
           .optional()
           .describe(
-            `Files from your own folder to hand them, by their path inside it or their full path, like "attachments/20261110-081108-35bc-image.png": pictures and files ${OWNER} attached in chat are in attachments/. The office copies each to this work's folder, where they read it.`
+            `Files the work needs: one in your folder, by its path inside it or its full path, or one in the folder of work you are on, from ${THREADS_DIR}/. Pictures and files ${OWNER} attached in chat are in attachments/ in your folder. They land in this work for your colleague. Never one from a tool your colleague lacks, without ${OWNER}'s yes.`
           ),
         request: z
           .string()
@@ -1620,9 +1738,7 @@ if (HANDS_OFF.tool) {
             })
       }
     },
-    async ({ to, title, brief, files = [], request, goal, continue_work }) => {
-      const handed = mailAttachments(ME, files);
-      if ('problem' in handed) return notHanded(handed.problem);
+    async ({ to, title, brief, files, request, goal, continue_work }) => {
       if (continue_work !== undefined && (request !== undefined || goal !== undefined))
         return notHanded(
           `Work ${continue_work} keeps its own request and goal. Leave out request and goal, put what is new in the brief, and call hand_off again.`
@@ -1636,12 +1752,15 @@ if (HANDS_OFF.tool) {
         const opens = await placed({});
         if ('problem' in opens) return notHanded(opens.problem);
       }
+      const picked = await filesForHandOff(files ?? [], on);
+      if ('problem' in picked) return notHanded(picked.problem);
       const r = await handOff({
         from: ME,
         to,
-        work: { title, brief, ...(handed.length ? { files: handed.map((f) => f.path) } : {}) },
+        work: { title, brief, ...(picked.here.length ? { files: picked.here } : {}) },
         thread: on !== undefined ? { id: on } : { title: request ?? title, goalId: goal },
-        run: RUN_KEY
+        run: RUN_KEY,
+        carry: picked.carry
       });
       if ('problem' in r) return notHanded(r.problem);
       const name = colleagues.find((c) => c.id === to)?.name ?? to;
@@ -1665,7 +1784,7 @@ if (HANDS_OFF.tool) {
     tool(
       'resume_at',
       {
-        description: `Pick work ${THREAD_ID} back up at a time you set: the office starts a fresh run of yours on it then, with its history. Use it when the next step has to wait for a time, not for a colleague or for ${OWNER}. A new time replaces the old. Then finish this run.`,
+        description: `Pick work ${THREAD_ID} back up at a time you set, or when a task ends: the office starts a fresh run of yours on it then, with its history. Use it when the next step has to wait for a time, or for a task on ${OWNER}'s desk on other work, not for a colleague or for ${OWNER} on this work. A new time or task replaces the old. Then finish this run.`,
         inputSchema: {
           at: z.string().optional().describe(`${ZONE}: "18:50" for today, or "2026-11-02 18:50".`),
           in_minutes: z
@@ -1674,10 +1793,26 @@ if (HANDS_OFF.tool) {
             .min(1)
             .max(10_080)
             .optional()
-            .describe('Instead of at: how many minutes from now.')
+            .describe('Instead of at: how many minutes from now.'),
+          after_task: z
+            .number()
+            .int()
+            .optional()
+            .describe(
+              `Instead of a time: the number of a task on ${OWNER}'s desk, on other work, that you gave or that is on work you are on. You pick this work up when they finish it or drop it.`
+            )
         }
       },
-      async ({ at, in_minutes }) => {
+      async ({ at, in_minutes, after_task }) => {
+        if (after_task !== undefined) {
+          if (at !== undefined || in_minutes !== undefined)
+            return notParked('Give after_task alone, or a time alone, not both.');
+          const parked = await parkOnTask(ME, THREAD_ID, after_task);
+          if ('problem' in parked) return notParked(parked.problem);
+          return text(
+            `Work ${THREAD_ID} picks back up when ${OWNER} finishes or drops "${parked.title}".`
+          );
+        }
         const when =
           in_minutes !== undefined
             ? new Date(Date.now() + in_minutes * 60_000)
@@ -1697,24 +1832,42 @@ if (HANDS_OFF.tool) {
     );
 }
 
-// Only in a chat (`inChat` on its row), and only for threads
-// this Odd works on and does not lead: their words reach the lead, not its own.
-if (said && workingOn.length)
+// Only in a chat (`inChat` on its row), and only for threads this Odd works on
+// and does not lead: their words reach the lead as theirs, and the Odd's own
+// only as its reading.
+if (workingOn.length)
   tool(
     'tell_lead',
     {
-      description: `Pass what ${OWNER} just told you about work you are on to the Odd who leads it, which picks it back up with their words. Copy the part of their message about that work exactly: it goes as theirs. Then tell ${OWNER} you passed it on. The work you are on:\n${workingOn.map((t) => `- ${t.id}: ${t.title}, led by ${t.lead}`).join('\n')}`,
+      description: `Pass what ${OWNER} just told you about work you are on to the Odd who leads it, which picks it back up with their words. Copy the part of their message about that work exactly: it goes as theirs. Then tell ${OWNER} you passed it on. ${PASS_ONLY_WORK} The work you are on:\n${workingOn.map((t) => `- ${t.id}: ${t.title}, led by ${t.lead}`).join('\n')}`,
       inputSchema: {
         work: z.number().int().describe('The number of the work, from the list.'),
         words: z
           .string()
           .min(1)
           .max(4000)
-          .describe(`The part of ${OWNER}'s message about this work, copied exactly.`)
+          .describe(`The part of ${OWNER}'s message about this work, copied exactly.`),
+        reading: z
+          .string()
+          .min(1)
+          .max(600)
+          .describe(
+            'What you understood them to mean, in your own words. The lead reads it as yours, never as theirs.'
+          )
       }
     },
-    async ({ work, words }) => {
-      const r = await tellLead({ staffId: ME, threadId: work, owner: OWNER, said, words });
+    async ({ work, words, reading }) => {
+      const r = await tellLead({
+        staffId: ME,
+        threadId: work,
+        owner: OWNER,
+        // `inChat` offers it only where the office sets OWNER_SAID. With none,
+        // no words match, so tellLead refuses and nothing reaches the lead.
+        said: OWNER_SAID ?? '',
+        words,
+        reading,
+        exchange: process.env.CHAT_EXCHANGE || undefined
+      });
       return text(
         'problem' in r
           ? r.problem

@@ -58,6 +58,26 @@ test('a call the office made tells the Odd not to make it again, with what came 
   assert.ok(lines.includes('- What it returned: captured'));
 });
 
+test("a finished task's run hears only the owner's choice answers", () => {
+  const steps = [
+    {
+      text: 'Paste the key',
+      done: true,
+      answer: 'not-for-the-odd',
+      action: { kind: 'secret', connector: 'c', name: 'n' }
+    },
+    {
+      text: 'Pick a blue',
+      done: true,
+      answer: 'Navy',
+      action: { kind: 'choice', options: ['Navy', 'Teal'] }
+    }
+  ] as TaskRow['steps'];
+  const lines = briefOf('task_done', { t: { row: { ...task.row, steps }, files: [] } });
+  assert.ok(lines.includes('- They answered "Pick a blue" with: Navy'), lines.join('\n'));
+  assert.ok(!lines.join('\n').includes('not-for-the-odd'), lines.join('\n'));
+});
+
 test('a switch the owner turned on tells the Odd its run has it, names what it asked for, and does the work once for a twin ask', () => {
   const asked = { ...ask, kind: 'switch', switches: ['web'] } as AskRow;
   const twin = { ...ask, id: 8 } as AskRow;
@@ -88,4 +108,60 @@ test('every follow-up kind gets its own brief, and feedback gets the feedback br
   }
   assert.match(briefOf('goal', { t: task })[0], FEEDBACK);
   assert.match(briefOf('task_done', { g: goal })[0], FEEDBACK);
+});
+
+test("a finished task's brief names each work that picked up on its own, and is the same as before when none did", () => {
+  const alone = followUpBrief({ ...followUp('task_done'), pickedUp: null }, ask, report, task);
+  const told = followUpBrief(
+    { ...followUp('task_done'), pickedUp: ['Print\nrun', 'Frame it'] },
+    ask,
+    report,
+    task
+  );
+  const lines = [
+    '- "Print run" was waiting on this too and has picked up on its own; leave that work to it.',
+    '- "Frame it" was waiting on this too and has picked up on its own; leave that work to it.'
+  ];
+  assert.deepEqual(
+    told.filter((l) => !lines.includes(l)),
+    alone,
+    'the lines are the only change'
+  );
+  const note = told.indexOf('- Their note: Their words');
+  assert.deepEqual(
+    lines.map((l) => told.indexOf(l)),
+    [note + 1, note + 2],
+    'each line sits with what the owner gave, before the steps'
+  );
+  assert.ok(!alone.some((l) => l.includes('picked up on its own')));
+});
+
+test("a carry-out started by a connect task's end names each work that picked up on its own, after the ask, and is the same as before when none did", () => {
+  const asked: AskRow[] = [
+    { ...ask, kind: 'access', access: { connector: 'gmail', level: 'read' } } as AskRow,
+    {
+      ...ask,
+      kind: 'folder',
+      folder: { path: '/tmp/taxes', level: 'read', given: { path: '/tmp/taxes', level: 'read' } }
+    } as AskRow,
+    { ...ask, kind: 'switch', switches: ['web'] } as AskRow,
+    ask
+  ];
+  const line =
+    '- "Inbox sort" was waiting on this too and has picked up on its own; leave that work to it.';
+  for (const a of asked) {
+    const alone = followUpBrief({ ...followUp('carry_out'), pickedUp: null }, a);
+    const told = followUpBrief({ ...followUp('carry_out'), pickedUp: ['Inbox\nsort'] }, a);
+    assert.deepEqual(
+      told.filter((l) => l !== line),
+      alone,
+      `${a.kind}: the line is the only change`
+    );
+    const at = told.indexOf(line);
+    assert.ok(
+      at > told.indexOf(`- What you said would happen: ${a.ifApproved}`) &&
+        at < told.findIndex((l) => l.startsWith('1. ')),
+      `${a.kind}: the line sits with the ask, before the steps`
+    );
+  }
 });

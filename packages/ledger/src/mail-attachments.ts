@@ -3,8 +3,8 @@
 // chat (its `attachments/`), and what it made. Checked when the Odd proposes the
 // email and again when the office sends it, since the file may change.
 import { lstatSync, realpathSync } from 'node:fs';
-import { basename, isAbsolute, join, relative, sep } from 'node:path';
-import { home, OFFICE_FILE_NAMES } from './home.ts';
+import { basename, isAbsolute, join, relative } from 'node:path';
+import { home, isOfficeFile, isWhereNamed } from './home.ts';
 
 /** One file on an email, by its path inside the Odd's folder. */
 export type MailAttachment = { path: string; name: string; mediaType: string; size: number };
@@ -46,9 +46,9 @@ export const mailType = (name: string): string =>
 
 /**
  * One file the Odd names, by its path inside its folder or its full path
- * there, checked: a plain file (no link, no folder), inside the folder by its
- * real path, not hidden and not the office's own. Otherwise the words that
- * turn it down.
+ * there, checked: a plain file (no link, no folder), where it really is with no
+ * link on the way, not hidden and not the office's own. Otherwise the words
+ * that turn it down.
  */
 export function mailAttachment(
   staffId: string,
@@ -59,18 +59,17 @@ export function mailAttachment(
   const rel = isAbsolute(named) ? relative(dir, named) : named;
   const parts = rel.split(/[\\/]/);
   if (!rel || isAbsolute(rel) || parts.some((p) => !p || p === '.' || p === '..')) return nope;
-  if (
-    parts.some((p) => p.startsWith('.')) ||
-    (parts.length === 1 && OFFICE_FILE_NAMES.includes(rel))
-  )
-    return nope;
+  if (parts.some((p) => p.startsWith('.'))) return nope;
   const path = join(dir, rel);
   try {
     const st = lstatSync(path);
     if (!st.isFile()) return nope;
-    // A folder on the way may be a link out of the Odd's folder.
-    const real = realpathSync.native(path);
-    if (relative(realpathSync.native(dir), real).split(sep)[0] === '..') return nope;
+    const realInside = relative(realpathSync.native(dir), realpathSync.native(path));
+    if (!isWhereNamed({ realInside, named: rel }))
+      return {
+        problem: `${named} is reached through a link, and an email carries only a file where it really is. Name the file itself.`
+      };
+    if (isOfficeFile(realInside)) return nope;
     if (!st.size) return { problem: `${named} is empty.` };
     return {
       path: parts.join('/'),

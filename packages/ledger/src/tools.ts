@@ -28,6 +28,12 @@ export type OfficeTool = {
 const TOOLS = [
   { id: 'raise_ask', name: 'Ask you', does: 'Puts an ask on your desk.', always: true },
   { id: 'my_asks', name: 'Its asks', does: 'Sees how you decided its asks.', always: true },
+  {
+    id: 'my_tasks',
+    name: 'Its tasks',
+    does: 'Sees how you finished the tasks it gave you, and what you answered.',
+    always: true
+  },
   { id: 'my_access', name: 'Its access', does: 'Sees the tools you gave it.', always: true },
   {
     id: 'reconnect_access',
@@ -90,7 +96,7 @@ const TOOLS = [
   {
     id: 'tell_lead',
     name: 'Tell the lead',
-    does: 'Passes what you tell it in chat about work another Odd leads to that Odd, in your words.',
+    does: 'Passes what you tell it in chat about work another Odd leads to that Odd: your words, and what it understood you to mean.',
     always: true,
     inChat: true
   },

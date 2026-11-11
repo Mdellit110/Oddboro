@@ -41,7 +41,6 @@ import {
   capabilities,
   capped,
   handOffBrief,
-  handFiles,
   handOffContext,
   handOffsFor,
   resultsToJoin,
@@ -57,8 +56,17 @@ import {
   recentThreadsBrief,
   threadsOn,
   threadsOnBrief,
-  goalsLedBrief,
+  workLedBrief,
+  workOnBrief,
   ledStories,
+  onStories,
+  storyOf,
+  threadOnKnown,
+  fitStories,
+  stageOf,
+  CHAT_STORIES_MAX,
+  type RecentThread,
+  type ThreadLine,
   type ThreadStory,
   HEALTH_WORDS,
   handsOff,
@@ -110,6 +118,7 @@ import {
   type Agent,
   type StaffRow,
   type UsageKind,
+  type Unparked,
   clockTime,
   pokeMissed,
   zone,
@@ -143,6 +152,7 @@ import {
   type CallPlace,
   type ConnectorRow
 } from '@oddboro/ledger';
+import { askReplaced, stepAnswer } from '@oddboro/ledger/desk-answers';
 import { fixedError } from '@oddboro/ledger/errors';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
@@ -159,6 +169,7 @@ import { changedSince, replay, replayed, replayedAt, replaySince } from './repla
 import {
   chatPreface,
   fileLine,
+  lastExchange,
   missedAt,
   type KeptFile,
   type RetoldEntry,
@@ -185,7 +196,7 @@ import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.
 import { sandboxPaths } from './sandbox-paths.ts';
 import { agentCommand } from './agent-sign-in.ts';
 import { ACT_WRITE, house, stillOnDeskSection, whoIsHereSection } from './house.ts';
-import { followUpBrief } from './follow-up-brief.ts';
+import { followUpBrief, waitEnded } from './follow-up-brief.ts';
 import { OUTCOME_LINE, personaRun, voiced } from './persona-run.ts';
 
 /** The owner's data folder, which every staffer may read, whatever tool it runs on. */
@@ -368,7 +379,8 @@ async function replyBrief(
           `({owner} is replying about your ask #${a.id}, "${a.title}", which is ${a.status === 'open' ? 'still open' : a.status}.`,
           `- Why: ${a.why}`,
           `- If approved: ${a.ifApproved}`,
-          ...(a.reason ? [`- Their reason: ${a.reason}`] : []),
+          // A replaced ask holds the office's words, and this line would say the owner wrote them.
+          ...(a.reason && !askReplaced(a) ? [`- Their reason: ${a.reason}`] : []),
           ')'
         ].join('\n')
       };
@@ -381,10 +393,10 @@ async function replyBrief(
         brief: [
           `({owner} is replying about the task you gave them, "${t.title}", which is ${t.status === 'open' ? 'still open' : t.status}.`,
           `- Why: ${t.why}`,
-          ...t.steps.map(
-            (st, i) =>
-              `- Step ${i + 1}: ${st.text}${st.done ? ' (done)' : ''}${st.answer ? `. Their answer: ${st.answer}` : ''}`
-          ),
+          ...t.steps.map((st, i) => {
+            const answer = stepAnswer(st);
+            return `- Step ${i + 1}: ${st.text}${st.done ? ' (done)' : ''}${answer ? `. Their answer: ${answer}` : ''}`;
+          }),
           ...(t.note ? [`- Their note: ${t.note}`] : []),
           ')'
         ].join('\n')
@@ -618,9 +630,12 @@ function canDo(
  * a run on a thread hands on in that one, and a run that cannot hand on is
  * told none (`leads`). A chat also lists the threads it
  * works on and does not lead, so what {owner} says there about one reaches
- * its lead. `led` are the stories of the threads it leads that the run is
- * told in full (`ledStories`): the lead's run on its thread is told how to
- * move it on, and its chat where each of its goals stands.
+ * its lead. `led` are the stories of the threads it leads (`ledStories`):
+ * the lead's run on its thread is told how to move it on, and its chat where
+ * its work stands. `on` are the stories of work another Odd leads: a chat's
+ * (`onStories`) or a colleague's run on that thread (`storyOf`). A chat's
+ * stories together keep to `CHAT_STORIES_MAX`, since it pays for them on every
+ * turn; one left out keeps its line in these lists.
  */
 async function prompt(
   who: StaffRow,
@@ -631,6 +646,7 @@ async function prompt(
     thread?: number;
     chat: boolean;
     led: ThreadStory[];
+    on: ThreadStory[];
     shown?: number[];
     own: OwnTools;
     /** Whether this office holds the network (`networkHeld`), read once as the run starts. */
@@ -642,10 +658,20 @@ async function prompt(
     hands: { tool: boolean; leads: boolean };
   }
 ): Promise<string> {
-  const { dir, own, hands } = opts;
+  const { dir, own, hands, chat } = opts;
   // run() fills in the time, so the rest can be compared with what a resumed session saw.
   const now = NOW;
   const updating = installsAt();
+  const led = chat
+    ? fitStories(opts.led, (s) => workLedBrief([s]), CHAT_STORIES_MAX)
+    : { kept: opts.led, used: 0 };
+  const on = chat
+    ? fitStories(opts.on, (s) => workOnBrief([s]), CHAT_STORIES_MAX - led.used).kept
+    : opts.on;
+  const goalsLeftOut = opts.led
+    .filter((s) => s.thread.goalId !== null && !led.kept.includes(s))
+    .sort((a, b) => b.thread.id - a.thread.id)
+    .map(listedLine);
   return (
     who.desk +
     '\n' +
@@ -659,16 +685,22 @@ async function prompt(
         )
       : '') +
     (await taught(who)) +
-    // A chat is told each live goal it leads in full (`goalsLedBrief`), so its list leaves them out.
+    // A chat is told the story of each live goal it leads (`workLedBrief`), so
+    // its list leaves those out. Work with no goal stays on it, told or not: the
+    // list is where the run hears how to continue it.
     (hands.leads
-      ? recentThreadsBrief(
-          await recentThreads(who.id, { told: opts.led.map((story) => story.thread.id) })
-        )
+      ? recentThreadsBrief([
+          ...goalsLeftOut,
+          ...(await recentThreads(who.id, {
+            told: led.kept.filter((s) => s.thread.goalId !== null).map((s) => s.thread.id)
+          }))
+        ])
       : '') +
-    (opts.chat ? threadsOnBrief(await threadsOn(who.id)) : '') +
+    (chat ? threadsOnBrief(await threadsOn(who.id)) : '') +
     (opts.thread
       ? opts.led.flatMap((story) => threadBrief({ story, shown: opts.shown })).join('\n')
-      : goalsLedBrief(opts.led)) +
+      : workLedBrief(led.kept)) +
+    (chat ? workOnBrief(on) : on.flatMap((story) => threadOnKnown({ story })).join('\n')) +
     stillOnDeskSection(await stillOnDesk(who.id)) +
     house({
       has: (t) => hasTool(who.tools, t),
@@ -685,6 +717,14 @@ async function prompt(
     canDo(opts.caps, opts.owner, who.agent, own, opts.officeHeld)
   );
 }
+
+/** A story as its one line in the list of work an Odd leads. */
+const listedLine = ({ thread: t, waiting, goal }: ThreadStory): RecentThread => ({
+  id: t.id,
+  title: t.title,
+  stage: stageOf(t.status, waiting),
+  goal
+});
 
 /**
  * How a run ended. `saved` means its tool named a session, which went in the
@@ -822,6 +862,8 @@ export type RunOpts = {
   extra?: string;
   /** The owner's own message, when this is a chat. */
   ownerSaid?: string;
+  /** That chat as it stood before the owner's message: `tell_lead` passes on its last exchange. */
+  chatBefore?: ChatEntry[];
   /** What a follow-up was asked, in words a persona can read: its `message` is only a label. */
   asked?: string;
   /** The ask the owner approved that this run carries out: the only one its self-edits may cite. */
@@ -905,14 +947,24 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   const prior = saved?.sessionId;
   const time = officeNow();
   const inChat = opts.kind === 'chat';
-  // What the lead knows of the threads it leads, read now, as the run starts.
-  // A lead's chat reads its goals' folders, as its pick-ups there do.
+  // What the Odd knows of the work it leads and the work it is on, read now,
+  // as the run starts.
   const led = opts.threadId
     ? await ledStories(who.id, { thread: opts.threadId })
     : inChat
       ? await ledStories(who.id, 'chat')
       : [];
-  const reads = opts.threadId ? [opts.threadId] : led.map((s) => s.thread.id);
+  const on = inChat
+    ? await onStories(who.id)
+    : opts.threadId && !led.length
+      ? await storyOf(opts.threadId)
+      : [];
+  // A chat reads the folder of all that work, even a story too long to be told
+  // there. A folder not made yet stays out: each tool would be started with a
+  // path that does not exist. A run on a thread reads that one folder.
+  const reads = opts.threadId
+    ? [opts.threadId]
+    : [...led, ...on].map((s) => s.thread.id).filter((id) => existsSync(threadFolder(id)));
   // The owner's switches and folders as this run's tool takes them (the
   // ledger's `ownTools`, which `capabilities` worked out once), less a network
   // this office holds back after Claude Code refused the open one. Read once,
@@ -936,6 +988,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       thread: opts.threadId,
       chat: inChat,
       led,
+      on,
       shown: opts.shown,
       own,
       officeHeld,
@@ -951,6 +1004,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
     officeEnv({
       key,
       ownerSaid: opts.ownerSaid,
+      chatExchange: opts.chatBefore && lastExchange(opts.chatBefore, { owner, odd: who.name }),
       approvedAsk: opts.approvedAsk,
       signedOut: caps.outside
         .filter((a) => a.heldBack === 'sign-in ran out')
@@ -1410,6 +1464,7 @@ export async function chat(
       r = await run(who, prompt, {
         kind: 'chat',
         ownerSaid: message,
+        chatBefore: past,
         images: [...files, ...missed].flatMap((f: KeptFile) =>
           'gone' in f || !isPicture(f.mediaType) ? [] : [{ path: f.path, mediaType: f.mediaType }]
         ),
@@ -1506,7 +1561,7 @@ function editBrief(path: string, shown: EditShown): string[] {
  * counts as failed, so the owner hears about it.
  */
 export async function followThrough(
-  f: FollowUpRow,
+  f: FollowUpRow & { unparked?: Unparked },
   a?: AskRow,
   r?: ReportRow,
   t?: TaskRow,
@@ -1643,6 +1698,8 @@ export async function followThrough(
         '',
         '{owner} is not in a chat with you.',
         '',
+        // Here, before the kind's own brief, so every kind of run that ended a park says so.
+        ...(f.unparked ? waitEnded(f.unparked) : []),
         ...(handed && colleague && thread
           ? handOffBrief({
               kind: handed.kind,
@@ -1652,12 +1709,7 @@ export async function followThrough(
               result: f.note,
               thread: thread.id,
               goal: goalServed,
-              joined,
-              // Copied now, before the run starts, so the colleague's run reads them.
-              files:
-                handed.kind === 'hand_off' && handed.files?.length
-                  ? handFiles(handed, thread.id)
-                  : undefined
+              joined
             })
           : edit
             ? editBrief(edit.path, edit.shown)

@@ -1,11 +1,13 @@
 // What a chat message tells the staffer's chat session before the owner's
 // words: the lines in its chat that no run of the session wrote, the owner's
 // messages whose run failed, the work it put on the desk, and the asks the
-// owner decided, since the session last heard. Without it, an answer to a
-// new manager's hello, or "How did the call go?" after a poke, means nothing
-// to the session.
+// owner decided and tasks they ended, since the session last heard. Without
+// it, an answer to a new manager's hello, or "How did the call go?" after a
+// poke, means nothing to the session.
+import { flat, SAID_AS } from '@oddboro/ledger/desk-answers';
 import type { ChatEntry } from '../staff/chat.ts';
 import type { ChatFile } from '#lib/attachments.ts';
+import { cut } from './run-env.ts';
 
 /** An attached file as a run hears it: kept, with its full path, or gone from the attachments folder since. */
 export type KeptFile = (ChatFile & { path: string }) | { tag: string; gone: true };
@@ -36,21 +38,44 @@ export const retoldLine = (e: RetoldEntry): string =>
 /** A line the session never saw: a poke the office delivered, a line it said in the staffer's name, or a failed run's error. */
 const unseen = (e: ChatEntry) => e.poke || e.told || e.failed;
 
-/** Something the staffer put on the desk, as the chat lists it, and when the owner decided an ask. */
+/** Something the staffer put on the desk, as the chat lists it, and when the owner decided an ask or ended a task. */
 type Landed = { kind: string; title: string; at: Date; status?: string; decidedAt?: Date | null };
 
-/** How the session hears each decision on an ask (`AskStatus`). */
-const DECIDED: Record<string, string> = {
-  approved: 'approved',
-  denied: 'turned down',
-  revise: 'sent back'
-};
+// Any desk item's status reaches here as text, and one with no word keeps its own.
+const said: Partial<Record<string, string>> = SAID_AS;
+const howItEnded = (d: Landed) => `"${d.title}" ${said[d.status ?? ''] ?? d.status}`;
 
 /**
  * The chat resumes the session saved last, or starts a new one that hears the
  * lines of `past` at `replayed` word for word (`replay` in replay.ts).
  */
 export type Session = 'resumed' | { replayed: Set<number> };
+
+/** The most of one chat line `lastExchange` carries, in UTF-16 units. */
+const EXCHANGE_LINE_MAX = 300;
+
+/**
+ * The last Odd line before the owner's message and the owner line before it,
+ * each on a line of its own and cut to `EXCHANGE_LINE_MAX`, for tell_lead. A
+ * told or poke line counts as the Odd's: the owner read it just before
+ * replying, whichever way it was written. Without an owner line before it (a
+ * hello, a first question) it is the Odd's half alone. The Odd's half is last,
+ * so tell_lead can leave it out for a lead that lacks the Odd's tools
+ * (`exchangeForLead` in the ledger's `threads.ts`).
+ */
+export function lastExchange(
+  past: ChatEntry[],
+  who: { owner: string; odd: string }
+): string | undefined {
+  const spoken = past.filter((e) => !e.failed && flat(e.text));
+  const odd = spoken.findLastIndex((e) => e.from === 'staff');
+  if (odd < 0) return undefined;
+  const quoted = (e: ChatEntry) => `"${cut(flat(e.text), EXCHANGE_LINE_MAX)}"`;
+  const owner = spoken.slice(0, odd).findLast((e) => e.from === 'owner');
+  return owner
+    ? `Just before, ${who.owner} said: ${quoted(owner)}.\n${who.odd} replied: ${quoted(spoken[odd])}.`
+    : `Just before, ${who.odd} said: ${quoted(spoken[odd])}.`;
+}
 
 /** Where `past` stands for `session`: which lines it holds, and the failed runs since the owner last wrote. */
 function heardOf(past: ChatEntry[], session: Session) {
@@ -91,8 +116,10 @@ export function chatPreface(past: RetoldEntry[], landed: Landed[], session: Sess
   // The session saw what it delivered up to the end of its last reply.
   const last = past.findLast((e, i) => !unseen(e) && !failedOn(i))?.at ?? '';
   const put = landed.filter((d) => d.at.toISOString() > last);
-  // Without this, a resumed session says an ask still waits after the owner decided it.
-  const decided = landed.filter((d) => d.decidedAt && d.decidedAt.toISOString() > last);
+  // Without these, a resumed session says an ask or a task still waits after the owner ended it.
+  const ended = landed.filter((d) => d.decidedAt && d.decidedAt.toISOString() > last);
+  const decided = ended.filter((d) => d.kind !== 'task');
+  const endedTasks = ended.filter((d) => d.kind === 'task');
   return [
     ...(told.length
       ? [
@@ -128,7 +155,12 @@ export function chatPreface(past: RetoldEntry[], landed: Landed[], session: Sess
       : []),
     ...(decided.length
       ? [
-          `(Since your last reply, {owner} decided your asks: ${decided.map((d) => `"${d.title}" ${DECIDED[d.status ?? ''] ?? d.status}`).join(', ')}. my_asks has their reasons.)`
+          `(Since your last reply, {owner} decided your asks: ${decided.map(howItEnded).join(', ')}. my_asks has their reasons.)`
+        ]
+      : []),
+    ...(endedTasks.length
+      ? [
+          `(Since your last reply, {owner} ended your tasks: ${endedTasks.map(howItEnded).join(', ')}. my_tasks has what they said.)`
         ]
       : [])
   ];
