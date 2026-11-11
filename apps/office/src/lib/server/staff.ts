@@ -175,7 +175,7 @@ import {
   type RetoldEntry,
   type Session
 } from './chat-preface.ts';
-import { filesNow, keptAt } from './chat-files.ts';
+import { filesNow, keptAt, plainName } from './chat-files.ts';
 import { officeEnv } from './run-env.ts';
 import { runEnv, toolServerEnv } from './run-env-allow.ts';
 import { firstDayOf } from './first-day.ts';
@@ -1007,7 +1007,11 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       key,
       ownerSaid: opts.ownerSaid,
       chatExchange: opts.chatBefore && lastExchange(opts.chatBefore, { owner, odd: who.name }),
-      ownerFiles: opts.ownerFiles?.map((f) => ({ tag: f.tag, path: keptAt(f.name) })),
+      ownerFiles: opts.ownerFiles?.map((f) => ({
+        tag: f.tag,
+        path: keptAt(f.name),
+        name: plainName(f.name)
+      })),
       approvedAsk: opts.approvedAsk,
       signedOut: caps.outside
         .filter((a) => a.heldBack === 'sign-in ran out')
