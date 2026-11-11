@@ -1996,6 +1996,23 @@ export async function followUpsToDo(): Promise<
 }
 
 /**
+ * Follow-ups of Odds still in the office that have yet to start, oldest
+ * first. One waits while a run of its Odd on the same work goes
+ * (`waitsOnOwnRun`), such as the chat that gave the owner the task it picks
+ * up after; any other starts at the office's next look. The office lists them
+ * under In progress, so work the owner's answer started shows while it waits.
+ */
+export async function followUpsToStart(): Promise<FollowUpRow[]> {
+  return db
+    .select()
+    .from(followUps)
+    .where(
+      and(isNull(followUps.startedAt), isNull(followUps.outcome), ofWorkingOdd(followUps.staffId))
+    )
+    .orderBy(asc(followUps.createdAt), asc(followUps.id));
+}
+
+/**
  * An Odd runs once at a time on a thread: a follow-up on one waits while a run
  * of the same Odd there has yet to end. So a hub never picks its thread up
  * twice at once, and a colleague's run on the owner's answer starts only once

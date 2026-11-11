@@ -696,7 +696,12 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `inProgress` (the `Work` shape in `src/lib/staff/work.ts`) with what it
    is, when it started, and the tool it is using now. The list reaches the
    page with each `working` event; only work starting or ending reloads the
-   card's tabs. Every Claude Code run gets the
+   card's tabs. In progress also lists each follow-up yet to start
+   (`followUpsWaiting` in `follow-ups.ts`, from the ledger's
+   `followUpsToStart`), such as a lead's pick-up after a task the owner
+   finished while the chat that gave it still goes: its title, what it will
+   do, and "Starts once <name>'s current run on this work ends". The page
+   reads those with `/api/office`, again on each change to `follow_ups`. Every Claude Code run gets the
    office's file tools where `FILES_VIA_OFFICE` says, else its own five
    (Read, Glob, Grep, Write, Edit), `Bash` with Run commands and
    `WebSearch` and `WebFetch` with Browse the web, and reads only its own

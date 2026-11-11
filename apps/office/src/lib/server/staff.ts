@@ -105,7 +105,6 @@ import {
   type EditShown,
   type FollowUpRow,
   type GoalRow,
-  type FollowUpKind,
   type HandOffStep,
   type JobRow,
   type Level,
@@ -156,7 +155,7 @@ import { askReplaced, stepAnswer } from '@oddboro/ledger/desk-answers';
 import { fixedError } from '@oddboro/ledger/errors';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
-import { floorTool, type Work } from '../staff/work.ts';
+import { floorTool, followUpDetail, type Work } from '../staff/work.ts';
 import type { ChatEntry, ChatEvent, ChatRef } from '../staff/chat.ts';
 import { closeGateway, openGateway } from './gateway.ts';
 import { awsReady } from './aws.ts';
@@ -1660,20 +1659,7 @@ export async function followThrough(
     f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder' || a?.kind === 'switch')
       ? await standsFor(a)
       : [];
-  const details: Record<FollowUpKind, string> = {
-    carry_out: `Carrying out ask #${a?.id}`,
-    rework: `Reworking ask #${a?.id}`,
-    denied: `Reading why you said no to ask #${a?.id}`,
-    task_done: 'Picking up after your task',
-    goal: 'Planning your goal',
-    first_day: 'Getting started',
-    feedback: 'Acting on your feedback',
-    hand_off: `Work ${colleague?.name} handed over`,
-    handed_back: `Picking up after ${colleague?.name}`,
-    resume: 'Picking the work back up',
-    edited: 'Learning from your edit'
-  };
-  const detail = details[f.kind];
+  const detail = followUpDetail(f.kind, { ask: a?.id, colleague: colleague?.name });
   // A colleague handed work on a goal's thread is told the goal in its brief.
   const goalServed =
     handed?.kind === 'hand_off' && thread?.goalId ? await findGoal(thread.goalId) : undefined;
