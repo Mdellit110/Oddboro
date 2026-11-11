@@ -590,7 +590,11 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   stopped one. The lead wakes to read the owner's words, the colleague's own
   reading, labelled as not the owner's, and the last exchange in that chat,
   less the colleague's own line when the lead lacks a tool the colleague holds
-  (`lacking`, `exchangeForLead`), which the note says was left out. The
+  (`lacking`, `exchangeForLead`), which the note says was left out. Every
+  file the owner attached to that message (`OWNER_FILES`) is copied into the
+  colleague's part of the work, by `hand_off`'s checks (`fitToCarry` in
+  `mcp.ts`) and copy (`carryEach`), and the note lists each at its path
+  there, or says which did not come and why; the words go either way. The
   colleague does nothing more, so the lead decides and hands on.
   With a goal's thread among them, `raise_ask`, `give_owner_a_task`,
   `ask_for_access`, `propose_hire` and a `hand_off` that would open a thread
