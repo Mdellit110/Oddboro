@@ -36,6 +36,12 @@ export const OFFICE_TOOLS: readonly OfficeTool[] = [
     does: 'Asks you to turn on Run commands or Browse the web for it. You turn it on with one click.',
     always: true
   },
+  {
+    id: 'ask_for_standing_yes',
+    name: 'Ask to stop asking',
+    does: 'Asks you to let it use a tool without asking each time, such as one that only stages a change. You say yes or no once.',
+    always: true
+  },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
   {
     id: 'leave_office',
@@ -218,4 +224,8 @@ export const tickable = (s: Step) => !s.action || s.action.kind === 'oauth';
  * brings one back, which has nothing to rework.
  */
 export const yesOrNo = (kind: AskKind | undefined): boolean =>
-  kind === 'hand_offs' || kind === 'window' || kind === 'remove' || kind === 'bring_back';
+  kind === 'hand_offs' ||
+  kind === 'window' ||
+  kind === 'remove' ||
+  kind === 'bring_back' ||
+  kind === 'standing';

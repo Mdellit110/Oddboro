@@ -127,6 +127,27 @@
       "when": 1794300345026,
       "tag": "0017_see-office",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794369423323,
+      "tag": "0018_standing-yes",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794421338509,
+      "tag": "0019_tool-notes",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794422568728,
+      "tag": "0020_ask-first",
+      "breakpoints": true
     }
   ]
 }

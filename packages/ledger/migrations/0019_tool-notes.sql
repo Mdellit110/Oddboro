@@ -1,0 +1,1 @@
+ALTER TABLE "connectors" ADD COLUMN "tool_notes" jsonb DEFAULT '{}'::jsonb NOT NULL;

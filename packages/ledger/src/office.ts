@@ -82,6 +82,7 @@ import {
   type Outcome,
   type HeldCall,
   type ReplyDraft,
+  type StandingRequest,
   type LedgerKind,
   type RunTrigger,
   type Schedule,
@@ -105,6 +106,7 @@ import {
 // Read only inside functions, so the import cycle with managers.ts is safe.
 import { MANAGER_ROLE } from './managers.ts';
 import { bringBack, leavingRefused, removeOdd } from './leaving.ts';
+import { giveStanding } from './standing.ts';
 import {
   grantWorks,
   levelAtMost,
@@ -1069,6 +1071,29 @@ async function refuseSecondSwitch(
     );
 }
 
+/** A standing ask for tools an open one already covers: the open one is the ask. */
+async function refuseSecondStanding(
+  tx: Tx,
+  staffId: string,
+  want: StandingRequest,
+  revises?: number
+): Promise<void> {
+  const open = await tx
+    .select()
+    .from(asks)
+    .where(and(eq(asks.staffId, staffId), eq(asks.kind, 'standing'), eq(asks.status, 'open')));
+  const same = open.find(
+    (r) =>
+      r.id !== revises &&
+      r.standing?.connector === want.connector &&
+      want.tools.every((t) => r.standing!.tools.includes(t))
+  );
+  if (same)
+    throw new AlreadyOnDesk(
+      `Your ask #${same.id} to use ${(same.standing?.tools ?? []).join(', ')} without asking is already there.`
+    );
+}
+
 /** The asks an Odd raises in its own words, which may not repeat one already open. Access asks have twins instead (`asksNoMore`). */
 const ONCE_ONLY: AskKind[] = ['approval', 'goal', 'remove', 'bring_back'];
 
@@ -1094,9 +1119,20 @@ export async function raiseAsk(
     call?: HeldCall;
     /** A remove or bring_back ask's Odd (leaving.ts). */
     odd?: string;
-    /** `goal`, `plan`, `reply`, `filter`, `folder`, `switch`, `call`, `remove` and `bring_back` say so; the rest follow from access or hire. */
+    /** A standing ask's tools (`ask_for_standing_yes`, standing.ts). */
+    standing?: StandingRequest;
+    /** `goal`, `plan`, `reply`, `filter`, `folder`, `switch`, `call`, `remove`, `bring_back` and `standing` say so; the rest follow from access or hire. */
     kind?:
-      'goal' | 'plan' | 'reply' | 'filter' | 'folder' | 'switch' | 'call' | 'remove' | 'bring_back';
+      | 'goal'
+      | 'plan'
+      | 'reply'
+      | 'filter'
+      | 'folder'
+      | 'switch'
+      | 'call'
+      | 'remove'
+      | 'bring_back'
+      | 'standing';
     revises?: number;
     /** The colleague whose handed-back work the lead raised this from (`VIA`). */
     via?: string;
@@ -1121,12 +1157,13 @@ export async function raiseAsk(
     // answer an email twice, and a filter may not file the same mail twice.
     // A folder or switch ask may not repeat one from the same place.
     // Office-raised kinds and access twins are left alone.
-    if (ONCE_ONLY.includes(kind) || a.reply || a.filter || a.folder || a.switches) {
+    if (ONCE_ONLY.includes(kind) || a.reply || a.filter || a.folder || a.switches || a.standing) {
       await lockDesk(tx, staffId);
       if (a.reply) await refuseSecondReply(tx, staffId, a.reply, a.revises);
       else if (a.filter) await refuseSecondFilter(tx, staffId, a.filter, a.revises);
       else if (a.folder) await refuseSecondFolder(tx, staffId, { ...a, folder: a.folder });
       else if (a.switches) await refuseSecondSwitch(tx, staffId, { ...a, switches: a.switches });
+      else if (a.standing) await refuseSecondStanding(tx, staffId, a.standing, a.revises);
       else await refuseRepeat(tx, staffId, a.title, a.revises);
     }
     // A plan goes on its goal's one thread, whatever run raised it: a chat,
@@ -1554,6 +1591,8 @@ async function decide(
       claimed?.kind === 'switch' && decision === 'approve'
         ? await turnOnSwitches(tx, claimed)
         : undefined;
+    // The standing yes goes on the grant with the yes, or neither happens.
+    if (claimed?.kind === 'standing' && decision === 'approve') await giveStanding(tx, claimed);
     // A yes or a no answers the twins too, at the same moment (`answeredWith`).
     // Sending one back leaves them waiting for the new version's answer.
     const open =
@@ -2660,32 +2699,156 @@ async function forgetAws(c: ConnectorRow): Promise<boolean> {
 export async function connectorReady(
   id: string,
   tools: string[],
-  readTools: string[]
+  readTools: string[],
+  toolNotes?: Record<string, string>
 ): Promise<void> {
   await db
     .update(connectors)
-    .set({ tools, readTools, readyAt: new Date() })
+    .set({ tools, readTools, readyAt: new Date(), ...(toolNotes ? { toolNotes } : {}) })
     .where(eq(connectors.id, id));
 }
 
+/** Each tool's description, by name, from a tools/list. */
+export const notesOf = (tools: { name: string; description?: string }[]): Record<string, string> =>
+  Object.fromEntries(tools.map((t) => [t.name, t.description?.trim() ?? '']));
+
+/** A tool as its service lists it now, and whether a Read only grant reaches it (`readsOnly`, or the service's role). */
+export type ListedTool = { name: string; description?: string; readOnly: boolean };
+
+/** What a refresh changed in a connector's stored tools (`refreshTools`). */
+export type ToolChanges = {
+  added: string[];
+  gone: string[];
+  /** Tools a Read only grant reaches now, and ones it no longer does. */
+  read: string[];
+  unread: string[];
+  /** Whether any tool's description changed. */
+  notes: boolean;
+  /** Each Odd that lost a standing yes to a tool the service dropped, with those tools. */
+  standing: { staffId: string; tools: string[] }[];
+};
+
+/** A refresh's changes in a few words for the owner, or that nothing changed. */
+export function changesSaid(ch: ToolChanges): string {
+  const said = [
+    ch.added.length && `${ch.added.length} new`,
+    ch.gone.length && `${ch.gone.length} gone`,
+    (ch.read.length || ch.unread.length) && 'Read only changed',
+    ch.notes && !ch.added.length && 'descriptions changed'
+  ].filter(Boolean);
+  return said.length ? `Tools updated: ${said.join(', ')}.` : 'Up to date.';
+}
+
+const sameNotes = (a: Record<string, string>, b: Record<string, string>): boolean =>
+  Object.keys(a).length === Object.keys(b).length &&
+  Object.entries(a).every(([k, v]) => b[k] === v);
+
 /**
- * Take tools out of what a Read only grant to a connector reaches, when they
- * no longer pass `readsOnly`: a connector the owner connected before the rule
- * held, or a server that changed its marks. Records which ones went and why,
- * so the owner can see it in the Ledger.
+ * Bring a connector's stored tools up to date with what its service lists
+ * now: the tool list, what Read only reaches (the same rule as connecting,
+ * both ways), and what each tool does. A tool the service dropped leaves each
+ * Odd's standing yes, so a new tool by that name waits for the owner's yes.
+ * Writes, and says so in the Ledger, only when something changed. Each run
+ * that lists the tools calls it, and so do the owner's Refresh, the office's
+ * start and its daily look (the office's access.ts).
  */
-export async function narrowReadTools(id: string, gone: string[]): Promise<void> {
-  const c = await connector(id);
-  if (!c || !gone.length) return;
-  const keep = c.readTools.filter((t) => !gone.includes(t));
-  if (keep.length === c.readTools.length) return;
-  await db.update(connectors).set({ readTools: keep }).where(eq(connectors.id, id));
-  await record({
-    kind: 'access',
-    actor: 'office',
-    title: `Read only for ${c.name} no longer reaches ${gone.join(', ')}`,
-    body: `${c.name} does not mark ${gone.length === 1 ? 'it' : 'them'} as only reading, or the name says ${gone.length === 1 ? 'it changes' : 'they change'} something. Read and write reaches ${gone.length === 1 ? 'it' : 'them'}: at Drafts for your yes each use waits for your yes, and at Acts on its own it goes.`
+export async function refreshTools(id: string, listed: ListedTool[]): Promise<ToolChanges> {
+  const names = listed.map((t) => t.name);
+  const reads = listed.filter((t) => t.readOnly).map((t) => t.name);
+  const notes = notesOf(listed);
+  const none: ToolChanges = {
+    added: [],
+    gone: [],
+    read: [],
+    unread: [],
+    notes: false,
+    standing: []
+  };
+  const done = await db.transaction(async (tx) => {
+    // Locked, so two runs that start at once record a change once.
+    const [c] = await tx.select().from(connectors).where(eq(connectors.id, id)).for('update');
+    if (!c) return undefined;
+    const ch: ToolChanges = {
+      added: names.filter((t) => !c.tools.includes(t)),
+      gone: c.tools.filter((t) => !names.includes(t)),
+      read: reads.filter((t) => !c.readTools.includes(t)),
+      unread: c.readTools.filter((t) => !reads.includes(t)),
+      notes: !sameNotes(notes, c.toolNotes),
+      standing: []
+    };
+    if (!ch.added.length && !ch.gone.length && !ch.read.length && !ch.unread.length && !ch.notes)
+      return { c, ch };
+    await tx
+      .update(connectors)
+      .set({ tools: names, readTools: reads, toolNotes: notes })
+      .where(eq(connectors.id, id));
+    if (ch.gone.length)
+      for (const g of await tx.select().from(grants).where(eq(grants.connectorId, id))) {
+        const lost = g.standing.filter((t) => ch.gone.includes(t));
+        if (!lost.length) continue;
+        await tx
+          .update(grants)
+          .set({ standing: g.standing.filter((t) => !lost.includes(t)) })
+          .where(and(eq(grants.staffId, g.staffId), eq(grants.connectorId, id)));
+        ch.standing.push({ staffId: g.staffId, tools: lost });
+      }
+    return { c, ch };
   });
+  if (!done) return none;
+  const { c, ch } = done;
+  const them = (n: string[]) => (n.length === 1 ? 'it' : 'them');
+  if (ch.added.length || ch.gone.length)
+    await record({
+      kind: 'access',
+      actor: 'office',
+      title: [
+        ch.added.length && `${c.name} added ${ch.added.join(', ')}`,
+        ch.gone.length &&
+          `${ch.added.length ? 'dropped' : `${c.name} dropped`} ${ch.gone.join(', ')}`
+      ]
+        .filter(Boolean)
+        .join(', and '),
+      body: `The office reads ${c.name}'s tools when it starts, once a day, on each run and on your Refresh. Read and write reaches a new tool at once.`
+    });
+  // A tool the service dropped leaves Read only with it; only a mark that changed is news.
+  const unread = ch.unread.filter((t) => !ch.gone.includes(t));
+  if (unread.length)
+    await record({
+      kind: 'access',
+      actor: 'office',
+      title: `Read only for ${c.name} no longer reaches ${unread.join(', ')}`,
+      body: `${c.name} does not mark ${them(unread)} as only reading, or the name says ${unread.length === 1 ? 'it changes' : 'they change'} something. Read and write reaches ${them(unread)}: at Drafts for your yes each use waits for your yes, and at Acts on its own it goes.`
+    });
+  if (ch.read.length)
+    await record({
+      kind: 'access',
+      actor: 'office',
+      title: `Read only for ${c.name} now reaches ${ch.read.join(', ')}`,
+      body: `${c.name} marks ${them(ch.read)} as only reading, and the name says no change.`
+    });
+  for (const s of ch.standing) {
+    const who = await staffer(s.staffId);
+    await record({
+      kind: 'access',
+      actor: 'office',
+      title: `${who?.name ?? s.staffId} asks again before using ${s.tools.join(', ')} in ${c.name}`,
+      body: `${c.name} no longer lists ${them(s.tools)}, so a tool that comes back by that name waits for your yes.`
+    });
+  }
+  return ch;
+}
+
+/** Each connected service at least one Odd holds: the ones the office keeps current. */
+export async function connectorsInUse(): Promise<ConnectorRow[]> {
+  return db
+    .select()
+    .from(connectors)
+    .where(
+      and(
+        isNotNull(connectors.readyAt),
+        exists(db.select().from(grants).where(eq(grants.connectorId, connectors.id)))
+      )
+    );
 }
 
 export async function grantsFor(
@@ -2716,7 +2879,8 @@ export async function setGrantLevel(
     throw new Error(`${who.name} holds ${who.permission}, so it cannot be given ${level}`);
   const [changed] = await db
     .update(grants)
-    .set({ level })
+    // Read only changes nothing: both exceptions go with write.
+    .set(level === 'read' ? { level, standing: [], askFirst: [] } : { level })
     .where(
       and(
         eq(grants.staffId, staffId),

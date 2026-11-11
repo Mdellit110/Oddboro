@@ -455,8 +455,8 @@ test('every office tool refuses a key it does not take, and says which keys it d
   // tell_lead, and a run on that work offers resume_at.
   await db.insert(staff).values({ ...odd('all', 'Ada'), tools: OFFICE_TOOLS.map((t) => t.id) });
   await db.insert(staffGoals).values({ staffId: 'all', goalId: fair.id, part: 'Everything' });
-  // Gmail at any level offers propose_reply.
-  await db.insert(grants).values({ staffId: 'all', connectorId: 'gmail', level: 'read' });
+  // Gmail at any level offers propose_reply, and at write ask_for_standing_yes.
+  await db.insert(grants).values({ staffId: 'all', connectorId: 'gmail', level: 'act' });
   const reached = new Set<string>();
   const runs: Record<string, string>[] = [chat, { THREAD_ID: String(sale.id) }];
   for (const env of runs) {

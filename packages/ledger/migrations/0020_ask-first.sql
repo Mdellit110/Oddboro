@@ -1,0 +1,1 @@
+ALTER TABLE "grants" ADD COLUMN "ask_first" text[] DEFAULT '{}' NOT NULL;
