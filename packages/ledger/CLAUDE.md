@@ -596,8 +596,10 @@ FOLDER_WARNING }` until the owner accepts it (`accept`, which `giveFolder`
   (`lacking`, `exchangeForLead`), which the note says was left out. Every
   file the owner attached to that message (`OWNER_FILES`) is copied into the
   colleague's part of the work, by `hand_off`'s checks (`fitToCarry` in
-  `mcp.ts`) and copy (`carryEach`), and the note lists each at its path
-  there, or says which did not come and why; the words go either way. The
+  `mcp.ts`) and copy (`carryEach`), under the owner's name for it (never a
+  hidden or instruction file's name), or the next free name, such as
+  `notes-2.md`, when a different file holds it. The note lists each at its
+  path there, or says which did not come and why; the words go either way. The
   colleague does nothing more, so the lead decides and hands on.
   With a goal's thread among them, `raise_ask`, `give_owner_a_task`,
   `ask_for_access`, `propose_hire` and a `hand_off` that would open a thread
