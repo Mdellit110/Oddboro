@@ -45,6 +45,13 @@ const port = await new Promise<number>((done) => {
 // "claude auth status" says signed out at once, and "claude auth login"
 // prints its sign-in page and waits until it is stopped, as Setup's sign-in
 // waits on the owner.
+/**
+ * For the stand-ins: the owner's own words in a run's message, which they
+ * read their triggers from. That is the last paragraph the office did not
+ * write in parentheses, so a trigger quoted in a brief, such as a message
+ * that got no reply, sets off nothing.
+ */
+const OWN_WORDS = `const said = (m) => m.split('\\n\\n').filter((p) => !p.startsWith('(')).at(-1) ?? '';`;
 export const bin = join(folder, 'bin');
 mkdirSync(bin);
 /**
@@ -81,10 +88,11 @@ if (verb === 'auth' && sub === 'login') {
   setInterval(() => {}, 60_000);
   return;
 }
+${OWN_WORDS}
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
-  const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(message)?.[1];
+  const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(said(message))?.[1];
   if (!hold) return answer();
   const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), answer()), 20);
 });
@@ -92,7 +100,7 @@ process.stdin.on('end', () => {
 function answer() {
   // Only a staff run carries --settings, so it is read only for the trigger.
   if (
-    message.includes('Refuse the open network') &&
+    said(message).includes('Refuse the open network') &&
     settings().sandbox?.network?.allowedDomains?.includes('*')
   ) {
     process.stderr.write('Overly broad patterns like "*" are not allowed\\n');
@@ -139,7 +147,7 @@ function reply() {
   };
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'look' } } });
-  const aloud = /Think aloud: ([^.]+)\./.exec(message)?.[1];
+  const aloud = /Think aloud: ([^.]+)\./.exec(said(message))?.[1];
   if (aloud) line({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: aloud } } });
   line({ type: 'result', subtype: 'success', result: JSON.stringify(gave) + '\\nOutcome: done' });
 }
@@ -211,7 +219,8 @@ if (args.some((a) => a.startsWith('- '))) {
 }
 const after = (flag) => args[args.indexOf(flag) + 1];
 const joined = (flag) => args.find((a) => a.startsWith(flag + '='))?.slice(flag.length + 1);
-const replay = /Replay (\\/\\S+\\.jsonl)/.exec(joined('--single'))?.[1];
+${OWN_WORDS}
+const replay = /Replay (\\/\\S+\\.jsonl)/.exec(said(joined('--single') ?? ''))?.[1];
 if (replay) {
   fs.writeFileSync(process.env.GROK_HOME + '/replay-args.json', JSON.stringify(args));
   process.stdout.write(fs.readFileSync(replay, 'utf8'));
@@ -300,12 +309,13 @@ function emptyFolder(p) {
     return false;
   }
 }
+${OWN_WORDS}
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
-  const replay = /Replay (\\/\\S+\\.jsonl)/.exec(message)?.[1];
+  const replay = /Replay (\\/\\S+\\.jsonl)/.exec(said(message))?.[1];
   if (replay) return process.stdout.write(fs.readFileSync(replay, 'utf8'));
-  const sleeper = /Leave a sleeper at (\\/\\S+)/.exec(message)?.[1];
+  const sleeper = /Leave a sleeper at (\\/\\S+)/.exec(said(message))?.[1];
   if (sleeper) {
     const s = require('node:child_process').spawn('sleep', ['60'], { stdio: 'ignore' });
     fs.writeFileSync(sleeper, String(s.pid));
@@ -376,14 +386,15 @@ if (process.argv[2] === '--version') {
 const path = require('node:path');
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.GEMINI_CLI_HOME + '/launches.log', '.');
+${OWN_WORDS}
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
   const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
   line({ type: 'init', session_id: '0a0a0a0a-0000-4000-8000-00000000ce01', model: 'gemini-test' });
-  if (message.startsWith('/'))
+  if (said(message).startsWith('/'))
     return line({ type: 'result', status: 'error', error: { type: 'Error', message: 'Ran a slash command.' } });
-  if (message.includes('End in error'))
+  if (said(message).includes('End in error'))
     return line({ type: 'result', status: 'error', error: { type: 'Error', message: 'Quota used up.' } });
   const settingsPath = process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
   const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));

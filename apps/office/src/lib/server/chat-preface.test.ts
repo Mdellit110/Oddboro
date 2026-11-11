@@ -2,13 +2,14 @@
 // `npm test -w @oddboro/office`.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { chatPreface } from './chat-preface.ts';
+import { answered, chatPreface } from './chat-preface.ts';
 import type { ChatEntry } from './staff.ts';
 
 const owner = (at: string, text: string): ChatEntry => ({ at, from: 'owner', text });
 const reply = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text });
 const told = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, told: true });
 const poke = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, poke: true });
+const failed = (at: string, text: string): ChatEntry => ({ at, from: 'staff', text, failed: true });
 
 test("a line the office said in the staffer's name since the owner last wrote is told to the session", () => {
   const lines = chatPreface([told('2026-11-03T09:00:00Z', 'Three questions?')], []);
@@ -84,4 +85,38 @@ test('an ask the owner decided since the last reply is told, and one decided bef
   assert.deepEqual(chatPreface(past, landed), [
     '(Since your last reply, {owner} decided your asks: "Book the hall" approved, "Call the band" sent back. my_asks has their reasons.)'
   ]);
+});
+
+test('a message that got no reply is told to the session, with the lines since the owner last got a reply', () => {
+  const past = [
+    owner('2026-11-03T09:00:00Z', 'Hi'),
+    reply('2026-11-03T09:00:05Z', 'Hello.'),
+    told('2026-11-03T09:01:00Z', 'The call moved to 3pm.'),
+    owner('2026-11-03T09:02:00Z', 'Book the room'),
+    failed('2026-11-03T09:07:00Z', 'No reply after 5 minutes.')
+  ];
+  assert.deepEqual(chatPreface(past, []), [
+    '(Before this, you said to {owner} in chat: "The call moved to 3pm.".)',
+    '({owner} wrote to you before this and got no reply, because the office stopped that run: "Book the room". If you did any of it, say so.)'
+  ]);
+  // Only the exchanges that happened: the failed one is left out.
+  assert.deepEqual(answered(past), past.slice(0, 3));
+});
+
+test('work put on the desk during a run that got no reply is still told', () => {
+  const lines = chatPreface(
+    [
+      owner('2026-11-03T09:00:00Z', 'Hi'),
+      reply('2026-11-03T09:00:05Z', 'Hello.'),
+      owner('2026-11-03T09:02:00Z', 'Draft the note'),
+      failed('2026-11-03T09:07:00Z', 'No reply after 5 minutes.')
+    ],
+    [{ kind: 'task', title: 'Draft the note', at: new Date('2026-11-03T09:03:00Z') }]
+  );
+  assert.ok(
+    lines.includes(
+      '(Since {owner} last wrote, you put these on their desk: task "Draft the note".)'
+    ),
+    lines.join('\n')
+  );
 });

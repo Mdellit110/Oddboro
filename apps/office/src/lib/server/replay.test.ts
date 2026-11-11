@@ -37,6 +37,7 @@ const reply = (text: string): ChatEntry => ({
 });
 const told = (text: string): ChatEntry => ({ ...reply(text), told: true });
 const poke = (text: string): ChatEntry => ({ ...reply(text), poke: true });
+const failed = (text: string): ChatEntry => ({ ...reply(text), failed: true });
 /** A desk item's line, which has no text of its own. */
 const item: ChatEntry = { ...reply(''), item: { kind: 'ask', id: 1, title: 'A', status: 'open' } };
 /** No files changed. */
@@ -81,6 +82,20 @@ function put(dir: string, path: string, at: Date): void {
 }
 const since = new Date('2026-11-04T09:00:00.000Z');
 const later = (minutes: number) => new Date(since.getTime() + minutes * 60_000);
+
+test("a reply that never came is replayed as the office's line, never as the Odd's words", () => {
+  const text = replay(
+    [owner('Book the room'), failed('No reply after 5 minutes.'), owner('Again?')],
+    none
+  );
+  assert.ok(
+    text.includes(
+      '{owner}: Book the room\n(No reply came: No reply after 5 minutes.)\n{owner}: Again?'
+    ),
+    text
+  );
+  assert.ok(!text.includes('You: No reply'), text);
+});
 
 test("changedSince lists the Odd's files changed since a time", () => {
   const dir = mkdtempSync(join(tmpdir(), 'oddboro-replay-'));

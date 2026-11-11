@@ -705,6 +705,50 @@ test('a Grok Odd on a Mac without grok fails its run naming Grok, and never runs
   }
 });
 
+test("a chat that got no reply keeps the owner's message and says why, and the next chat tells the Odd it got none", async () => {
+  const stream = join(folder, 'no-reply.jsonl');
+  writeFileSync(
+    stream,
+    JSON.stringify({
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      errors: ['Boom']
+    }) + '\n'
+  );
+  let error = '';
+  await chat('gus', `Replay ${stream}`, (e) => {
+    if (e.type === 'error') error = e.message;
+  });
+  assert.ok(error, 'the chat did not fail');
+  const [sent, why] = history('gus').slice(-2);
+  assert.equal(sent.from, 'owner');
+  assert.equal(sent.text, `Replay ${stream}`);
+  assert.deepEqual(
+    { from: why.from, text: why.text, failed: why.failed },
+    {
+      from: 'staff',
+      text: error,
+      failed: true
+    }
+  );
+  // The next chat says so: in the replay, for a new session, or else in its
+  // preface. The stand-in reads only the owner's own words, so it replays
+  // nothing this time.
+  const next = await chatOf('gus', 'Did that work?');
+  assert.ok(
+    next.message.includes(`the owner: Replay ${stream}\n(No reply came: ${error})`) ||
+      next.message.includes(
+        `got no reply, because the office stopped that run: "Replay ${stream}"`
+      ),
+    next.message
+  );
+  assert.ok(next.message.endsWith('Did that work?'), next.message);
+  const [again, answer] = history('gus').slice(-2);
+  assert.equal(again.text, 'Did that work?');
+  assert.equal(answer.failed, undefined);
+});
+
 test("a Grok run from an office Grok home nobody signed in to points to its Settings tab to sign in, one past Grok's plan limit says so in the office's words with no link, and another early end says what went wrong", async () => {
   const ended = async (errors: string[]) => {
     const stream = join(folder, 'ended.jsonl');

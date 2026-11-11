@@ -338,6 +338,15 @@ test('when the door refuses access the owner still gets the report, the Odd goes
   const quiet = await talk('Hello?');
   assert.equal(handsRuns, runs);
   assert.equal(doorTurns().length, turns);
-  assert.equal(history(pat.id).length, kept);
+  // The owner's message stays, with why no reply came.
+  assert.deepEqual(
+    history(pat.id)
+      .slice(kept)
+      .map(({ from, text, failed }) => ({ from, text, failed })),
+    [
+      { from: 'owner', text: 'Hello?', failed: undefined },
+      { from: 'staff', text: QUIET_LINE.access('Pat'), failed: true }
+    ]
+  );
   assert.deepEqual(quiet.events, [{ type: 'error', message: QUIET_LINE.access('Pat') }]);
 });

@@ -63,7 +63,10 @@ export function replaySince(entries: ChatEntry[], kept: ChatEntry[]): string | u
 /** The earlier chat, word for word, for a session that never saw it. Pure. */
 export function replay(entries: ChatEntry[], changed: Changed, budget = REPLAY_CHARS): string {
   const kept = replayed(entries, budget);
-  const lines = kept.map((e) => `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}`);
+  // A reply that never came is the office's line, not the Odd's words.
+  const lines = kept.map((e) =>
+    e.failed ? `(No reply came: ${e.text})` : `${e.from === 'owner' ? '{owner}' : 'You'}: ${e.text}`
+  );
   const more = changed.files.length - REPLAY_FILES;
   const files =
     changed.files.slice(0, REPLAY_FILES).join(', ') + (more > 0 ? `, and ${more} more` : '');

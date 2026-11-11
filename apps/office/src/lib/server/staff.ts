@@ -171,7 +171,7 @@ import { notifyMac } from './notify.ts';
 import { downtime, installsAt } from './update.ts';
 import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
 import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
-import { chatPreface } from './chat-preface.ts';
+import { answered, chatPreface } from './chat-preface.ts';
 import { officeEnv } from './run-env.ts';
 import { firstDayOf } from './first-day.ts';
 import { endedEarly, LAUNCHES, stoppedWhy, streamTools, type Launch } from './cli.ts';
@@ -220,6 +220,11 @@ export type ChatEntry = {
   files?: ChatFile[];
   /** On a reply: the choices it ended with (`splitChoices`), which the page shows as buttons. */
   choices?: string[];
+  /**
+   * On the office's line in place of a reply that never came, after the
+   * owner's message it answers: why (`text`). Never the Odd's own words.
+   */
+  failed?: true;
 };
 export type ChatEvent =
   | { type: 'delta'; text: string }
@@ -1461,7 +1466,7 @@ export async function chat(
     // An answer to a manager's first or second question (`FIRST_QUESTIONS`):
     // the office asks the next one itself, at once and with no run. The third
     // answer runs the manager, which reads all three in the chat.
-    const last = history(id).at(-1);
+    const last = answered(history(id)).at(-1);
     const asked = last?.from === 'staff' ? firstQuestionIn(last.text) : -1;
     const attached = files.map(({ path: _, ...f }) => f);
     if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1 && !files.length) {
@@ -1482,8 +1487,8 @@ export async function chat(
     const past = history(id);
     // A new session (the Odd moved to another tool, or its session is gone)
     // never saw the chat: it gets the latest of it word for word. The preface
-    // leaves out the told and poke lines the replay holds, and keeps those the
-    // budget cut, so each line since the owner last wrote is said once.
+    // leaves out the told, poke and no-reply lines the replay holds, and keeps
+    // those the budget cut, so each line since the owner last wrote is said once.
     const kept = sessionIdIn(chatSession(id), await runHomeOf(who)) ? [] : replayed(past);
     const inReplay = new Set(replayedAt(past, kept));
     const since = replaySince(past, kept);
@@ -1496,14 +1501,14 @@ export async function chat(
         ? [replay(past, changedSince(homeOf(id), since, [chatFile(id), chatSession(id)], writable))]
         : []),
       ...chatPreface(
-        past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke))),
+        past.filter((e, i) => !(inReplay.has(i) && (e.told || e.poke || e.failed))),
         landed
       ),
       ...(re ? [re.brief] : []),
       message,
       ...(files.length ? [attachedBrief(files)] : [])
     ].join('\n\n');
-    const r = await run(who, prompt, {
+    const r: Run = await run(who, prompt, {
       kind: 'chat',
       ownerSaid: message,
       images: files
@@ -1517,27 +1522,35 @@ export async function chat(
         const { text, choices } = splitChoices(e.text);
         onEvent({ type: 'done', text, ...(choices.length ? { choices } : {}) });
       }
+    }).catch((err: unknown) => {
+      const text = err instanceof Error ? err.message : String(err);
+      onEvent({ type: 'error', message: text });
+      return { ok: false, text };
     });
-    if (r.ok) {
-      const { text, choices } = splitChoices(r.text);
-      addToChat(id, {
-        at: sent,
-        from: 'owner',
-        text: message,
-        re: re?.ref,
-        ...(attached.length ? { files: attached } : {})
-      });
-      // `took`: how long the owner waited for this reply, from when they sent.
-      const at = new Date();
-      addToChat(id, {
-        at: at.toISOString(),
-        from: 'staff',
-        text,
-        took: at.getTime() - Date.parse(sent),
-        ...(choices.length ? { choices } : {})
-      });
-      if (re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
+    // The owner's message stays in the chat whether or not a reply came, so
+    // they can see what they sent and send it again.
+    addToChat(id, {
+      at: sent,
+      from: 'owner',
+      text: message,
+      re: re?.ref,
+      ...(attached.length ? { files: attached } : {})
+    });
+    const at = new Date();
+    if (!r.ok) {
+      addToChat(id, { at: at.toISOString(), from: 'staff', text: r.text, failed: true });
+      return;
     }
+    const { text, choices } = splitChoices(r.text);
+    // `took`: how long the owner waited for this reply, from when they sent.
+    addToChat(id, {
+      at: at.toISOString(),
+      from: 'staff',
+      text,
+      took: at.getTime() - Date.parse(sent),
+      ...(choices.length ? { choices } : {})
+    });
+    if (re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
   } finally {
     chatting.delete(id);
   }
