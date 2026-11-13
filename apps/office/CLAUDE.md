@@ -1285,8 +1285,22 @@ when the phone wakes. Nothing polls. Its own styles give every control 44px
 and every field 16px text, so a phone neither misses a tap nor zooms. The
 page links `static/desk.webmanifest` and the icons `desk-256.png` and
 `desk-512.png` (drawn by `npm run mark`), so a phone adds it to its home
-screen and opens it straight to the desk. It has no service worker, so
-nothing of the desk is kept on the phone. The office has one theme, dark,
+screen and opens it straight to the desk. Nothing of the desk is kept on the
+phone.
+
+Buzz me in its header turns on a buzz for that phone
+(`src/lib/ui/phone-buzz.ts`): the phone asks for leave to notify, registers
+`static/desk-push.js` for `/desk` alone, asks its push service for an address
+with the office's key, and gives the office that address (`/api/push`).
+`src/lib/server/push.ts` keeps the key (VAPID) and the addresses in the
+system's secret store, only at the push services `PUSH_HOSTS` names. On a
+change to asks, tasks or reports, while a phone is on, it reads the desk and
+sends each phone an empty push when anything is there that was not before; a
+restart or a phone just turned on sees the desk first and buzzes nothing. The
+push is empty, so nothing of the desk leaves: the worker shows "Something is
+waiting on your desk." and a tap opens `/desk`. A phone its push service no
+longer knows (404 or 410) is dropped. An iPhone gets push only for a desk
+added to its home screen, and the page says so where a browser has none. The office has one theme, dark,
 and so does this page.
 
 ## A new owner's first visit

@@ -67,6 +67,20 @@ Some things need the computer: a hire, a sign-in to a service, and picking a
 different folder. The desk says "Open this at the office" for those. Replying
 to a report also happens at the office, in the Odd's chat.
 
+## 6. Get a buzz when something lands
+
+1. Open the desk from its home screen icon. On an iPhone this is the only
+   way it can buzz.
+2. Tap **Buzz me** at the top.
+3. Allow notifications when the phone asks.
+
+The button now reads **Buzz on**. Tap it again to turn the buzz off for this
+phone. Each phone is turned on by itself.
+
+The buzz says only "Something is waiting on your desk." Nothing from the desk
+is in it. It goes through your phone's own push service (Apple's or
+Google's), which sees only that a message arrived.
+
 ## Check that it is closed to everyone else
 
 1. Turn Tailscale off on your phone.

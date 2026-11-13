@@ -62,6 +62,11 @@ export const OWNER_ACTIONS = {
     none: "Ends the account's sign-in and each persona's, and makes every persona Odd quiet."
   },
   'PUT /api/diagnostics': { notAnAction: SETUP },
+  // The office's push key and the phones it buzzes live in the system's secret
+  // store. GET makes the key the first time it is asked for.
+  'GET /api/push': { notAnAction: SETUP },
+  'POST /api/push': { notAnAction: SETUP },
+  'DELETE /api/push': { notAnAction: SETUP },
   'POST /api/diagnostics/envelope': {
     notAnAction: "Passes the page's error report through the office's filter; nothing is kept."
   },

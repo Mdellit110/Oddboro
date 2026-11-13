@@ -2,7 +2,7 @@
 // (`trustSystemCertificates`), the office's own database if .env names
 // no other (copied aside first on a new version's first start), the tables
 // brought up to date, the update row reset, then the job clock, the follow-up
-// watcher, one read of the New Altitude personas, and the office's address in
+// watcher, the phone buzz (`push.ts`), one read of the New Altitude personas, and the office's address in
 // the owner's Caddy if it uses theirs (never in the app, which has no address).
 // In the app (ODDBORO_APP) it also quits when the app does: on SIGTERM, once
 // the HTTP server has closed, and when the app's stdin pipe closes, which
@@ -23,6 +23,7 @@ import { keepAddress } from '#lib/server/address.ts';
 import { startFollowUps } from '#lib/server/follow-ups.ts';
 import { stopRuns } from '#lib/server/staff.ts';
 import { startClock } from '#lib/server/jobs.ts';
+import { startPush } from '#lib/server/push.ts';
 import { guardOffice } from '#lib/server/owner-page.ts';
 import { syncPersonas } from '#lib/server/persona.ts';
 import { loadUpdate } from '#lib/server/update.ts';
@@ -50,6 +51,7 @@ export const init: ServerInit = async () => {
   await loadUpdate();
   startClock();
   startFollowUps();
+  startPush();
   // An Odd that leaves the office stops what it is running at once.
   whenOddLeaves(stopRuns);
   // Never awaited: an office offline or signed out starts as fast as any.

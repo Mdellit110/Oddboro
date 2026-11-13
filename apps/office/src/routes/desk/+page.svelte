@@ -4,6 +4,7 @@
   // hire window or a chat says to open it at the office. It hears the office's
   // one live line, as the floor does, and reloads the desk on a change and
   // whenever the line opens again, such as when the phone wakes. Nothing polls.
+  // Its header holds the switch for a buzz on this phone (`phone-buzz.ts`).
   import { untrack } from 'svelte';
   import type { Desk } from '@oddboro/ledger';
   import { LIVE_TABLES } from '@oddboro/ledger/live-tables';
@@ -12,6 +13,7 @@
   import FileViewer from '#lib/ui/FileViewer.svelte';
   import { call, type ApiUrl } from '#lib/ui/api.ts';
   import { wins } from '#lib/ui/windows.svelte.ts';
+  import { buzzOff, buzzOn, buzzState, type BuzzState } from '#lib/ui/phone-buzz.ts';
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import type { OfficeEvent } from '#lib/server/events.ts';
   import type { PageProps } from './$types';
@@ -53,6 +55,33 @@
   });
 
   const nothing = () => {};
+
+  /** This phone's buzz, once the page knows it. */
+  let buzz = $state<BuzzState | undefined>();
+  let buzzBusy = $state(false);
+  let buzzProblem = $state('');
+  $effect(() => {
+    buzzState()
+      .then((s) => (buzz = s))
+      .catch(() => (buzz = 'cannot'));
+  });
+  async function flipBuzz() {
+    buzzBusy = true;
+    buzzProblem = '';
+    try {
+      buzz = buzz === 'on' ? await buzzOff() : await buzzOn();
+    } catch (e) {
+      buzzProblem = e instanceof Error ? e.message : String(e);
+    } finally {
+      buzzBusy = false;
+    }
+  }
+  const BUZZ_LINE: Record<Exclude<BuzzState, 'off' | 'on'>, string> = {
+    cannot:
+      'To get a buzz when something lands, add the desk to your home screen and open it from there.',
+    blocked:
+      "Notifications are off for the desk in this phone's settings. Turn them on there to get a buzz."
+  };
 </script>
 
 <svelte:head>
@@ -68,7 +97,22 @@
   <header class="flex items-center gap-2 border-b border-hairline px-4 py-3">
     <h1 class="flex-1 text-base font-medium">Desk</h1>
     <span class="text-sm text-muted">{waiting ? `${waiting} waiting` : 'Clear'}</span>
+    {#if buzz === 'on' || buzz === 'off'}
+      <button
+        class="rounded-lg px-3 text-xs {buzz === 'on'
+          ? 'bg-sea/25 text-ink'
+          : 'bg-raise text-muted'} disabled:opacity-40"
+        aria-pressed={buzz === 'on'}
+        disabled={buzzBusy}
+        onclick={flipBuzz}>{buzz === 'on' ? 'Buzz on' : 'Buzz me'}</button
+      >
+    {/if}
   </header>
+  {#if buzz === 'cannot' || buzz === 'blocked' || buzzProblem}
+    <p class="border-b border-hairline px-4 py-2 text-xs text-muted">
+      {buzzProblem || (buzz === 'cannot' || buzz === 'blocked' ? BUZZ_LINE[buzz] : '')}
+    </p>
+  {/if}
   <div class="min-h-0 flex-1" class:hidden={!!file}>
     <DeskDrawer {desk} {staff} away onhire={nothing} onplan={nothing} onstaff={nothing} />
   </div>
