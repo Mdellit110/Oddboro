@@ -18,6 +18,7 @@
   import type { Work } from '#lib/staff/work.ts';
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
+  import { deskKeys } from '#lib/desk.ts';
   import { account } from '#lib/ui/account.svelte.ts';
   import { personaNews } from '#lib/ui/persona-offers.svelte.ts';
   import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
@@ -526,12 +527,6 @@
 
   let refreshing: Promise<void> | undefined;
   let seen = new Set<string>();
-  const keys = (d: Desk) =>
-    new Set([
-      ...d.asks.map((a) => `ask-${a.id}`),
-      ...d.tasks.map((t) => `task-${t.id}`),
-      ...d.reports.map((r) => `report-${r.id}`)
-    ]);
 
   /** Fetch the office once per burst of changes. */
   function refresh(): Promise<void> {
@@ -550,7 +545,7 @@
         threads: HeldThread[];
         services: Record<string, string>;
       }>('/api/office');
-      const fresh = [...keys(next.desk)].filter((k) => !seen.has(k));
+      const fresh = [...deskKeys(next.desk)].filter((k) => !seen.has(k));
       if (
         notify &&
         fresh.length &&
@@ -560,11 +555,11 @@
         const first = [...next.desk.asks, ...next.desk.tasks, ...next.desk.reports].find((i) =>
           fresh.some((k) => k.endsWith(`-${i.id}`))
         );
-        new Notification(`${keys(next.desk).size} waiting on you in ${office.name}`, {
+        new Notification(`${deskKeys(next.desk).size} waiting on you in ${office.name}`, {
           body: first?.title ?? 'Something new is on your desk.'
         });
       }
-      seen = keys(next.desk);
+      seen = deskKeys(next.desk);
       staff = next.staff;
       desk = next.desk;
       working = next.working;
@@ -674,7 +669,7 @@
 
   onMount(() => {
     let disposed = false;
-    seen = keys(desk);
+    seen = deskKeys(desk);
     // A new owner's first visit opens on its own song; later visits play if the owner left the music on.
     startMusic(firstRun);
     try {

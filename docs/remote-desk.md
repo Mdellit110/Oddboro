@@ -9,28 +9,39 @@ home computer a private https name that only devices signed in to your
 Tailscale account can reach, and forwards that name to the office. The office
 answers the name once you list it in `.env`.
 
-These steps are for a Linux computer. They take about 15 minutes.
+These steps are for a Mac or a Linux computer. Where they differ, each step
+says so. They take about 15 minutes.
 
 ## 1. Run the office on the home computer
 
 1. Install Oddboro from the repo and run `npm run setup`. Finish the first
    visit in the browser on that computer.
-2. Set the computer to log in to its desktop by itself when it starts. On
-   Ubuntu: Settings, Users, Automatic Login. The office's login service starts
-   with the desktop, so it needs a desktop session.
+2. **Linux only.** Set the computer to log in to its desktop by itself when
+   it starts. On Ubuntu: Settings, Users, Automatic Login. The office's login
+   service starts with the desktop, so it needs a desktop session.
 3. Run `npm run service:install -w apps/office`. The office now starts at
-   every login and restarts if it stops.
-4. Set the computer never to sleep. On Ubuntu: Settings, Power, Automatic
-   Suspend, Off.
+   every login and restarts if it stops. On a Mac it also keeps the Mac awake
+   while it is on power.
+4. Set the computer never to sleep.
+   - **Mac:** System Settings, Energy (Battery on a laptop), and turn on
+     "Prevent automatic sleeping when the display is off".
+   - **Linux:** on Ubuntu, Settings, Power, Automatic Suspend, Off.
 
 ## 2. Put the computer on your tailnet
 
-1. Install Tailscale: `curl -fsSL https://tailscale.com/install.sh | sh`
-2. Sign in: `sudo tailscale up`, then open the link it prints.
+1. Install Tailscale.
+   - **Mac:** the Tailscale app from tailscale.com/download or the App Store.
+   - **Linux:** `curl -fsSL https://tailscale.com/install.sh | sh`
+2. Sign in.
+   - **Mac:** open the Tailscale app from the menu bar and log in.
+   - **Linux:** `sudo tailscale up`, then open the link it prints.
 3. In the Tailscale admin console (login.tailscale.com), open DNS and turn on
    MagicDNS and HTTPS Certificates.
-4. Forward the computer's Tailscale name to the office:
-   `sudo tailscale serve --bg http://127.0.0.1:4500`
+4. Forward the computer's Tailscale name to the office.
+   - **Mac:** `tailscale serve --bg http://127.0.0.1:4500`, with no `sudo`.
+     If the `tailscale` command is missing, turn on the CLI in the Tailscale
+     app's settings.
+   - **Linux:** `sudo tailscale serve --bg http://127.0.0.1:4500`
 5. Run `tailscale serve status` and note the name it shows, such as
    `home-pc.tail1234.ts.net`.
 
@@ -42,7 +53,9 @@ open internet, and the office has no login of its own.
 1. Open `.env` at the top of the repo.
 2. Add a line with the name from step 2.5, with no `https://`:
    `ODDBORO_EXTRA_HOSTS=home-pc.tail1234.ts.net`
-3. Restart the office: `systemctl --user restart com.oddboro.office`
+3. Restart the office.
+   - **Mac:** `launchctl kickstart -k gui/$(id -u)/com.oddboro.office`
+   - **Linux:** `systemctl --user restart com.oddboro.office`
 
 To list more than one name, separate them with commas.
 
@@ -90,6 +103,11 @@ Google's), which sees only that a message arrived.
 The office on the home computer itself still works at
 `http://127.0.0.1:4500` as before.
 
+Check the Tailscale name from the phone, not from the home computer. A Mac
+may not open its own tailnet name: the browser or `curl` fails with an error
+about TLS, while the phone opens it fine. That is Tailscale's, not the
+office's.
+
 ## If something goes wrong
 
 - **"This office answers only at its own address".** The name in `.env` does
@@ -99,6 +117,13 @@ The office on the home computer itself still works at
   not read the new name yet. Restart it.
 - **The page does not load at all.** Check `tailscale serve status` on the
   home computer, and that Tailscale is on in the phone.
-- **The office does not start after a reboot.** The desktop did not log in
-  by itself. Check step 1.2. The office's log is in
-  `~/.local/state/oddboro/office.log`.
+- **The office does not start after a reboot.** On Linux, the desktop did
+  not log in by itself: check step 1.2. The office's log is in
+  `~/Library/Logs/oddboro-office.log` on a Mac and
+  `~/.local/state/oddboro/office.log` on Linux.
+- **Buzz me fails with a message about the secret store.** The office keeps
+  its push key in the Keychain on a Mac and in the desktop keyring on Linux.
+  On Linux with automatic login, the keyring can stay locked: unlock it once
+  after each start, or give it no password.
+- **No buzz arrives.** Look for `[push]` lines in the office's log. They give
+  the push service's answer.

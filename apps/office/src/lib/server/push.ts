@@ -15,7 +15,8 @@ import {
   sign,
   type JsonWebKey
 } from 'node:crypto';
-import { desk, type Desk } from '@oddboro/ledger';
+import { desk } from '@oddboro/ledger';
+import { deskKeys } from '#lib/desk.ts';
 import { deleteSecret, getSecret, setSecret } from '@oddboro/ledger/secrets';
 import { bus, listen, type OfficeEvent } from './events.ts';
 
@@ -148,14 +149,6 @@ export async function buzz(): Promise<number> {
   }
   return took;
 }
-
-/** Each item on the desk, by kind and id. */
-export const deskKeys = (d: Desk): Set<string> =>
-  new Set([
-    ...d.asks.map((a) => `ask-${a.id}`),
-    ...d.tasks.map((t) => `task-${t.id}`),
-    ...d.reports.map((r) => `report-${r.id}`)
-  ]);
 
 /** What the office last saw on the desk, while a phone gets the buzz. Unset, the next look only sees. */
 let seen: Set<string> | undefined;
