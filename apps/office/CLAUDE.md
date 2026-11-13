@@ -1269,6 +1269,26 @@ the one being entered, and moves the rest to the work room with the most free
 seats. The `offices` trigger reloads every open page. Earlier layouts and the
 sample stay in the window to move back to.
 
+## The phone desk
+
+`/desk` (`src/routes/desk/`) is the Desk alone, for the owner's phone on
+their tailnet (`docs/remote-desk.md`). It shows the same `DeskDrawer.svelte`
+with `away` set: no Odd's card, chat or hire window is there, so the sender
+card and names open nothing, a hire ask, a hosted or AWS sign-in step, and a
+folder ask's Change (the picker opens on the office's computer) say "Open this
+at the office", and a report has Read but no Reply. Everything else answers
+as on the computer, through the same routes. A file an item opens shows over
+the desk (`FileViewer.svelte`), which stays as it was beneath. It hears
+`/api/events` and reloads `/api/office` on a change to a table whose page
+refreshes or reloads (`LIVE_TABLES`), and each time the line opens again, as
+when the phone wakes. Nothing polls. Its own styles give every control 44px
+and every field 16px text, so a phone neither misses a tap nor zooms. The
+page links `static/desk.webmanifest` and the icons `desk-256.png` and
+`desk-512.png` (drawn by `npm run mark`), so a phone adds it to its home
+screen and opens it straight to the desk. It has no service worker, so
+nothing of the desk is kept on the phone. The office has one theme, dark,
+and so does this page.
+
 ## A new owner's first visit
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
@@ -1358,9 +1378,14 @@ https, so that check refuses the owner's own http page. So the page's `call()`
 
 1. The Host must be one of the office's names, whatever the port: 127.0.0.1,
    [::1], localhost, the addresses through Caddy (`HOSTS` in
-   `src/lib/server/hosts.ts`) and the app's `ORIGIN`. A site that points its
-   own name at 127.0.0.1 looks same-origin to the browser, so only the name
-   gives it away. A route asked by any other name gets 403.
+   `src/lib/server/hosts.ts`), the app's `ORIGIN`, and the names the owner
+   lists in `ODDBORO_EXTRA_HOSTS`, from the environment or `.env`
+   (`extraHosts`, read by Vite's `allowedHosts` too, since Vite refuses an
+   unknown name before the guard sees it). A site that points its own name at
+   127.0.0.1 looks same-origin to the browser, so only the name gives it
+   away. A route asked by any other name gets 403. An extra name is for a
+   phone on the owner's tailnet (`docs/remote-desk.md`): the office still
+   listens on 127.0.0.1 only, and `tailscale serve` is the wall.
 2. Anything but GET, HEAD and OPTIONS must come from the owner's page
    (`fromOwnerPage`): Sec-Fetch-Site says same-origin, or, with none, the
    Origin names the Host asked, whatever the scheme, since through Caddy the

@@ -18,17 +18,26 @@
 // owner's page through Caddy, which reaches the office over http while the
 // page is https, so `fromOwnerPage` compares what the browser itself says.
 import type { Handle } from '@sveltejs/kit/hooks';
-import { HOSTS } from './hosts.ts';
+import { readEnv } from '@oddboro/ledger/env';
+import { extraHosts, HOSTS } from './hosts.ts';
 import { fromRun, GATEWAY_PATH } from './gateway.ts';
 import { fromShell } from './update.ts';
 
 /**
  * The names the office answers to, without a port: loopback, its addresses
- * through Caddy, and the app's ORIGIN. Names under .localhost reach only this
+ * through Caddy, the app's ORIGIN, and the names the owner added in
+ * ODDBORO_EXTRA_HOSTS (`extraHosts`). Names under .localhost reach only this
  * computer, so no other site can point one at the office.
  */
 const NAMES = new Set(
-  ['127.0.0.1', '[::1]', 'localhost', ...HOSTS, URL.parse(process.env.ORIGIN ?? '')?.hostname]
+  [
+    '127.0.0.1',
+    '[::1]',
+    'localhost',
+    ...HOSTS,
+    URL.parse(process.env.ORIGIN ?? '')?.hostname,
+    ...extraHosts(process.env.ODDBORO_EXTRA_HOSTS || readEnv().ODDBORO_EXTRA_HOSTS)
+  ]
     .filter((n): n is string => !!n)
     .map((n) => n.toLowerCase())
 );

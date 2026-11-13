@@ -175,7 +175,8 @@ export const ROUTE_IDS = {
   '/api/tasks/[id]': true,
   '/api/update': true,
   '/atlas/[file]': true,
-  '/connect/callback': true
+  '/connect/callback': true,
+  '/desk': true
 } as const satisfies Record<RouteId, true>;
 
 /** The only span attributes that leave. */

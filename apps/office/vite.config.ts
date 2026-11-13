@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
+import { readEnv } from '@oddboro/ledger/env';
+import { extraHosts, HOSTS } from './src/lib/server/hosts.ts';
 
 /** The repository's root folder, where every uploaded map's sources start. */
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
@@ -96,12 +98,17 @@ export default defineConfig(({ command }) => ({
     sveltekit({ adapter: adapter() })
   ],
   define: { __SITE_URL__: JSON.stringify(siteUrl()) },
-  // The office's addresses through Caddy (lib/server/address.ts).
+  // The office's addresses through Caddy (lib/server/address.ts), and the
+  // names the owner added, such as a Tailscale name (`extraHosts`). Vite
+  // refuses any other name before the office's own check sees the request.
   server: {
     port,
     strictPort: true,
     host: '127.0.0.1',
-    allowedHosts: ['local.oddboro.com', 'oddboro.localhost']
+    allowedHosts: [
+      ...HOSTS,
+      ...extraHosts(process.env.ODDBORO_EXTRA_HOSTS || readEnv().ODDBORO_EXTRA_HOSTS)
+    ]
   },
   // Rolldown, not ssr.external: this keeps a workspace package and its subpaths
   // out of the server build. The adapter also leaves out whatever package.json

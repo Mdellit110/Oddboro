@@ -36,8 +36,15 @@
     onplan: (hires: AskRow[]) => void;
     /** Open a staffer's card, from the name on an item. */
     onstaff: (id: string) => void;
+    /**
+     * Shown away from the office, on the phone desk (`/desk`): no Odd's card,
+     * chat or hire window is there, so what needs one, or needs this computer
+     * (its folder picker, a sign-in that comes back to it), says to open it at
+     * the office instead of offering a button.
+     */
+    away?: boolean;
   };
-  let { desk, staff, focus, onhire, onplan, onstaff }: Props = $props();
+  let { desk, staff, focus, onhire, onplan, onstaff, away = false }: Props = $props();
 
   /** The row each kind of desk item shows. */
   type DeskRow = { ask: AskRow; task: TaskRow; report: ReportRow };
@@ -264,6 +271,12 @@
   const doneCount = (steps: Step[]) => steps.filter((s) => s.done).length;
 </script>
 
+{#snippet atOffice(why: string)}
+  <p class="flex-[1.4] rounded-lg bg-ember/10 px-3 py-2 text-xs text-ink">
+    Open this at the office. {why}
+  </p>
+{/snippet}
+
 <section class="flex h-full min-h-0 flex-col" aria-label="Your desk">
   <!-- No heading: the window's tab already says Desk and how many wait. -->
   {#if open}
@@ -376,8 +389,9 @@
       {@const via = viaOf(open)}
       {#if from}
         <button
-          class="mb-3 flex w-full items-center gap-3 rounded-xl bg-raise px-3 py-2.5 text-start transition-colors hover:bg-sea/15"
-          title={`Open ${from.name}'s card`}
+          class="mb-3 flex w-full items-center gap-3 rounded-xl bg-raise px-3 py-2.5 text-start transition-colors enabled:hover:bg-sea/15"
+          title={away ? undefined : `Open ${from.name}'s card`}
+          disabled={away}
           onclick={() => onstaff(from.id)}
         >
           <Pixel
@@ -402,8 +416,9 @@
         <span class="text-faint"
           >· {from ? '' : 'Office · '}{#if from && via}{from.name}, from
             <button
-              class="tracking-[0.16em] uppercase hover:text-ink"
-              title={`Open ${who(via)?.name ?? via}'s chat`}
+              class="tracking-[0.16em] uppercase enabled:hover:text-ink"
+              title={away ? undefined : `Open ${who(via)?.name ?? via}'s chat`}
+              disabled={away}
               onclick={() => chatAbout(via, '')}>{who(via)?.name ?? via}</button
             >'s work ·
           {/if}{when(open.at)}</span
@@ -669,7 +684,7 @@
             >
           {/if}
           {#if a.folder}
-            {#if !changing}
+            {#if !changing && !away}
               <button
                 class="flex-1 rounded-lg bg-raise px-3 py-2 text-sm font-medium hover:bg-sea/25 disabled:opacity-40"
                 disabled={busy || unsaved}
@@ -682,11 +697,15 @@
               onclick={() => giveFolder(a)}>Give access</button
             >
           {:else if a.kind === 'hire'}
-            <button
-              class="flex-[1.4] rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
-              disabled={busy || unsaved}
-              onclick={() => onhire(a)}>Open hire window</button
-            >
+            {#if away}
+              {@render atOffice('Hiring happens in the hire window.')}
+            {:else}
+              <button
+                class="flex-[1.4] rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
+                disabled={busy || unsaved}
+                onclick={() => onhire(a)}>Open hire window</button
+              >
+            {/if}
           {:else}
             <button
               class="flex-1 rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
@@ -723,7 +742,9 @@
         {#if a.folder}
           <p class="mt-1.5 text-[11px] text-faint">
             Give access gives {who(a.staffId)?.name ?? 'the Odd'} this folder, and it starts on the work
-            that waited for it. Change lets you pick a smaller folder or Can read first.
+            that waited for it. {away
+              ? 'To pick a smaller folder or Can read first, open this at the office.'
+              : 'Change lets you pick a smaller folder or Can read first.'}
           </p>
         {/if}
         {#if !yesOrNo(a.kind)}
@@ -783,7 +804,9 @@
                     >
                   {/if}
                 </div>
-                {#if s.action?.kind === 'oauth' && !s.done}
+                {#if away && !s.done && (s.action?.kind === 'oauth' || s.action?.kind === 'aws')}
+                  {@render atOffice('The sign-in comes back to the office.')}
+                {:else if s.action?.kind === 'oauth' && !s.done}
                   <button
                     class="mt-2 rounded-lg bg-sea px-3 py-1.5 text-xs font-medium text-night disabled:opacity-40"
                     disabled={busy}
@@ -899,17 +922,25 @@
         </div>
       {:else}
         {@const r = open.row}
-        <SelectToChat {staff} author={r.staffId} what={`report "${r.title}"`}>
+        {#if away}
           <Markdown text={r.body} staff={r.staffId} class="mt-3 text-sm" />
-        </SelectToChat>
-        <p class="mt-2 text-[11px] text-faint">
-          Select any part of it to chat with an Odd about it.
-        </p>
-        <p class="mt-4 text-[11px] text-faint">
-          Feedback goes to {from?.name ?? 'the Odd'} as a reply in their chat. Replying marks it read.
-        </p>
+          <p class="mt-4 text-[11px] text-faint">
+            Feedback goes to {from?.name ?? 'the Odd'} as a reply in their chat. To reply, open this at
+            the office. Read takes it off your desk.
+          </p>
+        {:else}
+          <SelectToChat {staff} author={r.staffId} what={`report "${r.title}"`}>
+            <Markdown text={r.body} staff={r.staffId} class="mt-3 text-sm" />
+          </SelectToChat>
+          <p class="mt-2 text-[11px] text-faint">
+            Select any part of it to chat with an Odd about it.
+          </p>
+          <p class="mt-4 text-[11px] text-faint">
+            Feedback goes to {from?.name ?? 'the Odd'} as a reply in their chat. Replying marks it read.
+          </p>
+        {/if}
         <div class="mt-2 flex gap-2">
-          {#if r.staffId}
+          {#if r.staffId && !away}
             {@const author = r.staffId}
             <button
               class="flex-1 rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night"
