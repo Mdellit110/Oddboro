@@ -148,6 +148,7 @@ export const ROUTE_IDS = {
   '/api/personas': true,
   '/api/personas/[slug]': true,
   '/api/pokes/[id]': true,
+  '/api/phone': true,
   '/api/push': true,
   '/api/reports/[id]': true,
   '/api/rooms': true,

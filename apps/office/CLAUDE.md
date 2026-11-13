@@ -1272,16 +1272,41 @@ sample stay in the window to move back to.
 ## The phone desk
 
 `/desk` (`src/routes/desk/`) is the Desk alone, for the owner's phone on
-their tailnet (`docs/remote-desk.md`). It shows the same `DeskDrawer.svelte`
-with `away` set: no Odd's card, chat or hire window is there, so the sender
-card and names open nothing, a hire ask, a hosted or AWS sign-in step, and a
-folder ask's Change (the picker opens on the office's computer) say "Open this
-at the office", and a report has Read but no Reply. Everything else answers
-as on the computer, through the same routes. A file an item opens shows over
-the desk (`FileViewer.svelte`), which stays as it was beneath. It hears
+their tailnet (`docs/remote-desk.md`). Setup's Your phone section
+(`src/lib/ui/PhoneDeskSection.svelte`, under Updates once the office is
+welcomed) sets it up: `GET /api/phone` asks Tailscale on this computer
+(`src/lib/server/tailscale.ts`: on PATH, else the Mac app's own binary or
+Windows' `Program Files`) for its name (`status --json`, `Self.DNSName`) and
+whether `serve status --json` sends that name to the office. Each step shows
+only while it is to do: install or sign in to Tailscale, the
+`tailscale serve` command to run (with `sudo` on Linux; the office never runs
+it, since it changes what the tailnet reaches), and Let my phone in, which
+posts to `/api/phone` to add the name to `ODDBORO_EXTRA_HOSTS` in `.env` and
+in this process (`allowName` in `owner-page.ts`), so a release answers it at
+once. The dev server's Vite reads its names only as it starts, so there the
+section says to restart once. Then it shows the link and a QR code
+(`qrcode-generator`). It reads Tailscale when it opens and on Check again;
+nothing polls. `tailscale.test.ts` runs it on a Mac, Linux and Windows
+(hard rule 14).
+
+The page has two tabs. Desk shows the same `DeskDrawer.svelte` with `away`
+set: no hire window is there, and nothing reaches the office computer's folder
+picker or a sign-in that comes back to it, so a hire ask, a hosted or AWS
+sign-in step and a folder ask's Change say "Open this at the office".
+Selecting a report's text to chat about it stays at the computer too.
+Everything else answers as on the computer, through the same routes. Chat
+lists every Odd, with what each has waiting, and opens its own
+`ChatPanel.svelte`, as on the computer. The sender card and a colleague's name
+on an item, and a report's Reply (`replyAbout`), open that Odd's chat; opening
+an item alone (`showInChat`) does not, since on a phone that would leave the
+desk. A desk item tapped in a chat opens on the Desk tab while it waits
+(`waitingKey` in `src/lib/desk.ts`, which the floor's page uses too), and a
+report no longer there opens on its own (`ReportView.svelte`), as does a file
+(`FileViewer.svelte`), over the page, which stays as it was beneath. It hears
 `/api/events` and reloads `/api/office` on a change to a table whose page
-refreshes or reloads (`LIVE_TABLES`), and each time the line opens again, as
-when the phone wakes. Nothing polls. Its own styles give every control 44px
+refreshes or reloads (`LIVE_TABLES`), bumps an open chat's `version` as the
+floor does, takes each `working` event, and does all of it again each time
+the line opens, as when the phone wakes. Nothing polls. Its own styles give every control 44px
 and every field 16px text, so a phone neither misses a tap nor zooms. The
 page links `static/desk.webmanifest` and the icons `desk-256.png` and
 `desk-512.png` (drawn by `npm run mark`), so a phone adds it to its home
@@ -1293,10 +1318,14 @@ Buzz me in its header turns on a buzz for that phone
 `static/desk-push.js` for `/desk` alone, asks its push service for an address
 with the office's key, and gives the office that address (`/api/push`).
 `src/lib/server/push.ts` keeps the key (VAPID) and the addresses in the
-system's secret store, only at the push services `PUSH_HOSTS` names. On a
-change to asks, tasks or reports, while a phone is on, it reads the desk and
-sends each phone an empty push when anything is there that was not before; a
-restart or a phone just turned on sees the desk first and buzzes nothing. The
+system's secret store under `push-<hash of the office's home>`, so dev offices
+sharing one Keychain service never share them, and only at the push services
+`PUSH_HOSTS` names. It reads the phones from the store once and keeps them in
+memory (on `globalThis`, past a dev reload), so a change with no phone on
+starts nothing. On a change to asks, tasks or reports, while a phone is on, it
+reads the desk and sends each phone an empty push when anything is there that
+was not before, and logs `[push] sent to N of M phones`; a restart or a phone
+just turned on sees the desk first and buzzes nothing. The
 push is empty, so nothing of the desk leaves: the worker shows "Something is
 waiting on your desk." and a tap opens `/desk`. A phone its push service no
 longer knows (404 or 410) is dropped. An iPhone gets push only for a desk

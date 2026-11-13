@@ -64,6 +64,8 @@ export const OWNER_ACTIONS = {
   'PUT /api/diagnostics': { notAnAction: SETUP },
   // The office's push key and the phones it buzzes live in the system's secret
   // store. GET makes the key the first time it is asked for.
+  // Lists this computer's Tailscale name in the settings file, for the phone desk.
+  'POST /api/phone': { notAnAction: SETUP },
   'GET /api/push': { notAnAction: SETUP },
   'POST /api/push': { notAnAction: SETUP },
   'DELETE /api/push': { notAnAction: SETUP },

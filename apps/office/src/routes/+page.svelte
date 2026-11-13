@@ -18,7 +18,7 @@
   import type { Work } from '#lib/staff/work.ts';
   import type { LessonEvent, OfficeEvent } from '#lib/server/events.ts';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
-  import { deskKeys } from '#lib/desk.ts';
+  import { deskKeys, waitingKey } from '#lib/desk.ts';
   import { account } from '#lib/ui/account.svelte.ts';
   import { personaNews } from '#lib/ui/persona-offers.svelte.ts';
   import { diagnostics } from '#lib/ui/diagnostics.svelte.ts';
@@ -602,24 +602,10 @@
    * else a report on its own. False when there is nothing to open.
    */
   function openDelivered(staffId: string, d: Delivered): boolean {
-    const waiting = (rows: { id: number }[]) => {
-      const found = rows.some((r) => r.id === d.id);
-      if (found) void openDesk(`${d.kind}-${d.id}`);
-      return found;
-    };
-    switch (d.kind) {
-      case 'ask':
-        return waiting(desk.asks);
-      case 'task':
-        return waiting(desk.tasks);
-      case 'report':
-        if (!waiting(desk.reports)) openReport({ id: d.id, staff: staffId, title: d.title });
-        return true;
-      default: {
-        const missed: never = d.kind;
-        throw new Error(`Nothing opens a ${String(missed)}`);
-      }
-    }
+    const key = waitingKey(desk, d);
+    if (key) void openDesk(key);
+    else if (d.kind === 'report') openReport({ id: d.id, staff: staffId, title: d.title });
+    return !!key || d.kind === 'report';
   }
 
   /** A thread from the Goals window: the oldest thing it waits on, else its hub's chat, which shows it as a card. */

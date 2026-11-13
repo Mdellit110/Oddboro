@@ -42,6 +42,14 @@ const NAMES = new Set(
     .map((n) => n.toLowerCase())
 );
 
+/**
+ * Answer one more name from now on, as Setup's phone desk lists it
+ * (`allowPhoneDesk` in tailscale.ts), without a restart.
+ */
+export function allowName(name: string): void {
+  NAMES.add(name.toLowerCase());
+}
+
 /** True when the request asked for the office by one of its own names, on any port. */
 function toThisOffice(request: Request): boolean {
   // `[::1]:4500` gives `[::1]`. Anything that is not exactly a name and a port matches no name.

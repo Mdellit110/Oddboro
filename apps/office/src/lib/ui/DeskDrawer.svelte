@@ -34,13 +34,14 @@
     onhire: (a: AskRow) => void;
     /** Approving a goal plan opens a hire window for each hire in it. */
     onplan: (hires: AskRow[]) => void;
-    /** Open a staffer's card, from the name on an item. */
+    /** Open a staffer's card, from the name on an item; on the phone desk, its chat. */
     onstaff: (id: string) => void;
     /**
-     * Shown away from the office, on the phone desk (`/desk`): no Odd's card,
-     * chat or hire window is there, so what needs one, or needs this computer
-     * (its folder picker, a sign-in that comes back to it), says to open it at
-     * the office instead of offering a button.
+     * Shown away from the office, on the phone desk (`/desk`): no hire window
+     * is there, and nothing reaches this computer's folder picker or a sign-in
+     * that comes back to it, so those say to open them at the office instead of
+     * offering a button. Selecting a report's text to chat about it stays at
+     * the office too; Reply works here.
      */
     away?: boolean;
   };
@@ -389,9 +390,8 @@
       {@const via = viaOf(open)}
       {#if from}
         <button
-          class="mb-3 flex w-full items-center gap-3 rounded-xl bg-raise px-3 py-2.5 text-start transition-colors enabled:hover:bg-sea/15"
-          title={away ? undefined : `Open ${from.name}'s card`}
-          disabled={away}
+          class="mb-3 flex w-full items-center gap-3 rounded-xl bg-raise px-3 py-2.5 text-start transition-colors hover:bg-sea/15"
+          title={away ? `Chat with ${from.name}` : `Open ${from.name}'s card`}
           onclick={() => onstaff(from.id)}
         >
           <Pixel
@@ -416,9 +416,8 @@
         <span class="text-faint"
           >· {from ? '' : 'Office · '}{#if from && via}{from.name}, from
             <button
-              class="tracking-[0.16em] uppercase enabled:hover:text-ink"
-              title={away ? undefined : `Open ${who(via)?.name ?? via}'s chat`}
-              disabled={away}
+              class="tracking-[0.16em] uppercase hover:text-ink"
+              title={`Open ${who(via)?.name ?? via}'s chat`}
               onclick={() => chatAbout(via, '')}>{who(via)?.name ?? via}</button
             >'s work ·
           {/if}{when(open.at)}</span
@@ -924,10 +923,6 @@
         {@const r = open.row}
         {#if away}
           <Markdown text={r.body} staff={r.staffId} class="mt-3 text-sm" />
-          <p class="mt-4 text-[11px] text-faint">
-            Feedback goes to {from?.name ?? 'the Odd'} as a reply in their chat. To reply, open this at
-            the office. Read takes it off your desk.
-          </p>
         {:else}
           <SelectToChat {staff} author={r.staffId} what={`report "${r.title}"`}>
             <Markdown text={r.body} staff={r.staffId} class="mt-3 text-sm" />
@@ -935,12 +930,12 @@
           <p class="mt-2 text-[11px] text-faint">
             Select any part of it to chat with an Odd about it.
           </p>
-          <p class="mt-4 text-[11px] text-faint">
-            Feedback goes to {from?.name ?? 'the Odd'} as a reply in their chat. Replying marks it read.
-          </p>
         {/if}
+        <p class="mt-4 text-[11px] text-faint">
+          Feedback goes to {from?.name ?? 'the Odd'} as a reply in their chat. Replying marks it read.
+        </p>
         <div class="mt-2 flex gap-2">
-          {#if r.staffId && !away}
+          {#if r.staffId}
             {@const author = r.staffId}
             <button
               class="flex-1 rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night"

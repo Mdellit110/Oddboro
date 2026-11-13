@@ -7,8 +7,12 @@
 // office's own key (VAPID). Empty, so nothing of the desk leaves: the phone's
 // service worker (`static/desk-push.js`) shows a fixed line and opens the
 // desk. The key and the addresses live in the system's secret store, never in
-// Postgres or a file.
+// Postgres or a file, under a name of this office's own home (`SECRET`), so
+// two offices on one computer never share them. The list of phones is read
+// from the store once and kept in memory, so a change to the desk with no
+// phone on starts nothing.
 import {
+  createHash,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -17,10 +21,16 @@ import {
 } from 'node:crypto';
 import { desk } from '@oddboro/ledger';
 import { deskKeys } from '#lib/desk.ts';
+import { home } from '@oddboro/ledger/home';
 import { deleteSecret, getSecret, setSecret } from '@oddboro/ledger/secrets';
 import { bus, listen, type OfficeEvent } from './events.ts';
 
-const SECRET = 'push';
+/**
+ * Where the key and the phones are kept: `push-` and the start of a hash of
+ * the office's home. Every dev office on a Mac shares one Keychain service,
+ * so a plain name would have each of them buzz the others' phones.
+ */
+const SECRET = `push-${createHash('sha256').update(home()).digest('hex').slice(0, 12)}`;
 /** The tables whose change can put something new on the desk. */
 const DESK_TABLES = new Set(['asks', 'tasks', 'reports']);
 /** Who sends the pushes, as push services ask: the project, never the owner. */
@@ -90,8 +100,17 @@ export function vapidHeader(address: string, jwk: JsonWebKey, now = Date.now()):
   return `vapid t=${header}.${claims}.${b64url(signature)}, k=${publicKey(jwk)}`;
 }
 
-/** The addresses of the phones the owner turned the buzz on for. */
-export function phones(): string[] {
+/**
+ * What the watcher holds between changes, on `globalThis` so it outlives a
+ * dev reload of this module: the phones, read from the store once, and what
+ * the desk held at the last look while a phone was on.
+ */
+type Held = { phones?: string[]; seen?: Set<string>; looking: Promise<void> };
+const held = ((globalThis as unknown as { officePush?: Held }).officePush ??= {
+  looking: Promise.resolve()
+});
+
+function storedPhones(): string[] {
   try {
     const list: unknown = JSON.parse(getSecret(SECRET, 'phones') ?? '[]');
     return Array.isArray(list) ? list.filter((a): a is string => typeof a === 'string') : [];
@@ -100,16 +119,23 @@ export function phones(): string[] {
   }
 }
 
+/** The addresses of the phones the owner turned the buzz on for. */
+export function phones(): string[] {
+  held.phones ??= storedPhones();
+  return held.phones;
+}
+
 function keepPhones(list: string[]): void {
   if (list.length) setSecret(SECRET, 'phones', JSON.stringify(list));
   else deleteSecret(SECRET, 'phones');
+  held.phones = list;
 }
 
 /** Turn the buzz on for a phone. The desk as it stands now is already seen. */
 export function addPhone(address: string): void {
   if (!isPushAddress(address)) throw new Error("That is not a phone's push address.");
   if (!phones().includes(address)) keepPhones([...phones(), address]);
-  seen = undefined;
+  held.seen = undefined;
   void deskChanged();
 }
 
@@ -147,38 +173,40 @@ export async function buzz(): Promise<number> {
       console.error('[push] a push service could not be reached', e);
     }
   }
+  console.log(`[push] sent to ${took} of ${list.length} ${list.length === 1 ? 'phone' : 'phones'}`);
   return took;
 }
 
-/** What the office last saw on the desk, while a phone gets the buzz. Unset, the next look only sees. */
-let seen: Set<string> | undefined;
-let looking: Promise<void> = Promise.resolve();
-
-/** Read the desk, and buzz when it holds anything the last look did not. One look at a time. */
+/**
+ * Read the desk, and buzz when it holds anything the last look did not. One
+ * look at a time. With no phone on it reads nothing. A first look, or one
+ * after a phone was turned on, only sees.
+ */
 export function deskChanged(): Promise<void> {
-  looking = looking.then(async () => {
+  held.looking = held.looking.then(async () => {
     if (!phones().length) {
-      seen = undefined;
+      held.seen = undefined;
       return;
     }
     try {
       const now = deskKeys(await desk());
-      const fresh = seen ? [...now].some((k) => !seen?.has(k)) : false;
-      seen = now;
+      const before = held.seen;
+      const fresh = before ? [...now].some((k) => !before.has(k)) : false;
+      held.seen = now;
       if (fresh) await buzz();
     } catch (e) {
       console.error('[push] desk', e);
     }
   });
-  return looking;
+  return held.looking;
 }
 
-const g = globalThis as unknown as { officePush?: boolean };
+const g = globalThis as unknown as { officePushStarted?: boolean };
 
 /** Start once per process, from the server's `init`. A restart buzzes for nothing already there. */
 export function startPush(): void {
-  if (g.officePush) return;
-  g.officePush = true;
+  if (g.officePushStarted) return;
+  g.officePushStarted = true;
   listen();
   bus.on('event', (e: OfficeEvent) => {
     if (e.type === 'change' && DESK_TABLES.has(e.table)) void deskChanged();
