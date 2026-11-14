@@ -1,39 +1,66 @@
 <script lang="ts">
-  // The phone's Messages: every Odd, each opening its own chat
-  // (`ChatPanel.svelte`), as on the computer. The phone desk's Chat tab
-  // until phase 2 gives it a list of its own.
+  // The phone's Messages: one row per Odd, with its dot and its chat's last
+  // line (`previewLine`), each opening its own chat (`ChatPanel.svelte`), as
+  // on the computer. An open chat's header has Call. No unread counts yet:
+  // the phone does not keep what was read.
+  import type { Desk } from '@oddboro/ledger';
   import ChatPanel from '#lib/ui/ChatPanel.svelte';
   import type { Delivered } from '#lib/ui/chat-about.svelte.ts';
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import type { Work } from '#lib/staff/work.ts';
   import OddFace from './OddFace.svelte';
+  import { aroundLine, waitingOdds, type Presence } from './phone-home.ts';
+  import { previewLine, type LastLine } from './phone-messages.ts';
 
   type Props = {
     staff: StaffProfile[];
     /** The Odd whose chat is open, if any. */
     chatting: string | undefined;
     onchat: (id: string | undefined) => void;
+    /** Opens a call with an Odd. */
+    oncall: (id: string) => void;
     version: number;
     visible: boolean;
+    desk: Desk;
+    working: Record<string, string>;
     inProgress: Record<string, Work[]>;
     toStart: Record<string, Work[]>;
-    /** How many items each Odd has waiting on the desk. */
-    waitingFrom: Record<string, number>;
+    /** Each Odd's chat's last line, by its id. */
+    lastLines: Record<string, LastLine>;
     onitem: (staffId: string, d: Delivered) => void;
+    /** A chat's reply started or ended, so its last line changed. */
+    onsaid: () => void;
   };
   let {
     staff,
     chatting,
     onchat,
+    oncall,
     version,
     visible,
+    desk,
+    working,
     inProgress,
     toStart,
-    waitingFrom,
-    onitem
+    lastLines,
+    onitem,
+    onsaid
   }: Props = $props();
   const chatWith = $derived(staff.find((p) => p.id === chatting));
   const nothing = () => {};
+  const waiting = $derived(waitingOdds(desk));
+  const presence = (id: string): Presence =>
+    aroundLine({ working: working[id], work: inProgress[id], waiting: waiting.has(id) }).presence;
+  const DOT: Record<Presence, string> = {
+    working: 'bg-sea',
+    waiting: 'bg-ember',
+    free: 'bg-faint'
+  };
+  const PRESENCE: Record<Presence, string> = {
+    working: 'working',
+    waiting: 'waiting on you',
+    free: 'free'
+  };
 </script>
 
 <div class="flex h-full flex-col">
@@ -56,6 +83,24 @@
         Messages
       </button>
       <span class="min-w-0 flex-1 truncate font-medium">{chatWith.name}</span>
+      <button
+        class="flex size-11 shrink-0 items-center justify-center rounded-full bg-raise text-sea"
+        aria-label={`Call ${chatWith.name}`}
+        onclick={() => oncall(chatWith.id)}
+      >
+        <svg
+          class="size-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          ><path
+            d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"
+          /></svg
+        >
+      </button>
     </div>
     {#key chatWith.id}
       <div class="min-h-0 flex-1">
@@ -63,7 +108,7 @@
           profile={chatWith}
           {version}
           onstart={nothing}
-          onend={nothing}
+          onend={onsaid}
           {visible}
           onitem={(d) => onitem(chatWith.id, d)}
           work={[...(inProgress[chatWith.id] ?? []), ...(toStart[chatWith.id] ?? [])]}
@@ -75,23 +120,26 @@
     <header class="border-b border-hairline px-5 pt-6 pb-4">
       <h1 class="text-2xl font-semibold text-ink">Messages</h1>
     </header>
-    <ul class="flex flex-col gap-2 overflow-y-auto p-4">
+    <ul class="flex flex-col overflow-y-auto px-2 py-2">
       {#each staff as p (p.id)}
+        {@const dot = presence(p.id)}
         <li>
           <button
-            class="flex w-full items-center gap-3 rounded-2xl bg-raise px-4 py-3 text-start"
+            class="flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-start"
             onclick={() => onchat(p.id)}
           >
-            <OddFace odd={p} />
-            <span class="min-w-0 flex-1">
-              <span class="block font-medium text-ink">{p.name}</span>
-              <span class="block truncate text-sm text-muted">{p.role}</span>
+            <span class="relative shrink-0">
+              <OddFace odd={p} class="size-14 rounded-xl" />
+              <span
+                class="absolute -end-1 -bottom-1 size-3.5 rounded-full ring-2 ring-night {DOT[dot]}"
+              ></span>
             </span>
-            {#if waitingFrom[p.id]}
-              <span class="rounded-full bg-ember/20 px-2 py-0.5 text-xs text-ember"
-                >{waitingFrom[p.id]} waiting</span
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-lg font-medium text-ink">{p.name}</span>
+              <span class="block truncate text-muted"
+                ><span class="sr-only">{PRESENCE[dot]}: </span>{previewLine(lastLines[p.id])}</span
               >
-            {/if}
+            </span>
           </button>
         </li>
       {:else}

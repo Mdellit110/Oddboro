@@ -152,6 +152,7 @@ export const ROUTE_IDS = {
   '/api/phone/goals': true,
   '/api/phone/goals/[id]': true,
   '/api/phone/home': true,
+  '/api/phone/messages': true,
   '/api/push': true,
   '/api/reports/[id]': true,
   '/api/rooms': true,

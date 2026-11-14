@@ -20,12 +20,14 @@
     desk: Desk;
     staff: StaffProfile[];
     onback: () => void;
-    /** Opens an Odd's chat. */
+    /** Opens a call with an Odd. */
     oncall: (id: string) => void;
+    /** Opens an Odd's chat. */
+    onchat: (id: string) => void;
     /** Opens a desk item, by its key, on the Desk tab. */
     onopen: (key: string) => void;
   };
-  let { goal, desk, staff, onback, oncall, onopen }: Props = $props();
+  let { goal, desk, staff, onback, oncall, onchat, onopen }: Props = $props();
 
   const who = (id: string | null | undefined) => staff.find((p) => p.id === id);
   const lead = $derived(who(goal.leadId));
@@ -237,7 +239,7 @@
         <p class="mb-2 text-sm {sent.ok ? 'text-muted' : 'text-coral'}" role="status">
           {sent.line}
           {#if sent.ok && !sending}
-            <button type="button" class="ms-1 text-sea" onclick={() => oncall(lead.id)}
+            <button type="button" class="ms-1 text-sea" onclick={() => onchat(lead.id)}
               >Open the chat</button
             >
           {/if}
