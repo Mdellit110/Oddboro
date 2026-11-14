@@ -1,6 +1,6 @@
 <script lang="ts">
   // The phone's Desk: everything waiting on the owner as cards, newest first,
-  // with All, Asks, Tasks and Reports chips. Each card's buttons come from
+  // with chips to show one kind of work. Each card's buttons come from
   // `cardButtons` (`phone-desk.ts`). A one-tap button posts what the Desk
   // window's button posts. Open shows that Desk window's item, `away`, in full.
   // A card from an Odd has Call, which opens a call with that Odd.
@@ -143,15 +143,21 @@
             <p class="mt-2 rounded-lg bg-ember/15 px-3 py-2 text-ember">Sign in at the office</p>
           {/if}
         {/if}
-        <div class="mt-3 flex gap-2">
-          {#each cardButtons(c) as b (b.id)}
-            <button
-              class="flex-1 rounded-xl px-3 py-2.5 font-medium disabled:opacity-40 {style(b)}"
-              disabled={busy === c.key}
-              onclick={() => tap(c, b)}>{b.label}</button
-            >
-          {/each}
-        </div>
+        {#if c.kind === 'project'}
+          <p class="mt-3 rounded-lg bg-ember/15 px-3 py-2 text-ember">
+            On your office computer, open Desk and select this project to review the proposed work.
+          </p>
+        {:else}
+          <div class="mt-3 flex gap-2">
+            {#each cardButtons(c) as b (b.id)}
+              <button
+                class="flex-1 rounded-xl px-3 py-2.5 font-medium disabled:opacity-40 {style(b)}"
+                disabled={busy === c.key}
+                onclick={() => tap(c, b)}>{b.label}</button
+              >
+            {/each}
+          </div>
+        {/if}
         {#if problems[c.key]}
           <p class="mt-2 text-sm text-coral" role="alert">{problems[c.key]}</p>
         {/if}

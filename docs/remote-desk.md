@@ -126,9 +126,10 @@ If the buzz stops, check Settings, Apps, Chrome, Notifications.
   the same chat, shown big: the Odd's words appear as it writes them. Tap
   **Talk**, then the mic on your phone's keyboard, and speak. **Desk** goes
   to your desk, and **End** or Back takes you to where you started.
-- **Desk** shows what is waiting, newest first, with All, Asks, Tasks and
-  Reports. New items arrive live, with no reload. Approve, Deny, Make this
-  call and Read take one tap. Anything whose yes could send something out of
+- **Desk** shows what is waiting, newest first, with All, Asks, Tasks,
+  Reports and Projects. For proposed project work, use the title on the phone
+  to find the same proposal on the office computer's Desk and review it there.
+  New items arrive live, with no reload. Approve, Deny, Make this call and Read take one tap. Anything whose yes could send something out of
   the office, such as an email, has only **Open**, so you read it in full
   first. Open shows the item as the office's Desk does.
 - Some things need the computer: a hire, a sign-in to a service, and picking

@@ -6,6 +6,7 @@ import { ASK_KINDS, type AskRow, type Desk, type ReportRow, type TaskRow } from 
 import {
   askButtons,
   cardButtons,
+  cardLine,
   chipCounts,
   deskCards,
   sendsOut,
@@ -125,17 +126,31 @@ test('the desk lists newest first, and Waiting on you holds the asks alone', () 
   const d = desk({
     asks: [ask({ id: 1 }), ask({ id: 2, createdAt: new Date('2026-11-13T11:00:00Z') })],
     tasks: [task({ createdAt: new Date('2026-11-13T12:00:00Z') })],
-    reports: [report({})]
+    reports: [report({})],
+    projectWork: [
+      {
+        id: 'request-1',
+        sessionId: 'session-1',
+        title: 'Fix totals',
+        prompt: 'Check the rounding.',
+        staffId: null,
+        at: new Date('2026-11-13T13:00:00Z')
+      }
+    ]
   });
   assert.deepEqual(
     deskCards(d).map((c) => c.key),
-    ['task-1', 'ask-2', 'ask-1', 'report-1']
+    ['project-request-1', 'task-1', 'ask-2', 'ask-1', 'report-1']
   );
   assert.deepEqual(
     waitingOnYou(d).map((c) => c.key),
     ['ask-2', 'ask-1']
   );
-  assert.deepEqual(chipCounts(d), { all: 4, asks: 2, tasks: 1, reports: 1 });
+  assert.deepEqual(chipCounts(d), { all: 5, asks: 2, tasks: 1, reports: 1, projects: 1 });
+  const [project] = deskCards(d, 'projects');
+  assert.equal(project.row.title, 'Fix totals');
+  assert.equal(cardLine(project), 'Check the rounding.');
+  assert.deepEqual(cardButtons(project), []);
   assert.deepEqual(
     deskCards(d, 'reports').map((c) => c.key),
     ['report-1']
