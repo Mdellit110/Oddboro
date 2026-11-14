@@ -1,27 +1,29 @@
 <script lang="ts">
-  // The phone desk. Two tabs: Desk, the same desk as the office's Desk window
-  // (`DeskDrawer.svelte`) shown `away`, so what needs the office's computer or
-  // a hire window says to open it at the office; and Chat, every Odd, each
-  // opening its own chat (`ChatPanel.svelte`), as on the computer. A report's
-  // Reply and the name on an item open that Odd's chat here too. It hears the
-  // office's one live line, as the floor does, and reloads on a change and
-  // whenever the line opens again, such as when the phone wakes. Nothing
-  // polls. Its header holds the switch for a buzz on this phone
-  // (`phone-buzz.ts`).
+  // The phone app. Four tabs: Home (`PhoneHome.svelte`), Goals (next phase),
+  // Messages (each Odd's chat, `PhoneMessages.svelte`) and Desk
+  // (`PhoneDesk.svelte`, whose Open shows the office's own Desk window,
+  // `DeskDrawer.svelte`, `away`). It hears the office's one live line, as the
+  // floor does, and reloads on a change and whenever the line opens again, such
+  // as when the phone wakes. Nothing polls. Home's header holds the switch for
+  // a buzz on this phone (`phone-buzz.ts`), whose tap opens `/desk#desk`.
   import { tick, untrack } from 'svelte';
   import type { Desk } from '@oddboro/ledger';
   import { LIVE_TABLES } from '@oddboro/ledger/live-tables';
   import { setZone } from '@oddboro/ledger/time';
-  import ChatPanel from '#lib/ui/ChatPanel.svelte';
   import DeskDrawer from '#lib/ui/DeskDrawer.svelte';
   import FileViewer from '#lib/ui/FileViewer.svelte';
-  import Pixel from '#lib/ui/Pixel.svelte';
   import ReportView from '#lib/ui/ReportView.svelte';
   import { call, type ApiUrl } from '#lib/ui/api.ts';
-  import { chatRequest, type Delivered } from '#lib/ui/chat-about.svelte.ts';
+  import { chatRequest, replyAbout, type Delivered } from '#lib/ui/chat-about.svelte.ts';
   import { close, openReport, wins } from '#lib/ui/windows.svelte.ts';
   import { buzzOff, buzzOn, buzzState, type BuzzState } from '#lib/ui/phone-buzz.ts';
   import { waitingKey } from '#lib/desk.ts';
+  import PhoneDesk from '#lib/ui/phone/PhoneDesk.svelte';
+  import PhoneHome from '#lib/ui/phone/PhoneHome.svelte';
+  import PhoneMessages from '#lib/ui/phone/PhoneMessages.svelte';
+  import PhoneTabs from '#lib/ui/phone/PhoneTabs.svelte';
+  import type { Tab } from '#lib/ui/phone/phone-home.ts';
+  import type { PhoneHome as HomeData } from '#lib/server/phone-home.ts';
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import type { Work } from '#lib/staff/work.ts';
   import type { OfficeEvent } from '#lib/server/events.ts';
@@ -31,18 +33,25 @@
   setZone(untrack(() => data.zone));
   let staff = $state<StaffProfile[]>(untrack(() => data.staff));
   let desk = $state<Desk>(untrack(() => data.desk));
+  let home = $state<HomeData>(untrack(() => data.home));
+  let working = $state<Record<string, string>>({});
   let inProgress = $state<Record<string, Work[]>>({});
   let toStart = $state<Record<string, Work[]>>({});
   /** Bumps on a change an open chat reloads for, as on the computer. */
   let version = $state(0);
   const waiting = $derived(desk.asks.length + desk.tasks.length + desk.reports.length);
 
-  let tab = $state<'desk' | 'chat'>('desk');
-  /** The Odd whose chat is open on the Chat tab, if any. */
+  const TABS: Tab[] = ['home', 'goals', 'messages', 'desk'];
+  let tab = $state<Tab>('home');
+  $effect(() => {
+    const asked = location.hash.slice(1) as Tab;
+    if (TABS.includes(asked)) tab = asked;
+  });
+  /** The Odd whose chat is open on Messages, if any. */
   let chatting = $state<string | undefined>();
-  const chatWith = $derived(staff.find((p) => p.id === chatting));
-  /** The item the desk opens next, as on the computer's Desk. */
+  /** The item the Desk window opens next, and whether it shows over the Desk list. */
   let deskFocus = $state<string | undefined>();
+  let drawer = $state(false);
 
   /** A file or a report an item opened, shown over the page, which stays as it was beneath. */
   const front = $derived(
@@ -58,21 +67,32 @@
   /** The tables whose change the desk shows, and those an open chat reloads for. */
   const RELOADS = new Set([...pageOf('refresh'), ...pageOf('reload')]);
   const VERSIONS = pageOf('version');
+  /** The tables Home's next jobs and goals moving today come from. */
+  const HOME = new Set(['jobs', 'threads', 'follow_ups', 'goals', 'staff_goals']);
 
   async function reload() {
     try {
       const next = await call<{
         staff: StaffProfile[];
         desk: Desk;
+        working: Record<string, string>;
         inProgress: Record<string, Work[]>;
         toStart: Record<string, Work[]>;
       }>('/api/office');
       staff = next.staff;
       desk = next.desk;
+      working = next.working;
       inProgress = next.inProgress;
       toStart = next.toStart;
     } catch {
       // The office is out of reach; the next change or reconnect tries again.
+    }
+  }
+  async function reloadHome() {
+    try {
+      home = await call<HomeData>('/api/phone/home');
+    } catch {
+      // As above.
     }
   }
 
@@ -82,23 +102,42 @@
     events.onopen = () => {
       version++;
       void reload();
+      void reloadHome();
     };
     events.onmessage = (m) => {
       const e = JSON.parse(m.data) as OfficeEvent;
       if (e.type === 'working') {
+        working = e.working;
         inProgress = e.inProgress;
         return;
       }
       if (e.type !== 'change') return;
       if (RELOADS.has(e.table)) void reload();
       if (VERSIONS.has(e.table)) version++;
+      if (HOME.has(e.table)) void reloadHome();
     };
     return () => events.close();
   });
 
+  function pick(t: Tab) {
+    tab = t;
+    if (t === 'desk') drawer = false;
+    history.replaceState(history.state, '', `#${t}`);
+  }
+
   function openChat(id: string) {
     chatting = id;
-    tab = 'chat';
+    pick('messages');
+  }
+
+  /** Opens one item in the Desk window, over the Desk list. */
+  async function openOnDesk(key: string) {
+    pick('desk');
+    drawer = true;
+    // Cleared first, so asking for the item already open still brings it back.
+    deskFocus = undefined;
+    await tick();
+    deskFocus = key;
   }
 
   // A report's Reply, or a chat about something, opens that Odd's chat here.
@@ -112,15 +151,10 @@
   });
 
   /** Something an Odd delivered, tapped in its chat: on the desk while it waits, else a report on its own. */
-  async function openItem(staffId: string, d: Delivered) {
+  function openItem(staffId: string, d: Delivered) {
     const key = waitingKey(desk, d);
-    if (key) {
-      tab = 'desk';
-      // Cleared first, so asking for the item already open still brings it back.
-      deskFocus = undefined;
-      await tick();
-      deskFocus = key;
-    } else if (d.kind === 'report') openReport({ id: d.id, staff: staffId, title: d.title });
+    if (key) void openOnDesk(key);
+    else if (d.kind === 'report') openReport({ id: d.id, staff: staffId, title: d.title });
   }
 
   /** How many items each Odd has waiting on the desk. */
@@ -171,52 +205,75 @@
 </svelte:head>
 
 <main class="phone-desk mx-auto flex h-dvh max-w-xl flex-col">
-  <header class="flex items-center gap-2 border-b border-hairline px-3 py-2">
-    <div class="flex flex-1 gap-1" role="tablist" aria-label="Desk or chat">
-      {#each [{ id: 'desk', label: waiting ? `Desk (${waiting})` : 'Desk' }, { id: 'chat', label: 'Chat' }] as const as t (t.id)}
+  <div class="relative min-h-0 flex-1" class:hidden={!!front}>
+    <div class="flex h-full flex-col" class:hidden={tab !== 'home'}>
+      {#if buzz === 'on' || buzz === 'off'}
         <button
-          class="rounded-lg px-3 text-sm {tab === t.id ? 'bg-raise text-ink' : 'text-muted'}"
-          role="tab"
-          aria-selected={tab === t.id}
-          onclick={() => (tab = t.id)}>{t.label}</button
+          class="absolute end-4 top-5 z-10 rounded-lg px-3 text-xs {buzz === 'on'
+            ? 'bg-sea/25 text-ink'
+            : 'bg-raise text-muted'} disabled:opacity-40"
+          aria-pressed={buzz === 'on'}
+          disabled={buzzBusy}
+          onclick={flipBuzz}>{buzz === 'on' ? 'Buzz on' : 'Buzz me'}</button
         >
-      {/each}
+      {/if}
+      {#if buzz === 'cannot' || buzz === 'blocked' || buzzProblem}
+        <p class="border-b border-hairline px-5 py-2 text-xs text-muted">
+          {buzzProblem || (buzz === 'cannot' || buzz === 'blocked' ? BUZZ_LINE[buzz] : '')}
+        </p>
+      {/if}
+      <div class="min-h-0 flex-1">
+        <PhoneHome
+          office={data.office}
+          {staff}
+          {desk}
+          {working}
+          {inProgress}
+          {home}
+          onopen={openOnDesk}
+          oncall={openChat}
+          ongoals={() => pick('goals')}
+        />
+      </div>
     </div>
-    {#if buzz === 'on' || buzz === 'off'}
-      <button
-        class="rounded-lg px-3 text-xs {buzz === 'on'
-          ? 'bg-sea/25 text-ink'
-          : 'bg-raise text-muted'} disabled:opacity-40"
-        aria-pressed={buzz === 'on'}
-        disabled={buzzBusy}
-        onclick={flipBuzz}>{buzz === 'on' ? 'Buzz on' : 'Buzz me'}</button
-      >
-    {/if}
-  </header>
-  {#if buzz === 'cannot' || buzz === 'blocked' || buzzProblem}
-    <p class="border-b border-hairline px-4 py-2 text-xs text-muted">
-      {buzzProblem || (buzz === 'cannot' || buzz === 'blocked' ? BUZZ_LINE[buzz] : '')}
-    </p>
-  {/if}
 
-  <div class="min-h-0 flex-1" class:hidden={!!front || tab !== 'desk'}>
-    <DeskDrawer
-      {desk}
-      {staff}
-      away
-      focus={deskFocus}
-      onhire={nothing}
-      onplan={nothing}
-      onstaff={openChat}
-    />
-  </div>
+    <div class="flex h-full flex-col" class:hidden={tab !== 'goals'}>
+      <header class="border-b border-hairline px-5 pt-6 pb-4">
+        <h1 class="text-2xl font-semibold text-ink">Goals</h1>
+      </header>
+      <p class="px-5 py-6 text-muted">Your goals come to the phone in the next update.</p>
+    </div>
 
-  <div class="flex min-h-0 flex-1 flex-col" class:hidden={!!front || tab !== 'chat'}>
-    {#if chatWith}
-      <div class="flex items-center gap-2 border-b border-hairline px-3 py-1.5">
+    <div class="h-full" class:hidden={tab !== 'messages'}>
+      <PhoneMessages
+        {staff}
+        {chatting}
+        onchat={(id) => (chatting = id)}
+        {version}
+        visible={tab === 'messages' && !front}
+        {inProgress}
+        {toStart}
+        {waitingFrom}
+        onitem={openItem}
+      />
+    </div>
+
+    <div class="h-full" class:hidden={tab !== 'desk' || drawer}>
+      <PhoneDesk
+        {desk}
+        {staff}
+        onopen={openOnDesk}
+        onreply={(c) =>
+          c.row.staffId &&
+          replyAbout(c.row.staffId, { kind: 'report', id: c.row.id, title: c.row.title })}
+      />
+    </div>
+
+    <div class="flex h-full flex-col" class:hidden={tab !== 'desk' || !drawer}>
+      <div class="border-b border-hairline px-3 py-1.5">
         <button
-          class="flex items-center gap-1.5 rounded-lg bg-raise px-2.5 text-xs text-ink"
-          onclick={() => (chatting = undefined)}
+          class="flex items-center gap-1.5 rounded-lg bg-raise px-3 text-sm text-ink"
+          onclick={() => (drawer = false)}
         >
           <svg
             class="size-3 rtl:-scale-x-100"
@@ -228,56 +285,21 @@
             stroke-linejoin="round"
             aria-hidden="true"><path d="M7.5 2.5 4 6l3.5 3.5" /></svg
           >
-          All Odds
+          Desk
         </button>
-        <span class="min-w-0 flex-1 truncate text-sm font-medium">{chatWith.name}</span>
       </div>
-      {#key chatWith.id}
-        <div class="min-h-0 flex-1">
-          <ChatPanel
-            profile={chatWith}
-            {version}
-            onstart={nothing}
-            onend={nothing}
-            visible={tab === 'chat' && !front}
-            onitem={(d) => openItem(chatWith.id, d)}
-            work={[...(inProgress[chatWith.id] ?? []), ...(toStart[chatWith.id] ?? [])]}
-            onwork={nothing}
-          />
-        </div>
-      {/key}
-    {:else}
-      <ul class="flex flex-col gap-1.5 overflow-y-auto p-3">
-        {#each staff as p (p.id)}
-          <li>
-            <button
-              class="flex w-full items-center gap-3 rounded-xl bg-raise px-3 py-2.5 text-start hover:bg-sea/15"
-              onclick={() => openChat(p.id)}
-            >
-              <Pixel
-                src={p.look?.portrait}
-                frame={`${p.portrait}/default`}
-                fallback={`${p.sprite}@${p.variant}/idle-down-0`}
-                scale={1}
-                label={p.name}
-                class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sea-deep"
-              />
-              <span class="min-w-0 flex-1">
-                <span class="block text-sm text-ink">{p.name}</span>
-                <span class="block truncate text-xs text-muted">{p.role}</span>
-              </span>
-              {#if waitingFrom[p.id]}
-                <span class="rounded-full bg-ember/20 px-2 py-0.5 text-[11px] text-ember"
-                  >{waitingFrom[p.id]} waiting</span
-                >
-              {/if}
-            </button>
-          </li>
-        {:else}
-          <li class="py-10 text-center text-sm text-muted">No Odds in the office yet.</li>
-        {/each}
-      </ul>
-    {/if}
+      <div class="min-h-0 flex-1">
+        <DeskDrawer
+          {desk}
+          {staff}
+          away
+          focus={deskFocus}
+          onhire={nothing}
+          onplan={nothing}
+          onstaff={openChat}
+        />
+      </div>
+    </div>
   </div>
 
   {#if front?.kind === 'file'}
@@ -300,10 +322,12 @@
       </div>
     </div>
   {/if}
+
+  <PhoneTabs {tab} {waiting} onpick={pick} />
 </main>
 
 <style>
-  /* Room for a thumb: every control on the phone desk is at least 44px tall. */
+  /* Room for a thumb: every control on the phone is at least 44px tall. */
   .phone-desk :global(button),
   .phone-desk :global(select) {
     min-height: 2.75rem;
@@ -319,6 +343,5 @@
   }
   .phone-desk {
     padding-block-start: env(safe-area-inset-top);
-    padding-block-end: env(safe-area-inset-bottom);
   }
 </style>

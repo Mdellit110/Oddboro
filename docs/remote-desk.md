@@ -110,14 +110,20 @@ If the buzz stops, check Settings, Apps, Chrome, Notifications.
 
 ### What the desk does
 
-- **Desk** shows what is waiting. New items arrive live, with no reload.
-  Approve, deny or send back an ask, work through a task's steps, and read a
-  report.
-- **Chat** lists your Odds. Tap one to talk to it, as in the office. A
+- **Home** shows what waits on your yes or no, the goals with work handed on
+  or back today, and who is around: each Odd with what it is doing and a
+  button that opens its chat.
+- **Goals** comes in a later update.
+- **Messages** lists your Odds. Tap one to talk to it, as in the office. A
   report's **Reply** opens that Odd's chat too.
+- **Desk** shows what is waiting, newest first, with All, Asks, Tasks and
+  Reports. New items arrive live, with no reload. Approve, Deny, Make this
+  call and Read take one tap. Anything whose yes could send something out of
+  the office, such as an email, has only **Open**, so you read it in full
+  first. Open shows the item as the office's Desk does.
 - Some things need the computer: a hire, a sign-in to a service, and picking
   a different folder. The desk says "Open this at the office" for those.
-- **Buzz on** at the top turns the buzz off again for that phone. Each phone
+- **Buzz on** at the top of Home turns the buzz off again for that phone. Each phone
   is turned on by itself.
 
 The buzz says only "Something is waiting on your desk." Nothing from the desk

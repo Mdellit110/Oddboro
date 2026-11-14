@@ -19,7 +19,7 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window' }).then((open) => {
       const desk = open.find((c) => new URL(c.url).pathname === '/desk');
-      return desk ? desk.focus() : self.clients.openWindow('/desk');
+      return desk ? desk.focus() : self.clients.openWindow('/desk#desk');
     })
   );
 });
