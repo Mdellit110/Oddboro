@@ -1,5 +1,6 @@
 <script lang="ts">
-  // The phone app. Four tabs: Home (`PhoneHome.svelte`), Goals (next phase),
+  // The phone app. Four tabs: Home (`PhoneHome.svelte`), Goals (`PhoneGoals.svelte`,
+  // and a goal's page, `PhoneGoal.svelte`),
   // Messages (each Odd's chat, `PhoneMessages.svelte`) and Desk
   // (`PhoneDesk.svelte`, whose Open shows the office's own Desk window,
   // `DeskDrawer.svelte`, `away`). It hears the office's one live line, as the
@@ -19,11 +20,14 @@
   import { buzzOff, buzzOn, buzzState, type BuzzState } from '#lib/ui/phone-buzz.ts';
   import { waitingKey } from '#lib/desk.ts';
   import PhoneDesk from '#lib/ui/phone/PhoneDesk.svelte';
+  import PhoneGoal from '#lib/ui/phone/PhoneGoal.svelte';
+  import PhoneGoals from '#lib/ui/phone/PhoneGoals.svelte';
   import PhoneHome from '#lib/ui/phone/PhoneHome.svelte';
   import PhoneMessages from '#lib/ui/phone/PhoneMessages.svelte';
   import PhoneTabs from '#lib/ui/phone/PhoneTabs.svelte';
   import type { Tab } from '#lib/ui/phone/phone-home.ts';
   import type { PhoneHome as HomeData } from '#lib/server/phone-home.ts';
+  import type { PhoneGoal as GoalData, PhoneGoalCard } from '#lib/server/phone-goals.ts';
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import type { Work } from '#lib/staff/work.ts';
   import type { OfficeEvent } from '#lib/server/events.ts';
@@ -70,6 +74,40 @@
   /** The tables Home's next jobs and goals moving today come from. */
   const HOME = new Set(['jobs', 'threads', 'follow_ups', 'goals', 'staff_goals']);
 
+  /** The Goals tab, and the goal whose page is open, if any. */
+  let goals = $state<PhoneGoalCard[]>(untrack(() => data.goals));
+  let goalOpen = $state<GoalData | undefined>();
+  /** The tables a goal's card and page come from. */
+  const GOALS = new Set([
+    'goals',
+    'staff_goals',
+    'goal_progress',
+    'threads',
+    'follow_ups',
+    'asks',
+    'tasks'
+  ]);
+  async function reloadGoals() {
+    try {
+      goals = await call<PhoneGoalCard[]>('/api/phone/goals');
+      const id = goalOpen?.id;
+      if (id === undefined) return;
+      const next = await call<GoalData>(`/api/phone/goals/${id}`);
+      // Only if that goal's page is still the one open: the owner may have moved on.
+      if (goalOpen?.id === id) goalOpen = next;
+    } catch {
+      // The office is out of reach, or the goal is gone; the next change tries again.
+    }
+  }
+  async function openGoal(id: number) {
+    pick('goals');
+    try {
+      goalOpen = await call<GoalData>(`/api/phone/goals/${id}`);
+    } catch {
+      goalOpen = undefined;
+    }
+  }
+
   async function reload() {
     try {
       const next = await call<{
@@ -103,6 +141,7 @@
       version++;
       void reload();
       void reloadHome();
+      void reloadGoals();
     };
     events.onmessage = (m) => {
       const e = JSON.parse(m.data) as OfficeEvent;
@@ -115,6 +154,7 @@
       if (RELOADS.has(e.table)) void reload();
       if (VERSIONS.has(e.table)) version++;
       if (HOME.has(e.table)) void reloadHome();
+      if (GOALS.has(e.table)) void reloadGoals();
     };
     return () => events.close();
   });
@@ -232,16 +272,26 @@
           {home}
           onopen={openOnDesk}
           oncall={openChat}
-          ongoals={() => pick('goals')}
+          ongoals={openGoal}
         />
       </div>
     </div>
 
-    <div class="flex h-full flex-col" class:hidden={tab !== 'goals'}>
-      <header class="border-b border-hairline px-5 pt-6 pb-4">
-        <h1 class="text-2xl font-semibold text-ink">Goals</h1>
-      </header>
-      <p class="px-5 py-6 text-muted">Your goals come to the phone in the next update.</p>
+    <div class="h-full" class:hidden={tab !== 'goals'}>
+      {#if goalOpen}
+        {#key goalOpen.id}
+          <PhoneGoal
+            goal={goalOpen}
+            {desk}
+            {staff}
+            onback={() => (goalOpen = undefined)}
+            oncall={openChat}
+            onopen={openOnDesk}
+          />
+        {/key}
+      {:else}
+        <PhoneGoals {goals} {staff} onopen={openGoal} />
+      {/if}
     </div>
 
     <div class="h-full" class:hidden={tab !== 'messages'}>

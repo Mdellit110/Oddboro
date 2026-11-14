@@ -62,6 +62,13 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner sending the message; nothing leaves this computer here.'
   },
   {
+    file: 'apps/office/src/lib/ui/phone/phone-goals.ts',
+    calls: 1,
+    to: "The office, on this computer: the chat route of a goal's lead.",
+    sends: "The owner's message to the team on a goal's page, to the office that runs the lead.",
+    yes: 'The owner sending the message; nothing leaves this computer here.'
+  },
+  {
     file: 'apps/office/src/lib/ui/UpdatesSection.svelte',
     calls: 1,
     to: 'The office, on this computer: its live line of changes.',

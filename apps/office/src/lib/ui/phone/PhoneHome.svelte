@@ -23,7 +23,8 @@
     onopen: (key: string) => void;
     /** Opens an Odd's chat. */
     oncall: (id: string) => void;
-    ongoals: () => void;
+    /** Opens a goal's page. */
+    ongoals: (id: number) => void;
   };
   let { office, staff, desk, working, inProgress, home, onopen, oncall, ongoals }: Props = $props();
 
@@ -113,7 +114,7 @@
         <li>
           <button
             class="flex w-full items-center gap-3 rounded-2xl border border-sea/30 bg-sea-night px-4 py-3 text-start"
-            onclick={ongoals}
+            onclick={() => ongoals(h.goalId)}
           >
             <span class="flex shrink-0">
               {#each h.faces as id, n (id)}
