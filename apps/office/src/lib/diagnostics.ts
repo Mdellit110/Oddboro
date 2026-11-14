@@ -148,6 +148,9 @@ export const ROUTE_IDS = {
   '/api/personas': true,
   '/api/personas/[slug]': true,
   '/api/pokes/[id]': true,
+  '/api/phone': true,
+  '/api/phone/home': true,
+  '/api/push': true,
   '/api/reports/[id]': true,
   '/api/rooms': true,
   '/api/services': true,
@@ -175,7 +178,8 @@ export const ROUTE_IDS = {
   '/api/tasks/[id]': true,
   '/api/update': true,
   '/atlas/[file]': true,
-  '/connect/callback': true
+  '/connect/callback': true,
+  '/desk': true
 } as const satisfies Record<RouteId, true>;
 
 /** The only span attributes that leave. */

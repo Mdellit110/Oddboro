@@ -18,7 +18,7 @@ const port = await new Promise<number>((done) => {
 });
 const TOKEN = 'shell-token-for-tests';
 // Set before the office's modules load: they read where everything is, the
-// shell's token and the app's ORIGIN as they start.
+// shell's token, the app's ORIGIN and the owner's extra names as they start.
 Object.assign(process.env, {
   ODDBORO_HOME: folder,
   ODDBORO_DB_PORT: String(port),
@@ -29,6 +29,8 @@ Object.assign(process.env, {
   OLLAMA_URL: 'http://127.0.0.1:9',
   ODDBORO_UPDATE_TOKEN: TOKEN,
   ORIGIN: 'http://office.test:4500',
+  // A home computer's Tailscale name, and one written as an address.
+  ODDBORO_EXTRA_HOSTS: ' box.tail1234.ts.net ,https://Phone-Door.example:8443,',
   // An empty home of its own, so the office never finds the owner's own
   // tools there (a real grok in ~/.grok/bin), and no tool's maker is asked
   // for its newest version (versions.ts).
@@ -223,7 +225,7 @@ test('a name the office does not answer to is refused, for a read and an action 
   }
 });
 
-test('the office answers on loopback, its addresses through Caddy and the app ORIGIN, on any port', async () => {
+test('the office answers on loopback, its addresses through Caddy, the app ORIGIN and the extra names, on any port', async () => {
   for (const host of [
     '127.0.0.1:4570',
     'localhost:4500',
@@ -231,11 +233,38 @@ test('the office answers on loopback, its addresses through Caddy and the app OR
     'local.oddboro.com',
     'oddboro.localhost',
     'Oddboro.Localhost:4500',
-    'office.test:4500'
+    'office.test:4500',
+    'box.tail1234.ts.net',
+    'BOX.tail1234.ts.net:443',
+    'phone-door.example'
   ]) {
     const r = await send(ok, { method: 'GET', headers: { host } });
     assert.deepEqual([host, r.status], [host, 200]);
   }
+  // Only the whole name counts: a name ending in an extra one is someone else's.
+  for (const host of ['evil.box.tail1234.ts.net', 'tail1234.ts.net', 'ts.net']) {
+    const r = await send(ok, { method: 'GET', headers: { host } });
+    assert.deepEqual([host, r.status], [host, 403]);
+  }
+});
+
+test("the owner's page at an extra name approves an ask, and another site there cannot", async () => {
+  // `tailscale serve` passes the phone's Host on, and the page there is https.
+  const host = 'box.tail1234.ts.net';
+  const a = await openAsk();
+  const approve = (headers: Record<string, string>) =>
+    send(askRoute.POST as Route, {
+      path: `/api/asks/${a.id}`,
+      params: { id: a.id },
+      headers: { host, 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ decision: 'approve' })
+    });
+  const away = await approve({ 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' });
+  assert.deepEqual([away.status, away.ran], [403, false]);
+  assert.equal(await a.status(), 'open');
+  const phone = await approve({ 'sec-fetch-site': 'same-origin', origin: `https://${host}` });
+  assert.deepEqual([phone.status, phone.ran], [200, true]);
+  assert.equal(await a.status(), 'approved');
 });
 
 test('the shell reports an update with its token, and nothing else reports one', async () => {

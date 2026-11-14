@@ -8,6 +8,7 @@ backlog. Read a doc's status before acting on it: **proposed** (not agreed),
 - [decisions/CLAUDE.md](decisions/CLAUDE.md). The ledger, one file per decision. How to find, record and supersede one.
 - `office.gif`. The animation at the top of the README. `npm run office-gif -w @oddboro/site` makes it.
 - `hard-rules.md`. **Ratified.** The reason behind each hard rule in the root `CLAUDE.md`, one section per rule, same order.
+- `remote-desk.md`. **Built.** Reaching the office from a phone over Tailscale: the home computer, `tailscale serve`, `ODDBORO_EXTRA_HOSTS`, and the check that it is closed to everyone else.
 - `architecture.md`. **Built.** The picture: the parts, one function per job, and where each new kind of thing starts and which check catches a missed place.
 
 ## Later

@@ -1269,6 +1269,87 @@ the one being entered, and moves the rest to the work room with the most free
 seats. The `offices` trigger reloads every open page. Earlier layouts and the
 sample stay in the window to move back to.
 
+## The phone desk
+
+`/desk` (`src/routes/desk/`) is the Desk alone, for the owner's phone on
+their tailnet (`docs/remote-desk.md`). Setup's Your phone section
+(`src/lib/ui/PhoneDeskSection.svelte`, under Updates once the office is
+welcomed) sets it up: `GET /api/phone` asks Tailscale on this computer
+(`src/lib/server/tailscale.ts`: on PATH, else the Mac app's own binary or
+Windows' `Program Files`) for its name (`status --json`, `Self.DNSName`) and
+whether `serve status --json` sends that name to the office. Each step shows
+only while it is to do: install or sign in to Tailscale, the
+`tailscale serve` command to run (with `sudo` on Linux; the office never runs
+it, since it changes what the tailnet reaches), and Let my phone in, which
+posts to `/api/phone` to add the name to `ODDBORO_EXTRA_HOSTS` in `.env` and
+in this process (`allowName` in `owner-page.ts`), so a release answers it at
+once. The dev server's Vite reads its names only as it starts, so there the
+section says to restart once. Then it shows the link and a QR code
+(`qrcode-generator`). It reads Tailscale when it opens and on Check again;
+nothing polls. `tailscale.test.ts` runs it on a Mac, Linux and Windows
+(hard rule 14).
+
+The page is the phone app, with four tabs along its foot
+(`src/lib/ui/phone/`, `PhoneTabs.svelte`; `#desk` and the like in the address
+picks one, so the buzz opens Desk). Home (`PhoneHome.svelte`) lists the asks
+alone under Waiting on you, newest first; under Happening now the goals with
+work handed on or back today, with no count (`happeningToday`); and under
+Who's around each Odd with a dot and one line (`aroundLine`: its running work
+and minutes, else waiting on you, else free and its next job) and a call
+button that opens its chat for now. Home's next jobs and goals come from
+`GET /api/phone/home` (`src/lib/server/phone-home.ts`, read only, from the
+ledger's own readers), read again on a change to `jobs`, `threads`,
+`follow_ups`, `goals` or `staff_goals`. Its minutes move once a minute only
+while an Odd is at work. Goals says it comes in a later update. Desk
+(`PhoneDesk.svelte`) lists every item as a card, newest first, with All, Asks,
+Tasks and Reports chips, and each card's buttons from `cardButtons` in
+`phone-desk.ts`: a one-tap button posts the same route and body as the Desk
+window's, a card whose yes may send something out (a reply, or a held call the
+office did not put in words, `sendsOut`) and every kind with its own review
+get Open only, and a task shows its steps done. Open shows the same
+`DeskDrawer.svelte` over the list with `away`
+set: no hire window is there, and nothing reaches the office computer's folder
+picker or a sign-in that comes back to it, so a hire ask, a hosted or AWS
+sign-in step and a folder ask's Change say "Open this at the office".
+Selecting a report's text to chat about it stays at the computer too.
+Everything else answers as on the computer, through the same routes.
+Messages (`PhoneMessages.svelte`) lists every Odd, with what each has waiting, and opens its own
+`ChatPanel.svelte`, as on the computer. The sender card and a colleague's name
+on an item, and a report's Reply (`replyAbout`), open that Odd's chat; opening
+an item alone (`showInChat`) does not, since on a phone that would leave the
+desk. A desk item tapped in a chat opens on the Desk tab while it waits
+(`waitingKey` in `src/lib/desk.ts`, which the floor's page uses too), and a
+report no longer there opens on its own (`ReportView.svelte`), as does a file
+(`FileViewer.svelte`), over the page, which stays as it was beneath. It hears
+`/api/events` and reloads `/api/office` on a change to a table whose page
+refreshes or reloads (`LIVE_TABLES`), bumps an open chat's `version` as the
+floor does, takes each `working` event, and does all of it again each time
+the line opens, as when the phone wakes. Nothing polls. Its own styles give every control 44px
+and every field 16px text, so a phone neither misses a tap nor zooms. The
+page links `static/desk.webmanifest` and the icons `desk-256.png` and
+`desk-512.png` (drawn by `npm run mark`), so a phone adds it to its home
+screen and opens it straight to the desk. Nothing of the desk is kept on the
+phone.
+
+Buzz me at the top of Home turns on a buzz for that phone
+(`src/lib/ui/phone-buzz.ts`): the phone asks for leave to notify, registers
+`static/desk-push.js` for `/desk` alone, asks its push service for an address
+with the office's key, and gives the office that address (`/api/push`).
+`src/lib/server/push.ts` keeps the key (VAPID) and the addresses in the
+system's secret store under `push-<hash of the office's home>`, so dev offices
+sharing one Keychain service never share them, and only at the push services
+`PUSH_HOSTS` names. It reads the phones from the store once and keeps them in
+memory (on `globalThis`, past a dev reload), so a change with no phone on
+starts nothing. On a change to asks, tasks or reports, while a phone is on, it
+reads the desk and sends each phone an empty push when anything is there that
+was not before, and logs `[push] sent to N of M phones`; a restart or a phone
+just turned on sees the desk first and buzzes nothing. The
+push is empty, so nothing of the desk leaves: the worker shows "Something is
+waiting on your desk." and a tap opens `/desk`. A phone its push service no
+longer knows (404 or 410) is dropped. An iPhone gets push only for a desk
+added to its home screen, and the page says so where a browser has none. The office has one theme, dark,
+and so does this page.
+
 ## A new owner's first visit
 
 `npm run setup` asks nothing and opens the browser. Until the owner is
@@ -1358,9 +1439,14 @@ https, so that check refuses the owner's own http page. So the page's `call()`
 
 1. The Host must be one of the office's names, whatever the port: 127.0.0.1,
    [::1], localhost, the addresses through Caddy (`HOSTS` in
-   `src/lib/server/hosts.ts`) and the app's `ORIGIN`. A site that points its
-   own name at 127.0.0.1 looks same-origin to the browser, so only the name
-   gives it away. A route asked by any other name gets 403.
+   `src/lib/server/hosts.ts`), the app's `ORIGIN`, and the names the owner
+   lists in `ODDBORO_EXTRA_HOSTS`, from the environment or `.env`
+   (`extraHosts`, read by Vite's `allowedHosts` too, since Vite refuses an
+   unknown name before the guard sees it). A site that points its own name at
+   127.0.0.1 looks same-origin to the browser, so only the name gives it
+   away. A route asked by any other name gets 403. An extra name is for a
+   phone on the owner's tailnet (`docs/remote-desk.md`): the office still
+   listens on 127.0.0.1 only, and `tailscale serve` is the wall.
 2. Anything but GET, HEAD and OPTIONS must come from the owner's page
    (`fromOwnerPage`): Sec-Fetch-Site says same-origin, or, with none, the
    Origin names the Host asked, whatever the scheme, since through Caddy the

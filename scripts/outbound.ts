@@ -91,6 +91,21 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner opening the office; nothing leaves this computer.'
   },
   {
+    file: 'apps/office/src/lib/server/push.ts',
+    calls: 1,
+    to: "The push service of each phone the owner turned the buzz on for: Apple's, Google's, Mozilla's or Microsoft's, and no other (`PUSH_HOSTS`).",
+    sends:
+      "An empty push, signed with the office's own key, when something new lands on the desk. Nothing of the desk: the phone shows a fixed line.",
+    yes: 'The owner tapping Buzz me on the phone desk, on that phone. Buzz on turns it off.'
+  },
+  {
+    file: 'apps/office/src/routes/desk/+page.svelte',
+    calls: 1,
+    to: "The office's live line of changes, from the owner's phone over their own tailnet to the home computer.",
+    sends: "A request to hear changes. Nothing of the owner's.",
+    yes: 'The owner opening the phone desk; the request stays on their tailnet.'
+  },
+  {
     file: 'apps/office/src/lib/server/gemini.ts',
     calls: 1,
     to: "Google's Gemini models list.",
