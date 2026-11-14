@@ -1300,7 +1300,21 @@ button. Home's next jobs and goals come from
 `GET /api/phone/home` (`src/lib/server/phone-home.ts`, read only, from the
 ledger's own readers), read again on a change to `jobs`, `threads`,
 `follow_ups`, `goals` or `staff_goals`. Its minutes move once a minute only
-while an Odd is at work. Goals says it comes in a later update. Desk
+while an Odd is at work. Goals (`PhoneGoals.svelte`) lists the active goals,
+newest first, from `GET /api/phone/goals` (`src/lib/server/phone-goals.ts`,
+read only): area, title, when, the lead (the hub of the goal's newest open
+thread, else the Office Manager, `leadOf`), the faces of the Odds serving it,
+what of it waits on the owner, and its threads done out of all with the
+latest health in words (`progressOf`), never a percentage. There is no New:
+goals are set at the computer. A card, or a goal under Happening now, opens
+its page (`PhoneGoal.svelte`, `GET /api/phone/goals/[id]`): why, done when,
+progress and the team, then its work read only as one conversation
+(`goalConversation`: each hand-off's brief, each result going back and the
+lead's next step, in the Odds' own words), with what waits on the owner
+woven in by when it landed and the Desk tab's buttons on it (`goalLines`).
+Call opens the lead's chat, and Message the team posts to the lead's own
+chat route (`messageLead`). Both read again on a change to the goal's
+tables. Desk
 (`PhoneDesk.svelte`) lists every item as a card, newest first, with All, Asks,
 Tasks and Reports chips, and each card's buttons from `cardButtons` in
 `phone-desk.ts`: a one-tap button posts the same route and body as the Desk
