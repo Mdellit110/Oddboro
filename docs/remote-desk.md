@@ -4,10 +4,17 @@ Run Oddboro on a computer at home that stays on, and open it from your phone
 anywhere, over Tailscale. Only your own devices can reach it. Nobody else on
 the internet can.
 
-How it works: the office still listens on 127.0.0.1 only. Tailscale gives the
-home computer a private https name that only devices signed in to your
-Tailscale account can reach, and forwards that name to the office. The office
-answers the name once you list it in `.env`.
+How it works: the office still listens on 127.0.0.1 only, and answers only
+this computer. Tailscale gives the home computer a private https name that
+only devices signed in to your Tailscale account can reach, and forwards that
+name to the phone's door, a second listener on 127.0.0.1 at port 4502
+(`ODDBORO_PHONE_PORT` moves it). The door hands each request on to the office
+as this computer, and opens only for your tailnet, at the name you list in
+`.env`. The office's own checks still run on every request.
+
+The phone works with an office run from the repo (`npm run setup`, `npm run
+dev` or the login service). The Oddboro desktop app answers only its own
+window, so a phone cannot reach it.
 
 These steps are for a Mac or a Linux computer. Where they differ, each step
 says so. They take about 15 minutes.
@@ -37,29 +44,27 @@ says so. They take about 15 minutes.
    - **Linux:** `sudo tailscale up`, then open the link it prints.
 3. In the Tailscale admin console (login.tailscale.com), open DNS and turn on
    MagicDNS and HTTPS Certificates.
-4. Forward the computer's Tailscale name to the office.
-   - **Mac:** `tailscale serve --bg http://127.0.0.1:4500`, with no `sudo`.
+4. Forward the computer's Tailscale name to the phone's door.
+   - **Mac:** `tailscale serve --bg http://127.0.0.1:4502`, with no `sudo`.
      If the `tailscale` command is missing, turn on the CLI in the Tailscale
      app's settings.
-   - **Linux:** `sudo tailscale serve --bg http://127.0.0.1:4500`
+   - **Linux:** `sudo tailscale serve --bg http://127.0.0.1:4502`
 5. Run `tailscale serve status` and note the name it shows, such as
    `home-pc.tail1234.ts.net`.
 
 Use `tailscale serve`, never `tailscale funnel`. Funnel puts the name on the
-open internet, and the office has no login of its own.
+open internet, and the office has no login of its own. The door refuses
+anything that comes through funnel, since it carries no tailnet sign-in.
 
-## 3. Let the office answer that name
+## 3. Open the door to that name
 
 1. In the office, open **Setup** and find **Your phone**. It shows this
    computer's Tailscale name, such as `home-pc.tail1234.ts.net`. If it says
    Tailscale is missing or off, finish section 2 and press **Check again**.
 2. If it shows a `tailscale serve` command, you skipped step 2.4: run that
    command, then press **Check again**.
-3. Press **Let my phone in**. The office answers that name from now on.
-4. If Setup says to restart the office, restart it once. Only an office run
-   with `npm run dev` or the login service needs this.
-   - **Mac:** `launchctl kickstart -k gui/$(id -u)/com.oddboro.office`
-   - **Linux:** `systemctl --user restart com.oddboro.office`
+3. Press **Let my phone in**. The door opens to that name at once, with no
+   restart.
 
 Setup then shows the desk's link and a QR code. Scan it with your phone's
 camera in section 4.
@@ -154,11 +159,14 @@ office's.
 
 ## If something goes wrong
 
-- **"This office answers only at its own address".** The office does not
-  answer that name yet. Press **Let my phone in** in Setup, or check the name
-  in `.env`.
-- **"Blocked request. This host is not allowed".** Same cause: the office has
-  not read the new name yet. Restart it.
+- **"This door opens only to the owner's own tailnet".** The door does not
+  know that name yet: press **Let my phone in** in Setup, or check the name
+  in `.env`. It also says this through `tailscale funnel`.
+- **"This office answers only its own computer".** `tailscale serve` points
+  at the office itself, port 4500. Point it at the door: run the command in
+  step 2.4 again with port 4502.
+- **"The office is not answering".** The door is open but the office is not
+  running. Start it.
 - **The page does not load at all.** Check `tailscale serve status` on the
   home computer, and that Tailscale is on in the phone.
 - **The office does not start after a reboot.** On Linux, the desktop did

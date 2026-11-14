@@ -89,12 +89,17 @@ export const DATA_COLLECTION = {
 } satisfies DataCollection;
 
 /**
- * Never traced. The event stream stays open for as long as the page does. The
+ * Never traced. The event streams stay open with the page or terminal, and
+ * the terminal posts each input to its command route. The
  * shell asks for updates every 30 seconds, so a trace there would send
- * reports while the owner is away. The relay would trace itself in a loop.
+ * reports while the owner is away, and asks for the key's proof every half
+ * second while Node starts. The relay would trace itself in a loop.
  */
 export const QUIET_ROUTES: ReadonlySet<string> = new Set<RouteId>([
   '/api/events',
+  '/api/project-sessions',
+  '/api/project-sessions/[id]/events',
+  '/api/proof',
   '/api/update',
   '/api/diagnostics/envelope'
 ]);
@@ -110,6 +115,7 @@ export const ROUTE_IDS = {
   '/account/callback': true,
   '/api/account': true,
   '/api/accounts': true,
+  '/api/act-check': true,
   '/api/agents': true,
   '/api/agents/[tool]': true,
   '/api/asks/[id]': true,
@@ -120,6 +126,8 @@ export const ROUTE_IDS = {
   '/api/asks/[id]/folder': true,
   '/api/asks/[id]/original': true,
   '/api/asks/[id]/reply': true,
+  '/api/browser-link': true,
+  '/api/client-log': true,
   '/api/connectors': true,
   '/api/diagnostics': true,
   '/api/diagnostics/envelope': true,
@@ -132,7 +140,9 @@ export const ROUTE_IDS = {
   '/api/goals': true,
   '/api/goals/[id]': true,
   '/api/goals/[id]/staff': true,
+  '/api/health': true,
   '/api/jobs/[id]': true,
+  '/api/jobs/away': true,
   '/api/ledger': true,
   '/api/lessons': true,
   '/api/lessons/[id]': true,
@@ -153,22 +163,29 @@ export const ROUTE_IDS = {
   '/api/phone/goals/[id]': true,
   '/api/phone/home': true,
   '/api/phone/messages': true,
+  '/api/project-sessions': true,
+  '/api/project-sessions/[id]/events': true,
+  '/api/proof': true,
   '/api/push': true,
   '/api/reports/[id]': true,
   '/api/rooms': true,
   '/api/services': true,
   '/api/services/[id]': true,
+  '/api/services/[id]/tools': true,
   '/api/setup': true,
   '/api/setup/address': true,
+  '/api/setup/advanced': true,
   '/api/setup/claude': true,
   '/api/setup/notify': true,
   '/api/staff': true,
   '/api/staff/[id]': true,
   '/api/staff/[id]/access': true,
   '/api/staff/[id]/chat': true,
+  '/api/staff/[id]/chat/[turnId]/[index]': true,
   '/api/staff/[id]/description': true,
   '/api/staff/[id]/attachments': true,
   '/api/staff/[id]/attachments/[name]': true,
+  '/api/staff/[id]/bug-reports': true,
   '/api/staff/[id]/jobs': true,
   '/api/staff/[id]/lessons': true,
   '/api/staff/[id]/look': true,

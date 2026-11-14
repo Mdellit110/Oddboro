@@ -18,167 +18,150 @@
 // level (the tools the server marks as only reading, `readsOnly`) or at write
 // level (every tool), each through the office's gateway (gateway.ts), which
 // keeps the keys and sign-ins. Hosted servers get a fresh OAuth token per run.
-import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { savedTaskWords } from './chat-delivery.ts';
 import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync
-} from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, dirname, join, sep } from 'node:path';
-import {
-  currentPlatform,
-  DATABASE_URL,
-  goal as findGoal,
-  goalsFor,
-  goalWhen,
+  accountOf,
+  accountsHome,
+  AGENT_NAMES,
+  anyStaffer,
   atDraft,
   capabilities,
   capped,
-  handOffBrief,
-  handOffContext,
-  handOffsFor,
-  resultsToJoin,
-  runsGoing,
-  servesHandOff,
-  servesNoThread,
-  thread as threadById,
-  threadBrief,
-  threadFolder,
-  threadPart,
-  threadsFor,
-  recentThreads,
-  recentThreadsBrief,
-  threadsOn,
-  threadsOnBrief,
-  workLedBrief,
-  workOnBrief,
-  ledStories,
-  onStories,
-  storyOf,
-  threadOnKnown,
-  fitStories,
-  stageOf,
   CHAT_STORIES_MAX,
-  type RecentThread,
-  type ThreadLine,
-  type ThreadStory,
-  HEALTH_WORDS,
-  handsOff,
-  hasTool,
-  jobsFor,
-  levelAtMost,
-  writesWait,
-  levelLine,
-  lessonLine,
-  lessonsOf,
-  liveLessons,
-  outsideLines,
-  ownerName,
-  roster,
-  ownerNoteOf,
-  firstQuestionIn,
-  FIRST_QUESTIONS,
-  recordUsage,
-  setPlanLimits,
-  startFirstDay,
+  chatSession,
+  type ChatCard,
   claimPoke,
+  clockTime,
+  currentPlatform,
+  DATABASE_URL,
   deliveries,
   EDIT_CHARS,
   editShown,
-  ask as askById,
-  replyToReport,
-  standsFor,
-  stillOnDesk,
-  report as reportById,
+  effortFor,
+  FILES_SERVER,
+  filesViaOffice,
+  goal as findGoal,
+  fitStories,
+  folderLines,
+  goalsFor,
+  goalWhen,
+  handOffBrief,
+  handOffContext,
+  handOffsFor,
+  handsOff,
+  hasTool,
+  HEALTH_WORDS,
+  heldReach,
+  holdNetwork,
+  home,
+  jobsFor,
+  ledStories,
+  lessonLine,
+  lessonsOf,
+  levelAtMost,
+  levelLine,
+  liveLessons,
+  MANAGER_ROLE,
+  modelFor,
+  networkHeld,
+  OFFICE_ACCOUNT,
+  onStories,
+  outsideLines,
+  ownerName,
+  ownerNoteOf,
+  ownToolsSaid,
+  pokeMissed,
+  recentThreads,
+  recentThreadsBrief,
+  recordUsage,
+  releaseRun,
+  reserveRun,
+  resultsToJoin,
+  roster,
+  rulePath,
+  runsGoing,
+  runsOnLine,
+  SECRET_STORES,
+  servesHandOff,
+  servesNoThread,
+  setPlanLimits,
+  settingsTab,
+  STAFF_SERVER,
   staffer,
-  anyStaffer,
-  task as taskById,
+  stageOf,
+  standsFor,
+  startFirstDay,
+  stillOnDesk,
+  storyOf,
   taskFiles,
+  threadBrief,
+  thread as threadById,
+  threadFolder,
+  threadOnKnown,
+  threadPart,
+  threadsFor,
+  threadsOn,
+  threadsOnBrief,
+  toolHome,
+  workLedBrief,
+  workOnBrief,
+  writesWait,
+  zone,
+  zoneName,
+  type Agent,
   type AskRow,
+  type CallPlace,
   type Capabilities,
+  type ConnectorRow,
   type EditShown,
+  type FollowUpKind,
   type FollowUpRow,
   type GoalRow,
   type HandOffStep,
-  type JobRow,
   type Level,
-  type RunTrigger,
   type ModelUsage,
   type Outcome,
-  type ReportRow,
-  type TaskRow,
-  type PokeRow,
-  type Agent,
-  type StaffRow,
-  type UsageKind,
-  type Unparked,
-  clockTime,
-  pokeMissed,
-  zone,
-  zoneName,
-  STAFF_SERVER,
-  FILES_SERVER,
-  filesViaOffice,
-  AGENT_NAMES,
-  folderLines,
-  heldReach,
-  holdNetwork,
-  networkHeld,
-  ownTools,
-  ownToolsSaid,
-  runsOnLine,
-  SECRET_STORES,
-  settingsTab,
   type OwnTools,
-  chatSession,
-  home,
-  OFFICE_FILE_NAMES,
-  OFFICE_FILES,
-  rulePath,
-  effortFor,
-  MANAGER_ROLE,
-  modelFor,
-  accountOf,
-  accountsHome,
-  OFFICE_ACCOUNT,
-  toolHome,
-  type CallPlace,
-  type ConnectorRow
+  type PokeRow,
+  type RecentThread,
+  type ReportRow,
+  type CheckedFiles,
+  type StaffRow,
+  type TaskRow,
+  type ThreadStory,
+  type Unparked,
+  type UsageKind
 } from '@oddboro/ledger';
-import { askReplaced, stepAnswer } from '@oddboro/ledger/desk-answers';
-import { fixedError } from '@oddboro/ledger/errors';
+import { flat } from '@oddboro/ledger/desk-answers';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { basename, dirname, join, sep } from 'node:path';
+import type { ChatEntry, ChatEvent } from '../staff/chat.ts';
+import { floorTool, followUpDetail, type WorkAbout } from '../staff/work.ts';
+import type { ChatFile } from '#lib/attachments.ts';
+import { agentCommand } from './agent-sign-in.ts';
+import { sourceReady } from './access.ts';
+import { lastExchange } from './chat-preface.ts';
+import { addToChat, history } from './chat-turns.ts';
+import {
+  apiKey,
+  claudeAccountOf,
+  claudeInput,
+  claudeRunHome,
+  claudeSettings,
+  modelArgs,
+  userTurn
+} from './claude.ts';
+import { keptAt, plainName } from './chat-files.ts';
+import { endedEarly, LAUNCHES, stoppedWhy, streamTools, type Launch } from './cli.ts';
 import { bus, emit } from './events.ts';
 import { deniedEdits, denyRules, readStaffFile } from './files.ts';
-import { floorTool, followUpDetail, type Work } from '../staff/work.ts';
-import type { ChatEntry, ChatEvent, ChatRef } from '../staff/chat.ts';
-import { closeGateway, openGateway } from './gateway.ts';
-import { awsReady } from './aws.ts';
-import { bearer } from './oauth.ts';
-import { apiKey, claudeAccountOf, claudeRunHome, claudeSettings, modelArgs } from './claude.ts';
-import { notifyMac } from './notify.ts';
-import { downtime, installsAt } from './update.ts';
-import { catchUp, NOW, parseSession, saveSession, sectionsOf, sessionIdIn } from './resume.ts';
-import { changedSince, replay, replayed, replayedAt, replaySince } from './replay.ts';
-import {
-  chatPreface,
-  fileLine,
-  lastExchange,
-  missedAt,
-  type KeptFile,
-  type RetoldEntry,
-  type Session
-} from './chat-preface.ts';
-import { filesNow, keptAt, plainName } from './chat-files.ts';
-import { officeEnv } from './run-env.ts';
-import { runEnv, toolServerEnv } from './run-env-allow.ts';
 import { firstDayOf } from './first-day.ts';
-import { endedEarly, LAUNCHES, stoppedWhy, streamTools, type Launch } from './cli.ts';
+import { followUpBrief, waitEnded } from './follow-up-brief.ts';
+import { closeGateway, openGateway } from './gateway.ts';
+import { ACT_WRITE, house, managerWork, stillOnDeskSection, whoIsHereSection } from './house.ts';
 import {
   configServers,
   NOT_SIGNED_IN,
@@ -188,15 +171,20 @@ import {
   type McpServer,
   type RunImage
 } from './launch.ts';
-import { isPicture, type ChatFile } from '#lib/attachments.ts';
-import { splitChoices } from '#lib/choices.ts';
-import { tooOldLine } from './versions.ts';
-import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
-import { sandboxPaths } from './sandbox-paths.ts';
-import { agentCommand } from './agent-sign-in.ts';
-import { ACT_WRITE, house, stillOnDeskSection, whoIsHereSection } from './house.ts';
-import { followUpBrief, waitEnded } from './follow-up-brief.ts';
+import { notifyMac } from './notify.ts';
 import { OUTCOME_LINE, personaRun, voiced } from './persona-run.ts';
+import { offeredSection } from './persona-offered.ts';
+import { catchUp, NOW, parseSession, saveSession, sectionsOf } from './resume.ts';
+import { runEnv, toolServerEnv } from './run-env-allow.ts';
+import { cut, officeEnv } from './run-env.ts';
+import { sandboxPaths } from './sandbox-paths.ts';
+import { claudeSandbox, NETWORK_REFUSED, NETWORK_REFUSED_LINE } from './sandbox.ts';
+import { downtime, installsAt } from './update.ts';
+import { tooOldLine } from './versions.ts';
+export { activeReply, addToReply, chat, replyToOwnerTurn, stopReply } from './chat-run.ts';
+export { history, keepOwnerTurn } from './chat-turns.ts';
+export { runJob } from './job-run.ts';
+export { inProgress, isBusy, runsActive, stopRuns, working } from './run-state.ts';
 
 /** The owner's data folder, which every staffer may read, whatever tool it runs on. */
 const DATA = home('data');
@@ -204,111 +192,16 @@ const HOMES = home('staff');
 const CHAT_TIMEOUT_MS = 5 * 60_000;
 const JOB_TIMEOUT_MS = 20 * 60_000;
 
-/**
- * Background runs at once per staffer: jobs, follow-ups and drafts. Each
- * starts a fresh session, so they run side by side; one more waits for a
- * free slot. A chat never waits for them. It resumes the staffer's one chat
- * session, so only a second chat waits.
- */
-const AT_ONCE = 3;
-const slots = new Map<string, { busy: number; queue: (() => void)[] }>();
-const chatting = new Set<string>();
-/** Staffer id to what it is running, for the floor: the first thing, and how many more. */
-export const working: Record<string, string> = {};
-/** Staffer id to its work in progress, waiting for a slot or running. */
-export const inProgress: Record<string, Work[]> = {};
-let workIds = 0;
-
-/** Run `fn` in one of the staffer's slots, listed as work in progress until it ends. */
-async function slot<T>(
-  id: string,
-  about: Pick<Work, 'kind' | 'label' | 'detail' | 'askId'>,
-  fn: (onEvent: (e: ChatEvent) => void) => Promise<T>
-): Promise<T> {
-  const item: Work = {
-    ...about,
-    id: ++workIds,
-    since: new Date().toISOString(),
-    queued: true,
-    steps: 0
-  };
-  (inProgress[id] ??= []).push(item);
-  const s = slots.get(id) ?? { busy: 0, queue: [] };
-  slots.set(id, s);
-  if (s.busy < AT_ONCE) s.busy++;
-  else {
-    show(id);
-    // A finished run hands its slot straight to the next in line.
-    await new Promise<void>((go) => s.queue.push(go));
-  }
-  item.queued = false;
-  item.since = new Date().toISOString();
-  show(id);
-  try {
-    return await fn((e) => {
-      if (e.type !== 'tool') return;
-      item.doing = e.name;
-      item.steps++;
-      show(id);
-    });
-  } finally {
-    inProgress[id] = (inProgress[id] ?? []).filter((w) => w !== item);
-    if (!inProgress[id].length) delete inProgress[id];
-    show(id);
-    const next = s.queue.shift();
-    if (next) next();
-    else s.busy--;
-  }
-}
-
-function show(id: string): void {
-  const now = (inProgress[id] ?? []).filter((w) => !w.queued).map((w) => w.label);
-  if (now.length) working[id] = now.length > 1 ? `${now[0]} +${now.length - 1} more` : now[0];
-  else delete working[id];
-  emit({ type: 'working', working: { ...working }, inProgress: structuredClone(inProgress) });
-}
-
-/** Staffer id to a stop for each of its runs going now. */
-const stoppers: Record<string, Set<() => void>> = {};
-
-/**
- * Stop every run of an Odd that left the office (`whenOddLeaves` in the
- * ledger): its chat, jobs, follow-ups and drafts end now, as failed.
- */
-export function stopRuns(id: string): void {
-  for (const stop of [...(stoppers[id] ?? [])]) stop();
-}
+import { isBusy, slot } from './run-state.ts';
 
 export async function isStaff(id: string): Promise<boolean> {
   return /^[a-z0-9-]+$/.test(id) && !!(await staffer(id));
-}
-
-export function isBusy(id: string): boolean {
-  return chatting.has(id);
-}
-
-/** True while any staffer has a chat, job, follow-up or draft going. */
-export function runsActive(): boolean {
-  return chatting.size > 0 || Object.keys(inProgress).length > 0;
 }
 
 function homeOf(id: string): string {
   const dir = join(HOMES, id);
   mkdirSync(join(dir, 'notes'), { recursive: true });
   return dir;
-}
-
-const chatFile = (id: string) => join(homeOf(id), OFFICE_FILES.chat);
-const addToChat = (id: string, line: ChatEntry) =>
-  appendFileSync(chatFile(id), JSON.stringify(line) + '\n');
-
-export function history(id: string): ChatEntry[] {
-  const file = chatFile(id);
-  if (!existsSync(file)) return [];
-  return readFileSync(file, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as ChatEntry);
 }
 
 /** The chat as the owner sees it: what was said, and each delivery and lesson where it landed. */
@@ -358,69 +251,10 @@ export async function chatLog(id: string): Promise<ChatEntry[]> {
       )
     ];
   });
-  return [...history(id), ...items, ...threads, ...handOffs, ...kept].sort((a, b) =>
+  const messages = history(id).map(({ item: _item, ...message }) => message);
+  return [...messages, ...items, ...threads, ...handOffs, ...kept].sort((a, b) =>
     a.at.localeCompare(b.at)
   );
-}
-
-/** What the staffer needs to know about the delivery the owner is replying about. */
-async function replyBrief(
-  id: string,
-  re: Pick<ChatRef, 'kind' | 'id'>
-): Promise<{ ref: ChatRef; brief: string }> {
-  switch (re.kind) {
-    case 'ask': {
-      const a = await askById(re.id);
-      if (a?.staffId !== id) throw fixedError('No such ask from this Odd');
-      return {
-        ref: { kind: 'ask', id: a.id, title: a.title },
-        brief: [
-          `({owner} is replying about your ask #${a.id}, "${a.title}", which is ${a.status === 'open' ? 'still open' : a.status}.`,
-          `- Why: ${a.why}`,
-          `- If approved: ${a.ifApproved}`,
-          // A replaced ask holds the office's words, and this line would say the owner wrote them.
-          ...(a.reason && !askReplaced(a) ? [`- Their reason: ${a.reason}`] : []),
-          ')'
-        ].join('\n')
-      };
-    }
-    case 'task': {
-      const t = await taskById(re.id);
-      if (t?.staffId !== id) throw fixedError('No such task from this Odd');
-      return {
-        ref: { kind: 'task', id: t.id, title: t.title },
-        brief: [
-          `({owner} is replying about the task you gave them, "${t.title}", which is ${t.status === 'open' ? 'still open' : t.status}.`,
-          `- Why: ${t.why}`,
-          ...t.steps.map((st, i) => {
-            const answer = stepAnswer(st);
-            return `- Step ${i + 1}: ${st.text}${st.done ? ' (done)' : ''}${answer ? `. Their answer: ${answer}` : ''}`;
-          }),
-          ...(t.note ? [`- Their note: ${t.note}`] : []),
-          ')'
-        ].join('\n')
-      };
-    }
-    case 'report': {
-      const r = await reportById(re.id);
-      if (r?.staffId !== id) throw fixedError('No such report from this Odd');
-      return {
-        ref: { kind: 'report', id: r.id, title: r.title },
-        brief: [
-          `({owner} is replying about your report "${r.title}". If it is feedback, act on it: work inside the office now, raise_ask before changing one of your jobs, or anything outside the office ${ACT_WRITE}, and give_owner_a_task for anything only they can do.`,
-          '',
-          'The report:',
-          '',
-          r.body.slice(0, 8000),
-          ')'
-        ].join('\n')
-      };
-    }
-    default: {
-      const missed: never = re.kind;
-      throw new Error(`No reply brief for a ${String(missed)}`);
-    }
-  }
 }
 
 /** Every plugin in the owner's user settings, switched off for staff sessions. */
@@ -463,16 +297,21 @@ export async function runHomeOf(who: StaffRow): Promise<string> {
 
 /**
  * The servers and tool permissions one run gets: the outside tools
- * `capabilities` says it holds. A run from a hand-off works at Draft at most
- * (`ceiling`), so a colleague's words never stand in for the owner's yes. Its
+ * `capabilities` says it holds. A run the office starts on its own
+ * (`atDraft`), and any run that serves a colleague's hand-off, works at Draft
+ * at most (`ceiling`), so a colleague's words never stand in for the owner's
+ * yes. Only the carry-out of an approval ask, the owner's yes to that exact
+ * action, keeps the Odd's level. Its
  * caps come down to the ceiling too (`capped`), so its prompt lists what it loads.
  * Every outside tool reaches the run through the office's gateway
  * (gateway.ts), which keeps the keys and passes on only the tools the grant
  * reaches; `gate` is the run's token, closed when the run ends. The tool's own
  * allow list names the same tools, so either one alone holds. A write grant
  * at Draft lists every tool, and the gateway holds each change for the
- * owner's yes (`writesWait`), on the desk where `place` says; a run with no
- * place (a lesson run) changes nothing.
+ * owner's yes (`writesWait`), on the desk where `place` says, but for the
+ * tools the owner lets the Odd use without asking (`standing`), in any run
+ * with a place; a run with no place (a lesson run) changes nothing. At Act
+ * it holds only calls to the tools the owner set to ask first (`askFirst`).
  */
 async function access(who: StaffRow, ceiling: Level, ms: number, place?: CallPlace) {
   const office: McpServer = {
@@ -486,36 +325,40 @@ async function access(who: StaffRow, ceiling: Level, ms: number, place?: CallPla
   const servers: Record<string, McpServer> = { office };
   const allowed = ['mcp__office'];
   const caps = capped(await capabilities(who), ceiling);
-  const reach: { connector: ConnectorRow; level: Level; waits: boolean }[] = [];
+  const reach: {
+    connector: ConnectorRow;
+    level: Level;
+    waits: boolean;
+    standing: string[];
+    askFirst: string[];
+  }[] = [];
   for (const a of caps.outside) {
     if (a.heldBack) continue;
     const c = a.connector;
-    // A sign-in that ran out shows only now, as the office asks for a fresh token.
-    if (c.config.oauth && !(await bearer(c.id).catch(() => undefined))) {
+    if (!(await sourceReady(c))) {
       a.heldBack = 'sign-in ran out';
       continue;
     }
-    // So does an AWS sign-in that ended, for AWS itself and any tool whose key is kept there.
-    if (!(await awsReady(c))) {
-      a.heldBack = 'sign-in ran out';
-      continue;
-    }
-    reach.push({ connector: c, level: a.level, waits: writesWait(a.level, caps.level) });
+    reach.push({
+      connector: c,
+      level: a.level,
+      waits: writesWait(a.level, caps.level),
+      standing: a.standing,
+      askFirst: a.askFirst
+    });
     if (a.level === 'act') allowed.push(`mcp__${c.id}`);
     else allowed.push(...c.readTools.map((t) => `mcp__${c.id}__${t}`));
   }
-  const { token: gate, servers: outside } = openGateway(reach, ms, place);
+  const { token: gate, servers: outside } = openGateway(reach, ms, place, who.id);
   Object.assign(servers, outside);
   return { servers, office, allowed, caps, gate };
 }
 
 /**
- * Who the staffer works for, built fresh each run: the owner, the people in
- * their life, its own intake, and the goals it serves, which are the only
- * goals it sees.
+ * Who the staffer works for, built fresh each run: the owner, its own intake,
+ * and the goals it serves, which are the only goals it sees.
  */
 async function whoFor(who: StaffRow, dir: string): Promise<string> {
-  const people = join(DATA, 'people.json');
   const serving = (await goalsFor(who.id)).filter((g) => g.status === 'active');
   const goalLine = (g: (typeof serving)[number]) => {
     const latest = g.progress[0];
@@ -536,7 +379,6 @@ async function whoFor(who: StaffRow, dir: string): Promise<string> {
     '## Who you work for',
     '',
     '- {owner}. This office is theirs, and runs on their Mac.',
-    existsSync(people) && `- The people in their life are listed in ${people}, which you may read.`,
     existsSync(join(dir, 'notes', 'intake.md')) &&
       "- {owner}'s own answers from when you were hired are in notes/intake.md. Read them before your first piece of work, and again whenever you are unsure what they want.",
     serving.length
@@ -700,6 +542,15 @@ async function prompt(
       ? opts.led.flatMap((story) => threadBrief({ story, shown: opts.shown })).join('\n')
       : workLedBrief(led.kept)) +
     (chat ? workOnBrief(on) : on.flatMap((story) => threadOnKnown({ story })).join('\n')) +
+    (who.role === MANAGER_ROLE
+      ? managerWork(existsSync(join(dir, 'notes', 'pending-judgments.md')))
+      : '') +
+    // An Odd that can propose a hire hears which real people it may propose as personas.
+    (hasTool(who.tools, 'propose_hire') || hasTool(who.tools, 'propose_goal_plan')
+      ? offeredSection(
+          new Set((await roster()).flatMap((o) => (o.package ? [o.package.slug] : [])))
+        )
+      : '') +
     stillOnDeskSection(await stillOnDesk(who.id)) +
     house({
       has: (t) => hasTool(who.tools, t),
@@ -729,7 +580,20 @@ const listedLine = ({ thread: t, waiting, goal }: ThreadStory): RecentThread => 
  * How a run ended. `saved` means its tool named a session, which went in the
  * session file, so a later run that resumes it holds this run's message.
  */
-export type Run = { ok: boolean; text: string; saved?: true };
+export type Run = {
+  ok: boolean;
+  text: string;
+  saved?: true;
+  interrupted?: true;
+  /** A file job's check of what this run wrote (`CheckedFiles`, less the periods it started with). */
+  checked?: Omit<CheckedFiles, 'periods'>;
+};
+const stopped = (): Run => ({ ok: false, text: 'Stopped at your request.', interrupted: true });
+/** How a run ends on its stop: the owner's Stop, or the Odd leaving the office (`stopRuns`). */
+const stoppedBy = (who: StaffRow, signal?: AbortSignal): Run =>
+  signal?.reason === 'left'
+    ? { ok: false, text: `${who.name} left the office, so this stopped.` }
+    : stopped();
 
 type Window = { utilization?: number; resetsAt?: number };
 
@@ -856,11 +720,24 @@ export const RUN_ENDED = 'run-ended';
 
 /** What a run is for, and what it may do. */
 export type RunOpts = {
+  runId?: string;
+  signal?: AbortSignal;
   kind: UsageKind;
+  /** A scheduled file exchange grants no right to lead or wake the work. */
+  jobFiles?: {
+    thread: number;
+    input?: string;
+    output: string;
+    record: string;
+    inputHash?: string;
+    sources?: string[];
+  };
   sessionFile?: string;
   extra?: string;
   /** The owner's own message, when this is a chat. */
   ownerSaid?: string;
+  /** The owner's text stays literal, even when it contains {owner}. */
+  literal?: string;
   /** That chat as it stood before the owner's message: `tell_lead` passes on its last exchange. */
   chatBefore?: ChatEntry[];
   /** The files the owner attached to that message, which `tell_lead` takes to the lead. */
@@ -873,7 +750,7 @@ export type RunOpts = {
   ownerNote?: string;
   /** The file the owner edited, and their version of it, which a lesson read from it quotes. The run may not write that file. */
   ownerEdit?: { path: string; text: string };
-  /** Draft at most: a follow-up `atDraft` names. */
+  /** Draft at most: a follow-up `atDraft` names, or one that serves a colleague's hand-off, except an approval ask's carry-out. */
   draftOnly?: boolean;
   /** A run that only reads the owner's reason or edit for a lesson (`servesNoThread`): it hands nothing on. */
   lessonRun?: boolean;
@@ -889,18 +766,82 @@ export type RunOpts = {
   images?: RunImage[];
   timeoutMs: number;
   onEvent?: (e: ChatEvent) => void;
+  /** Set by `run`: when the run must end, and the step it is on while it gets ready. */
+  clock?: Clock;
 };
+
+/**
+ * A run's time limit, counted from when the run was asked for, not from when
+ * its tool starts. `step` names what the run is doing before its tool starts,
+ * so a run that never got that far says where it stopped. While its tool
+ * runs (`going`), the tool's own timer ends it at the same deadline.
+ */
+type Clock = { deadline: number; step: string; over: boolean; going: boolean };
+
+const noReply = (ms: number): Run => ({
+  ok: false,
+  text: `No reply after ${ms / 60_000} minutes.`
+});
 
 /**
  * One run of an Odd. A persona Odd's chat, job or follow-up goes on from its
  * coding tool to its persona on New Altitude (`personaRun`); every other run
  * is the coding tool's alone.
+ *
+ * It ends by its time limit even when something it waits on before its tool
+ * starts never answers, so no chat stays "still replying" and no slot stays
+ * busy. A run still getting ready then never starts its tool (`runTool`).
  */
-async function run(who: StaffRow, message: string, opts: RunOpts): Promise<Run> {
+export async function run(who: StaffRow, message: string, opts: RunOpts): Promise<Run> {
+  const own = !opts.runId;
+  const live = opts.runId
+    ? runsGoing.get(opts.runId)
+    : reserveRun({ staffId: who.id, kind: opts.kind });
+  if (!live) throw new Error('The run is no longer registered.');
+  if (live.stop.signal.aborted) return stopped();
   const kind = opts.kind;
-  return who.package && voiced(kind) && !opts.lessonRun
-    ? personaRun(who, message, { ...opts, kind }, runTool)
-    : runTool(who, message, opts);
+  const clock: Clock = {
+    deadline: Date.now() + opts.timeoutMs,
+    step: 'getting ready',
+    over: false,
+    going: false
+  };
+  const input = { ...opts, runId: live.key, signal: live.stop.signal, clock };
+  // Before its tool starts, `run` ends it: at its time limit, or at once on
+  // Stop or the Odd leaving. Once its tool runs (`going`), `runTool` does.
+  const ended = Promise.withResolvers<Run>();
+  const timer = setTimeout(() => {
+    if (clock.going) return;
+    clock.over = true;
+    console.error(
+      `${who.name}'s ${kind} run stopped after ${opts.timeoutMs / 60_000} minutes, ${clock.step}.`
+    );
+    const r = noReply(opts.timeoutMs);
+    opts.onEvent?.({ type: 'error', message: r.text });
+    ended.resolve(r);
+  }, opts.timeoutMs);
+  const interrupted = () => {
+    if (clock.going) return;
+    const r = stoppedBy(who, live.stop.signal);
+    if (!r.interrupted) opts.onEvent?.({ type: 'error', message: r.text });
+    ended.resolve(r);
+  };
+  live.stop.signal.addEventListener('abort', interrupted, { once: true });
+  try {
+    return await Promise.race([
+      who.package && voiced(kind) && !opts.lessonRun
+        ? personaRun(who, message, { ...input, kind }, runTool)
+        : runTool(who, message, input),
+      ended.promise
+    ]);
+  } finally {
+    clearTimeout(timer);
+    live.stop.signal.removeEventListener('abort', interrupted);
+    if (own) {
+      releaseRun(live);
+      bus.emit(RUN_ENDED);
+    }
+  }
 }
 
 /**
@@ -909,7 +850,16 @@ async function run(who: StaffRow, message: string, opts: RunOpts): Promise<Run> 
  * tool: no run falls back to another.
  */
 async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<Run> {
+  if (opts.signal?.aborted) return stopped();
+  const clock = opts.clock ?? {
+    deadline: Date.now() + opts.timeoutMs,
+    step: 'getting ready',
+    over: false,
+    going: false
+  };
+  const step = (now: string) => void (clock.step = now);
   const dir = homeOf(who.id);
+  step('reading its account');
   // The account its tool signs in with, and that account's folder. A session
   // saved in another folder (the Odd moved accounts) cannot resume here.
   const account = await accountOf(who);
@@ -925,7 +875,8 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   // Every run gets a key: a thread it hands off on keeps it, and holds the
   // Odd's pick-ups there until it ends (`runsGoing`), even when it is a
   // follow-up on no thread. A call the gateway holds for the owner carries it too.
-  const key = randomUUID();
+  const key = opts.runId!; // run() reserves it before preparation.
+  step("opening its tools' gateway");
   const { servers, office, allowed, caps, gate } = await access(
     who,
     ceiling,
@@ -940,7 +891,24 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
           via: opts.via
         }
   );
+  // A source can sign out between the check of both jobs and this run.
+  const unavailable = caps.outside.filter(
+    (a) => a.heldBack && opts.jobFiles?.sources?.includes(a.connector.id)
+  );
+  if (unavailable.length) {
+    await closeGateway(gate);
+    return {
+      ok: false,
+      text: unavailable
+        .map(
+          (a) =>
+            `${who.name} needs ${a.connector.name} for the scheduled file. Ask in ${who.name}'s chat to reconnect it (${a.heldBack}).`
+        )
+        .join('\n')
+    };
+  }
   // Prompts name the owner as {owner}: each install's staff use its own name.
+  step('writing its brief');
   const owner = await ownerName();
   const say = (s: string) => s.replaceAll('{owner}', owner);
   // Claude Code keeps a session's first system prompt on --resume, so a
@@ -948,6 +916,10 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   const prior = saved?.sessionId;
   const time = officeNow();
   const inChat = opts.kind === 'chat';
+  // A Claude Code chat reads stream-json and keeps its stdin open until its
+  // result, so Send now can add the owner's words to the turn (`addToReply`).
+  // A persona's chat stays closed: its persona hears only the first message.
+  const streamed = inChat && who.agent === 'claude' && !who.package;
   // What the Odd knows of the work it leads and the work it is on, read now,
   // as the run starts.
   const led = opts.threadId
@@ -1028,7 +1000,8 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
     })
   );
   // On a thread, the run writes only its own part of the thread's folder.
-  const part = opts.threadId ? threadPart(opts.threadId, who.id) : undefined;
+  const fileThread = opts.threadId ?? opts.jobFiles?.thread;
+  const part = fileThread ? threadPart(fileThread, who.id) : undefined;
   if (part) mkdirSync(part, { recursive: true });
   const writes = [dir, ...(part ? [part] : []), ...extraWrites];
   const denied = deniedEdits({
@@ -1051,9 +1024,11 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
         ODDBORO_FILES: JSON.stringify({
           cwd: dir,
           reads: readsBeyond(dir, reads, extraReads, claudeDir),
+          input: opts.jobFiles?.input,
           writes,
           noWrite: denied
-        })
+        }),
+        ...(opts.jobFiles ? { ODDBORO_FILE_CHECK: JSON.stringify(opts.jobFiles) } : {})
       }
     };
     allowed.push('mcp__files');
@@ -1115,6 +1090,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   function claudeArgs(): string[] {
     return [
       '-p',
+      ...(opts.images?.length || streamed ? ['--input-format', 'stream-json'] : []),
       '--output-format',
       'stream-json',
       '--verbose',
@@ -1146,7 +1122,7 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       ...(prior ? ['--resume', prior] : ['--session-id', randomUUID()])
     ];
   }
-  const input = preface + say(message);
+  const input = preface + say(message) + (opts.literal === undefined ? '' : `\n\n${opts.literal}`);
   /**
    * The run's servers, settings and system prompt go to Claude Code in files
    * only the owner can read, in a folder no run reads, removed when the run
@@ -1173,7 +1149,15 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
   /** A Claude Code run; with commands, their temp folder and the git template in it, made now and removed when the run ends. */
   function claudeLaunch(): Launch {
     const env = staffEnv(toolDir || undefined);
-    if (!tmp) return { args: claudeArgs(), env, stdin: input, done: writeRunFiles(env) };
+    const stdin = claudeInput(
+      input,
+      opts.images?.map((i) => ({
+        mediaType: i.mediaType,
+        data: readFileSync(i.path).toString('base64')
+      })),
+      streamed
+    );
+    if (!tmp) return { args: claudeArgs(), env, stdin, done: writeRunFiles(env) };
     mkdirSync(tmp, { recursive: true, mode: 0o700 });
     const shell = shellEnv(tmp);
     mkdirSync(shell.GIT_TEMPLATE_DIR, { mode: 0o700 });
@@ -1184,25 +1168,29 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
     return {
       args: claudeArgs(),
       env,
-      stdin: input,
+      stdin,
       done: () => {
         dropFiles();
         rmSync(tmp, { recursive: true, force: true });
       }
     };
   }
+  step(`checking ${AGENT_NAMES[who.agent]}'s sign-in and version`);
   // An added Claude account nobody signed in to: say where to sign in, rather than Claude Code's own advice.
   if (who.agent === 'claude' && account !== OFFICE_ACCOUNT && !(await claudeAccountOf(account))) {
     const line = `Claude Code ${NOT_SIGNED_IN}`;
+    await closeGateway(gate);
     opts.onEvent?.({ type: 'error', message: line });
     return { ok: false, text: line };
   }
   // A tool older than the office runs fails on a switch it does not know, so it never starts.
   const tooOld = await tooOldLine(who.agent, SIGN_IN_WHERE);
   if (tooOld) {
+    await closeGateway(gate);
     opts.onEvent?.({ type: 'error', message: tooOld });
     return { ok: false, text: tooOld };
   }
+  step(`starting ${AGENT_NAMES[who.agent]}`);
   const launch: Launch | { refused: string } =
     who.agent === 'claude'
       ? claudeLaunch()
@@ -1210,7 +1198,10 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
           key,
           staffId: who.id,
           dir,
-          reads: readsBeyond(dir, reads, extraReads, claudeDir),
+          reads: [
+            ...readsBeyond(dir, reads, extraReads, claudeDir),
+            ...(opts.jobFiles?.input ? [opts.jobFiles.input] : [])
+          ],
           part,
           writes,
           granted: extraWrites,
@@ -1229,29 +1220,48 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
           account,
           // Claude Code, Grok and Gemini open a picture with their file tools;
           // Codex has no such tool (`view_image` is off), so it gets them with the message.
-          ...(who.agent === 'codex' && opts.images?.length ? { images: opts.images } : {})
+          ...(opts.images?.length ? { images: opts.images } : {})
         });
+  // Stopped while it got ready: `run` has ended it, so it starts nothing now.
+  if (opts.signal?.aborted) {
+    if (!('refused' in launch)) launch.done();
+    await closeGateway(gate);
+    return stopped();
+  }
   if ('refused' in launch) {
+    await closeGateway(gate);
     opts.onEvent?.({ type: 'error', message: launch.refused });
     return { ok: false, text: launch.refused };
   }
   const tool = AGENT_NAMES[who.agent];
+  // Past its time limit while it got ready: `run` has ended it, and told the
+  // owner, so it starts nothing now.
+  if (clock.over) {
+    launch.done();
+    void closeGateway(gate);
+    console.error(
+      `${who.name}'s ${opts.kind} run was ready only after its time limit, so ${tool} never started.`
+    );
+    return noReply(opts.timeoutMs);
+  }
+  step(`waiting on ${tool}`);
+  clock.going = true;
 
   return new Promise((done) => {
-    runsGoing.add(key);
     // The command the page counts as installed, such as a Grok only in xAI's
     // install folder or an npm Claude Code on Windows; by name when there is
     // none, so the run fails naming it.
     const [cmd, before] = agentCommand(who.agent) ?? [who.agent, []];
+    const ownGroup = !!launch.ownGroup || currentPlatform() !== 'win32';
     const child = spawn(cmd, [...before, ...launch.args], {
       cwd: dir,
       env: launch.env,
-      detached: !!launch.ownGroup,
+      detached: ownGroup,
       windowsHide: true
     });
     /** Stop the tool, and with a group of its own, whatever its commands left running. */
     const stop = () => {
-      if (!launch.ownGroup) return child.kill();
+      if (!ownGroup) return child.pid ? stopGroups(child.pid) : child.kill();
       if (child.pid) stopGroups(child.pid);
     };
     let buffer = '';
@@ -1261,9 +1271,22 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
     let last = '';
     let session: string | undefined;
     let finished = false;
+    /** The results of a streamed chat that took added words, which may answer them in a turn of their own. */
+    const results: Run[] = [];
+    let added = 0;
+    const live = runsGoing.get(key);
+    const heard = (): Run | undefined =>
+      results.length
+        ? (results.find((r) => !r.ok) ?? {
+            ok: true,
+            text: results.map((r) => r.text).join('\n\n')
+          })
+        : undefined;
     const finish = (end: Run) => {
       if (finished) return;
       finished = true;
+      if (live) live.add = undefined;
+      if (!child.stdin.writableEnded) child.stdin.end();
       // A Claude Code that refuses the open network fails this run: the owner
       // is told plainly, and from now on this office's Claude Code runs keep
       // their commands off the internet (`holdNetwork`).
@@ -1281,28 +1304,42 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       const line = NETWORK_REFUSED_LINE[opts.ownerSaid === undefined ? 'unsent' : 'sent'];
       const r = refused ? { ok: false, text: line.replaceAll('{name}', who.name) } : end;
       clearTimeout(timer);
-      stoppers[who.id]?.delete(leave);
-      runsGoing.delete(key);
-      launch.done();
-      void closeGateway(gate);
-      bus.emit(RUN_ENDED);
+      opts.signal?.removeEventListener('abort', interrupted);
+      clock.going = false;
       // Saved however the run ended: once the tool names a session, it holds the message.
       const saved = !!(session && opts.sessionFile);
-      if (session && opts.sessionFile)
-        saveSession(opts.sessionFile, { sessionId: session, seen: sections, home: toolDir });
-      opts.onEvent?.(r.ok ? { type: 'done', text: r.text } : { type: 'error', message: r.text });
-      done(saved ? { ...r, saved } : r);
+      // The run ends whatever a step here throws: a throw that skipped `done`
+      // left the chat "still replying" until the office restarted.
+      try {
+        launch.done();
+        void closeGateway(gate);
+        if (session && opts.sessionFile)
+          saveSession(opts.sessionFile, { sessionId: session, seen: sections, home: toolDir });
+        if (!r.interrupted)
+          opts.onEvent?.(
+            r.ok ? { type: 'done', text: r.text } : { type: 'error', message: r.text }
+          );
+      } catch (e) {
+        console.error(`${who.name}'s run ended, but tidying up after it failed:`, e);
+      } finally {
+        done(saved ? { ...r, saved } : r);
+      }
     };
-    const timer = setTimeout(() => {
+    // What is left of the run's time limit, which started when the run was asked for.
+    const timer = setTimeout(
+      () => {
+        stop();
+        finish(heard() ?? noReply(opts.timeoutMs));
+      },
+      Math.max(0, clock.deadline - Date.now())
+    );
+    // Stop, or the Odd leaving the office (`stopRuns`), ends this run at once.
+    const interrupted = () => {
       stop();
-      finish({ ok: false, text: `No reply after ${opts.timeoutMs / 60_000} minutes.` });
-    }, opts.timeoutMs);
-    // The Odd leaving the office stops this run at once (`stopRuns`).
-    const leave = () => {
-      stop();
-      finish({ ok: false, text: `${who.name} left the office, so this stopped.` });
+      finish(stoppedBy(who, opts.signal));
     };
-    (stoppers[who.id] ??= new Set()).add(leave);
+    opts.signal?.addEventListener('abort', interrupted, { once: true });
+    if (opts.signal?.aborted) interrupted();
 
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => {
@@ -1357,8 +1394,18 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
             opts.onEvent?.({ type: 'delta', text: '\n\n' });
           }
         } else if (e.type === 'result') {
-          if (e.subtype === 'success') finish({ ok: true, text: String(e.result ?? reply).trim() });
-          else finish({ ok: false, text: endedEarly(who.agent, e) });
+          const r: Run =
+            e.subtype !== 'success'
+              ? { ok: false, text: endedEarly(who.agent, e) }
+              : e.is_error === true
+                ? { ok: false, text: String(e.result ?? 'The run failed.') }
+                : { ok: true, text: String(e.result ?? reply).trim() };
+          // A streamed chat takes no more words after its result. Words added
+          // too late for this turn get a turn of their own before Claude Code
+          // ends, so a run that took any ends when Claude Code does.
+          if (!child.stdin.writableEnded) child.stdin.end();
+          if (!added) finish(r);
+          else results.push(r);
         }
       }
     });
@@ -1368,175 +1415,26 @@ async function runTool(who: StaffRow, message: string, opts: RunOpts): Promise<R
       finish({ ok: false, text: `Could not start ${tool}: ${err.message}` })
     );
     child.on('close', (code) => {
-      if (launch.ownGroup) stop();
-      finish({
-        ok: false,
-        text: stoppedWhy(who.agent, code, stderr)
-      });
-    });
-    child.stdin.end(launch.stdin);
-  });
-}
-
-/** What a chat run is told about the files the owner attached: where each is, by its tag. */
-function attachedBrief(files: (ChatFile & { path: string })[]): string {
-  return [
-    `({owner} attached ${files.length === 1 ? 'a file' : `${files.length} files`} to this message. Each is kept in your folder, and each tag in brackets in their message names one. Look at each picture and read each file before you answer. A picture already shown with this message needs no opening.`,
-    ...files.map(fileLine),
-    ')'
-  ].join('\n');
-}
-
-/** Send one chat message. Resolves when the reply is complete; events stream through `onEvent`. */
-export async function chat(
-  id: string,
-  message: string,
-  onEvent: (e: ChatEvent) => void,
-  replyTo?: Pick<ChatRef, 'kind' | 'id'>,
-  /** Files the owner attached, already kept in the Odd's attachments folder (`attachedFiles`). */
-  files: (ChatFile & { path: string })[] = []
-): Promise<void> {
-  if (chatting.has(id)) throw new Error(`${id} is already replying`);
-  const who = await staffer(id);
-  if (!who) throw new Error(`No Odd named ${id}`);
-  chatting.add(id);
-  // Stamped when sent, so what the staffer delivers while replying lands between the two.
-  const sent = new Date().toISOString();
-  try {
-    // An answer to a manager's first or second question (`FIRST_QUESTIONS`):
-    // the office asks the next one itself, at once and with no run. The third
-    // answer runs the manager, which reads all three in the chat.
-    const last = history(id).at(-1);
-    const asked = last?.from === 'staff' ? firstQuestionIn(last.text) : -1;
-    const attached = files.map(({ path: _, ...f }) => f);
-    if (asked >= 0 && asked < FIRST_QUESTIONS.length - 1 && !files.length) {
-      const next = FIRST_QUESTIONS[asked + 1].ask;
-      addToChat(id, { at: sent, from: 'owner', text: message });
-      addToChat(id, { at: new Date().toISOString(), from: 'staff', text: next, told: true });
-      onEvent({ type: 'done', text: next });
-      return;
-    }
-    let re: Awaited<ReturnType<typeof replyBrief>> | undefined;
-    let r: Run;
-    try {
-      // Lines the office wrote in the chat, and work put on the desk, since the
-      // owner last wrote are not in the session: say so, so an answer to the
-      // hello, "How did the call go?" or "What about Thursday?" makes sense to
-      // the staffer.
-      re = replyTo ? await replyBrief(id, replyTo) : undefined;
-      const landed = (await deliveries(id, 20)).filter(
-        (d) => !(d.kind === re?.ref.kind && d.id === re.ref.id)
-      );
-      // Each owner line's files as they are now, for the lines the office retells below.
-      const past: RetoldEntry[] = history(id).map((e) =>
-        e.files?.length ? { ...e, now: filesNow(id, e.files) } : e
-      );
-      // A new session (the Odd moved to another tool, or its session is gone)
-      // never saw the chat: it gets the latest of it word for word. The preface
-      // leaves out the told, poke and failed run's owner lines the replay holds,
-      // and keeps those the budget cut, so each line since the owner last wrote
-      // is said once.
-      const resumed = !!sessionIdIn(chatSession(id), await runHomeOf(who));
-      const kept = resumed ? [] : replayed(past);
-      const since = replaySince(past, kept);
-      const session: Session = resumed ? 'resumed' : { replayed: new Set(replayedAt(past, kept)) };
-      // A missed line's pictures go to the run as a new message's do. A line the
-      // replay retells names its files by path alone, so a long replay never
-      // sends every picture the chat ever held.
-      const missed = missedAt(past, session).flatMap((i) => past[i].now ?? []);
-      // The Odd writes only its own folder and the given folders it may change, so only those are walked.
-      const writable = ownTools(who, currentPlatform())
-        .granted.filter((f) => f.write)
-        .map((f) => f.path);
-      const prompt = [
-        ...(since
-          ? [
-              replay(
-                past,
-                changedSince(
-                  homeOf(id),
-                  since,
-                  OFFICE_FILE_NAMES.map((f) => join(homeOf(id), f)),
-                  writable
-                )
-              )
-            ]
-          : []),
-        ...chatPreface(past, landed, session),
-        ...(re ? [re.brief] : []),
-        message,
-        ...(files.length ? [attachedBrief(files)] : [])
-      ].join('\n\n');
-      r = await run(who, prompt, {
-        kind: 'chat',
-        ownerSaid: message,
-        chatBefore: past,
-        ownerFiles: attached,
-        images: [...files, ...missed].flatMap((f: KeptFile) =>
-          'gone' in f || !isPicture(f.mediaType) ? [] : [{ path: f.path, mediaType: f.mediaType }]
-        ),
-        sessionFile: chatSession(id),
-        timeoutMs: CHAT_TIMEOUT_MS,
-        // The choices a reply ends with go to the page beside its text, as buttons.
-        onEvent: (e) => {
-          if (e.type !== 'done') return onEvent(e);
-          const { text, choices } = splitChoices(e.text);
-          onEvent({ type: 'done', text, ...(choices.length ? { choices } : {}) });
+      if (ownGroup) stop();
+      finish(
+        heard() ?? {
+          ok: false,
+          text: stoppedWhy(who.agent, code, stderr)
         }
-      });
-    } catch (err) {
-      // A throw on the way to a reply (a database read, a file the run reads)
-      // fails the chat like a failed run: told now, and saved below.
-      r = { ok: false, text: err instanceof Error ? err.message : String(err) };
-      onEvent({ type: 'error', message: r.text });
-    }
-    // Saved however the run ended, so a reload still shows what the owner said
-    // and why no reply came. A failed run's error is never the Odd's words:
-    // the replay leaves it out, and the next chat's preface says the run failed.
-    addToChat(id, {
-      at: sent,
-      from: 'owner',
-      text: message,
-      re: re?.ref,
-      ...(attached.length ? { files: attached } : {})
+      );
     });
-    const at = new Date();
-    if (r.ok) {
-      const { text, choices } = splitChoices(r.text);
-      addToChat(id, {
-        at: at.toISOString(),
-        from: 'staff',
-        text,
-        // `took`: how long the owner waited for this reply, from when they sent.
-        took: at.getTime() - Date.parse(sent),
-        ...(choices.length ? { choices } : {})
-      });
-    } else
-      addToChat(id, {
-        at: at.toISOString(),
-        from: 'staff',
-        text: r.text,
-        failed: true,
-        ...(r.saved ? { inSession: true } : {})
-      });
-    if (r.ok && re?.ref.kind === 'report') await replyToReport(re.ref.id, message);
-  } finally {
-    chatting.delete(id);
-  }
-}
-
-/** Run one job in a fresh session. The staffer walks to its room while it runs. */
-export async function runJob(job: JobRow, trigger: RunTrigger = 'schedule'): Promise<Run> {
-  const who = await staffer(job.staffId);
-  if (!who) return { ok: false, text: `No Odd named ${job.staffId}` };
-  return slot(who.id, { kind: 'job', label: job.name, detail: 'Running a job' }, (onEvent) =>
-    run(who, job.instructions, {
-      kind: 'job',
-      onEvent,
-      timeoutMs: JOB_TIMEOUT_MS,
-      extra: `\n## This run\n\nYou are running your job "${job.name}". {owner} is not in a chat with you.${trigger === 'manual' ? ' They started this run by hand just now, so they are at their screen: send anything the job has for them now (poke_owner with in_minutes 0), whatever quiet hours you keep for them.' : ''} Do the job, then reply with what you did in a few plain lines. Your reply goes in the ledger${job.report ? ' and on their desk as a report' : ''}.\n`
-    })
-  );
+    // A tool that ends before it reads its input breaks the pipe; the run
+    // ends through 'close' all the same.
+    child.stdin.on('error', () => {});
+    if (!streamed || !live) return void child.stdin.end(launch.stdin);
+    child.stdin.write(launch.stdin);
+    live.add = (text) => {
+      if (finished || child.stdin.writableEnded) return false;
+      child.stdin.write(userTurn(text));
+      added++;
+      return true;
+    };
+  });
 }
 
 /** What a staffer is told when it reads the owner's edit to its file, for a lesson. */
@@ -1659,18 +1557,42 @@ export async function followThrough(
                 : `Feedback on ${r?.title ?? 'a report'}`));
   const task = t ? { row: t, files: await taskFiles(t.id) } : undefined;
   // One carry-out may stand for twin asks that start no run of their own.
-  const also =
-    f.kind === 'carry_out' && (a?.kind === 'access' || a?.kind === 'folder' || a?.kind === 'switch')
-      ? await standsFor(a)
-      : [];
+  // `standsFor` finds none for a kind that has no twins.
+  const also = f.kind === 'carry_out' && a ? await standsFor(a) : [];
   const detail = followUpDetail(f.kind, { ask: a?.id, colleague: colleague?.name });
   // A colleague handed work on a goal's thread is told the goal in its brief.
   const goalServed =
     handed?.kind === 'hand_off' && thread?.goalId ? await findGoal(thread.goalId) : undefined;
-  const work = { kind: 'follow-up' as const, label, detail, askId: a?.id };
-  const res = await slot(who.id, work, (onEvent) =>
+  const goal = goalServed ?? (thread?.goalId ? await findGoal(thread.goalId) : g);
+  const leadId = thread?.hubId ?? who.id;
+  const about: WorkAbout | undefined =
+    goal?.status === 'active'
+      ? {
+          key: randomUUID(),
+          kind: 'goal',
+          id: goal.id,
+          title: goal.title,
+          leadId,
+          lead: leadId === who.id ? who.name : ((await staffer(leadId))?.name ?? leadId)
+        }
+      : undefined;
+  const work = { kind: 'follow-up' as const, label, detail, askId: a?.id, about };
+  // Work for a colleague's hand-off runs at Draft at most whatever its kind,
+  // so a colleague's words never stand in for the owner's yes, even after a
+  // yes that raised this Odd's own level or tools. The carry-out of an
+  // approval ask is the owner's yes to that exact action, so it keeps the
+  // Odd's level and one yes stays one yes.
+  const draftOnly =
+    atDraft(f.kind) ||
+    (serves !== undefined && !(f.kind === 'carry_out' && a?.kind === 'approval'));
+  const res = await slot(who.id, work, (onEvent, runId) =>
     run(who, label, {
       kind: 'follow-up',
+      literal:
+        f.kind === 'task_done' && t?.responseVersion && t.response
+          ? savedTaskWords(t.response)
+          : undefined,
+      runId,
       onEvent,
       asked:
         handed?.kind === 'hand_off'
@@ -1679,7 +1601,7 @@ export async function followThrough(
       approvedAsk: f.kind === 'carry_out' ? a?.id : undefined,
       ownerNote: ownerNoteOf(f),
       ownerEdit: edit && { path: edit.path, text: edit.shown.now },
-      draftOnly: atDraft(f.kind),
+      draftOnly,
       lessonRun: servesNoThread(f.kind),
       handOffId: serves?.id,
       threadId: thread?.id,
@@ -1691,6 +1613,12 @@ export async function followThrough(
         '## This run',
         '',
         '{owner} is not in a chat with you.',
+        // Answered in its chat: the reply this run ends with shows there (`answerInChat`).
+        ...(f.chatCard
+          ? [
+              `They answered in your chat, so your reply at the end also shows there, under the ${f.chatCard.kind} they answered. Write it to them.`
+            ]
+          : []),
         '',
         // Here, before the kind's own brief, so every kind of run that ended a park says so.
         ...(f.unparked ? waitEnded(f.unparked) : []),
@@ -1708,7 +1636,7 @@ export async function followThrough(
           : edit
             ? editBrief(edit.path, edit.shown)
             : [
-                ...followUpBrief(f, a, r, task, g, also),
+                ...followUpBrief(f, a, r, task, g, { also, draftOnly, level: who.permission }),
                 ...(serves?.handOff && giver && thread
                   ? handOffContext({
                       h: serves.handOff,
@@ -1750,7 +1678,8 @@ export async function draft(id: string, message: string): Promise<Run> {
   return slot(
     id,
     { kind: 'draft', label: 'Drafting', detail: 'Drafting for the hire window' },
-    (onEvent) => run(who, message, { kind: 'draft', timeoutMs: CHAT_TIMEOUT_MS, onEvent })
+    (onEvent, runId) =>
+      run(who, message, { kind: 'draft', runId, timeoutMs: CHAT_TIMEOUT_MS, onEvent })
   );
 }
 
@@ -1771,35 +1700,32 @@ export async function firstDay(id: string): Promise<void> {
   const [jobs, serving] = await Promise.all([jobsFor(id), goalsFor(id)]);
   // Only an active goal: it is the only kind its runs are shown (`whoFor`).
   const day = firstDayOf({ jobs: jobs.length, goal: serving.find((g) => g.status === 'active') });
-  if (!chatting.has(id)) {
-    chatting.add(id);
-    try {
-      const r = await slot(
-        id,
-        { kind: 'draft', label: 'Saying hello', detail: 'Introducing themselves' },
-        (onEvent) =>
-          run(
-            who,
-            [
-              'You were hired a moment ago, and you just walked into the office. {owner} has your chat open. Say hello.',
-              '',
-              '- Write as yourself, the way your job description says you work: a few short lines, no headings, no lists.',
-              '- Say who you are and what you are here for, in your own words, not your job title.',
-              ...day.hello
-            ].join('\n'),
-            {
-              kind: 'chat',
-              sessionFile: chatSession(id),
-              timeoutMs: CHAT_TIMEOUT_MS,
-              onEvent
-            }
-          )
-      );
-      // The chat session wrote this hello, so it is not a told line.
-      if (r.ok) addToChat(id, { at: new Date().toISOString(), from: 'staff', text: r.text });
-    } finally {
-      chatting.delete(id);
-    }
+  if (!isBusy(id)) {
+    const r = await slot(
+      id,
+      { kind: 'draft', label: 'Saying hello', detail: 'Introducing themselves' },
+      (onEvent, runId) =>
+        run(
+          who,
+          [
+            'You were hired a moment ago, and you just walked into the office. {owner} has your chat open. Say hello.',
+            '',
+            '- Write as yourself, the way your job description says you work: a few short lines, no headings, no lists.',
+            '- Say who you are and what you are here for, in your own words, not your job title.',
+            ...day.hello
+          ].join('\n'),
+          {
+            kind: 'chat',
+            runId,
+            sessionFile: chatSession(id),
+            timeoutMs: CHAT_TIMEOUT_MS,
+            onEvent
+          }
+        ),
+      { greeting: true }
+    );
+    // The chat session wrote this hello, so it is not a told line.
+    if (r.ok) addToChat(id, { at: new Date().toISOString(), from: 'staff', text: r.text });
   }
   if (day.starts) await startFirstDay(id);
 }
@@ -1810,6 +1736,32 @@ export async function firstDay(id: string): Promise<void> {
  */
 export function sayInChat(id: string, text: string): void {
   addToChat(id, { at: new Date().toISOString(), from: 'staff', text, told: true });
+}
+
+/** The most of a failed follow-up's reason its one chat line carries. */
+const FAILED_LINE_MAX = 300;
+
+/**
+ * The Odd's reply to an answer the owner gave on a card in its chat: what
+ * the run their answer started did, in the chat under that card (`re`), so
+ * the talk goes on where they answered. One line per run. A failed run says
+ * so in one line, shown as a failed reply is. A told line, since no run of
+ * the chat session wrote it: the next chat hears it (`chatPreface`).
+ */
+export function answerInChat(id: string, card: ChatCard, outcome: Outcome, result: string): void {
+  const failed = outcome === 'failed';
+  const why = cut(flat(result), FAILED_LINE_MAX);
+  addToChat(id, {
+    at: new Date().toISOString(),
+    from: 'staff',
+    text: failed
+      ? `Could not finish this${why ? `: ${why}` : '.'}`
+      : result.trim() || (outcome === 'waiting' ? 'It waits on you, on your desk.' : 'Done.'),
+    told: true,
+    re: card,
+    ...(failed ? { runFailed: true as const } : {})
+  });
+  emit({ type: 'change', table: 'chat' });
 }
 
 /** Deliver a due poke: a chat line from the staffer, and a notification on the Mac. */

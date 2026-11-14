@@ -25,6 +25,8 @@ export type LiveTable = {
 };
 
 export const LIVE_TABLES: Record<TableName, LiveTable> = {
+  project_requests: { trigger: 'all', page: ['refresh', 'version'] },
+  project_sessions: { trigger: 'all', page: ['version'] },
   staff: { trigger: 'all', page: ['refresh'] },
   // Once the office is up, every change is the owner's own call on the page, and
   // the list that made it reads the accounts again (agent-tools.svelte.ts).
@@ -43,7 +45,8 @@ export const LIVE_TABLES: Record<TableName, LiveTable> = {
   ledger: { trigger: 'all', page: ['ledger'] },
   connectors: { trigger: 'all', page: ['refresh', 'version'] },
   grants: { trigger: 'all', page: ['version'] },
-  jobs: { trigger: 'all', page: ['version'] },
+  // A job that skipped a run shows on the desk (`desk().away`), so the page reads the office again.
+  jobs: { trigger: 'all', page: ['refresh', 'version'] },
   threads: { trigger: 'all', page: ['refresh', 'version'] },
   // The office's own listener starts each new follow-up (follow-ups.ts). The
   // page reads the office again, for those waiting to start under In progress.
@@ -56,7 +59,7 @@ export const LIVE_TABLES: Record<TableName, LiveTable> = {
   usage: { trigger: 'all', page: ['version'] },
   owner: {
     trigger: {
-      none: "Written only by the owner's own welcome on the page (finishWelcome), never by an Odd."
+      none: "Written only by the owner's own welcome and Setup on the page (finishWelcome, setAdvancedMode), never by an Odd."
     },
     page: []
   },

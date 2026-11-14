@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import {
   asks,
   followUps,
@@ -314,7 +314,7 @@ test("the lead's brief names the hand-offs still out, and leaves out a result it
 
 test("a lead's chat that hands off on a thread holds its pick-ups there until it ends, and what landed meanwhile comes back in one run", async () => {
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const first = await give('paige', 'Write the speech', undefined, chat);
   const thread = first.threadId ?? 0;
   const second = await give('rex', 'Book the band', thread, chat);
@@ -347,7 +347,7 @@ test("a lead's chat that hands off on a thread another run opened holds its pick
   const opened = await give('paige', 'Paint the sign');
   const thread = opened.threadId ?? 0;
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   await give('rex', 'Hang the sign', thread, chat);
   await runs(opened, 'done', 'Painted.');
   const [back] = await onThread(thread, 'handed_back');
@@ -362,7 +362,7 @@ test("a lead's chat that hands off on a thread another run opened holds its pick
 
 test("a lead's pick-up after a task it gave in a chat waits while the chat goes, and is listed to start until it starts", async () => {
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const h = await give('rex', 'Fit the lights', undefined, chat);
   const thread = h.threadId ?? 0;
   const t = await O.giveTask('lead', {
@@ -385,7 +385,7 @@ test("a lead's pick-up after a task it gave in a chat waits while the chat goes,
 
 test("a lone hand-off picks up at once, even while the lead's chat hands off on another thread", async () => {
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   await give('rex', 'Hire the photographer', undefined, chat);
   const lone = await give('paige', 'Print the menus');
   await runs(lone, 'done', 'The menus are printed.');
@@ -397,7 +397,7 @@ test("a lone hand-off picks up at once, even while the lead's chat hands off on 
 
 test("a lead's chat holds only the lead: a colleague's carry-out on the thread starts while it goes", async () => {
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const h = await give('rex', 'Draft the menu', undefined, chat);
   assert.ok(await O.startFollowUp(h.id));
   const ask = await raises(h, 'Send the menu');
@@ -412,7 +412,7 @@ test("a lead's chat holds only the lead: a colleague's carry-out on the thread s
 
 test('after a restart, a result from a chat that was handing off picks up at once, even beside a new chat', async () => {
   const before = randomUUID();
-  O.runsGoing.add(before);
+  O.reserveRun({ key: before, staffId: 'test', kind: 'chat' });
   const h = await give('paige', 'Plan the seating', undefined, before);
   const thread = h.threadId ?? 0;
   assert.ok(await O.startFollowUp(h.id));
@@ -420,7 +420,7 @@ test('after a restart, a result from a chat that was handing off picks up at onc
   // and its cut-off runs fail, so the result goes back.
   O.runsGoing.delete(before);
   const after = randomUUID();
-  O.runsGoing.add(after);
+  O.reserveRun({ key: after, staffId: 'test', kind: 'chat' });
   await O.closeStaleFollowUps();
   const [back] = await onThread(thread, 'handed_back');
   assert.equal(back.handOff?.outcome, 'failed');
@@ -514,7 +514,7 @@ test("a failed run with no lead to wake puts one report on the owner's desk", as
 
 test("answers that come while the lead's chat holds its thread join one pick-up, which the claim returns whole", async () => {
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const h = await give('paige', 'Choose the venue', undefined, chat);
   const thread = h.threadId ?? 0;
   await T.answerThread(thread, 'First answer.');
@@ -546,7 +546,7 @@ test("a chat whose hand-off passed the round's limit: the owner's yes starts it 
     .values({ title: 'The year', hubId: 'lead', holderId: 'lead', handOffsUsed: T.HAND_OFF_LIMIT })
     .returning();
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const r = await H.handOff({
     from: 'lead',
     to: 'paige',
@@ -575,7 +575,7 @@ test("a chat whose hand-off the usage window held holds the pick-up the window's
     .values({ id: 'claude', ...w })
     .onConflictDoUpdate({ target: planLimits.id, set: w });
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const r = await H.handOff({
     from: 'lead',
     to: 'paige',
@@ -605,7 +605,7 @@ test('a carry-out on no thread that hands off holds the pick-up of its result wh
   assert.ok(await O.startFollowUp(carry.id));
   // The office gives every run a key, this one too, and hand_off passes it on.
   const key = randomUUID();
-  O.runsGoing.add(key);
+  O.reserveRun({ key: key, staffId: 'test', kind: 'chat' });
   const h = await give('rex', 'Find a caterer', undefined, key);
   await runs(h, 'done', 'Found one.');
   const [back] = await onThread(h.threadId ?? 0, 'handed_back');
@@ -621,7 +621,7 @@ test('a carry-out on no thread that hands off holds the pick-up of its result wh
 test("a chat that raises a goal's plan holds the pick-up the owner's yes starts on the goal's thread, until the chat ends", async () => {
   const [g] = await db.insert(goals).values({ title: 'Run the fair' }).returning();
   const chat = randomUUID();
-  O.runsGoing.add(chat);
+  O.reserveRun({ key: chat, staffId: 'test', kind: 'chat' });
   const { ask } = await O.raiseAsk('lead', {
     kind: 'plan',
     title: 'Plan for: Run the fair',
@@ -673,8 +673,8 @@ test("only both sides of a hand-off, a pick-up, and a run reading the owner's no
 
 test('a thread keeps the key of every run that handed off on it, so each holds the pick-up while it goes', async () => {
   const [first, second] = [randomUUID(), randomUUID()];
-  O.runsGoing.add(first);
-  O.runsGoing.add(second);
+  O.reserveRun({ key: first, staffId: 'test', kind: 'chat' });
+  O.reserveRun({ key: second, staffId: 'test', kind: 'chat' });
   const h = await give('paige', 'Hang the lights', undefined, first);
   const thread = h.threadId ?? 0;
   await give('rex', 'Test the lights', thread, second);
@@ -714,6 +714,36 @@ async function runsAndParks(f: Row, task: number) {
 // A task the lead gave, on no work: the one kind on no work it may park on (`parkOnTask`).
 const aTask = (lead: string, title: string) =>
   O.giveTask(lead, { title, why: 'w', steps: ['Do it'] });
+
+test('a failed wake leaves the task open, its checked steps intact, and its work parked', async () => {
+  const work = await ownWork('failed-wake');
+  const task = await aTask(work.lead, 'Confirm the route');
+  await O.tickStep(task.id, 0);
+  await parksOn(work.lead, work.work, task.id);
+  await db.execute(
+    sql`alter table follow_ups add constraint refuse_test_wake check (kind <> 'resume' or note not like '%Confirm the route%')`
+  );
+  try {
+    await assert.rejects(O.finishTask(task.id, true, 'Use the north path.'));
+    assert.equal((await O.task(task.id))?.status, 'open');
+    assert.equal((await O.task(task.id))?.steps[0].done, true);
+    assert.equal((await threadOf(work.work)).resumeOnTask, task.id);
+    assert.deepEqual(await onThread(work.work, 'resume'), []);
+    assert.equal(
+      (await db.select().from(followUps).where(eq(followUps.taskId, task.id))).length,
+      0
+    );
+  } finally {
+    await db.execute(sql`alter table follow_ups drop constraint refuse_test_wake`);
+  }
+  const attempts = await Promise.all([
+    O.finishTask(task.id, true, 'Use the north path.'),
+    O.finishTask(task.id, true, 'Use the north path.')
+  ]);
+  assert.deepEqual(attempts.sort(), [false, true]);
+  assert.equal((await onThread(work.work, 'resume')).length, 1);
+  assert.equal((await O.task(task.id))?.note, 'Use the north path.');
+});
 
 test('finishing a task wakes the thread parked on it once, and a dropped task wakes it too and says so', async () => {
   const finished = await ownWork('finished');

@@ -39,7 +39,9 @@ import {
   staffGoals,
   tasks,
   threads,
+  chatCardOf,
   type HeldHandOff,
+  type InChat,
   type Outcome,
   type ThreadStatus
 } from './schema.ts';
@@ -69,7 +71,7 @@ export type Db = typeof db | Tx;
 /**
  * The thread keeps the key of a run that put work on it from outside it: a
  * hand-off, taken or held (`takeHandOff`), or a plan (`raiseAsk`). While that
- * run goes, the hub's pick-ups there wait (`waitsOnOwnRun` in office.ts). Only
+ * run goes, the hub's pick-ups there wait (`waitsOnOwnRun` in office-follow-ups.ts). Only
  * the office's memory says which keys still go (`runsGoing`), so a key from
  * before a restart holds nothing, and none needs clearing.
  */
@@ -370,7 +372,7 @@ async function askToKeepGoing(tx: Tx, t: ThreadRow, held: HeldHandOff): Promise<
  * A yes to a `hand_offs` ask starts the hand-off it held, as the hub wrote it,
  * as the first of a new round, and its result brings the hub back as any
  * hand-off's does. It runs in the transaction that claims the ask (`decide`
- * in office.ts), so a stop between the two cannot leave the yes with nothing
+ * in office-decide.ts), so a stop between the two cannot leave the yes with nothing
  * started. What it carries is worked out now (`sharing`), from access as it
  * is at the yes.
  */
@@ -488,12 +490,18 @@ export async function wakeThread(id: number): Promise<void> {
  * the answer, and with `askId`, the ask it answers, so its brief can say what
  * comes next, such as starting the work of a plan the owner approved. While a
  * pick-up of the hub's there has yet to start, as when a run of the hub's on
- * the thread holds it (`waitsOnOwnRun` in office.ts), each answer joins it, a
+ * the thread holds it (`waitsOnOwnRun` in office-follow-ups.ts), each answer joins it, a
  * line each, so several hires landing together wake it once. The claim
  * returns the row as joined (`startFollowUp`), so the run reads every line.
  */
-export async function answerThread(id: number, answer: string, askId?: number): Promise<void> {
-  await db.transaction(async (tx) => {
+export async function answerThread(
+  id: number,
+  answer: string,
+  askId?: number,
+  q: Db = db,
+  chat?: InChat
+): Promise<void> {
+  await q.transaction(async (tx) => {
     const [t] = await tx
       .select({ hubId: threads.hubId, leftAt: staff.leftAt })
       .from(threads)
@@ -503,6 +511,8 @@ export async function answerThread(id: number, answer: string, askId?: number): 
     // pick-up would wait for ever, or run on work its leaving stopped once it
     // came back (`removeOdd`).
     if (!t || t.leftAt) return;
+    // Answered in the hub's own chat: the pick-up replies there, under the newest card answered.
+    const chatCard = chatCardOf(t.hubId, chat);
     // Locked, so a claim cannot start it between this look and the join: the
     // claim waits, then returns the joined note, or it went first and this
     // answer writes a pick-up of its own.
@@ -523,7 +533,10 @@ export async function answerThread(id: number, answer: string, askId?: number): 
     if (waiting)
       await tx
         .update(followUps)
-        .set({ note: waiting.note ? `${waiting.note}\n${answer}` : answer })
+        .set({
+          note: waiting.note ? `${waiting.note}\n${answer}` : answer,
+          ...(chatCard ? { chatCard } : {})
+        })
         .where(eq(followUps.id, waiting.id));
     else
       await addFollowUp(tx, {
@@ -531,7 +544,8 @@ export async function answerThread(id: number, answer: string, askId?: number): 
         kind: 'resume',
         threadId: id,
         note: answer,
-        askId
+        askId,
+        chatCard
       });
   });
 }

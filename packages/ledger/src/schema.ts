@@ -6,6 +6,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -13,6 +14,8 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
+  uuid,
   vector
 } from 'drizzle-orm/pg-core';
 import type { ArtKind, Place } from '@oddboro/sprites/art';
@@ -24,6 +27,7 @@ import type { FolderAccess, Level, OwnSwitch } from './access-words.ts';
 import type { GmailFilter } from './filter-words.ts';
 import type { MailAttachment } from './mail-attachments.ts';
 import type { PersonaLink } from './personas.ts';
+import type { OfficeToolId } from './tools.ts';
 
 const at = (name: string) => timestamp(name, { withTimezone: true });
 const created = (name = 'created_at') => at(name).notNull().defaultNow();
@@ -106,10 +110,15 @@ export type AccountRow = typeof accounts.$inferSelect;
  * changes something, held by the gateway for an Odd at Draft (`asks.call`):
  * on the owner's yes the office makes that exact call. `switch` asks for the
  * owner's Run commands or Browse the web switch, or both (`asks.switches`):
- * the owner's yes turns them on. `remove` asks to let an Odd go (`asks.odd`):
+ * the owner's yes turns them on. `level` asks for a higher level (`asks.level`)
+ * and `office_tool` for office tools the owner grants (`asks.officeTools`): the
+ * owner's yes makes the Settings tab's own change (`changeLevel`, `changeTools`).
+ * `remove` asks to let an Odd go (`asks.odd`):
  * an Odd asking to leave names itself, and the Office Manager names another.
  * `bring_back` is the manager's ask to bring back an Odd that left. The owner's
- * yes does it (`removeOdd`, `bringBack`).
+ * yes does it (`removeOdd`, `bringBack`). `catch_up` is the office's ask to
+ * fill more missed periods of a `record` job than it fills on its own
+ * (`asks.catch_up`, missed-runs.ts): the owner's yes owes the job those periods.
  */
 export const ASK_KINDS = [
   'approval',
@@ -123,9 +132,13 @@ export const ASK_KINDS = [
   'filter',
   'folder',
   'switch',
+  'level',
+  'office_tool',
   'call',
   'remove',
-  'bring_back'
+  'bring_back',
+  'catch_up',
+  'standing'
 ] as const;
 export type AskKind = (typeof ASK_KINDS)[number];
 /** `revise` means the owner sent it back to be reworked. */
@@ -189,9 +202,19 @@ export type HeldCall = {
    * and no Odd's prompt or brief ever carries them.
    */
   shown?: string[];
+  /**
+   * Calls to the same service the run made without asking (its standing yes)
+   * before it made this one, such as the change a commit call applies. Only
+   * the desk shows them.
+   */
+  before?: { tool: string; arguments: Record<string, unknown> }[];
   /** Set once the office made the call: whether the tool took it, and its words. */
   result?: { ok: boolean; text: string; at: string };
 };
+/** What a catch_up ask fills: one job's missed scheduled times, ISO, oldest first. */
+export type CatchUp = { jobId: number; times: string[] };
+/** A standing ask: tools of one service the Odd asks to use without asking. */
+export type StandingRequest = { connector: string; tools: string[] };
 /** A proposed hire. Approving it opens the hire window filled in with this. */
 export type HireProposal = {
   name: string;
@@ -204,17 +227,37 @@ export type HireProposal = {
   jobDescriptionFile: string;
   /** Office tools beyond the ones every staffer has. */
   tools?: string[];
-  job?: { name: string; instructions: string; schedule: Schedule; report?: boolean };
+  job?: NewJob;
   /** What the person looks like, in words, for drawing their look. */
   appearance?: string;
   /** The owner's intake answers, a file in the proposer's folder. The hire gets a copy as `notes/intake.md`. */
   intakeFile?: string;
   /** The goal this hire serves, and its part in it. Hiring links them. */
   goal?: { id: number; part: string };
+  /** A real person New Altitude offers as a persona: its slug. The hire window offers that persona. */
+  personaSlug?: string;
+};
+
+/** Files a recurring job exchanges on one piece of work. Names start inside the thread. */
+export type JobFiles = {
+  thread: number;
+  input?: string;
+  output: string;
+  /** The source tools whose contents the output shares. */
+  sources?: string[];
+  /** The owner approved putting those sources in this output on this work. */
+  share?: boolean;
 };
 
 /** A new job for a staffer. */
-export type NewJob = { name: string; instructions: string; schedule: Schedule; report?: boolean };
+export type NewJob = {
+  name: string;
+  instructions: string;
+  schedule: Schedule;
+  report?: boolean;
+  missed?: MissedRuns;
+  files?: Omit<JobFiles, 'thread'>;
+};
 
 /** One piece of a goal plan. The owner ticks the ones to go ahead with. */
 export type GoalPlanItem =
@@ -227,7 +270,14 @@ export type GoalPlanItem =
       /** A new job for it. */
       job?: NewJob;
       /** A change to one of its jobs, by name. */
-      editJob?: { name: string; instructions?: string; schedule?: Schedule };
+      editJob?: {
+        name: string;
+        newName?: string;
+        instructions?: string;
+        schedule?: Schedule;
+        missed?: MissedRuns;
+        files?: Omit<JobFiles, 'thread'>;
+      };
     };
 
 /** How the office meets one goal. */
@@ -257,6 +307,8 @@ export type GoalDraft = {
 /** What the owner wants more of. Staff serve goals; the manager plans them. */
 export const goals = pgTable('goals', {
   id: id(),
+  /** One explicit submission from the manager's chat, kept across retries. */
+  requestId: uuid().unique(),
   title: text().notNull(),
   why: text(),
   doneWhen: text(),
@@ -327,10 +379,18 @@ export const asks = pgTable('asks', {
   folder: jsonb().$type<FolderRequest>(),
   /** A call ask's held call to an outside tool. */
   call: jsonb().$type<HeldCall>(),
+  /** A catch_up ask's job, and each missed scheduled time it would fill. */
+  catchUp: jsonb().$type<CatchUp>(),
   /** A switch ask's switches, Run commands or Browse the web, to turn on (`ask_for_switch`). */
   switches: jsonb().$type<OwnSwitch[]>(),
+  /** A level ask's level, above the Odd's own when it asked (`ask_for_level`). */
+  level: text().$type<Level>(),
+  /** An office_tool ask's office tools, ones the Settings tab grants (`ask_for_office_tool`). */
+  officeTools: text().array().$type<OfficeToolId[]>(),
   /** A remove or bring_back ask's Odd (a staff id). */
   odd: text(),
+  /** A standing ask's tools, to use without asking (`ask_for_standing_yes`). */
+  standing: jsonb().$type<StandingRequest>(),
   /** The ask this one reworks, after the owner sent that one back. */
   revises: integer(),
   /** The hand-off (its `hand_off` follow-up) the staffer raised this while working on. */
@@ -356,6 +416,7 @@ export type StepAction =
   | { kind: 'secret'; connector: string; name: string }
   | { kind: 'oauth'; connector: string }
   | { kind: 'aws'; connector: string }
+  | { kind: 'postal'; connector: string }
   | { kind: 'choice'; options: string[] }
   | { kind: 'tools'; connector: string };
 /** Steps that share a `key` tick together, e.g. the two steps of one sign-in. */
@@ -387,6 +448,9 @@ export const tasks = pgTable('tasks', {
   title: text().notNull(),
   why: text().notNull(),
   steps: jsonb().$type<Step[]>().notNull(),
+  /** The task's working text. Version zero is the Odd's starting text until the owner saves it. */
+  response: text(),
+  responseVersion: integer().notNull().default(0),
   status: text().$type<TaskStatus>().notNull().default('open'),
   note: text(),
   /**
@@ -579,6 +643,8 @@ export type ConnectorConfig = {
    * nothing else (AWS read only's role), so a Read only grant reaches them all.
    */
   readsByRole?: boolean;
+  /** The one LegalZoom mailbox the owner selected for this office. */
+  pmb?: string;
   /**
    * Environment variables or headers whose value the office fetches from the
    * owner's AWS Secrets Manager when a run first uses the tool, in place of a
@@ -615,6 +681,12 @@ export const connectors = pgTable('connectors', {
   readTools: text().array().notNull().default([]),
   /** Every tool, for a Draft or Act grant. Filled in when the owner connects it. */
   tools: text().array().notNull().default([]),
+  /**
+   * What each tool does, by name, in the service's own words: filled in when
+   * the owner connects it and kept current by each run's tool list
+   * (`noteTools`). Only the owner's page shows them.
+   */
+  toolNotes: jsonb().$type<Record<string, string>>().notNull().default({}),
   /** Set once the owner has finished connecting it. */
   readyAt: at('ready_at'),
   createdAt: created()
@@ -630,6 +702,22 @@ export const grants = pgTable(
       .notNull()
       .references(() => connectors.id),
     level: text().$type<Level>().notNull().default('read'),
+    /**
+     * Tools of this service the Odd uses without asking, its standing yes: at
+     * Draft a call to one of them goes through instead of waiting on the desk.
+     * Only a write grant has any (`setStanding`, `giveStanding`).
+     */
+    standing: text().array().notNull().default([]),
+    /**
+     * Tools of this service the owner approves each call to first, even at
+     * Act: a call to one waits on the desk as every change does at Draft.
+     * Each list is the exception to its level, so both keep their tools as
+     * the level moves. A tool the service drops stays here, so one that comes
+     * back by that name still asks first, and the tools it adds in the same
+     * refresh join it, in case one is the same tool renamed (`setAskFirst`,
+     * `refreshTools`).
+     */
+    askFirst: text().array().notNull().default([]),
     askId: integer().references(() => asks.id),
     grantedAt: created('granted_at')
   },
@@ -644,6 +732,15 @@ export type Schedule =
   | { every: 'weekday'; at: string }
   | { every: 'week'; day: Weekday; at: string };
 
+/**
+ * What a job does with runs it missed while the office was off. `latest`: only
+ * the newest run matters, so it catches up once if it is still early enough,
+ * else skips to its next time. `record`: each run adds an entry to a series, so
+ * every missed period is filled. How: `apps/office/src/lib/server/jobs.ts`.
+ */
+export const MISSED_RUNS = ['latest', 'record'] as const;
+export type MissedRuns = (typeof MISSED_RUNS)[number];
+
 export const jobs = pgTable('jobs', {
   id: id(),
   staffId: text()
@@ -652,10 +749,17 @@ export const jobs = pgTable('jobs', {
   name: text().notNull(),
   instructions: text().notNull(),
   schedule: jsonb().$type<Schedule>().notNull(),
+  files: jsonb().$type<JobFiles>(),
+  changedAt: created('changed_at'),
   /** The result goes on the owner's desk as a report. */
   report: boolean().notNull().default(false),
   enabled: boolean().notNull().default(true),
   nextRunAt: at('next_run_at'),
+  missed: text().$type<MissedRuns>().notNull().default('latest'),
+  /** Missed scheduled times, ISO, oldest first, that the clock still owes one catch-up run. */
+  owed: jsonb().$type<string[]>(),
+  /** The run a `latest` job skipped, while it waits on the desk's While you were away card. */
+  skippedAt: at('skipped_at'),
   createdAt: created()
 });
 
@@ -699,7 +803,7 @@ export const threads = pgTable('threads', {
   /**
    * The key of each run that put work here from outside the thread: a hand-off,
    * held or not, or a goal's plan (`keepRun` in threads.ts).
-   * While one of them goes (`runsGoing` in office.ts), the hub's pick-ups here
+   * While one of them goes (`runsGoing` in office-follow-ups.ts), the hub's pick-ups here
    * wait, so the hub runs once at a time on its thread.
    */
   runs: text().array().notNull().default([]),
@@ -775,6 +879,23 @@ export type HeldHandOff = Pick<HandOff, 'from' | 'title' | 'brief' | 'files'> & 
  */
 export type FileEdit = { path: string; before: string };
 
+/**
+ * The card in its Odd's chat the owner answered from: an ask they approved
+ * or sent back there, or a task they finished there. The run their answer
+ * starts replies in that chat under it, as well as in the Ledger.
+ */
+export type ChatCard = { kind: 'ask' | 'task'; id: number; title: string };
+
+/**
+ * An answer the owner gave in a chat: the Odd whose chat it is, and the card.
+ * Only a run of that Odd's replies there (`chatCardOf`).
+ */
+export type InChat = { staffId: string; card: ChatCard };
+
+/** The card a run of `staffId` replies under, when the owner answered in its own chat. */
+export const chatCardOf = (staffId: string, chat?: InChat): ChatCard | undefined =>
+  chat?.staffId === staffId ? chat.card : undefined;
+
 export const followUps = pgTable('follow_ups', {
   id: id(),
   staffId: text()
@@ -813,6 +934,8 @@ export const followUps = pgTable('follow_ups', {
   unparkedAt: at('unparked_at'),
   /** The owner ticked "Report when done": success goes on their desk too. A failure always does. */
   reportWhenDone: boolean().notNull().default(false),
+  /** The owner answered in this Odd's chat, on this card: the run's reply goes there too. Null from the Desk. */
+  chatCard: jsonb().$type<ChatCard>(),
   createdAt: created(),
   startedAt: at('started_at'),
   outcome: text().$type<Outcome>(),
@@ -825,6 +948,22 @@ export type RunStatus = 'running' | 'done' | 'failed';
 /** Why a run started: its schedule came due, or the owner pressed Run now. */
 export type RunTrigger = 'schedule' | 'manual';
 
+/**
+ * A file job's run, as only the office records it. `periods` are the scheduled
+ * times the run is for, ISO, oldest first, set as it starts. `sha256` is set
+ * only once the office's file tools saw the run write `output` (the writer's
+ * part and file name) with those exact bytes. A run with periods and no
+ * digest left no checked file for them. A reader's run also names the input
+ * it read and the writer's run that wrote it.
+ */
+export type CheckedFiles = {
+  periods: string[];
+  output: string;
+  sha256?: string;
+  input?: string;
+  inputRun?: number;
+};
+
 export const runs = pgTable('runs', {
   id: id(),
   jobId: integer()
@@ -836,6 +975,8 @@ export const runs = pgTable('runs', {
   status: text().$type<RunStatus>().notNull().default('running'),
   trigger: text().$type<RunTrigger>().notNull().default('schedule'),
   summary: text(),
+  /** A file job's run, as the office checked it (`CheckedFiles`). Null for other jobs. */
+  checkedFiles: jsonb().$type<CheckedFiles>(),
   startedAt: created('started_at'),
   finishedAt: at('finished_at')
 });
@@ -890,6 +1031,16 @@ export const owner = pgTable('owner', {
   name: text().notNull(),
   /** When the owner finished the welcome. Until then the office opens on it. */
   welcomedAt: at('welcomed_at'),
+  /**
+   * When the owner said yes to Advanced mode in Setup. Null while it is off.
+   * Project sessions, which run outside Oddboro's limits, exist only while it is on.
+   */
+  advancedAt: at('advanced_at'),
+  /**
+   * When the owner passed the Act check (act-check.ts). Null until then, and
+   * while null nothing puts an Odd at Act (`changeLevel`, `hire`).
+   */
+  actCheckAt: at('act_check_at'),
   updatedAt: at('updated_at').notNull().defaultNow()
 });
 
@@ -1013,3 +1164,83 @@ export const appUpdate = pgTable('app_update', {
   upAt: at('up_at'),
   updatedAt: at('updated_at').notNull().defaultNow()
 });
+
+// A connection belongs to one native conversation in the owner's chosen project.
+// The provider keeps its full transcript. The office keeps requests it sent there.
+export const projectSessions = pgTable(
+  'project_sessions',
+  {
+    id: text().primaryKey(),
+    agent: text().$type<'claude' | 'codex'>().notNull(),
+    nativeId: text().notNull(),
+    folder: text().notNull(),
+    title: text().notNull(),
+    staffId: text(),
+    /**
+     * The Odd the owner lets send work here without asking: only the one the
+     * session is shared with. Null, the default, means every assignment waits
+     * for the owner's Take over and send.
+     */
+    sendsUnasked: text(),
+    createdAt: created()
+  },
+  (t) => [
+    foreignKey({
+      name: 'project_sessions_staff_id_fkey',
+      columns: [t.staffId],
+      foreignColumns: [staff.id]
+    }),
+    foreignKey({
+      name: 'project_sessions_sends_unasked_fkey',
+      columns: [t.sendsUnasked],
+      foreignColumns: [staff.id]
+    }),
+    unique('project_sessions_agent_native_id_key').on(t.agent, t.nativeId),
+    check('project_sessions_agent_check', sql`${t.agent} IN ('claude', 'codex')`)
+  ]
+);
+
+export type ProjectRequestState =
+  | 'proposed'
+  | 'queued'
+  | 'authorized'
+  | 'sending'
+  | 'working'
+  | 'done'
+  | 'stopped'
+  | 'uncertain'
+  | 'failed';
+
+export const projectRequests = pgTable(
+  'project_requests',
+  {
+    id: text().primaryKey(),
+    sessionId: text().notNull(),
+    staffId: text(),
+    threadId: integer(),
+    prompt: text().notNull(),
+    file: text(),
+    state: text().$type<ProjectRequestState>().notNull(),
+    turn: text(),
+    answer: text(),
+    createdAt: created()
+  },
+  (t) => [
+    foreignKey({
+      name: 'project_requests_session_id_fkey',
+      columns: [t.sessionId],
+      foreignColumns: [projectSessions.id]
+    }),
+    foreignKey({
+      name: 'project_requests_staff_id_fkey',
+      columns: [t.staffId],
+      foreignColumns: [staff.id]
+    }),
+    foreignKey({
+      name: 'project_requests_thread_id_fkey',
+      columns: [t.threadId],
+      foreignColumns: [threads.id]
+    }),
+    index('project_requests_session').on(t.sessionId, t.createdAt)
+  ]
+);

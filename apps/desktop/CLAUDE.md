@@ -34,18 +34,39 @@ an update (`update.rs`).
    `/usr/local/bin`, `~/.local/bin` and `~/.claude/local` if missing. Windows has no login shell: the app's
    own PATH, plus `%USERPROFILE%\.local\bin` (Claude Code's and uv's
    installers), WinGet's `Links` folder and `C:\Program Files\Git\cmd`.
-4. Starts Node, shows the small loading window, and asks `GET /` every half
-   second for up to 90 seconds. When it answers, the main window opens the
-   office and the loading window closes. On timeout, a dialog shows the last
-   lines of the log and the app quits.
+4. Starts Node with a fresh key (`key.rs`): 32 bytes from the system's
+   random source, made anew for every start of Node and held only in the
+   shell's memory. It writes the key as the first line on Node's stdin and
+   shows the small loading window. The office answers nothing without the
+   key (`apps/office/CLAUDE.md`, "Who the office answers").
+   Then, every half second for up to 90 seconds, it asks the server on the
+   port to prove it holds that key: `GET /api/proof?nonce=<fresh 64 hex
+digits>`, answered with HMAC-SHA256 under the key of `oddboro-proof:` and
+   the nonce, which the shell checks in constant time (`ring`). Nothing else
+   counts. A server that answers without the proof is not the office this
+   shell started, since another program may have taken the port, and the
+   log says so once. Only once the proof holds does the main window open on
+   a blank page, get the key's cookie (HttpOnly, SameSite=Strict, no expiry,
+   for the office's host), wait until the webview reads it back, then open
+   the office, and the loading window close. On timeout, a dialog shows the
+   last lines of the log and the app quits, as before.
 5. Writes Node's stdout and stderr to `~/Library/Logs/Oddboro/office.log` on
    a Mac, `~/.local/state/oddboro/office.log` on Linux (`XDG_STATE_HOME`
    wins when set) and `%LOCALAPPDATA%\Oddboro\Logs\office.log` on Windows,
-   with its own lines prefixed `oddboro:`. Past 10 MB the log
-   moves to `office.log.1` when Node next starts.
+   or wherever `ODDBORO_LOG` says. Its own lines start `oddboro: ` and the
+   time in UTC: first `Oddboro <version> (<target>) opening` with the pid,
+   port, home and webview version, then the update check, `started node`,
+   `office page loaded: <url>` once the window has the page, and the words
+   of every dialog it shows (`dialog: ...`), written before the dialog waits
+   for OK. The office adds `office:` lines (each startup step's time,
+   `ready`, a new version's `first start of X after Y`) and `page:` lines
+   (the page's boot and its errors), as `apps/office/CLAUDE.md` says. Past
+   10 MB the log moves to `office.log.1` when Node next starts.
 6. Restarts Node when it dies: after 1s, 5s, then 30s, at most 5 times in 10
-   minutes. Then it shows the log tail and quits. After a restart the main
-   window reloads.
+   minutes. Then it shows the log tail and quits. Each restart gets a new
+   key and the same proof as step 4, and only then does the main window get
+   the new cookie and reload. A key the window sent after its Node died
+   opens nothing.
 7. Keeps the computer awake while Node runs. On a Mac,
    `/usr/bin/caffeinate -s -w <node pid>`, on AC power only. On Linux,
    `systemd-inhibit --what=sleep --mode=block cat`, with `cat`'s stdin a pipe
@@ -77,7 +98,12 @@ an update (`update.rs`).
    so neither it nor anything it starts opens a console window.
 10. Keeps links to the office's own origin in the window. Links to any other
     origin, `mailto:` and `tel:`, and every `target="_blank"` or
-    `window.open`, open in the default browser.
+    `window.open`, open in the default browser. The browser has no key, so a
+    new window at the office's own origin (a file attached in a chat) opens
+    there as a link the office makes for that path: the shell asks
+    `POST /api/browser-link` with the key and opens the address with the
+    code it gets, which works once within a minute. If the office makes
+    none, the shell logs it and opens nothing.
 11. Reports a panic, giving up on the office (step 4's timeout, step 6's
     limit, or Node not starting) and a broken install (no Node, no server
     code), only when it found a report address and the office's `.env`
@@ -113,6 +139,11 @@ an update (`update.rs`).
 The page gets no Tauri IPC: there are no capability files, and remote pages
 never get IPC without one.
 
+When the shell gives up, its exit code says why: 2 another office has the
+port, 3 no Node, 4 no office server, 5 a bad server URL, 6 the server would
+not start or keep running (no randomness for the key counts as not starting),
+7 no window. 0 is a quit.
+
 ## The contract with the server
 
 - Entry: `<resources>/server/apps/office/build/index.js`, run with cwd
@@ -131,13 +162,14 @@ never get IPC without one.
 | `ODDBORO_PORT`                 | the same                                                   |
 | `HOST`                         | `127.0.0.1`                                                |
 | `ORIGIN`                       | `http://127.0.0.1:<port>`                                  |
+| `BODY_SIZE_LIMIT`              | `12M` for chat imports; attachments keep their own limit   |
 | `ODDBORO_HOME`                 | `~/.oddboro` (`%USERPROFILE%\.oddboro`), unless set        |
 | `ODDBORO_CODE`                 | `<resources>/server`                                       |
-| `ODDBORO_DB_PORT`              | passed through when the shell's env sets it                |
+| `ODDBORO_DB_PORT`              | passed through when the shell's env sets it; Windows only  |
 | `PATH`                         | the login-shell PATH from step 3                           |
 | `ODDBORO_VERSION`              | the app's version, like `0.0.4`                            |
 | `BODY_SIZE_LIMIT`              | `11M`, so a 10 MB file attached in a chat gets through     |
-| `ODDBORO_UPDATE_TOKEN`         | a fresh secret per run, release builds only                |
+| `ODDBORO_UPDATES`              | `1` in release builds, which update themselves             |
 | `ODDBORO_SECRETS`              | `shell` on a Mac: the shell keeps the office's secrets     |
 | `ODDBORO_GOOGLE_CLIENT_SECRET` | the Google sign-in client's secret, when the build had one |
 | `ODDBORO_GITHUB_CLIENT_SECRET` | the GitHub sign-in app's secret, when the build had one    |
@@ -170,7 +202,14 @@ never get IPC without one.
   processes never do.
 - Node's stdin is a pipe the shell holds open. It closes when the shell dies
   by any means, Force Quit included, so a force-quit shell never leaves Node
-  running on the port.
+  running on the port. Its first line is always `oddboro:key <64 hex digits>`,
+  this start's key, written before any Keychain answer. No secret goes to Node
+  in its environment or on its command line: any program running as the
+  owner can read those (`ps -E`). A line on Node's stdout with
+  `oddboro:key` in it goes nowhere, never the log.
+- The shell's own requests to Node (`/api/update`, `/api/browser-link`) go
+  through `server::call`, with the current start's key in the
+  `X-Oddboro-Key` header.
 - `ODDBORO_SERVER_URL`, when set, skips Node and opens that URL. Use it to run
   the shell against `vite dev`.
 
@@ -190,8 +229,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
    `oddboro:update-check` (Check now in Setup). It downloads a new version in
    the background and checks its signature against the public key in
    `tauri.conf.json`, then `POST`s `{ version, notes }` to
-   `http://127.0.0.1:<port>/api/update` with the header
-   `X-Oddboro-Update-Token`. A check that finds nothing posts
+   `http://127.0.0.1:<port>/api/update` with the app's key in the header
+   `X-Oddboro-Key`. A check that finds nothing posts
    `{ checked: true }`; one that fails posts `{ failed }`.
 4. Then it asks `GET /api/update` every 30 seconds. When the answer has
    `install: true` (the server decides, see `apps/office/CLAUDE.md`), it stops
@@ -226,6 +265,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   sending.
 - `src-tauri/src/server.rs`. Starting, watching, restarting and stopping Node.
 - `src-tauri/src/env.rs`. Port, home, log path and the login-shell PATH.
+- `src-tauri/src/key.rs`. The app's key: a new one per start of Node, the
+  line Node reads it from, the window's cookie, the header and the proof.
 - `src-tauri/src/secrets.rs`. The office's secrets in the Mac's Keychain, and
   the line protocol it asks with.
 - `src-tauri/src/update.rs`. Checking, downloading and installing updates,
@@ -252,8 +293,11 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   `~/.claude`.
 - `scripts/stage.ts`. Builds the office and the sprites, then lays out
   `stage/`: the office build, which bundles every third-party package the
-  office itself runs but Sentry's, the production `node_modules` that Sentry,
-  the ledger, sprites and world load, at the versions installed in the repo, and those three as plain
+  office itself runs except Sentry, the production `node_modules` that Sentry,
+  the ledger, sprites and world load, at the versions installed in the repo
+  (optional ones too, so the ledger's terminal library, `node-pty`, ships, and
+  a stage that cannot install it fails; it has no Linux prebuild, so a Linux
+  stage compiles it with Python, make and a C++ compiler), and those three as plain
   JavaScript (types stripped, `.ts` imports rewritten) in
   `node_modules/@oddboro/`, with their files beside them. Packages' test
   folders (`__screenshots__`, `__tests__`) and every source map stay out, and a staged path
@@ -261,16 +305,30 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   builder stops at 260, and GitHub's runner puts the stage 60 deep. Sentry's
   build tools stay out too: peer packages (Vite and SvelteKit, with Rolldown
   and Lightning CSS), and `BUILD_ONLY` (Sentry's bundler plugins, the oxc
-  parser and the `sentry` CLI). Native code fails the stage unless `NATIVE`
-  names it (the keyring), and on a Mac unless it carries a Developer ID
-  signature with a secure timestamp, since the release signs only the shell
-  and Node and Apple's notary refuses anything else unsigned. It fetches the Node
+  parser and the `sentry` CLI). The stage keeps only this machine's terminal library and helpers.
+  The Mac release signs and verifies them before bundling the app. The keyring
+  must carry its publisher's timestamped Developer ID signature on a Mac.
+  Any other native code fails the stage. It fails if the office lists a
+  third-party package under `dependencies` that `UNBUNDLED` does not name
+  (Sentry's two): its build bundles the rest, so they belong in
+  `devDependencies` (0.0.5 shipped 16,000 files of them, #13). It fails if
+  any page chunk is over 500 kB. It fetches the Node
   binary for this machine's Node version, system and chip, and checks it
   against nodejs.org's sums (Windows's comes as a zip, unpacked with
-  Windows's own `tar`). `--smoke` starts the stage on port 4590 with a
-  throwaway home and a report address on port 9 (so Sentry starts, with no yes), waits for it to answer, and checks it quits when asked
-  (SIGTERM, or a closed stdin on Windows):
-  `node apps/desktop/scripts/stage.ts --smoke`.
+  Windows's own `tar`). `scripts/smoke.ts --stage` then checks the stage.
+- `scripts/smoke.ts` and `scripts/driver.ts`. The smoke test, and what
+  drives the installed app for it. See "Smoke tests".
+- `installer/`. The window the Mac `.dmg` opens to: the app and
+  Applications on Oddboro's grass lot, an arrow between them.
+  `lot.json` is the lot (a room stamp of grass and park props), `arrow.px`
+  the arrow. `scripts/installer.ts` draws them into `background.tiff` (1x
+  and 2x) and has Finder lay out a scratch disk named Oddboro, keeping its
+  layout as `DS_Store`. `release.ts` copies both into every `.dmg`. Only
+  Finder writes a layout Finder trusts, and it finds the picture by its path
+  on a disk named Oddboro, so the volume name must stay. After changing
+  `lot.json` or `arrow.px`, run `npm run installer -w @oddboro/desktop` on a
+  Mac and commit both files. `-- --look` writes only the picture, with the
+  icons marked, to `out/installer-look.png`.
 - `stage/` must hold no folder symlinks. The bundler walks it without
   following them, so a linked folder never reaches the app.
 - `stage/`, `src-tauri/binaries/`, `src-tauri/target/` and `src-tauri/gen/`
@@ -291,7 +349,7 @@ a signed `tauri build --bundles app` run beside the owner's office on 4510.
 that changes what goes into the app: `apps/desktop`, `apps/office`,
 `packages`, `.nvmrc` or the workflow itself, but not a `CLAUDE.md`. A merge
 that touches only the site or the docs builds nothing. Neither does a
-lockfile-only update, so run it by hand for one that should ship. Five jobs:
+lockfile-only update, so run it by hand for one that should ship. Six jobs:
 
 1. `version` picks the next patch version from the highest PUBLISHED release
    tag (none gives `0.0.1`), and writes GitHub's generated notes. A draft
@@ -316,8 +374,23 @@ lockfile-only update, so run it by hand for one that should ship. Five jobs:
    and a `latest.json` for `windows-x86_64` or `windows-aarch64`. Only the
    updater key and the Google client's secret are needed. The installer is not code-signed, so Windows
    SmartScreen warns before it runs.
-5. `draft` merges the five `latest.json` files into one, deletes any draft
-   of the same version, and creates a DRAFT release `vX.Y.Z` on the merge
+   Before it signs, `release.ts` checks the build's own version: the Windows
+   app and installer's file version, and the Mac app's `Info.plist`.
+5. `smoke` installs each build and runs it on its own kind of machine, plus
+   the x86_64 AppImage on Ubuntu 24.04 (see "Smoke tests"). No secrets. One
+   failure, and no draft.
+6. `draft` tests and runs `scripts/check-release.ts` on what the five builds
+   uploaded, and creates nothing unless every build passes: exactly the files
+   this version should have, each site copy byte for byte the versioned file,
+   each `latest.json` naming this version, its own machine and this release's
+   file, each updater signature verified against the app's public key over
+   the file's own bytes and naming its file and version, and each served
+   file at least about half its 0.0.8 size, so none is cut off or empty
+   (`smallest` in `BUILDS`; bloat is `stage.ts`'s to catch). 0.0.6 shipped
+   0.0.5's Windows installer (#40); this is the check that stops that. It
+   writes the merged `latest.json` and the list of files to upload, so the
+   draft never takes a file it did not check. Then it deletes any draft of
+   the same version, and creates a DRAFT release `vX.Y.Z` on the merge
    commit, with the notes and these assets:
    `Oddboro.dmg`, `Oddboro-x86_64.AppImage`, `Oddboro-aarch64.AppImage`,
    `Oddboro-x64-setup.exe` and `Oddboro-arm64-setup.exe` (the site's
@@ -325,7 +398,7 @@ lockfile-only update, so run it by hand for one that should ship. Five jobs:
    so every release carries them), the versioned `.dmg`, the Mac updater
    archive and its `.sig`, each versioned AppImage and installer and its
    `.sig`, and `latest.json`.
-6. The owner reads the draft and presses Publish. Installed apps pick it up at
+7. The owner reads the draft and presses Publish. Installed apps pick it up at
    their next check, and the next build takes the next version. Until then,
    each merge replaces the draft, so it always holds the newest `main`.
 
@@ -339,6 +412,64 @@ Sentry. A `--test` build uploads nothing.
 
 The repo must be public for installed apps to reach the release. While it is
 private, `latest.json` answers 404 to them.
+
+### Smoke tests
+
+`scripts/smoke.ts` checks a real build the way an owner meets it, one row of
+a table per step; a failed required row fails the run. It runs the app on
+port 4590 (database port 54590 on Windows), a throwaway home and its own log
+(`ODDBORO_LOG`), and points `ODDBORO_UPDATE_URL` at an address that refuses,
+so the build never updates itself away. The port, home and log are its own;
+the secrets are not, so the office runs with no secret store
+(`ODDBORO_SECRETS=office`), always with `--stage` and off CI for the app, and
+never reads the owner's Keychain or keyring.
+The Mac app keeps its secrets through its shell, in the same Keychain the
+owner's Oddboro uses, so off CI `--installed` and `--artifact` on a Mac
+refuse to run without `--my-keychain`. The rows: it installs; the version
+matches (the uninstall entry, `oddboro.exe` and the Start menu shortcut on
+Windows; `Info.plist`, `codesign`, `spctl` and the stapled ticket on a Mac);
+it starts with no dialog; the real window shows the welcome and Next moves it
+to the name step; a request without the app's key gets 403, a read too, while
+the page's built files under `/_app/` load; the log has the window loading
+the page and the page booting, with no page errors; it quits with Node and
+both ports gone; it starts twice more; on Windows it uninstalls.
+
+The real app's shell keeps its key to itself, so the rows that need the
+office's answers run where a key can come along. `--stage` starts the staged
+server itself and writes a fresh key on its stdin, as the shell does, then
+checks with it: a write with the key but no `Origin` gets 403 and the page's
+own shape 404 (#25), the setup checks pass, it onboards, and it starts again
+with its data. On Linux the app's run asks the same from inside the real
+page, which carries the window's key: the setup checks, with a stand-in
+Claude Code found where an install puts it (PR #18, CI only), and the
+onboarding. On a Mac and Windows the setup checks row reads the log: in the
+app the office writes `office: setup <id> ok` or `fail` for each check when
+the window's welcome asks for them, the id and the result alone. That row is
+required there too, Claude Code included. The onboarding row says it was not
+checked, and the restarts do not check the data stayed.
+
+`scripts/driver.ts` drives it, each system its own way: the NSIS installer
+with `/S` and UI Automation on Windows (WebView2 on GitHub's runners drops
+DevTools' argument), the `.dmg` copied to a resolved folder and
+Accessibility through System Events on a Mac (a path through a symlink stops
+the app), the AppImage under Xvfb with a GNOME keyring and WebDriver through
+`tauri-driver` on Linux. A dialog fails the run with its words. A run stops
+only what it started: the processes it spawned, the shells and Nodes its own
+log names, and everything under them. Another Oddboro it finds fails the row
+with its pid, and the run leaves it running.
+
+```sh
+node apps/desktop/scripts/smoke.ts --stage                       # the staged server, after stage.ts, with Sentry on (port 9 takes nothing)
+node apps/desktop/scripts/smoke.ts --installed                    # the app on this computer, on its own port, home and log
+node apps/desktop/scripts/smoke.ts --from <folder> --version 0.0.9   # a build job's output, as release.yml runs it
+```
+
+`--artifact <file>` takes one installer, AppImage or `.dmg`. On Windows it
+replaces and then uninstalls the Oddboro installed for this user, so off a
+runner it asks for `--replace-installed`. Quit Oddboro first: Linux and
+Windows keep to one at a time. Results go to `--out`: `results.json`,
+`summary.md`, `office.log`, `shell.log` and a screenshot. The run's home
+goes when it ends, pass or fail; `--keep` keeps it for a look.
 
 ### Secrets
 
@@ -432,7 +563,7 @@ dialogs never show: without a parent window they go through
 office:
 
 ```sh
-ODDBORO_PORT=4510 ODDBORO_DB_PORT=54510 ODDBORO_HOME=/tmp/oddboro-test-home \
+ODDBORO_PORT=4510 ODDBORO_HOME=/tmp/oddboro-test-home \
   src-tauri/target/debug/oddboro
 ```
 
@@ -453,7 +584,8 @@ Each line says what to do when its trigger comes.
 - `tauri` 2.12.5, `tauri-build` 2.7.4
 - `tauri-plugin-autostart` 2.7.0, `tauri-plugin-dialog` 2.8.4
 - `tauri-plugin-updater` 2.14.1, `serde_json` 1.0.154
-- `getrandom` 0.3.4, for the update token
+- `getrandom` 0.3.4, for the app's key and the proof's nonce
+- `ring` 0.17.14, the one rustls builds, for the proof's HMAC-SHA256
 - `sentry` 0.49.5, and `rustls` 0.23.46 with `ring`, for error reports
 - `reqwest` 0.13.5, the client sentry sends with, named so a report can
   carry the sign-in's token

@@ -1,6 +1,6 @@
 // The hand_off tool as a run sees it: the office tool server (src/mcp.ts) in a
 // process of its own, as the office starts one for each run, over the office's
-// own database (local-db.ts) in a throwaway folder on a free port. It checks
+// own database (local-db.ts) in a throwaway folder. It checks
 // what only the tool server decides: which runs are offered hand_off, that a
 // hand-off or a goal's plan carries the run's key to its thread, that a
 // hand-off that hands nothing on comes back as an error and one held for the
@@ -38,6 +38,7 @@ const {
   connectors,
   goals,
   grants,
+  owner,
   staff,
   tasks: tasksTable,
   threads
@@ -49,6 +50,7 @@ const { MAIL_FILES_MAX } = await import('../src/mail-attachments.ts');
 const { isOffered, OFFICE_TOOLS, RIDES_WITH, STARTER_TOOLS } = await import('../src/tools.ts');
 const { MANAGER_ROLE } = await import('../src/managers.ts');
 const { HAND_OFF_LIMIT, LEADS_NONE, threadPart } = await import('../src/threads.ts');
+const { connectProject, shareProject } = await import('../src/project-sessions.ts');
 afterEach(() => oneThreadPerGoal(sql, MANAGER_ROLE));
 
 const odd = (id: string, name: string) => ({
@@ -511,10 +513,14 @@ test("a goal hire with a job opens its own job's work as a thread of its own", a
   assert.equal(led.goalId, null, "its own job's work opens a thread of its own");
 });
 
-test('a lead off its threads must say which thread an ask is for, and one it does not lead is refused', async () => {
+test('a lead off its threads may say which thread an ask is for, left out reads as none, and one it does not lead is refused', async () => {
   const c = await toolServer('mo', { ...chat, RUN_KEY: 'k-mo' });
   const tool = (await c.listTools()).tools.find((t) => t.name === 'raise_ask');
-  assert.ok(tool?.inputSchema.required?.includes('work'), 'it has to choose, null or a number');
+  assert.ok(tool && 'work' in (tool.inputSchema.properties ?? {}), 'a lead is offered work');
+  assert.ok(
+    !tool.inputSchema.required?.includes('work'),
+    'work may be left out, and then the ask is for none of it'
+  );
   const [lenas] = await db.select().from(threads).where(eq(threads.hubId, 'lead'));
   const wrong = await c.callTool({ name: 'raise_ask', arguments: { ...ask, work: lenas.id } });
   assert.equal(wrong.isError, true);
@@ -550,7 +556,7 @@ test('a lead naming a thread it leads is never refused, even when it also serves
 });
 
 // A chat resumed after a parameter was renamed still uses the old name. Every
-// tool refuses a key it does not take (mcp.ts `tool`), and names the ones it does.
+// tool refuses a key it does not take (mcp-run.ts `tool`), and names the ones it does.
 /** A finished piece of work Lena leads, to continue. */
 const finished = async (title: string) =>
   (
@@ -667,8 +673,16 @@ test('every office tool refuses a key it does not take, and says which keys it d
   // tell_lead, and a run on that work offers resume_at.
   await db.insert(staff).values({ ...odd('all', 'Ada'), tools: OFFICE_TOOLS.map((t) => t.id) });
   await db.insert(staffGoals).values({ staffId: 'all', goalId: fair.id, part: 'Everything' });
-  // Gmail at any level offers propose_reply.
-  await db.insert(grants).values({ staffId: 'all', connectorId: 'gmail', level: 'read' });
+  // Gmail at any level offers propose_reply, and at write ask_for_standing_yes.
+  await db.insert(grants).values({ staffId: 'all', connectorId: 'gmail', level: 'act' });
+  // A native conversation shared with Ada offers the project tools, in Advanced
+  // mode. The owner row keeps the name every other test here reads.
+  await db
+    .insert(owner)
+    .values({ name: 'the owner', advancedAt: new Date() })
+    .onConflictDoUpdate({ target: owner.id, set: { advancedAt: new Date() } });
+  const project = await connectProject('claude', 'every-tool-test', '/project', 'Tests');
+  await shareProject(project.id, 'all');
   const reached = new Set<string>();
   const runs: Record<string, string>[] = [chat, { THREAD_ID: String(sale.id) }];
   for (const env of runs) {
@@ -720,8 +734,8 @@ test('every tool the server registers is a listed office tool or rides with one'
 for (const [id, holds] of Object.entries(HOLDERS))
   for (const run of ['chat', 'thread'] as const)
     test(`an Odd holding ${holds.length} of the office tools (${id}) in a ${run} has exactly the always tools, the ones it holds and the ones that ride with them, as each row's conditions allow`, async () => {
-      // None of these Odds is the Office Manager, and only Tot holds Gmail.
-      const toolRun = { gmail: id === 'tot', chat: run === 'chat', manager: false };
+      // None of these Odds is the Office Manager, only Tot holds Gmail, and none at Read and write.
+      const toolRun = { gmail: id === 'tot', write: false, chat: run === 'chat', manager: false };
       const offered = new Set<string>(
         OFFICE_TOOLS.filter((t) => isOffered(holds, t.id, toolRun)).map((t) => t.id)
       );
@@ -736,13 +750,14 @@ for (const [id, holds] of Object.entries(HOLDERS))
 // The test above works out what a run gets with `isOffered`, so a condition
 // dropped from a row, or from `isOffered`, changes what it expects too. These
 // hold the rows themselves, and what `isOffered` gives for each condition.
-test('only leave_office, withdraw, tell_lead, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never offered, even to a chat holding it', () => {
+test('only leave_office, withdraw, tell_lead, draft_bug_report, remove_odd and bring_back_odd wait for a chat, only leave_office is kept from the manager, and only see_office shapes the prompt and is never offered, even to a chat holding it', () => {
   const where = (field: 'inChat' | 'notToManager' | 'prompt') =>
     OFFICE_TOOLS.filter((t) => t[field]).map((t) => t.id);
   assert.deepEqual(where('inChat'), [
     'leave_office',
     'withdraw',
     'tell_lead',
+    'draft_bug_report',
     'remove_odd',
     'bring_back_odd'
   ]);
@@ -766,6 +781,8 @@ test('isOffered gives an always tool to every run its row allows, and a held too
   assert.equal(isOffered([], 'tell_lead', chatRun), true);
   assert.equal(isOffered([], 'propose_reply', chatRun), false);
   assert.equal(isOffered([], 'propose_reply', { ...job, gmail: true }), true);
+  assert.equal(isOffered([], 'ask_for_standing_yes', job), false);
+  assert.equal(isOffered([], 'ask_for_standing_yes', { ...job, write: true }), true);
   assert.equal(isOffered([], 'search_ledger', chatRun), false);
   assert.equal(isOffered(['search_ledger'], 'search_ledger', job), true);
 });

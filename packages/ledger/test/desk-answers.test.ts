@@ -17,7 +17,9 @@ import {
   followUps,
   goals,
   grants,
+  jobs,
   ledger,
+  owner,
   staff,
   staffGoals,
   tasks,
@@ -29,6 +31,9 @@ import { db } from './pglite.ts';
 import { TEMP_IN_APPDATA } from './store-states.ts';
 
 process.env.OLLAMA_URL = 'http://127.0.0.1:9';
+// The owner passed the Act check (act-check.test.ts), so a level ask's yes to
+// Act goes through. No name, so the owner is still "the owner".
+await db.insert(owner).values({ name: '', actCheckAt: new Date() });
 // A home of the test's own, so a folder ask's folder can be given.
 const HOME = realpathSync(mkdtempSync(join(tmpdir(), 'desk-answers-')));
 process.env.HOME = HOME;
@@ -88,12 +93,20 @@ async function aGoal(title: string): Promise<number> {
   return g.id;
 }
 
-/** Each grant and each Odd serving a goal, keyed by the row, as what it shows an Odd got. */
+/**
+ * Each grant, each tool an Odd uses without asking, and each Odd serving a
+ * goal, keyed by the row, as what it shows an Odd got.
+ */
 async function held(): Promise<Map<string, string>> {
   const granted = await db.select().from(grants);
   const served = await db.select().from(staffGoals);
   return new Map([
     ...granted.map((g) => [`${g.staffId} ${g.connectorId}`, `grant:${g.staffId}`] as const),
+    ...granted.flatMap((g) =>
+      g.standing.map(
+        (t) => [`${g.staffId} ${g.connectorId} ${t}`, `standing:${g.staffId}`] as const
+      )
+    ),
     ...served.map((s) => [`${s.staffId} goal ${s.goalId}`, `serves:${s.staffId}`] as const)
   ]);
 }
@@ -104,7 +117,8 @@ async function markNow(): Promise<Mark> {
 }
 /**
  * What reached an Odd since `mark`: each new follow-up as `<kind>:<odd>`, each
- * new grant as `grant:<odd>`, and each Odd newly serving a goal as `serves:<odd>`.
+ * new grant as `grant:<odd>`, each tool it newly uses without asking as
+ * `standing:<odd>`, and each Odd newly serving a goal as `serves:<odd>`.
  */
 async function reached(mark: Mark): Promise<string[]> {
   const ups = await db.select().from(followUps);
@@ -202,6 +216,18 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
     deny: NO,
     iterate: REWORK
   },
+  // The level went to Ada with the yes, so the work that waited on it starts.
+  level: {
+    approve: { cell: ['grant_setting'], onThread: ['carry_out:ada'], onNone: ['carry_out:ada'] },
+    deny: NO,
+    iterate: REWORK
+  },
+  // The office tools went to Ada with the yes, so the work that waited on them starts.
+  office_tool: {
+    approve: { cell: ['grant_setting'], onThread: ['carry_out:ada'], onNone: ['carry_out:ada'] },
+    deny: NO,
+    iterate: REWORK
+  },
   // The office made the call with the yes, so the Odd carries on with what it returned.
   call: {
     approve: {
@@ -252,6 +278,22 @@ const PINNED: Record<AskKind, Record<Decision, Pin>> = {
       cell: ['answer_back', OFF_A_THREAD, 'odd_returns'],
       onThread: ['resume:ada'],
       onNone: []
+    },
+    deny: NO,
+    iterate: REFUSED
+  },
+  // The office raises it on no thread, and a yes owes the job its runs: no Odd hears of it.
+  catch_up: {
+    approve: { cell: ['catch_up'], onThread: [] },
+    deny: { cell: [], onThread: [] },
+    iterate: REFUSED
+  },
+  // The yes puts the tool on Ada's grant, and the answer goes back as any ask's does.
+  standing: {
+    approve: {
+      cell: ['give_standing', 'answer_back'],
+      onThread: ['resume:ada', 'standing:ada'],
+      onNone: ['standing:ada']
     },
     deny: NO,
     iterate: REFUSED
@@ -368,6 +410,34 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
     });
     return { id: ask.id };
   },
+  // A yes raises Ada, so each ask starts with her at Draft.
+  level: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    await db.update(staff).set({ permission: 'draft' }).where(eq(staff.id, 'ada'));
+    const { ask } = await raiseAsk('ada', {
+      kind: 'level',
+      title: 'Raise Ada from Draft to Act',
+      why: 'w',
+      ifApproved: 'i',
+      level: 'act',
+      threadId
+    });
+    return { id: ask.id };
+  },
+  // A yes turns the tool on, so each ask starts with Ada holding none.
+  office_tool: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    await db.update(staff).set({ tools: [] }).where(eq(staff.id, 'ada'));
+    const { ask } = await raiseAsk('ada', {
+      kind: 'office_tool',
+      title: 'Turn on Office report',
+      why: 'w',
+      ifApproved: 'i',
+      officeTools: ['office_report'],
+      threadId
+    });
+    return { id: ask.id };
+  },
   reply: async (on) => {
     const threadId = on ? await thread() : undefined;
     const { ask } = await raiseAsk('ada', {
@@ -454,6 +524,52 @@ const raise: Record<AskKind, (onThread: boolean) => Promise<Raised>> = {
       threadId
     });
     return { id: ask.id };
+  },
+  // Ada holds Gmail at write, and asks to use one tool of it without asking:
+  // a tool of its own, since the office refuses a second ask that covers one.
+  standing: async (on) => {
+    const threadId = on ? await thread() : undefined;
+    await db
+      .insert(grants)
+      .values({ staffId: 'ada', connectorId: 'gmail', level: 'act' })
+      .onConflictDoUpdate({
+        target: [grants.staffId, grants.connectorId],
+        set: { level: 'act' }
+      });
+    const { ask } = await raiseAsk('ada', {
+      kind: 'standing',
+      title: 'Use a tool without asking',
+      why: 'w',
+      ifApproved: 'i',
+      standing: { connector: 'gmail', tools: [`stage_${++raised}`] },
+      threadId
+    });
+    return { id: ask.id };
+  },
+  // The office's own ask, as askToCatchUp raises it, for a job of Ada's.
+  catch_up: async () => {
+    const [j] = await db
+      .insert(jobs)
+      .values({
+        staffId: 'ada',
+        name: 'Count the cakes',
+        instructions: 'Count them.',
+        schedule: { every: 'day', at: '09:00' },
+        missed: 'record'
+      })
+      .returning({ id: jobs.id });
+    const [a] = await db
+      .insert(asks)
+      .values({
+        staffId: 'ada',
+        kind: 'catch_up',
+        title: 'Fill 11 missed periods?',
+        why: 'w',
+        ifApproved: 'i',
+        catchUp: { jobId: j.id, times: ['2026-11-01T14:00:00.000Z'] }
+      })
+      .returning({ id: asks.id });
+    return { id: a.id };
   }
 };
 /** The owner's decision, through the function the office answers each with. */
@@ -531,11 +647,14 @@ const SILENT_OFF_A_THREAD: readonly (readonly [AskKind, Decision])[] = [
   ['filter', 'deny'],
   ['folder', 'deny'],
   ['switch', 'deny'],
+  ['level', 'deny'],
+  ['office_tool', 'deny'],
   ['call', 'deny'],
   ['remove', 'approve'],
   ['remove', 'deny'],
   ['bring_back', 'approve'],
-  ['bring_back', 'deny']
+  ['bring_back', 'deny'],
+  ['standing', 'deny']
 ];
 const namesNew1715 = (kind: AskKind, decision: Decision) =>
   effectsOf(cellOf(kind, decision)).some((e) => typeof e === 'object' && e.none === 'NEW-1715');

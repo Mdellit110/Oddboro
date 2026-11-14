@@ -30,7 +30,8 @@ an app; `ledger` imports `world` and `sprites`, and `world` imports `sprites`.
 - `apps/site`. The public site, static. It reads `sprites` and `world` only.
 - `scripts`. The lint guards: plain Node, no dependencies.
 - `.github/workflows`. `ci.yml` runs the checks on every pull request, on a
-  Mac, Linux and Windows; `release.yml` builds the app; `codeql.yml` scans.
+  Mac, Linux and Windows, unless it changes only the site or the docs;
+  `site.yml` checks those; `release.yml` builds the app; `codeql.yml` scans.
 
 ## One function per job
 
@@ -38,7 +39,7 @@ Before writing a helper, use the one that already does the job.
 
 | Job                                                     | Use                                                   | In                                                     |
 | ------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------ |
-| Write a ledger row (a decision, a hire, a run)          | `record()`                                            | `packages/ledger/src/office.ts`                        |
+| Write a ledger row (a decision, a hire, a run)          | `record()`                                            | `packages/ledger/src/office-ledger.ts`                 |
 | Find the office's folders, code and ports               | `home()`, `CODE`, `OFFICE_PORT`, `DATABASE_PORT`      | `packages/ledger/src/home.ts`                          |
 | Tell the office's time                                  | `zone()`                                              | `packages/ledger/src/time.ts`                          |
 | Read or write `.env`                                    | `readEnv()`, `writeEnv()`                             | `packages/ledger/src/env.ts`                           |
@@ -49,8 +50,8 @@ Before writing a helper, use the one that already does the job.
 | Know what an Odd's run reaches                          | `capabilities()`, `ownTools()`                        | `packages/ledger/src/capabilities.ts`                  |
 | Say a level or where the owner sets access              | `LEVELS`, `settingsTab()`, `levelRoute()`             | `packages/ledger/src/access-words.ts`                  |
 | Know whether an Odd holds an office tool                | `hasTool()`                                           | `packages/ledger/src/tools.ts`                         |
-| Register an office tool                                 | `tool()`                                              | `packages/ledger/src/mcp.ts`                           |
-| Check a folder before an Odd gets it                    | `checkFolder()`                                       | `packages/ledger/src/office.ts`                        |
+| Register an office tool                                 | `tool()`                                              | `packages/ledger/src/mcp-run.ts`                       |
+| Check a folder before an Odd gets it                    | `checkFolder()`                                       | `packages/ledger/src/office-folders.ts`                |
 | Put a follow-up on a thread                             | `addFollowUp()`, which runs `settleThread()`          | `packages/ledger/src/threads.ts`                       |
 | Tell the page something changed                         | a table's trigger, or `emit()`                        | `apps/office/src/lib/server/events.ts`                 |
 | Tell every run how the office works                     | `house()`                                             | `apps/office/src/lib/server/house.ts`                  |
@@ -82,7 +83,12 @@ change.
   `packages/ledger/src/desk-answers.ts`, which says what each answer does. A
   kind the owner answers on its own card (a reply, a filter, a folder, a call)
   gives `approve` a `by`, the line a bare yes gets, and its route approves it;
-  a plain yes (a `switch` ask) names its effects directly.
+  a plain yes (a `switch`, `level` or `office_tool` ask) names its effects
+  directly. Check-types then fails at `TWINS`, the repeat guard's switch in
+  `raiseAsk` and `grantSetting` in `office.ts`, `carriedLinesOf` and
+  `carryOutBrief` in `apps/office/src/lib/server/follow-up-brief.ts`,
+  `YES_SAID` in `apps/office/src/lib/ui/yes-said.ts`, and `ASK_ROWS` in the
+  office's `named-tools.test.ts`.
 - **A follow-up kind.** Start at `FOLLOW_UP_KINDS` in `schema.ts`. Check-types
   fails at every `Record<FollowUpKind, ...>`, `AT_DRAFT` and
   `SERVES_NO_THREAD` in `hand-offs.ts` among them, and at the switch in
@@ -112,7 +118,7 @@ change.
   `apps/office/src/lib/server/sandbox-paths.ts` declares that system, and
   `launch-contract.test.ts` launches the tool there. `scripts/check-platform.ts`
   fails a `process.platform` read anywhere but `currentPlatform()`.
-- **A secret store.** Start at `STORE_MARKS` in `packages/ledger/src/office.ts`;
+- **A secret store.** Start at `STORE_MARKS` in `packages/ledger/src/office-folders.ts`;
   `SECRET_STORES` is its keys, so one list says what a run and a given folder
   stay out of. Each entry says how the store is found anywhere but
   the top of the home, where its name is enough.
@@ -123,13 +129,14 @@ change.
   a run unlisted. No check: a run that lacks a name it needs fails only when
   it runs.
 - **An office tool.** Start at its row in `OFFICE_TOOLS` in
-  `packages/ledger/src/tools.ts`, and register it in `mcp.ts` behind
+  `packages/ledger/src/tools.ts`, and register it in its `mcp-*.ts` file behind
   `has()`. A tool registered only alongside another, never granted alone
   (such as `my_pokes` with `poke_owner`), goes in `RIDES_WITH` instead,
   under the tool it rides with. When it is offered is a field on its row,
-  never a rule in `mcp.ts`, which registers such a tool behind `offered()`:
-  `withGmail` only while the Odd holds Gmail, `inChat` only in a chat on the
-  owner's words, `notToManager` never to the Office Manager.
+  never a rule in its `mcp-*.ts` file, which registers such a tool behind `offered()`:
+  `withGmail` only while the Odd holds Gmail, `withWrite` only while it holds
+  a service at Read and write, `inChat` only in a chat on the owner's words,
+  `notToManager` never to the Office Manager.
   Whether the owner grants it is the `office_tools` row of `OWNER_GRANTS`.
   `hand-off-tool.test.ts` fails a registered tool that is neither listed nor
   rides with one, check-types fails an id `OFFICE_TOOLS` lacks in
@@ -165,13 +172,14 @@ change.
   tool's run.
 - **A kind of run.** Start at `UsageKind` in `schema.ts`. Check-types fails
   at `RUN_FAILURE` in `apps/office/src/lib/server/run-failures.ts`, and
-  `failed-run.test.ts` holds where each failure lands. No check: the run
-  registers it must join (`slots`, `chatting` and `inProgress` in the office's
-  `staff.ts`, `runsGoing` in `office.ts`).
+  `failed-run.test.ts` holds where each failure lands. Live execution uses
+  `runsGoing` in `run-registry.ts`, with a stop handle on each entry.
+  `run-state.test.ts` checks admission and removal; `chat-steer.test.ts`
+  checks that Stop and Send now select only the named attempt.
 - **A room kind.** Start at `ROOM_KINDS` in `packages/world/src/generate.ts`.
   Check-types fails at `KIND_ABOUT` and `ROOM_ID`. No check: its furnishing
   in `recipe()`, and the rooms an Odd names in a hire proposal (`hireFields`
-  in `mcp.ts`), which list Main Street's by hand.
+  in `mcp-run.ts`), which list Main Street's by hand.
 - **A migration.** After a schema change, `npm run db:generate` writes it; a
   trigger, function or row goes in one by hand. `migrations.test.ts` fails a
   journal entry out of order or a file with no entry. No check runs it

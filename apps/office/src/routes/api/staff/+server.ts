@@ -12,6 +12,8 @@
 import { error, json } from '@sveltejs/kit';
 import {
   account as accountRow,
+  ACT_CHECK_NEEDED,
+  actCheckPassed,
   addJob,
   AGENT_NAMES,
   agentsOn,
@@ -21,6 +23,7 @@ import {
   EFFORT_ORDER,
   effortsOf,
   hire,
+  MISSED_RUNS,
   MODELS,
   OFFICE_ACCOUNT,
   officeAgent,
@@ -46,7 +49,13 @@ type Body = Partial<Record<'name' | 'role' | 'room' | 'permission' | 'remit' | '
   look?: unknown;
   portraitPx?: unknown;
   newParts?: unknown;
-  job?: { name?: unknown; instructions?: unknown; schedule?: unknown; report?: unknown };
+  job?: {
+    name?: unknown;
+    instructions?: unknown;
+    schedule?: unknown;
+    report?: unknown;
+    missed?: unknown;
+  };
 };
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -68,6 +77,8 @@ export const POST: RequestHandler = async ({ request }) => {
   if (problems.length) error(400, problems.join('; '));
   if (!rooms.has(room)) error(400, 'Pick a room on the floor');
   if (!permission) error(400, 'Pick read, draft or act');
+  // A hire at Act waits for the owner's Act check (`hire` refuses it too).
+  if (permission === 'act' && !(await actCheckPassed())) error(409, ACT_CHECK_NEEDED);
   // Left out, the hire runs on the column's default, Claude Code.
   const agent = b.agent === undefined ? undefined : offeredAgent(b.agent, currentPlatform());
   if (b.agent !== undefined && !agent)
@@ -126,7 +137,8 @@ export const POST: RequestHandler = async ({ request }) => {
       name: jobName,
       instructions: jobSteps,
       schedule: jobSchedule,
-      report: b.job.report === true
+      report: b.job.report === true,
+      missed: MISSED_RUNS.find((m) => m === b.job?.missed)
     });
   // The hire is made, so what fails after this is logged, not a failed hire. A
   // goal gone since leaves the proposal open on the desk: the hire does not serve it.

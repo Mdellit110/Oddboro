@@ -104,8 +104,12 @@
     </div>
     {#key chatWith.id}
       <div class="min-h-0 flex-1">
+        <!-- A plan's hires wait on the Desk tab as Open cards: the phone has no hire window. -->
         <ChatPanel
           profile={chatWith}
+          {desk}
+          {staff}
+          onplan={nothing}
           {version}
           onstart={nothing}
           onend={onsaid}

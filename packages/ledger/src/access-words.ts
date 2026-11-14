@@ -4,6 +4,13 @@
 // level and the switches, and of the switches. The page imports this, so it
 // imports nothing.
 
+/**
+ * What the owner agrees to when they turn on Advanced mode in Setup. The
+ * ledger keeps these words with their yes (`setAdvancedMode`).
+ */
+export const ADVANCED_CONSENT =
+  'Advanced mode lets the office open Claude Code and Codex in your own projects. Work sent there runs with your permissions on this computer, outside Oddboro’s limits, and can change files, run commands or reach the internet as your coding tool allows.';
+
 /** The owner's permission levels, lowest first. */
 export const LEVELS = ['read', 'draft', 'act'] as const;
 export type Level = (typeof LEVELS)[number];
@@ -16,8 +23,19 @@ export const LEVEL_LABEL: Record<Level, string> = {
   draft: 'Drafts for your yes',
   act: 'Acts on its own'
 };
-/** What the Odd reads for each level. */
+/**
+ * Each level's name. The Odd reads it, and so does the owner where an ask
+ * names a level: a level ask's title, card and button.
+ */
 export const LEVEL_NAME: Record<Level, string> = { read: 'Read', draft: 'Draft', act: 'Act' };
+/** What the owner reads a level lets the Odd `name` do, on a level ask's card. */
+export const AT_LEVEL: Record<Level, (name: string) => string> = {
+  read: (name) => `At Read, ${name} reads and reports.`,
+  draft: (name) =>
+    `At Draft, ${name} prepares changes outside the office, and each one waits for your yes.`,
+  act: (name) =>
+    `At Act, ${name} uses the tools you connected for ${name} at read and write without asking you first, in chats with you, in ${name}'s jobs and in work you approve. Work a colleague hands ${name}, and a thread ${name} picks back up, still runs at Draft: each change there waits for your yes.`
+};
 /** A grant to an outside tool is read or act. */
 export type GrantLevel = Extract<Level, 'read' | 'act'>;
 /** What the owner reads for a grant level; the Odd reads the same words in lower case. */
@@ -91,3 +109,8 @@ export const switchesSaid = (s: readonly OwnSwitch[]): string =>
  */
 export const NOT_OWN_TOOLS =
   'Not for web search, reading pages or a shell: those are your own tools, and my_access says how to get them.';
+
+/** The office offers one read-only LegalZoom mailbox. */
+export const POSTAL_ID = 'legalzoom-virtual-mail';
+export const POSTAL_NAME = 'Physical mail (LegalZoom)';
+export const POSTAL_URL = 'https://api.earthclassmail.com/v2/mcp/readonly';

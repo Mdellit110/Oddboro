@@ -17,11 +17,40 @@ export type Outbound = {
 
 export const OUTBOUND: readonly Outbound[] = [
   {
+    file: 'apps/office/src/lib/server/project-sessions/codex-rpc.ts',
+    calls: 2,
+    to: 'The local Codex App Server, through authenticated loopback or the private socket the owner chose.',
+    sends:
+      'Native conversation requests, assignments, corrections and answers to provider permission prompts.',
+    yes: 'The owner turning on Advanced mode and connecting that conversation; a shared Odd sends only after the owner takes over its exact proposal, or at Act when the owner lets it send to that session without asking.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/ProjectSessions.svelte',
+    calls: 2,
+    to: 'The office on this computer.',
+    sends: 'The selected session ID for updates and a request for the system folder picker.',
+    yes: 'The owner opening Projects and choosing a project folder.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/ProjectTerminal.svelte',
+    calls: 1,
+    to: 'The office on this computer.',
+    sends: 'The selected session and terminal view IDs for its output stream.',
+    yes: 'The owner opening that native terminal.'
+  },
+  {
+    file: 'apps/office/src/lib/ui/project-api.ts',
+    calls: 1,
+    to: 'The office on this computer.',
+    sends: 'The selected project action, instruction, file reference or native terminal input.',
+    yes: 'The owner taking that action in Projects. Native tool approval remains in the native conversation.'
+  },
+  {
     file: 'apps/office/src/lib/server/access.ts',
     calls: 1,
     to: 'A hosted connector, at the address it was saved with.',
     sends:
-      "The connector's own secrets in its headers, a request for its tools, and each call an Odd's run makes to it through the office's gateway (gateway.ts), with that call's arguments.",
+      "The connector's own secrets in its headers, a request for its tools, and each call an Odd's run makes to it through the office's gateway (gateway.ts), with that call's arguments. For LegalZoom physical mail, also the owner's mailbox list and check while they choose one mailbox in setup.",
     yes: 'The owner adding that connector, and granting the Odd it at Read only or Read and write.'
   },
   {
@@ -120,6 +149,14 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner sending the message on the call; the request stays on their tailnet.'
   },
   {
+    file: 'apps/office/src/lib/server/phone-door.ts',
+    calls: 1,
+    to: 'The office itself, at 127.0.0.1 on this computer, and nowhere else (`OFFICE_URL`).',
+    sends:
+      "A request from the owner's phone over their tailnet, handed on as it came, without what Tailscale added.",
+    yes: "The owner listing their tailnet name with Let my phone in, and pointing tailscale serve at the door; the office's own checks still run."
+  },
+  {
     file: 'apps/office/src/lib/server/gemini.ts',
     calls: 1,
     to: "Google's Gemini models list.",
@@ -155,16 +192,16 @@ export const OUTBOUND: readonly Outbound[] = [
     calls: 1,
     to: "New Altitude's relay for reports, or the owner's own Sentry when a build from source names one.",
     sends:
-      'Error and trace reports from the server, carrying only what `diagnostics.ts` lets through (no chats, no work and no family data), with the New Altitude sign-in on those to the relay.',
+      "Error and trace reports from the server, carrying only what `diagnostics.ts` lets through (no chats, no Odds' work and nothing from the owner's files), with the New Altitude sign-in on those to the relay.",
     yes: "The owner's Diagnostics switch in Setup. With no answer, nothing is sent."
   },
   {
     file: 'apps/office/src/hooks.client.ts',
-    calls: 1,
+    calls: 2,
     to: 'The office itself: the page sends through it and never to the relay.',
     sends:
-      'Error and trace reports from the page, each through the same filter, which the office then forwards as `instrumentation.server.ts` says.',
-    yes: "The owner's Diagnostics switch in Setup. With no answer, the office drops what it gets."
+      'Error and trace reports from the page, each through the same filter, which the office then forwards as `instrumentation.server.ts` says. Also, to /api/client-log, that the page booted and each error it hit, at most 20 a page load, which the office writes to the log on this computer and sends nowhere.',
+    yes: "The owner's Diagnostics switch in Setup for the reports. With no answer, the office drops what it gets. The log lines stay on this computer, so they need none."
   },
   {
     file: 'apps/office/src/lib/server/versions.ts',
@@ -188,7 +225,14 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner, who sets OLLAMA_URL; with it unset nothing leaves this computer.'
   },
   {
-    file: 'packages/ledger/src/office.ts',
+    file: 'packages/ledger/src/local-db.ts',
+    calls: 1,
+    to: "The office's own database socket, in the office home on this computer.",
+    sends: 'Nothing: it only opens a connection, to learn whether another office answers there.',
+    yes: 'None needed: nothing leaves this computer, and it carries no data.'
+  },
+  {
+    file: 'packages/ledger/src/office-access.ts',
     calls: 1,
     to: "Google's token revocation address.",
     sends: 'The Gmail or Drive sign-in being removed, so Google cancels it too.',

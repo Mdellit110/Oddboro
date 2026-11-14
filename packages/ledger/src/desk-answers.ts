@@ -71,6 +71,10 @@ export const askReplaced = (a: { status: AskStatus; reason: string | null }): bo
  * - `turn_on`: the switches the ask names turned on with the yes
  *   (`turnOnSwitches`), and the work that waited on them starts, once for each
  *   place a result goes back to.
+ * - `grant_setting`: the level or office tools the ask names change with the
+ *   yes, as the Settings tab changes them (`changeLevel`, `changeTools`), and
+ *   the work that waited on them starts, once for each place a result goes
+ *   back to.
  * - `start_held`: the hand-off the ask held starts, as the ask is claimed.
  * - `answer_window`: the usage window's answer (`answerWindow`).
  * - `answer_hand_offs`: the yes or no to more hand-offs goes to the thread's hub
@@ -85,6 +89,10 @@ export const askReplaced = (a: { status: AskStatus; reason: string | null }): bo
  * - `odd_leaves`: the Odd the ask names leaves the office (`removeOdd` in
  *   leaving.ts), after the answer went back, so leaving closes any run it started.
  * - `odd_returns`: the Odd the ask names comes back as it was (`bringBack`).
+ * - `catch_up`: the job the ask names owes a run for its missed periods
+ *   (`oweCatchUp`), which the office clock starts.
+ * - `give_standing`: the tools the ask names went on the Odd's grant with the
+ *   yes (`giveStanding`), so its runs use them without asking.
  */
 export type Effect =
   | 'approval_work'
@@ -92,6 +100,7 @@ export type Effect =
   | 'grant_access'
   | 'give_folder'
   | 'turn_on'
+  | 'grant_setting'
   | 'start_held'
   | 'answer_window'
   | 'answer_hand_offs'
@@ -102,6 +111,8 @@ export type Effect =
   | 'wake_parked'
   | 'odd_leaves'
   | 'odd_returns'
+  | 'catch_up'
+  | 'give_standing'
   | { none: string };
 export type AskEffect = Exclude<Effect, 'task_done' | 'wake_parked'>;
 export type TaskEffect = Extract<
@@ -135,7 +146,8 @@ export type AskAnswer = {
   deny: readonly AskEffect[];
   /**
    * `refused`: the owner says yes or no and nobody reworks it, since the office
-   * raised it, or it lets an Odd go or brings one back.
+   * raised it, or it lets an Odd go, brings one back or lets one use named
+   * tools without asking.
    */
   iterate: readonly AskEffect[] | 'refused';
 };
@@ -196,6 +208,9 @@ export const OWNER_ANSWERS = {
     },
     // Plain Approve is the desk's Turn on.
     switch: { approve: ['turn_on'], deny: NO, iterate: REWORK },
+    // Plain Approve is the desk's Raise to (level) or Turn on.
+    level: { approve: ['grant_setting'], deny: NO, iterate: REWORK },
+    office_tool: { approve: ['grant_setting'], deny: NO, iterate: REWORK },
     call: {
       approve: { by: 'Approve the call from its card on the desk', then: ['carry_out'] },
       deny: NO,
@@ -204,6 +219,16 @@ export const OWNER_ANSWERS = {
     remove: { approve: ['answer_back', OFF_A_THREAD, 'odd_leaves'], deny: NO, iterate: 'refused' },
     bring_back: {
       approve: ['answer_back', OFF_A_THREAD, 'odd_returns'],
+      deny: NO,
+      iterate: 'refused'
+    },
+    // The office raised it, not the Odd named on it, and a no needs nothing done:
+    // the job had already moved on to its next time.
+    catch_up: { approve: ['catch_up'], deny: [], iterate: 'refused' },
+    // A yes or a no settles it: a no stands, so the Odd keeps asking for each call.
+    // Off a thread the yes still reaches the Odd: its next run's prompt names the tools.
+    standing: {
+      approve: ['give_standing', 'answer_back'],
       deny: NO,
       iterate: 'refused'
     }

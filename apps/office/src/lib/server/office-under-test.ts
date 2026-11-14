@@ -1,6 +1,6 @@
 // An office under test, for the tests of a run as the office starts it
 // (`followThrough`, `chat`): the office's own database (local-db.ts) in a
-// throwaway folder on a free port, stand-ins for `claude`, `grok`, `codex`, `gemini`,
+// throwaway folder (on Windows, on a free port), stand-ins for `claude`, `grok`, `codex`, `gemini`,
 // `xcode-select`, `security` and the installers `npm` and `bash` first on PATH, a stand-in secret store, a few
 // Odds, and the helpers that start a run and read back what its stand-in was given. Each stand-in sends back what the run gave it,
 // its arguments, the tool server's environment and the run's instructions,
@@ -43,10 +43,13 @@ const port = await new Promise<number>((done) => {
 // Code's binary refuses that with, on stderr, and exit 1, after any hold.
 // Only the last line, since a later prompt can quote an earlier message.
 // One that says "Think aloud: <words>." on any line streams <words> as
-// text first.
-// "claude auth status" says signed out at once, and "claude auth login"
-// prints its sign-in page and waits until it is stopped, as Setup's sign-in
-// waits on the owner.
+// text first. A run with --input-format stream-json starts on its first user
+// line, as Claude Code does, and keeps each user line after it, text only, in
+// "added" (Send now), answering all of them in its one result; it ends
+// when the office closes its stdin.
+// "claude auth status" says signed out at once, "claude auth logout" ends at
+// once, and "claude auth login" prints its sign-in page and waits until it is
+// stopped, as Setup's sign-in waits on the owner.
 export const bin = join(folder, 'bin');
 mkdirSync(bin);
 /**
@@ -78,20 +81,48 @@ if (verb === 'auth' && sub === 'status') {
   );
   process.exit(0);
 }
+if (verb === 'auth' && sub === 'logout') process.exit(0);
 if (verb === 'auth' && sub === 'login') {
   process.stdout.write('Opening https://claude.ai/oauth/authorize?test\\n');
   setInterval(() => {}, 60_000);
   return;
 }
 let message = '';
+/** What each stream-json user line after the first said. */
+const added = [];
 /** The owner's words in a chat, or a job's instructions, which come last. */
 const lastLine = () => message.trimEnd().split('\\n').at(-1);
-process.stdin.on('data', (d) => (message += d));
+const streamed = process.argv.includes('--input-format');
+let lines = '';
+let started = false;
+const textOf = (content) => content.filter((b) => b.type === 'text').map((b) => b.text).join('\\n');
+process.stdin.on('data', (d) => {
+  if (!streamed) return void (message += d);
+  lines += d;
+  let nl;
+  while ((nl = lines.indexOf('\\n')) >= 0) {
+    const line = lines.slice(0, nl);
+    lines = lines.slice(nl + 1);
+    if (!line.trim()) continue;
+    const content = JSON.parse(line).message.content;
+    if (started) {
+      added.push(textOf(content));
+      continue;
+    }
+    // A turn with a picture comes back whole, for a test to read its blocks.
+    message = content.some((b) => b.type !== 'text') ? line : textOf(content);
+    started = true;
+    start();
+  }
+});
 process.stdin.on('end', () => {
+  if (!streamed) start();
+});
+function start() {
   const hold = /Hold until (\\/[^\\s"\\\\]+) exists/.exec(lastLine())?.[1];
   if (!hold) return answer();
   const wait = setInterval(() => fs.existsSync(hold) && (clearInterval(wait), answer()), 20);
-});
+}
 /** After any hold, so two runs can be refused at once. */
 function answer() {
   // Only a staff run carries --settings, so it is read only for the trigger.
@@ -129,6 +160,7 @@ function reply() {
     claudeSettings: settings(),
     system: fs.readFileSync(after('--append-system-prompt-file'), 'utf8'),
     message,
+    added,
     claudeMds: process.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS ?? null,
     autoMemory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null,
     tmpdir: process.env.CLAUDE_CODE_TMPDIR ?? null,
@@ -173,7 +205,7 @@ const fs = require('node:fs');
 // "--version" prints versions/grok in the test office, else the oldest the office runs.
 if (process.argv[2] === '--version') {
   const v = ${JSON.stringify(join(folder, 'versions', 'grok'))};
-  process.stdout.write('grok ' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '1.0.62') + '\\n');
+  process.stdout.write('grok ' + (fs.existsSync(v) ? fs.readFileSync(v, 'utf8').trim() : '1.0.77') + '\\n');
   process.exit(0);
 }
 const args = process.argv.slice(2);
@@ -216,8 +248,11 @@ if (args.some((a) => a.startsWith('- '))) {
   process.exit(2);
 }
 const after = (flag) => args[args.indexOf(flag) + 1];
-const joined = (flag) => args.find((a) => a.startsWith(flag + '='))?.slice(flag.length + 1);
-const replay = /Replay (\\/\\S+\\.jsonl)\\s*$/.exec(joined('--single'))?.[1];
+// The message comes in the file --prompt-file names: plain text, or content blocks in a .json file.
+const promptPath = after('--prompt-file');
+const promptText = fs.readFileSync(promptPath, 'utf8');
+const blocks = promptPath.endsWith('.json') ? JSON.parse(promptText) : undefined;
+const replay = /Replay (\\/[^\\r\\n]+\\.jsonl)\\s*$/.exec(blocks ? '' : promptText)?.[1];
 if (replay) {
   fs.writeFileSync(process.env.GROK_HOME + '/replay-args.json', JSON.stringify(args));
   process.stdout.write(fs.readFileSync(replay, 'utf8'));
@@ -242,9 +277,12 @@ const gave = {
   home: process.env.HOME,
   agentMode: fs.statSync(after('--agent')).mode & 0o777,
   profile,
-  system: joined('--rules'),
-  message: joined('--single'),
-  prompt: joined('--prompt-json') && JSON.parse(joined('--prompt-json'))
+  // The system prompt is the agent file's body, after its frontmatter.
+  system: agent.replace(/^---\\n[\\s\\S]*?\\n---\\n/, '').replace(/\\n$/, ''),
+  promptMode: /^prompt_mode: (.*)$/m.exec(agent)?.[1],
+  promptFileMode: fs.statSync(promptPath).mode & 0o777,
+  message: blocks ? undefined : promptText,
+  prompt: blocks
 };
 const line = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
 line({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'tool_use', name: 'use_tool' } } });
@@ -310,7 +348,7 @@ function emptyFolder(p) {
 let message = '';
 process.stdin.on('data', (d) => (message += d));
 process.stdin.on('end', () => {
-  const replay = /Replay (\\/\\S+\\.jsonl)\\s*$/.exec(message)?.[1];
+  const replay = /Replay (\\/[^\\r\\n]+\\.jsonl)\\s*$/.exec(message)?.[1];
   if (replay) return process.stdout.write(fs.readFileSync(replay, 'utf8'));
   const sleeper = /Leave a sleeper at (\\/\\S+)/.exec(message)?.[1];
   if (sleeper) {
@@ -499,7 +537,6 @@ Object.assign(process.env, {
   ODDBORO_ENV: join(folder, 'none.env'),
   // No tool's maker is asked for its newest version (versions.ts).
   ODDBORO_NO_LATEST: '1',
-  DATABASE_URL: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
   ODDBORO_LOCAL_DB: '1',
   OLLAMA_URL: 'http://127.0.0.1:9',
   // The stand-ins, node for them, and the system's own tools: never the Mac's
@@ -551,8 +588,8 @@ mock.module('@oddboro/ledger/secrets', {
 mkdirSync(join(folder, 'codex'));
 writeFileSync(join(folder, 'codex', 'auth.json'), '{}');
 // A static import beside this file loads as this file waits on its port above,
-// so home.ts would read no ODDBORO_DB_PORT and every such test file would bind
-// the one fixed port.
+// so home.ts would read neither ODDBORO_HOME nor ODDBORO_DB_PORT, and the
+// office would start in a folder other than this one.
 const { DATABASE_PORT } = await import('@oddboro/ledger/home');
 assert.equal(
   DATABASE_PORT,
@@ -614,6 +651,8 @@ export type Gave = {
   env: Record<string, string>;
   system: string;
   message: string;
+  /** What a streamed Claude Code chat was given after its first message (Send now). */
+  added?: string[];
   claudeMds: string | null;
   autoMemory: string | null;
   /** The Claude Code run's CLAUDE_CODE_TMPDIR and NODE_OPTIONS, which Run commands sets. */
@@ -633,6 +672,11 @@ export type Gave = {
   /** The Grok run's HOME: the owner's, or the run home `runHome` made. */
   home?: string;
   agentMode?: number;
+  /** The Grok run's agent file's `prompt_mode`, and the mode of the file `--prompt-file` names. */
+  promptMode?: string;
+  promptFileMode?: number;
+  /** The Grok run's message as content blocks, from a `.json` prompt file. */
+  prompt?: { type: string; data?: string; mimeType?: string; text?: string }[];
   profile?: string;
   codexEnv?: Record<string, string>;
   /** The Codex run's MCP servers, as its `-c mcp_servers` said them, or the Grok run's, as its agent file names them. */
@@ -677,7 +721,7 @@ export async function runOf(id: number, ask?: number): Promise<Gave & { going: s
   // The stand-in's tool call comes before its result, so the run still goes.
   const seen = (e: { type: string; inProgress?: Record<string, { doing?: string }[]> }) => {
     if (e.type === 'working' && e.inProgress?.[f.staffId]?.some((w) => w.doing))
-      going = [...L.runsGoing];
+      going = [...L.runsGoing.keys()];
   };
   bus.on('event', seen);
   const r = await followThrough(f, ask ? await L.ask(ask) : undefined).finally(() =>
@@ -696,8 +740,11 @@ export async function chatOf(id: string, message = 'Hello.'): Promise<Gave & { t
     if (e.type === 'error') text = e.message;
   });
   assert.ok(text.startsWith('{'), `${id}'s chat gave no reply: ${text}`);
-  return { ...(JSON.parse(text.slice(0, text.lastIndexOf('\nOutcome:'))) as Gave), tools };
+  return { ...gaveIn(text), tools };
 }
+/** What a run's stand-in said it was given, from the run's text, which ends with its outcome line. */
+export const gaveIn = (text: string): Gave =>
+  JSON.parse(text.slice(0, text.lastIndexOf('\nOutcome:'))) as Gave;
 /** `fn`, run as if the office ran on `platform`. */
 export async function onPlatform<T>(
   platform: NodeJS.Platform,
