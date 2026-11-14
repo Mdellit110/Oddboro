@@ -21,7 +21,7 @@
     home: PhoneHome;
     /** Opens a desk item, by its key, on the Desk tab. */
     onopen: (key: string) => void;
-    /** Opens an Odd's chat. */
+    /** Opens a call with an Odd. */
     oncall: (id: string) => void;
     ongoals: () => void;
   };

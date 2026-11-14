@@ -1296,7 +1296,7 @@ alone under Waiting on you, newest first; under Happening now the goals with
 work handed on or back today, with no count (`happeningToday`); and under
 Who's around each Odd with a dot and one line (`aroundLine`: its running work
 and minutes, else waiting on you, else free and its next job) and a call
-button that opens its chat for now. Home's next jobs and goals come from
+button. Home's next jobs and goals come from
 `GET /api/phone/home` (`src/lib/server/phone-home.ts`, read only, from the
 ledger's own readers), read again on a change to `jobs`, `threads`,
 `follow_ups`, `goals` or `staff_goals`. Its minutes move once a minute only
@@ -1313,8 +1313,12 @@ picker or a sign-in that comes back to it, so a hire ask, a hosted or AWS
 sign-in step and a folder ask's Change say "Open this at the office".
 Selecting a report's text to chat about it stays at the computer too.
 Everything else answers as on the computer, through the same routes.
-Messages (`PhoneMessages.svelte`) lists every Odd, with what each has waiting, and opens its own
-`ChatPanel.svelte`, as on the computer. The sender card and a colleague's name
+Messages (`PhoneMessages.svelte`) lists every Odd with its dot and its chat's
+last line ("You: ..." when the owner said it, `previewLine`), from
+`GET /api/phone/messages` (`src/lib/server/phone-messages.ts`, read only),
+read again when the tab opens, on a change to `pokes` or `staff` (a poke
+landing, a new Odd's hello), and when a chat or call on the phone ends. A row opens the Odd's own
+`ChatPanel.svelte`, as on the computer, with Call in its header. The sender card and a colleague's name
 on an item, and a report's Reply (`replyAbout`), open that Odd's chat; opening
 an item alone (`showInChat`) does not, since on a phone that would leave the
 desk. A desk item tapped in a chat opens on the Desk tab while it waits
@@ -1324,7 +1328,16 @@ report no longer there opens on its own (`ReportView.svelte`), as does a file
 `/api/events` and reloads `/api/office` on a change to a table whose page
 refreshes or reloads (`LIVE_TABLES`), bumps an open chat's `version` as the
 floor does, takes each `working` event, and does all of it again each time
-the line opens, as when the phone wakes. Nothing polls. Its own styles give every control 44px
+the line opens, as when the phone wakes. Nothing polls. A call
+(`PhoneCall.svelte`, `phone-call.ts`) opens over any tab from Home's call
+buttons, an open chat and a Desk card, with the tab bar hidden. It is the
+Odd's own chat route: it opens on the chat's last spoken lines as captions,
+and a reply shows as the route streams it, while bars move. Above them: the
+Odd's portrait, name and role, a timer that ticks only while the call shows,
+what else the Odd is doing (`alsoLine`), and Waiting on you with its newest
+ask or task (`waitingFor`) and Open, which goes to the Desk. Talk opens the
+Type box so the keyboard's own mic dictates; Desk goes to the Desk tab; End
+and Back close it, and Back names the tab it was opened from. Its own styles give every control 44px
 and every field 16px text, so a phone neither misses a tap nor zooms. The
 page links `static/desk.webmanifest` and the icons `desk-256.png` and
 `desk-512.png` (drawn by `npm run mark`), so a phone adds it to its home

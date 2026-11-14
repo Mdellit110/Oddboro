@@ -3,6 +3,7 @@
   // with All, Asks, Tasks and Reports chips. Each card's buttons come from
   // `cardButtons` (`phone-desk.ts`). A one-tap button posts what the Desk
   // window's button posts. Open shows that Desk window's item, `away`, in full.
+  // A card from an Odd has Call, which opens a call with that Odd.
   import type { Desk } from '@oddboro/ledger';
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import { call, type ApiUrl } from '#lib/ui/api.ts';
@@ -28,8 +29,10 @@
     onopen: (key: string) => void;
     /** A report's Reply: opens its writer's chat about it. */
     onreply: (c: DeskCard & { kind: 'report' }) => void;
+    /** Opens a call with an Odd. */
+    oncall: (id: string) => void;
   };
-  let { desk, staff, onopen, onreply }: Props = $props();
+  let { desk, staff, onopen, onreply, oncall }: Props = $props();
 
   let chip = $state<Chip>('all');
   const counts = $derived(chipCounts(desk));
@@ -99,6 +102,26 @@
             </p>
             <h2 class="mt-0.5 text-lg leading-snug font-medium text-ink">{c.row.title}</h2>
           </div>
+          {#if from}
+            <button
+              class="flex size-11 shrink-0 items-center justify-center rounded-full bg-raise text-sea"
+              aria-label={`Call ${from.name}`}
+              onclick={() => oncall(from.id)}
+            >
+              <svg
+                class="size-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                ><path
+                  d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"
+                /></svg
+              >
+            </button>
+          {/if}
         </div>
         {#if line}
           <p class="mt-2 line-clamp-2 text-muted">{line}</p>

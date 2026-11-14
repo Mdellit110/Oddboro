@@ -112,10 +112,15 @@ If the buzz stops, check Settings, Apps, Chrome, Notifications.
 
 - **Home** shows what waits on your yes or no, the goals with work handed on
   or back today, and who is around: each Odd with what it is doing and a
-  button that opens its chat.
+  button that calls it.
 - **Goals** comes in a later update.
-- **Messages** lists your Odds. Tap one to talk to it, as in the office. A
-  report's **Reply** opens that Odd's chat too.
+- **Messages** lists your Odds, each with the last thing said in its chat.
+  Tap one to talk to it, as in the office. A report's **Reply** opens that
+  Odd's chat too.
+- **A call** opens from Home, from an Odd's chat and from a Desk card. It is
+  the same chat, shown big: the Odd's words appear as it writes them. Tap
+  **Talk**, then the mic on your phone's keyboard, and speak. **Desk** goes
+  to your desk, and **End** or Back takes you to where you started.
 - **Desk** shows what is waiting, newest first, with All, Asks, Tasks and
   Reports. New items arrive live, with no reload. Approve, Deny, Make this
   call and Read take one tap. Anything whose yes could send something out of
