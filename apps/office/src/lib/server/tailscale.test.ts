@@ -6,11 +6,10 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import type { RequestEvent } from '@sveltejs/kit';
 import type { Run } from './tailscale.ts';
 
 // The office's own code loads after the harness has set its folders and port.
-const { guardOffice } = await import('./owner-page.ts');
+const { throughTailnet } = await import('./phone-door.ts');
 const { allowPhoneDesk, phoneDesk, servesOffice } = await import('./tailscale.ts');
 
 /** A folder with a stand-in `tailscale`, and `tailscale.exe` for Windows. */
@@ -30,7 +29,7 @@ const answers =
     JSON.stringify(args[0] === 'status' ? status : serve);
 const running = { BackendState: 'Running', Self: { DNSName: `${NAME}.` } };
 const served = {
-  Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:4500' } } } }
+  Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:4502' } } } }
 };
 
 for (const [platform, sudo] of [
@@ -46,7 +45,7 @@ for (const [platform, sudo] of [
           tailscale: 'on',
           name: NAME,
           serving: true,
-          serveCommand: `${sudo}tailscale serve --bg http://127.0.0.1:4500`,
+          serveCommand: `${sudo}tailscale serve --bg http://127.0.0.1:4502`,
           allowed: false,
           link: `https://${NAME}/desk`
         });
@@ -79,10 +78,10 @@ for (const [platform, sudo] of [
 
 test('serve counts only when the name sends to this office', () => {
   for (const proxy of [
-    'http://127.0.0.1:4500',
-    'http://127.0.0.1:4500/',
-    'http://localhost:4500',
-    '4500'
+    'http://127.0.0.1:4502',
+    'http://127.0.0.1:4502/',
+    'http://localhost:4502',
+    '4502'
   ])
     assert.equal(
       servesOffice({ Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: proxy } } } } }, NAME),
@@ -94,10 +93,12 @@ test('serve counts only when the name sends to this office', () => {
     { Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:3000' } } } } },
     {
       Web: {
-        [`other.tail1234.ts.net:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:4500' } } }
+        [`other.tail1234.ts.net:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:4502' } } }
       }
     },
-    { Web: { [`${NAME}:443`]: { Handlers: { '/desk': { Proxy: 'http://127.0.0.1:4500' } } } } }
+    { Web: { [`${NAME}:443`]: { Handlers: { '/desk': { Proxy: 'http://127.0.0.1:4502' } } } } },
+    // Straight at the office, which answers only this computer, so the phone gets nothing.
+    { Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:4500' } } } } }
   ])
     assert.equal(servesOffice(status, NAME), false, JSON.stringify(status));
 });
@@ -105,41 +106,20 @@ test('serve counts only when the name sends to this office', () => {
 /** The office's `.env`, fixed as the ledger loads (`ENV_FILE`): the harness's own. */
 const { ENV_FILE: env, readEnv } = await import('@oddboro/ledger/env');
 
-test('one click lists the name in .env and the office answers it at once', async () => {
+test('one click lists the name in .env and the door answers it at once', async () => {
   writeFileSync(env, 'ODDBORO_EXTRA_HOSTS=old-box.tail1234.ts.net\n');
-  const asked = (host: string) =>
-    guardOffice({
-      event: {
-        request: new Request('http://127.0.0.1:4500/desk', { headers: { host } }),
-        url: new URL('http://127.0.0.1:4500/desk'),
-        getClientAddress: () => '127.0.0.1'
-      } as unknown as RequestEvent,
-      resolve: async () => new Response('ok')
-    });
-  assert.equal((await asked(NAME)).status, 403);
+  const asked = () => throughTailnet({ host: NAME, 'tailscale-user-login': 'owner@example.com' });
   await withEnv({ ODDBORO_EXTRA_HOSTS: '' }, () =>
     withTailscale(async () => {
       assert.equal(readEnv().ODDBORO_EXTRA_HOSTS, 'old-box.tail1234.ts.net');
-      const r = await allowPhoneDesk(answers(running, served), false);
+      assert.equal(asked(), false);
+      const r = await allowPhoneDesk(answers(running, served));
       assert.equal(r.desk.tailscale === 'on' && r.desk.allowed, true);
-      assert.equal(r.restart, false);
+      assert.equal(asked(), true);
       // Clicked again, nothing changes.
-      assert.equal((await allowPhoneDesk(answers(running, served), true)).restart, false);
+      await allowPhoneDesk(answers(running, served));
     })
   );
-  assert.equal((await asked(NAME)).status, 200);
   // The name joins what was there, and nothing else in the file changes.
   assert.equal(readFileSync(env, 'utf8'), `ODDBORO_EXTRA_HOSTS=old-box.tail1234.ts.net,${NAME}\n`);
 });
-
-test('under the dev server a new name also needs a restart, since Vite reads its list as it starts', () =>
-  withEnv({ ODDBORO_EXTRA_HOSTS: '' }, () =>
-    withTailscale(async () => {
-      const other = 'laptop.tail1234.ts.net';
-      const r = await allowPhoneDesk(
-        answers({ BackendState: 'Running', Self: { DNSName: `${other}.` } }),
-        true
-      );
-      assert.equal(r.restart, true);
-    })
-  ));

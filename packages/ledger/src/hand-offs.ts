@@ -3,8 +3,9 @@
 // staffer that handed it, which picks up in a fresh run of its own. Both are
 // follow-ups, so the office starts them the moment they are written and nothing
 // polls. Every hand-off is a step in a thread (threads.ts): the colleague's run
-// cannot hand off (mcp.ts), the hub's pick-up may hand on in the same thread,
-// and both work at Draft at most (staff.ts in the office app).
+// cannot hand off (mcp-run.ts), the hub's pick-up may hand on in the same thread,
+// and both work at Draft at most (staff.ts in the office app), as does every
+// later run that serves the hand-off, but an approval ask's carry-out.
 import {
   closeSync,
   constants,
@@ -260,7 +261,7 @@ export async function leadLeft(q: Db, id: string): Promise<string | undefined> {
 /**
  * A `denied` run only reads the owner's reason for a lesson. The denial itself
  * already went back to the hand-off or thread the ask came from (`answerLater`
- * in office.ts, or `answerHandOffs` for a no to more hand-offs), so the run
+ * in office-decide.ts, or `answerHandOffs` for a no to more hand-offs), so the run
  * serves neither: it joins no thread and hands
  * nothing back. An `edited` run only reads the owner's edit to a file, for a
  * lesson, and answers nothing raised anywhere. Neither run hands work on: the
@@ -283,9 +284,12 @@ export const SERVES_NO_THREAD: Record<FollowUpKind, boolean> = {
 export const servesNoThread = (kind: FollowUpKind): boolean => SERVES_NO_THREAD[kind];
 
 /**
- * Whether a follow-up's run works at Draft at most: both sides of a hand-off,
- * the hub picking its thread back up, and a run that only reads the owner's
- * reason or edit for a lesson (every kind `SERVES_NO_THREAD` marks).
+ * Whether a follow-up's run works at Draft at most by its kind alone: both
+ * sides of a hand-off, the hub picking its thread back up, and a run that only
+ * reads the owner's reason or edit for a lesson (every kind `SERVES_NO_THREAD`
+ * marks). A run of any other kind that serves a colleague's hand-off
+ * (`servesHandOff`) works at Draft at most too, but an approval ask's
+ * carry-out (staff.ts in the office app).
  */
 export const AT_DRAFT: Record<FollowUpKind, boolean> = {
   carry_out: false,
@@ -353,7 +357,7 @@ export async function answeredAll(q: Db, handOffId: number): Promise<boolean> {
 /**
  * The other results waiting for a hub on the thread a `handed_back` picks up,
  * oldest first. They landed while a run of the hub's there had yet to end
- * (`waitsOnOwnRun` in office.ts), so this one run picks them all up, and they
+ * (`waitsOnOwnRun` in office-follow-ups.ts), so this one run picks them all up, and they
  * end with it (`finishFollowUp`).
  */
 export async function resultsToJoin(f: FollowUpRow): Promise<FollowUpRow[]> {
@@ -381,16 +385,17 @@ export async function resultsToJoin(f: FollowUpRow): Promise<FollowUpRow[]> {
 export async function handBackLater(
   handOffId: number,
   outcome: Outcome,
-  answer: string
+  answer: string,
+  q: Db = db
 ): Promise<void> {
-  const [origin] = await db
+  const [origin] = await q
     .select()
     .from(followUps)
     .where(and(eq(followUps.id, handOffId), eq(followUps.kind, 'hand_off')));
   const back = origin && handBack(origin, outcome, answer);
   if (!back?.handOff) return;
   const handOff = { ...back.handOff, answered: true };
-  await db.transaction(async (tx) => {
+  await q.transaction(async (tx) => {
     if (!(await leadLeft(tx, back.staffId))) await addFollowUp(tx, { ...back, handOff });
   });
 }

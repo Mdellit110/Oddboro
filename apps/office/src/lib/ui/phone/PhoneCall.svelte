@@ -151,7 +151,7 @@
         else if (ev.type === 'done') {
           reply.text = ev.text;
           choices = ev.choices ?? [];
-        } else {
+        } else if (ev.type === 'error') {
           reply.text = ev.message;
           reply.failed = true;
         }

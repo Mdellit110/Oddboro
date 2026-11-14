@@ -90,6 +90,10 @@ export function askButtons(a: AskRow): CardButton[] {
     case 'folder':
     case 'remove':
     case 'bring_back':
+    case 'level':
+    case 'catch_up':
+    case 'office_tool':
+    case 'standing':
       return [OPEN];
     default: {
       const missed: never = kind;

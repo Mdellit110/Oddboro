@@ -67,7 +67,6 @@ Object.assign(process.env, {
   ODDBORO_DB_PORT: String(port),
   ODDBORO_ENV: settings,
   ODDBORO_PORT: '4517',
-  DATABASE_URL: `postgres://postgres:postgres@127.0.0.1:${port}/postgres`,
   ODDBORO_LOCAL_DB: '1',
   OLLAMA_URL: 'http://127.0.0.1:9',
   ODDBORO_ACCOUNT_SITE: `${fake.origin}/`
@@ -79,6 +78,7 @@ await bringUpToDate();
 const L = await import('@oddboro/ledger');
 const { accountStatus, accountToken } = await import('./account.ts');
 const { installGrantedPersonas, syncPersonas } = await import('./persona.ts');
+const { offeredSection } = await import('./persona-offered.ts');
 const { history } = await import('./staff.ts');
 const { bus } = await import('./events.ts');
 const accountRoute = await import('../../routes/api/account/+server.ts');
@@ -561,9 +561,9 @@ test('the kept list names each persona whose sign-in the store holds, and no oth
   await grant('pat');
 });
 
-test('a sign-in kept from before a restart, for a persona with no Odd, joins at Open when listed and ends at sign-out either way', async () => {
-  // Rae and Sam were added on an earlier run's first-visit card, and the office
-  // restarted before it opened. New Altitude lists Rae and has stopped listing Sam.
+test('a kept sign-in for a persona with no Odd hires nobody until Add, and ends at sign-out either way', async () => {
+  // The store holds sign-ins for Rae and Sam from another office on this
+  // computer, or from before a reset. New Altitude lists Rae and has stopped listing Sam.
   const rae = structuredClone(QUINN);
   rae.slug = 'rae';
   rae.odd.name = 'Rae';
@@ -571,23 +571,29 @@ test('a sign-in kept from before a restart, for a persona with no Odd, joins at 
   rae.odd.parts[0].px = rae.odd.parts[0].px.replace('hair-quinn-short-tuft', 'hair-rae-short-tuft');
   rae.odd.look.hair = 'rae-short-tuft';
   fake.odds = [PAT, QUINN, rae];
-  const blob = saved('new-altitude-persona-pat:oauth');
+  // Each made from Pat's sign-in, with its own tokens and its own door.
+  const pat = store.get('new-altitude-persona-pat:oauth')!;
   for (const slug of ['rae', 'sam']) {
     fake.issueGrant(`access-${slug}`, `refresh-${slug}`, 'stream');
+    const blob = JSON.parse(pat.replaceAll('/pat/', `/${slug}/`)) as Blob;
     blob.tokens = { access_token: `access-${slug}`, refresh_token: `refresh-${slug}` };
     store.set(`new-altitude-persona-${slug}:oauth`, JSON.stringify(blob));
   }
   // The earlier run's writes named them in the kept list.
   store.set(KEPT, JSON.stringify([...kept(), 'rae', 'sam']));
 
+  // A sign-in is not the owner's yes: Rae's card still offers Add, and Open hires nobody.
   const listed = (await offers()).body.offers as { slug: string; joined: string }[];
-  assert.equal(listed.find((o) => o.slug === 'rae')?.joined, 'granted');
+  assert.equal(listed.find((o) => o.slug === 'rae')?.joined, 'no');
   assert.equal(
     listed.find((o) => o.slug === 'sam'),
     undefined
   );
-  // What Open the office runs once the manager is hired: the listed one joins.
   await installGrantedPersonas();
+  assert.equal(await odd('rae'), undefined);
+  assert.equal(await odd('sam'), undefined);
+  // Add uses the kept sign-in, so no page opens, and Rae joins the open office.
+  assert.equal((await persona('POST', 'rae')).body.url, '');
   assert.ok(await odd('rae'));
   assert.equal(await odd('sam'), undefined);
   const held = [ACCOUNT, ...personaSecrets()].map((k) => saved(k).tokens?.refresh_token);
@@ -627,6 +633,78 @@ test('a store that refuses to write the kept list still lets sign-out end every 
   assert.deepEqual(kept(), ['pat', 'quinn']);
   assert.equal((await account('DELETE')).status, 200);
   assert.equal(store.has(KEPT), false);
+});
+
+/** A persona like Quinn under its own slug, name and hair part, so it can work here too. */
+function another(slug: string, name: string) {
+  const p = structuredClone(QUINN) as typeof QUINN & { displayName: string };
+  p.slug = slug;
+  p.displayName = `${name} Example`;
+  p.odd.name = name;
+  p.odd.parts[0].name = `${slug}-short-tuft`;
+  p.odd.parts[0].px = p.odd.parts[0].px.replace('hair-quinn-short-tuft', `hair-${slug}-short-tuft`);
+  p.odd.look.hair = `${slug}-short-tuft`;
+  return p;
+}
+
+test("a persona added from a hire ask's window answers that ask once it joins, and only then", async () => {
+  await signIn();
+  fake.odds = [PAT, QUINN, another('tess', 'Tess'), another('uma', 'Uma')];
+  const manager = (await L.roster())[0].id;
+  const propose = async (name: string) =>
+    (
+      await L.raiseAsk(manager, {
+        title: `Hire ${name}, ${name} Example Persona`,
+        why: 'For their view.',
+        ifApproved: 'The hire window opens with this filled in.',
+        hire: {
+          name,
+          role: `${name} Example Persona`,
+          permission: 'read',
+          remit: 'Gives a view.',
+          jobDescriptionFile: 'notes/jd.md'
+        }
+      })
+    ).ask.id;
+  const addFrom = (slug: string, askId: number) =>
+    call('/api/personas/[slug]', personaRoute.POST as Handler, {
+      method: 'POST',
+      slug,
+      body: { askId }
+    });
+  const status = async (id: number) => (await L.ask(id))?.status;
+
+  // Add on Tess's proposal, and the owner leaves the sign-in page unfinished.
+  const forTess = await propose('Tess');
+  assert.equal((await addFrom('tess', forTess)).status, 200);
+  assert.equal(await odd('tess'), undefined);
+  assert.equal(await status(forTess), 'open');
+  // Tess joins later from Setup's Add, which names no ask: the proposal stays open.
+  await grant('tess');
+  assert.ok(await odd('tess'));
+  assert.equal(await status(forTess), 'open');
+
+  // Add on Uma's proposal, and the sign-in finishes: her join answers it.
+  const forUma = await propose('Uma');
+  const { body } = await addFrom('uma', forUma);
+  assert.equal((await finish(String(body.url))).title, 'Connected');
+  assert.ok(await odd('uma'));
+  const answered = await L.ask(forUma);
+  assert.equal(answered?.status, 'approved');
+  assert.equal(
+    answered?.reason,
+    "Ada added Uma Example's New Altitude persona instead of a new Odd."
+  );
+
+  // An Odd that can propose a hire hears who is on offer from the last read,
+  // and who works here already. Signing out takes the list away.
+  const here = new Set(['pat', 'quinn', 'tess', 'uma']);
+  assert.match(offeredSection(new Set(['pat'])), /persona_slug/);
+  assert.match(offeredSection(new Set(['pat'])), /Uma Example \(uma\)/);
+  assert.doesNotMatch(offeredSection(here), /persona_slug/);
+  assert.match(offeredSection(here), /Already working here as personas: Pat Example/);
+  assert.equal((await account('DELETE')).status, 200);
+  assert.equal(offeredSection(new Set()), '');
 });
 
 test('no token, code, state or verifier reaches .env or the logs', async () => {

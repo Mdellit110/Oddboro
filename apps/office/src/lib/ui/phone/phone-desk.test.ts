@@ -45,6 +45,9 @@ const report = (r: Partial<ReportRow>): ReportRow =>
     ...r
   }) as ReportRow;
 const desk = (d: Partial<Desk>): Desk => ({
+  projectWork: [],
+  recent: [],
+  away: [],
   asks: [],
   tasks: [],
   reports: [],

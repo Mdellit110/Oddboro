@@ -120,7 +120,7 @@ export const LAUNCHES: Record<
         effort: r.effort,
         model: r.model
       }),
-      // Grok takes its message as an argument and reads no input.
+      // Grok reads its message from a file (--prompt-file), never from input.
       stdin: ''
     };
   },
@@ -153,6 +153,11 @@ export const LAUNCHES: Record<
     };
   },
   gemini: async (r) => {
+    if (r.images?.length)
+      return {
+        refused:
+          'Gemini cannot receive pictures in this office. Use a text file or choose another tool.'
+      };
     if (r.commands) return { refused: COMMANDS_WHY.gemini };
     const missing = geminiKeyMissing();
     if (missing) return { refused: missing };

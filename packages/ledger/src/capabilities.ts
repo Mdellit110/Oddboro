@@ -53,6 +53,10 @@ export type Access = {
   connector: ConnectorRow;
   level: Level;
   heldBack?: HeldBack;
+  /** Tools of a write grant the Odd uses without asking, at Draft (`grants.standing`). */
+  standing: string[];
+  /** Tools of a write grant each call to which waits for the owner's yes, at Act (`grants.askFirst`). */
+  askFirst: string[];
 };
 
 /** What a run's own tools reach: worked out from the staff row and the system, never stored. */
@@ -114,12 +118,20 @@ export function accessOf(g: GrantRow & { connector: ConnectorRow }, permission: 
     : g.connector.readyAt
       ? undefined
       : 'still connecting';
-  return { connector: g.connector, level: g.level, heldBack };
+  return {
+    connector: g.connector,
+    level: g.level,
+    heldBack,
+    standing: g.level === 'act' ? g.standing : [],
+    askFirst: g.level === 'act' ? g.askFirst : []
+  };
 }
 
 /**
- * What a run below the Odd's own level can do (a hand-off's, either side, or
- * a hub's pick-up): its level is `ceiling`, and a grant that does not work
+ * What a run below the Odd's own level can do (one that serves a colleague's
+ * hand-off, whatever its kind but an approval ask's carry-out, or one the
+ * office starts on its own, such as a hub's pick-up): its level is `ceiling`,
+ * and a grant that does not work
  * there comes down to read, since a grant is only read or act. At a Draft
  * ceiling a write grant stays, and each change through it waits for the
  * owner's yes (`writesWait`), as it does for an Odd at Draft. A grant
@@ -207,7 +219,7 @@ export function accessInRun(
     levelLine(caps.level, owner),
     ...(ceiling
       ? [
-          `This run was started by a colleague or by the office, not by ${owner}'s yes, so it works at ${LEVEL_NAME[ceiling]} at most.`
+          `This run serves a colleague's hand-off or was started by the office, so it works at ${LEVEL_NAME[ceiling]} at most, whatever ${owner} has approved.`
         ]
       : []),
     runsOnLine(caps.agent),
@@ -247,15 +259,17 @@ export function outsideLines(c: Capabilities, owner: string, about?: string): st
     const what = `${a.connector.name} (${GRANT_LABEL[a.level === 'act' ? 'act' : 'read'].toLowerCase()})`;
     switch (a.heldBack) {
       case 'above its level':
-        return `${what}: held back. It needs the ${LEVEL_NAME[GRANT_NEEDS[a.level === 'act' ? 'act' : 'read']]} level or higher, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${OWNER_GRANTS.level.missing({ owner, whose: whoseOf(about) })}`;
+        return `${what}: held back. It needs the ${LEVEL_NAME[GRANT_NEEDS[a.level === 'act' ? 'act' : 'read']]} level or higher, and the current level is ${LEVEL_NAME[c.level]}. It works again once ${owner} raises it. ${OWNER_GRANTS.level.missing({ owner, whose: about === undefined ? undefined : whoseOf(about) })}`;
       case 'still connecting':
         return `${what}: held back until ${owner} finishes connecting it.`;
       case 'sign-in ran out':
         return `${what}: held back. Its sign-in ran out, and ${owner} needs to sign in again.`;
       case undefined:
         return writesWait(a.level, c.level)
-          ? `${what}: ${reachOf(a)}. ${WRITES_WAIT(owner, about)}`
-          : `${what}: ${reachOf(a)}.`;
+          ? `${what}: ${reachOf(a)}. ${WRITES_WAIT(owner, about)}${a.standing.length ? ` ${STANDING(owner, a.standing, about)}` : ''}`
+          : a.askFirst.length
+            ? `${what}: ${reachOf(a)}. ${ASK_FIRST(owner, a.askFirst, about)}`
+            : `${what}: ${reachOf(a)}.`;
     }
   });
 }
@@ -269,6 +283,24 @@ export const WRITES_WAIT = (owner: string, about?: string): string =>
     ? `Each call that changes something waits for ${owner}'s yes: the office puts that exact call on their desk and makes it once they approve, then you carry on with what it returned. Call it once and move on; never call it again to retry, and never say it is done before you hear.`
     : `Each call ${about} makes that changes something waits for ${owner}'s yes on their desk.`;
 
+/**
+ * A write grant's standing yes at Draft, said to the Odd (or about it): the
+ * tools of that service it uses without asking, which the gateway passes on.
+ */
+export const STANDING = (owner: string, tools: string[], about?: string): string =>
+  about === undefined
+    ? `Except ${tools.join(', ')}: ${owner} lets you use ${tools.length === 1 ? 'that one' : 'those'} without asking, so a call goes straight through.`
+    : `${about} uses ${tools.join(', ')} without asking.`;
+
+/**
+ * A write grant's tools the owner approves first even at Act, said to the
+ * Odd (or about it): the gateway holds each call to them, as at Draft.
+ */
+export const ASK_FIRST = (owner: string, tools: string[], about?: string): string =>
+  about === undefined
+    ? `Except ${tools.join(', ')}: each call to ${tools.length === 1 ? 'that one' : 'those'} waits for ${owner}'s yes: the office puts that exact call on their desk and makes it once they approve, then you carry on with what it returned. Call it once and move on; never call it again to retry, and never say it is done before you hear.`
+    : `Each call ${about} makes to ${tools.join(', ')} waits for ${owner}'s yes on their desk.`;
+
 /** The Odd's level, said to the Odd. */
 export function levelLine(level: Level, owner: string): string {
   return {
@@ -279,12 +311,12 @@ export function levelLine(level: Level, owner: string): string {
 }
 
 /**
- * ask_for_access's refusal of a grant above the Odd's level (`held`): where
- * the owner sets the level, and to say so in the reply, since approving an
- * ask never changes a level: the owner changes it on the card.
+ * ask_for_access's refusal of a grant above the Odd's level (`held`): ask for
+ * the level first (`ask_for_level`), since an access ask's yes changes no
+ * level, then ask for the grant again.
  */
 export function askAboveLevel(held: Level, asked: 'read' | 'write', owner: string): string {
-  return `You hold ${held}, so you cannot ask for ${asked}. ${OWNER_GRANTS.level.missing({ owner, whose: 'your' })} If this job needs a higher one, say so in your reply.`;
+  return `You hold ${held}, so you cannot ask for ${asked}. ${OWNER_GRANTS.level.missing({ owner })} Once you have it, ask for ${asked} again.`;
 }
 
 /**

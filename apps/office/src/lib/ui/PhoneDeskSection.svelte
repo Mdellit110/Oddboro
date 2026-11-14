@@ -3,7 +3,7 @@
   // Tailscale (`#lib/server/tailscale.ts`, `docs/remote-desk.md`). It reads
   // where things stand when it opens and on Check again, and nothing polls.
   // Each step shows only while it is still to do: Tailscale here and signed
-  // in, `tailscale serve` pointing at the office (a command the owner runs),
+  // in, `tailscale serve` pointing at the phone's door (a command the owner runs),
   // and the name let in (one click). Then the desk's link and a QR code.
   import qrcode from 'qrcode-generator';
   import { call } from './api.ts';
@@ -12,7 +12,6 @@
   let desk = $state<PhoneDesk | undefined>();
   let busy = $state(false);
   let problem = $state('');
-  let restart = $state(false);
   let copied = $state(false);
 
   async function load() {
@@ -32,9 +31,7 @@
     busy = true;
     problem = '';
     try {
-      const r = await call<{ desk: PhoneDesk; restart: boolean }>('/api/phone', {});
-      desk = r.desk;
-      restart = r.restart;
+      desk = (await call<{ desk: PhoneDesk }>('/api/phone', {})).desk;
     } catch (e) {
       problem = e instanceof Error ? e.message : String(e);
     } finally {
@@ -124,16 +121,10 @@
         onclick={letIn}>Let my phone in</button
       >
       <p class="text-[11px] text-faint">
-        The office then answers {d.name}. Nothing else changes: it still listens on this computer
-        only.
+        The phone's door then opens to {d.name}. Nothing else changes: it listens on this computer
+        only, and lets in only your own tailnet.
       </p>
     {:else}
-      {#if restart}
-        <p class="rounded-lg bg-ember/10 px-2.5 py-2 text-xs text-ink">
-          Restart the office once so it answers the new name. A development office reads its names
-          as it starts.
-        </p>
-      {/if}
       {#if d.serving}
         <div class="flex items-center gap-3 rounded-lg bg-raise px-2.5 py-2 text-xs">
           {#if qr}

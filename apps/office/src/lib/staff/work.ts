@@ -4,29 +4,7 @@
 // import in the browser.
 import type { FollowUpKind } from '@oddboro/ledger';
 
-export type Work = {
-  /** Unique while the office runs. A follow-up yet to start is its row's id, below zero. */
-  id: number;
-  kind: 'job' | 'follow-up' | 'draft';
-  /** The job's name or the ask's title. */
-  label: string;
-  /** What kind of work it is, in a few words: "Carrying out ask #20". */
-  detail: string;
-  /** When it started, or joined the line for a slot. */
-  since: string;
-  /** True while it waits for a free slot, or to start. */
-  queued: boolean;
-  /**
-   * A follow-up the office has yet to start: it waits for the Odd's run on
-   * the same work to end (`followUpsToStart` in the ledger).
-   */
-  toStart?: true;
-  askId?: number;
-  /** The tool the staffer is using now, as Claude Code names it. */
-  doing?: string;
-  /** Tool calls so far. */
-  steps: number;
-};
+export type { Work, WorkAbout } from '@oddboro/ledger/run-registry';
 
 /**
  * What a follow-up does, in a few words, by its kind: the line over its title
@@ -93,12 +71,13 @@ const TOOL_WORDS: Record<string, string> = {
 };
 
 /**
- * The office's own tools (the ledger's `mcp.ts`), each in words. A test holds
- * this to every tool `mcp.ts` registers, so a new one cannot show as its name.
+ * The office's own tools (the ledger's `mcp-*.ts` files, which `mcp.ts` imports), each in words. A test holds
+ * this to every tool they register, so a new one cannot show as its name.
  */
 export const OFFICE_TOOL_WORDS: Record<string, string> = {
   ask_for_access: 'Asking you for access',
   cancel_poke: 'Calling off a poke',
+  draft_bug_report: 'Drafting a bug report',
   edit_my_description: 'Editing its description',
   edit_my_job: 'Editing its job',
   find_connectors: 'Looking for a tool to connect',
@@ -108,6 +87,8 @@ export const OFFICE_TOOL_WORDS: Record<string, string> = {
   list_goals: 'Looking at the goals',
   log_progress: 'Logging progress',
   my_access: 'Checking its access',
+  my_project_sessions: 'Checking project assignments',
+  send_project_work: 'Sending a project assignment',
   my_asks: 'Checking its asks',
   my_tasks: 'Checking its tasks',
   my_goals: 'Checking its goals',
@@ -126,6 +107,9 @@ export const OFFICE_TOOL_WORDS: Record<string, string> = {
   propose_filter: 'Drafting a Gmail filter for you',
   ask_for_folder: 'Asking you for a folder',
   ask_for_switch: 'Asking you to turn on a switch',
+  ask_for_level: 'Asking you for a higher level',
+  ask_for_office_tool: 'Asking you for an office tool',
+  ask_for_standing_yes: 'Asking to use a tool without your yes each time',
   raise_ask: 'Raising an ask',
   reconnect_access: 'Asking you to reconnect a tool',
   resume_at: 'Setting when to pick up again',

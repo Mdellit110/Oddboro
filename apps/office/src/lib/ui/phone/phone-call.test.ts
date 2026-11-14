@@ -48,6 +48,9 @@ test('work waiting for a slot or to start is not running', () => {
 });
 
 const desk = (d: Partial<Desk>): Desk => ({
+  projectWork: [],
+  recent: [],
+  away: [],
   asks: [],
   tasks: [],
   reports: [],

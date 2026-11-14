@@ -36,6 +36,8 @@ export type OwnerAction =
 /** Every `op` the task route takes. The route's `op` has this type, so it can compare no other. */
 export const TASK_OPS = [
   'finish',
+  'start-response',
+  'response',
   'tick',
   'untick',
   'choose',
@@ -50,7 +52,9 @@ export const TASK_OPS = [
   'aws-secret-keys',
   'aws-secret',
   'tools',
-  'confirm-tools'
+  'confirm-tools',
+  'postal-inboxes',
+  'postal-select'
 ] as const;
 export type TaskOp = (typeof TASK_OPS)[number];
 
@@ -60,6 +64,9 @@ export const OWNER_ACTIONS = {
   'POST /api/account': { notAnAction: SETUP },
   'DELETE /api/account': {
     none: "Ends the account's sign-in and each persona's, and makes every persona Odd quiet."
+  },
+  'POST /api/client-log': {
+    notAnAction: "Writes the page's boot or error to the log on this computer; no record changes."
   },
   'PUT /api/diagnostics': { notAnAction: SETUP },
   // The office's push key and the phones it buzzes live in the system's secret
@@ -93,6 +100,10 @@ export const OWNER_ACTIONS = {
   'POST /api/asks/[id]/filter': { records: 'decision' },
   'POST /api/asks/[id]/folder': { records: 'decision' },
   'POST /api/asks/[id]/reply': { records: 'decision' },
+  'POST /api/browser-link': {
+    notAnAction:
+      "Makes a one-time link for the owner's browser, kept in memory for a minute; no record changes."
+  },
   'PUT /api/files': { records: 'work' },
   'POST /api/files/open': {
     notAnAction: 'Opens a page the Odd built in the browser; it changes nothing.'
@@ -105,14 +116,18 @@ export const OWNER_ACTIONS = {
   // An Odd's run reaching its outside tools, with the token the office gave
   // that run (gateway.ts). From the owner's page it answers 401 and changes
   // nothing; what a run's call there changes, the office records itself
-  // (`narrowReadTools`).
+  // (`refreshTools`).
   'POST /api/gateway/[connector]': { notAnAction: "Only an Odd's run reaches it." },
   'DELETE /api/gateway/[connector]': { notAnAction: "Only an Odd's run reaches it." },
   'POST /api/goals': { records: 'decision' },
   'PUT /api/goals/[id]': { records: 'decision' },
   'POST /api/goals/[id]/staff': { records: 'decision' },
   'DELETE /api/goals/[id]/staff': { records: 'decision' },
+  'POST /api/project-sessions': {
+    none: 'Connections, grants and instructions are kept in project_sessions and project_requests. Native terminal input never enters the office ledger.'
+  },
   'POST /api/jobs/[id]': { none: NO_ROW },
+  'DELETE /api/jobs/away': { none: "Takes the jobs off the desk's While you were away card." },
   'PATCH /api/lessons/[id]': { records: 'decision' },
   'POST /api/looks': {
     notAnAction: 'Draws a look for the hire window; nothing is kept until a hire.'
@@ -154,8 +169,20 @@ export const OWNER_ACTIONS = {
   'POST /api/setup/claude': { notAnAction: SETUP },
   'DELETE /api/setup/claude': { notAnAction: SETUP },
   'POST /api/setup/notify': { notAnAction: SETUP },
+  // The owner's yes to Advanced mode's warning, and turning it off again.
+  'PUT /api/setup/advanced': { records: 'decision' },
+  // The owner's answers to the Act check (`passActCheck`).
+  'POST /api/act-check': {
+    mayRecord: ['decision'],
+    when: 'One row the first time every answer is right. None for a wrong answer, or once the check was passed.'
+  },
   'PATCH /api/services/[id]': { records: 'access' },
   'POST /api/services/[id]': { none: NO_ROW },
+  // The owner's Refresh (`refreshTools`).
+  'POST /api/services/[id]/tools': {
+    mayRecord: ['access'],
+    when: 'A row for each change the service made to its tools since the office last read them: tools added or dropped, Read only reaching more or fewer, and each Odd that lost a standing yes. Nothing when only a description changed, or nothing did.'
+  },
   'POST /api/staff': { records: 'hire' },
   // The owner's Remove (`removeOdd`).
   'DELETE /api/staff/[id]': {
@@ -178,6 +205,17 @@ export const OWNER_ACTIONS = {
     notAnAction:
       "Keeps a file the owner attaches in the Odd's attachments folder, as part of the chat message that names it, which the chat's own log keeps."
   },
+  'POST /api/staff/[id]/bug-reports': {
+    notAnAction:
+      "Files the owner's reviewed bug report on GitHub with their own GitHub CLI, then adds its link to the chat, which the chat's own log keeps."
+  },
+  'DELETE /api/staff/[id]/chat': {
+    none: 'Stops only the named reply attempt and keeps its outcome in chat.'
+  },
+  'PATCH /api/staff/[id]/chat': {
+    notAnAction:
+      "Adds the owner's words to the named reply while it runs; the chat's own log keeps them."
+  },
   'POST /api/staff/[id]/chat': {
     notAnAction:
       "The chat's own log keeps it; a decision in it is recorded by the tool the Odd calls."
@@ -191,6 +229,12 @@ export const OWNER_ACTIONS = {
     notAnAction: 'Drafts a job description for the hire window; nothing is kept until a hire.'
   },
   'PUT /api/switches': { none: NO_ROW },
+  'POST /api/tasks/[id]#start-response': {
+    none: 'Starts the response on an open task from its selected reference file.'
+  },
+  'POST /api/tasks/[id]#response': {
+    none: 'Keeps the versioned response on its task. Finishing records the owner action.'
+  },
   'POST /api/tasks/[id]#finish': { records: 'work' },
   // Finishing is the task's one ledger row, so the steps before it write none.
   'POST /api/tasks/[id]#tick': { none: 'Ticks one step of the task.' },
@@ -229,6 +273,12 @@ export const OWNER_ACTIONS = {
   'POST /api/tasks/[id]#tools': { notAnAction: 'Lists the tools the server offers.' },
   'POST /api/tasks/[id]#confirm-tools': {
     none: 'Marks the tool ready with the tools it lists, and ticks the step.'
+  },
+  'POST /api/tasks/[id]#postal-inboxes': {
+    notAnAction: 'Lists the LegalZoom mailboxes the sign-in reaches.'
+  },
+  'POST /api/tasks/[id]#postal-select': {
+    none: 'Saves the one LegalZoom mailbox the office reads, marks the tool ready, and ticks the step.'
   },
   // The app's shell reporting an update, and the owner picking when it
   // installs: both write the `app_update` row.
