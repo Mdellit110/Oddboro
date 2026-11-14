@@ -1,10 +1,11 @@
 <script lang="ts">
   // The phone app. Four tabs: Home (`PhoneHome.svelte`), Goals (next phase),
-  // Messages (each Odd's chat, `PhoneMessages.svelte`) and Desk
+  // Messages (each Odd's last line and its chat, `PhoneMessages.svelte`) and Desk
   // (`PhoneDesk.svelte`, whose Open shows the office's own Desk window,
   // `DeskDrawer.svelte`, `away`). It hears the office's one live line, as the
   // floor does, and reloads on a change and whenever the line opens again, such
-  // as when the phone wakes. Nothing polls. Home's header holds the switch for
+  // as when the phone wakes. Nothing polls. A call (`PhoneCall.svelte`) opens
+  // over any tab from Home, Messages and the Desk, and Back returns to it. Home's header holds the switch for
   // a buzz on this phone (`phone-buzz.ts`), whose tap opens `/desk#desk`.
   import { tick, untrack } from 'svelte';
   import type { Desk } from '@oddboro/ledger';
@@ -18,11 +19,13 @@
   import { close, openReport, wins } from '#lib/ui/windows.svelte.ts';
   import { buzzOff, buzzOn, buzzState, type BuzzState } from '#lib/ui/phone-buzz.ts';
   import { waitingKey } from '#lib/desk.ts';
+  import PhoneCall from '#lib/ui/phone/PhoneCall.svelte';
   import PhoneDesk from '#lib/ui/phone/PhoneDesk.svelte';
   import PhoneHome from '#lib/ui/phone/PhoneHome.svelte';
   import PhoneMessages from '#lib/ui/phone/PhoneMessages.svelte';
   import PhoneTabs from '#lib/ui/phone/PhoneTabs.svelte';
   import type { Tab } from '#lib/ui/phone/phone-home.ts';
+  import type { LastLine } from '#lib/ui/phone/phone-messages.ts';
   import type { PhoneHome as HomeData } from '#lib/server/phone-home.ts';
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import type { Work } from '#lib/staff/work.ts';
@@ -34,6 +37,7 @@
   let staff = $state<StaffProfile[]>(untrack(() => data.staff));
   let desk = $state<Desk>(untrack(() => data.desk));
   let home = $state<HomeData>(untrack(() => data.home));
+  let lastLines = $state<Record<string, LastLine>>(untrack(() => data.messages));
   let working = $state<Record<string, string>>({});
   let inProgress = $state<Record<string, Work[]>>({});
   let toStart = $state<Record<string, Work[]>>({});
@@ -47,6 +51,15 @@
     const asked = location.hash.slice(1) as Tab;
     if (TABS.includes(asked)) tab = asked;
   });
+  /** The call on screen, if any: the Odd, and the name of where it was opened from for Back. */
+  let calling = $state<{ id: string; from: string } | undefined>();
+  const callWith = $derived(calling && staff.find((p) => p.id === calling?.id));
+  const TAB_NAMES: Record<Tab, string> = {
+    home: 'Home',
+    goals: 'Goals',
+    messages: 'Messages',
+    desk: 'Desk'
+  };
   /** The Odd whose chat is open on Messages, if any. */
   let chatting = $state<string | undefined>();
   /** The item the Desk window opens next, and whether it shows over the Desk list. */
@@ -69,6 +82,12 @@
   const VERSIONS = pageOf('version');
   /** The tables Home's next jobs and goals moving today come from. */
   const HOME = new Set(['jobs', 'threads', 'follow_ups', 'goals', 'staff_goals']);
+  /**
+   * The tables whose change comes with a line the office writes into a chat
+   * itself: a poke landing, a new Odd's hello. A reply on the phone reloads
+   * on its own (`onsaid`), and one at the computer shows when Messages opens.
+   */
+  const CHAT_LINES = new Set(['pokes', 'staff']);
 
   async function reload() {
     try {
@@ -88,6 +107,13 @@
       // The office is out of reach; the next change or reconnect tries again.
     }
   }
+  async function reloadMessages() {
+    try {
+      lastLines = await call<Record<string, LastLine>>('/api/phone/messages');
+    } catch {
+      // As below.
+    }
+  }
   async function reloadHome() {
     try {
       home = await call<HomeData>('/api/phone/home');
@@ -103,6 +129,7 @@
       version++;
       void reload();
       void reloadHome();
+      void reloadMessages();
     };
     events.onmessage = (m) => {
       const e = JSON.parse(m.data) as OfficeEvent;
@@ -114,12 +141,14 @@
       if (e.type !== 'change') return;
       if (RELOADS.has(e.table)) void reload();
       if (VERSIONS.has(e.table)) version++;
+      if (CHAT_LINES.has(e.table)) void reloadMessages();
       if (HOME.has(e.table)) void reloadHome();
     };
     return () => events.close();
   });
 
   function pick(t: Tab) {
+    if (t === 'messages' && t !== tab) void reloadMessages();
     tab = t;
     if (t === 'desk') drawer = false;
     history.replaceState(history.state, '', `#${t}`);
@@ -128,6 +157,11 @@
   function openChat(id: string) {
     chatting = id;
     pick('messages');
+  }
+
+  /** Opens a call with an Odd, over the tab it was opened from, which Back names. */
+  function openCall(id: string) {
+    calling = { id, from: TAB_NAMES[tab] };
   }
 
   /** Opens one item in the Desk window, over the Desk list. */
@@ -156,14 +190,6 @@
     if (key) void openOnDesk(key);
     else if (d.kind === 'report') openReport({ id: d.id, staff: staffId, title: d.title });
   }
-
-  /** How many items each Odd has waiting on the desk. */
-  const waitingFrom = $derived(
-    [...desk.asks, ...desk.tasks, ...desk.reports].reduce<Record<string, number>>((n, i) => {
-      if (i.staffId) n[i.staffId] = (n[i.staffId] ?? 0) + 1;
-      return n;
-    }, {})
-  );
 
   const nothing = () => {};
 
@@ -205,7 +231,7 @@
 </svelte:head>
 
 <main class="phone-desk mx-auto flex h-dvh max-w-xl flex-col">
-  <div class="relative min-h-0 flex-1" class:hidden={!!front}>
+  <div class="relative min-h-0 flex-1" class:hidden={!!front || !!callWith}>
     <div class="flex h-full flex-col" class:hidden={tab !== 'home'}>
       {#if buzz === 'on' || buzz === 'off'}
         <button
@@ -231,7 +257,7 @@
           {inProgress}
           {home}
           onopen={openOnDesk}
-          oncall={openChat}
+          oncall={openCall}
           ongoals={() => pick('goals')}
         />
       </div>
@@ -249,12 +275,16 @@
         {staff}
         {chatting}
         onchat={(id) => (chatting = id)}
+        oncall={openCall}
         {version}
-        visible={tab === 'messages' && !front}
+        visible={tab === 'messages' && !front && !callWith}
+        {desk}
+        {working}
         {inProgress}
         {toStart}
-        {waitingFrom}
+        {lastLines}
         onitem={openItem}
+        onsaid={reloadMessages}
       />
     </div>
 
@@ -263,6 +293,7 @@
         {desk}
         {staff}
         onopen={openOnDesk}
+        oncall={openCall}
         onreply={(c) =>
           c.row.staffId &&
           replyAbout(c.row.staffId, { kind: 'report', id: c.row.id, title: c.row.title })}
@@ -302,6 +333,30 @@
     </div>
   </div>
 
+  {#if callWith && calling}
+    <!-- A file or report a caption opened shows over the call, which stays beneath. -->
+    {#key callWith.id}
+      <div class="min-h-0 flex-1" class:hidden={!!front}>
+        <PhoneCall
+          odd={callWith}
+          from={calling.from}
+          {desk}
+          work={inProgress[callWith.id]}
+          {version}
+          onend={() => (calling = undefined)}
+          onopen={(key) => {
+            calling = undefined;
+            void openOnDesk(key);
+          }}
+          ondesk={() => {
+            calling = undefined;
+            pick('desk');
+          }}
+          onsaid={reloadMessages}
+        />
+      </div>
+    {/key}
+  {/if}
   {#if front?.kind === 'file'}
     <div class="min-h-0 flex-1">
       <FileViewer
@@ -323,7 +378,9 @@
     </div>
   {/if}
 
-  <PhoneTabs {tab} {waiting} onpick={pick} />
+  {#if !callWith}
+    <PhoneTabs {tab} {waiting} onpick={pick} />
+  {/if}
 </main>
 
 <style>

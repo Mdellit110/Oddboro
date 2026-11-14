@@ -38,7 +38,7 @@
       bind:this={canvas}
       aria-hidden="true"
       class="size-full object-contain [image-rendering:pixelated]"
-      class:hidden={!drawn}
+      style:display={drawn ? undefined : 'none'}
     ></canvas>
   {/if}
   {#if !drawn || !odd}

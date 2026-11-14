@@ -106,6 +106,13 @@ export const OUTBOUND: readonly Outbound[] = [
     yes: 'The owner opening the phone desk; the request stays on their tailnet.'
   },
   {
+    file: 'apps/office/src/lib/ui/phone/PhoneCall.svelte',
+    calls: 2,
+    to: "The office's chat route, from the owner's phone over their own tailnet to the home computer.",
+    sends: "The owner's words on a call with an Odd, to the office that runs the Odd.",
+    yes: 'The owner sending the message on the call; the request stays on their tailnet.'
+  },
+  {
     file: 'apps/office/src/lib/server/gemini.ts',
     calls: 1,
     to: "Google's Gemini models list.",
