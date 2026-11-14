@@ -1289,13 +1289,31 @@ section says to restart once. Then it shows the link and a QR code
 nothing polls. `tailscale.test.ts` runs it on a Mac, Linux and Windows
 (hard rule 14).
 
-The page has two tabs. Desk shows the same `DeskDrawer.svelte` with `away`
+The page is the phone app, with four tabs along its foot
+(`src/lib/ui/phone/`, `PhoneTabs.svelte`; `#desk` and the like in the address
+picks one, so the buzz opens Desk). Home (`PhoneHome.svelte`) lists the asks
+alone under Waiting on you, newest first; under Happening now the goals with
+work handed on or back today, with no count (`happeningToday`); and under
+Who's around each Odd with a dot and one line (`aroundLine`: its running work
+and minutes, else waiting on you, else free and its next job) and a call
+button that opens its chat for now. Home's next jobs and goals come from
+`GET /api/phone/home` (`src/lib/server/phone-home.ts`, read only, from the
+ledger's own readers), read again on a change to `jobs`, `threads`,
+`follow_ups`, `goals` or `staff_goals`. Its minutes move once a minute only
+while an Odd is at work. Goals says it comes in a later update. Desk
+(`PhoneDesk.svelte`) lists every item as a card, newest first, with All, Asks,
+Tasks and Reports chips, and each card's buttons from `cardButtons` in
+`phone-desk.ts`: a one-tap button posts the same route and body as the Desk
+window's, a card whose yes may send something out (a reply, or a held call the
+office did not put in words, `sendsOut`) and every kind with its own review
+get Open only, and a task shows its steps done. Open shows the same
+`DeskDrawer.svelte` over the list with `away`
 set: no hire window is there, and nothing reaches the office computer's folder
 picker or a sign-in that comes back to it, so a hire ask, a hosted or AWS
 sign-in step and a folder ask's Change say "Open this at the office".
 Selecting a report's text to chat about it stays at the computer too.
-Everything else answers as on the computer, through the same routes. Chat
-lists every Odd, with what each has waiting, and opens its own
+Everything else answers as on the computer, through the same routes.
+Messages (`PhoneMessages.svelte`) lists every Odd, with what each has waiting, and opens its own
 `ChatPanel.svelte`, as on the computer. The sender card and a colleague's name
 on an item, and a report's Reply (`replyAbout`), open that Odd's chat; opening
 an item alone (`showInChat`) does not, since on a phone that would leave the
@@ -1313,7 +1331,7 @@ page links `static/desk.webmanifest` and the icons `desk-256.png` and
 screen and opens it straight to the desk. Nothing of the desk is kept on the
 phone.
 
-Buzz me in its header turns on a buzz for that phone
+Buzz me at the top of Home turns on a buzz for that phone
 (`src/lib/ui/phone-buzz.ts`): the phone asks for leave to notify, registers
 `static/desk-push.js` for `/desk` alone, asks its push service for an address
 with the office's key, and gives the office that address (`/api/push`).
