@@ -187,7 +187,7 @@ async function reach(route: string, method: string, call: Call = {}): Promise<un
   return page.load({ url });
 }
 
-// New Altitude on this computer, for the persona routes. It lists three
+// New Altitude on this computer, for the persona routes. It lists four
 // made-up personas, so each route that adds one has one the office lacks.
 const newAltitude = await fakeNewAltitude();
 process.env.ODDBORO_ACCOUNT_SITE = `${newAltitude.origin}/`;
@@ -195,7 +195,12 @@ after(() => newAltitude.close());
 /** `pat` under another name: its slug, name, part and sprites renamed alike, so its look is its own. */
 const personaAs = (slug: string, name: string) =>
   JSON.parse(JSON.stringify(PAT).replaceAll('pat', slug).replaceAll('Pat', name)) as typeof PAT;
-newAltitude.odds = [PAT, personaAs('quin', 'Quin'), personaAs('rio', 'Rio')];
+newAltitude.odds = [
+  PAT,
+  personaAs('quin', 'Quin'),
+  personaAs('rio', 'Rio'),
+  personaAs('tam', 'Tam')
+];
 
 /** New Altitude's page at `url` saying yes: the query it sends the browser back to the callback with. */
 async function yesAt(url: string): Promise<Record<string, string>> {
@@ -365,6 +370,12 @@ const TRY: Record<Recording, (send: Send) => Promise<void>> = {
     const query = await addPersona('rio');
     await send({ query });
     await send({ query });
+  },
+  'POST /api/phone/sign-in': async (send) => {
+    const { ACCOUNT_PLACE } = await import('./account.ts');
+    const query = await addPersona('tam');
+    const url = ACCOUNT_PLACE.redirect + '?' + new URLSearchParams(query);
+    await send({ body: { url, state: query.state } });
   },
   // Quin's sign-in kept from before the welcome, as after a restart: Add finds
   // it still holds and adds Quin at once.

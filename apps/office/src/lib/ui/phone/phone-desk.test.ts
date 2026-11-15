@@ -150,7 +150,7 @@ test("a task's card counts its steps and says when a sign-in waits at the office
       { text: 'Check', done: false }
     ] as TaskRow['steps']
   });
-  assert.deepEqual(taskProgress(t), { line: '1 of 3 steps done', done: 1 / 3, signIn: true });
+  assert.deepEqual(taskProgress(t), { line: '1 of 3 steps done', done: 1 / 3, signIn: false });
   assert.equal(
     taskProgress(task({ steps: [{ text: 'a', done: false }] })).line,
     '0 of 1 step done'

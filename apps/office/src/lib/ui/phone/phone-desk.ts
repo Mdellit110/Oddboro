@@ -161,7 +161,7 @@ export function taskProgress(t: TaskRow): { line: string; done: number; signIn: 
   return {
     line: `${done} of ${total} ${total === 1 ? 'step' : 'steps'} done`,
     done: total ? done / total : 0,
-    signIn: next?.action?.kind === 'oauth' || next?.action?.kind === 'aws'
+    signIn: next?.action?.kind === 'aws'
   };
 }
 

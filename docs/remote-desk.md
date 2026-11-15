@@ -131,8 +131,12 @@ If the buzz stops, check Settings, Apps, Chrome, Notifications.
   call and Read take one tap. Anything whose yes could send something out of
   the office, such as an email, has only **Open**, so you read it in full
   first. Open shows the item as the office's Desk does.
-- Some things need the computer: a hire, a sign-in to a service, and picking
-  a different folder. The desk says "Open this at the office" for those.
+- A hire opens the office's existing hire window on this phone. For a New
+  Altitude or hosted service sign-in, authorize in the tab that opened.
+  If the browser cannot reach the return page, copy its whole address. In the
+  waiting office window, choose **Finish from another device**, paste the
+  address and press **Finish sign-in**. Keep it out of chat.
+- AWS sign-in and changing a folder still use the office computer.
 - **Buzz on** at the top of Home turns the buzz off again for that phone. Each phone
   is turned on by itself.
 

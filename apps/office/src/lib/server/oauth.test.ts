@@ -46,7 +46,7 @@ const stopDatabase = await startLocalDatabase();
 const { bringUpToDate } = await import('@oddboro/ledger/upgrade');
 await bringUpToDate();
 const L = await import('@oddboro/ledger');
-const { bearer } = await import('./oauth.ts');
+const { bearer, KeychainProvider, REDIRECT } = await import('./oauth.ts');
 
 after(async () => {
   await fake.close();
@@ -101,6 +101,24 @@ const refreshesSent = () =>
         s.path === '/token' && new URLSearchParams(s.body).get('grant_type') === 'refresh_token'
     )
     .map((s) => new URLSearchParams(s.body).get('refresh_token'));
+
+test('a new request replaces an older return for the same connector, and each return expires', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = new Map<string, string>();
+  const place = { redirect: REDIRECT, pending };
+  const provider = new KeychainProvider('tracker', place);
+  const first = provider.state();
+  const other = new KeychainProvider('calendar', place).state();
+  t.mock.timers.tick(1000);
+  const latest = provider.state();
+  assert.equal(pending.has(first), false);
+  assert.equal(pending.get(other), 'calendar');
+  t.mock.timers.tick(15 * 60_000 - 1000);
+  assert.equal(pending.has(other), false);
+  assert.equal(pending.get(latest), 'tracker');
+  t.mock.timers.tick(1000);
+  assert.equal(pending.size, 0);
+});
 
 test("two runs that need a connector's token at once refresh it once", async () => {
   await signedIn('refresh-seeded');

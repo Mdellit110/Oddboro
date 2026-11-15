@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PhoneSignInReturn from './PhoneSignInReturn.svelte';
   import type { AskRow, Desk, LedgerRow, ReportRow, Step, TaskRow } from '@oddboro/ledger';
   import Pixel from './Pixel.svelte';
   import Markdown from './Markdown.svelte';
@@ -48,11 +49,8 @@
     /** Open a staffer's card, from the name on an item; on the phone desk, its chat. */
     onstaff: (id: string) => void;
     /**
-     * Shown away from the office, on the phone desk (`/desk`): no hire window
-     * is there, and nothing reaches this computer's folder picker or a sign-in
-     * that comes back to it, so those say to open them at the office instead of
-     * offering a button. Selecting a report's text to chat about it stays at
-     * the office too; Reply works here.
+     * The phone desk uses the office hire window for hires and the computer
+     * for its folder picker and AWS sign-in.
      */
     away?: boolean;
   };
@@ -273,10 +271,14 @@
   const dismissAway = () => act(() => call('/api/jobs/away', undefined, 'DELETE'));
 
   /** The service's sign-in page opens in a new tab; the step ticks when the owner comes back. */
+  let waitingForSignIn = $state<{ task: number; index: number; url: string }>();
   async function hostedSignIn(t: TaskRow, index: number) {
     await act(async () => {
       const r = await call<{ url?: string }>(`/api/tasks/${t.id}`, { op: 'oauth', index });
-      if (r.url) window.open(r.url, '_blank', 'noopener');
+      if (r.url) {
+        waitingForSignIn = { task: t.id, index, url: r.url };
+        window.open(r.url, '_blank', 'noopener');
+      }
     });
   }
 
@@ -725,7 +727,9 @@
             >
           {:else if a.kind === 'hire'}
             {#if away}
-              {@render atOffice('Hiring happens in the hire window.')}
+              <a class="rounded-lg bg-sea px-3 py-2 text-night" href={`/?hire=${a.id}`}
+                >Open hire window</a
+              >
             {:else}
               <button
                 class="flex-[1.4] rounded-lg bg-sea px-3 py-2 text-sm font-medium text-night disabled:opacity-40"
@@ -826,7 +830,7 @@
                     >
                   {/if}
                 </div>
-                {#if away && !s.done && (s.action?.kind === 'oauth' || s.action?.kind === 'aws')}
+                {#if away && !s.done && s.action?.kind === 'aws'}
                   {@render atOffice('The sign-in comes back to the office.')}
                 {:else if s.action?.kind === 'oauth' && !s.done}
                   <button
@@ -834,6 +838,17 @@
                     disabled={busy}
                     onclick={() => hostedSignIn(t, index)}>Sign in</button
                   >
+                  {#if waitingForSignIn?.task === t.id && waitingForSignIn.index === index}
+                    <a
+                      href={waitingForSignIn.url}
+                      target="_blank"
+                      rel="noopener"
+                      class="text-sea underline">Open the sign-in page</a
+                    >
+                    {#key waitingForSignIn.url}<PhoneSignInReturn
+                        start={waitingForSignIn.url}
+                      />{/key}
+                  {/if}
                 {:else if s.action?.kind === 'postal'}
                   {#if s.done}
                     {#if s.answer}<p class="mt-1.5 text-xs text-muted">{s.answer}</p>{/if}
