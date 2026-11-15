@@ -494,13 +494,11 @@ test('a computer with no secret store gets a plain reason and nothing is sent', 
   assert.equal(fake.seen.length, before);
 });
 
-test('a phone finishes its own pending return once', async () => {
+test('a phone can replace an expired return and finish its own current sign-in once', async (t) => {
   const phone = await import('../../routes/api/phone/sign-in/+server.ts');
   const { ACCOUNT_PLACE } = await import('./account.ts');
-  const back = await returnFrom();
-  const address = ACCOUNT_PLACE.redirect + '?' + back;
-  const state = back.get('state');
-  const submit = (url: string, expected: string | null = state) =>
+
+  const submit = (url: string, expected = new URL(url).searchParams.get('state')) =>
     send({
       route: '/api/phone/sign-in',
       method: 'POST',
@@ -509,6 +507,18 @@ test('a phone finishes its own pending return once', async () => {
       resolve: phone.POST as Handler
     });
   const exchanges = grants('authorization_code').length;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let expired: URLSearchParams;
+  try {
+    expired = await returnFrom();
+    t.mock.timers.tick(15 * 60_000);
+  } finally {
+    t.mock.timers.reset();
+  }
+  assert.equal((await submit(ACCOUNT_PLACE.redirect + '?' + expired)).status, 400);
+  assert.equal(accountStatus().state, 'out');
+  assert.equal(grants('authorization_code').length, exchanges);
+  const address = ACCOUNT_PLACE.redirect + '?' + (await returnFrom());
   assert.equal((await submit(address, 'another request')).status, 400);
   assert.equal(
     (await submit(address.replace(ACCOUNT_PLACE.redirect, 'https://example.invalid/elsewhere')))
