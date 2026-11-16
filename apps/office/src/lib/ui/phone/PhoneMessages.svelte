@@ -9,6 +9,7 @@
   import type { StaffProfile } from '#lib/staff/roster.ts';
   import type { Work } from '#lib/staff/work.ts';
   import OddFace from './OddFace.svelte';
+  import { oddNow, readerProps } from '#lib/staff/odd-now.ts';
   import { aroundLine, waitingOdds, type Presence } from './phone-home.ts';
   import { previewLine, type LastLine } from './phone-messages.ts';
 
@@ -48,6 +49,25 @@
   }: Props = $props();
   const chatWith = $derived(staff.find((p) => p.id === chatting));
   const nothing = () => {};
+  // What the chat's header says an Odd is doing comes from the same reading of
+  // the office the computer uses. The phone keeps no floor, messages or threads,
+  // so an Odd reads as at home; `working` holds exactly the Odds replying.
+  const readerFor = (id: string) => {
+    const ids = staff.map((p) => p.id);
+    const snapshot = {
+      ids,
+      inProgress,
+      toStart,
+      chatting: Object.keys(working),
+      desk,
+      staff,
+      messages: {},
+      threads: [],
+      activity: Object.fromEntries(ids.map((i) => [i, 'home' as const])),
+      nameOf: (i: string) => staff.find((p) => p.id === i)?.name ?? i
+    };
+    return readerProps(snapshot, oddNow(snapshot), id, nothing);
+  };
   const waiting = $derived(waitingOdds(desk));
   const presence = (id: string): Presence =>
     aroundLine({ working: working[id], work: inProgress[id], waiting: waiting.has(id) }).presence;
@@ -107,15 +127,12 @@
         <!-- A plan's hires wait on the Desk tab as Open cards: the phone has no hire window. -->
         <ChatPanel
           profile={chatWith}
-          {desk}
-          {staff}
-          onplan={nothing}
+          {...readerFor(chatWith.id)}
           {version}
           onstart={nothing}
           onend={onsaid}
           {visible}
           onitem={(d) => onitem(chatWith.id, d)}
-          work={[...(inProgress[chatWith.id] ?? []), ...(toStart[chatWith.id] ?? [])]}
           onwork={nothing}
         />
       </div>

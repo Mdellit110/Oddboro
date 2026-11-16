@@ -26,7 +26,10 @@ export * from './read-only.ts';
 export {
   searchRegistry,
   ensureConnector,
+  connectorIdFor,
   BUILT_IN,
+  GITHUB_ADDRESS,
+  GITHUB_ID,
   HEADER_NAME,
   type Candidate,
   type WayIn
@@ -41,14 +44,17 @@ export * from './goals.ts';
 export * from './lessons.ts';
 export * from './goal-words.ts';
 export * from './updates.ts';
+export * from './chat-updates.ts';
 export * from './update-window.ts';
 export * from './hand-offs.ts';
+export { runsAtDraft, runCeiling } from './work/kinds.ts';
 export * from './hand-off-news.ts';
 export * from './threads.ts';
 export * from './lead-brief.ts';
 export * from './sharing.ts';
 export { WEEKDAYS } from './time.ts';
 export * from './project-sessions.ts';
+export { PROJECT_RECEIVERS } from './project-receiver.ts';
 export * from './leaving.ts';
 export * from './missed-runs.ts';
 export * from './bug-drafts.ts';

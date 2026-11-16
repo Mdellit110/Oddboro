@@ -42,7 +42,11 @@
   let desk = $state<Desk>(untrack(() => data.desk));
   let home = $state<HomeData>(untrack(() => data.home));
   let lastLines = $state<Record<string, LastLine>>(untrack(() => data.messages));
-  let working = $state<Record<string, string>>({});
+  let chattingOdds = $state<string[]>([]);
+  /** What the phone shows for an Odd replying in chat; its running work reads better and wins. */
+  const working = $derived<Record<string, string>>(
+    Object.fromEntries(chattingOdds.map((id) => [id, 'Chatting']))
+  );
   let inProgress = $state<Record<string, Work[]>>({});
   let toStart = $state<Record<string, Work[]>>({});
   /** Bumps on a change an open chat reloads for, as on the computer. */
@@ -132,13 +136,13 @@
       const next = await call<{
         staff: StaffProfile[];
         desk: Desk;
-        working: Record<string, string>;
+        chatting: string[];
         inProgress: Record<string, Work[]>;
         toStart: Record<string, Work[]>;
       }>('/api/office');
       staff = next.staff;
       desk = next.desk;
-      working = next.working;
+      chattingOdds = next.chatting;
       inProgress = next.inProgress;
       toStart = next.toStart;
     } catch {
@@ -173,7 +177,7 @@
     events.onmessage = (m) => {
       const e = JSON.parse(m.data) as OfficeEvent;
       if (e.type === 'working') {
-        working = e.working;
+        chattingOdds = e.chatting;
         inProgress = e.inProgress;
         return;
       }

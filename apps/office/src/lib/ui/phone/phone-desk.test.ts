@@ -52,6 +52,7 @@ const desk = (d: Partial<Desk>): Desk => ({
   tasks: [],
   reports: [],
   attachments: [],
+  connectOnly: [],
   folders: {},
   ...d
 });

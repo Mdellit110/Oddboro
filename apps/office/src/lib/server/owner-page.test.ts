@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import type { RequestEvent } from '@sveltejs/kit';
+import { kitUrl, ownProof, REQUEST_TARGETS } from './request-targets.ts';
 
 const folder = mkdtempSync(join(tmpdir(), 'oddboro-owner-page-'));
 const port = await new Promise<number>((done) => {
@@ -25,7 +26,6 @@ Object.assign(process.env, {
   // A file that does not exist, so no .env reaches this office.
   ODDBORO_ENV: join(folder, 'none.env'),
   ODDBORO_LOCAL_DB: '1',
-  OLLAMA_URL: 'http://127.0.0.1:9',
   ORIGIN: 'http://office.test:4500',
   // An empty home of its own, so the office never finds the owner's own
   // tools there (a real grok in ~/.grok/bin), and no tool's maker is asked
@@ -89,7 +89,7 @@ async function send(
   });
   const event = {
     request,
-    url: new URL(request.url),
+    url: kitUrl(request),
     params: s.params ?? {},
     getClientAddress: () => s.from ?? '127.0.0.1'
   } as unknown as RequestEvent;
@@ -469,7 +469,7 @@ test('with no Sec-Fetch-Site, a foreign, unreadable or missing Origin is refused
   assert.equal(from({ host }), false);
 });
 
-test('the app allows a screenshot in chat while other actions keep their smaller limit', async () => {
+test('the app allows a screenshot in chat and a backup to restore while other actions keep their smaller limit', async () => {
   const before = process.env.ODDBORO_APP;
   process.env.ODDBORO_APP = '1';
   const body = 'x'.repeat(2 * 1024 * 1024);
@@ -480,6 +480,9 @@ test('the app allows a screenshot in chat while other actions keep their smaller
       assert.equal(large.status, 200);
       const uploaded = await send(ok, { path: '/api/staff/paige/attachments', body, headers });
       assert.equal(uploaded.status, 200);
+      // A backup to restore is the whole office, held to its own limit as it arrives.
+      const restore = await send(ok, { path: '/api/backup/restore', body, headers });
+      assert.equal(restore.status, 200);
       const other = await send(ok, { path: '/api/goals', body, headers });
       assert.equal(other.status, 413);
       assert.equal(other.ran, false);
@@ -488,4 +491,51 @@ test('the app allows a screenshot in chat while other actions keep their smaller
     if (before === undefined) delete process.env.ODDBORO_APP;
     else process.env.ODDBORO_APP = before;
   }
+});
+
+test('from source, an action without the page passes only as a run at its gateway, judged on the address it was sent to, and another computer gets nothing', async () => {
+  const notes = {
+    id: 'notes',
+    name: 'Notes',
+    readTools: [],
+    tools: [],
+    config: {}
+  } as unknown as import('@oddboro/ledger').ConnectorRow;
+  const { token } = openGateway([{ connector: notes, level: 'read' }], 60_000);
+  const RUN = { authorization: `Bearer ${token}` };
+  // Outside the app no request carries a key, so the shell's header opens nothing.
+  const SHELL = { 'x-oddboro-key': 'a1'.repeat(32) };
+  let rows = 0;
+  try {
+    for (const { target, kitPath, app } of REQUEST_TARGETS) {
+      rows++;
+      const path = target.replace('<root>', folder);
+      if (app === 'unparsed') {
+        assert.throws(() => new Request(`http://127.0.0.1:4500${path}`), TypeError, target);
+        continue;
+      }
+      const named: Record<string, string> = kitPath ? { 'x-sveltekit-pathname': kitPath } : {};
+      const runs = app === 'passes' && ownProof(path) === 'run';
+      for (const proof of [{}, SHELL, RUN]) {
+        const r = await send(ok, { method: 'POST', path, headers: { ...named, ...proof } });
+        const passes = runs && proof === RUN;
+        assert.deepEqual(
+          [target, kitPath, r.status, r.ran],
+          [target, kitPath, passes ? 200 : 403, passes]
+        );
+        for (const method of ['GET', 'POST']) {
+          const away = await send(ok, {
+            method,
+            path,
+            headers: { ...named, ...PAGE, ...proof },
+            from: '192.168.1.20'
+          });
+          assert.deepEqual([target, method, away.status, away.ran], [target, method, 403, false]);
+        }
+      }
+    }
+  } finally {
+    await closeGateway(token);
+  }
+  assert.equal(rows, REQUEST_TARGETS.length);
 });

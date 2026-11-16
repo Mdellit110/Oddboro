@@ -22,19 +22,32 @@ import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import { backUpForNewVersion } from './backup.ts';
+import { applyStagedRestore } from './office-backup.ts';
 import { LOCAL_DATABASE_DIR, LOCAL_DATABASE_PORT, LOCAL_DATABASE_SOCKET } from './db.ts';
 import { currentPlatform } from './platform.ts';
 
 type Listener = (channel: string, payload: string) => void;
 /** Closes the socket and the database. Only a test needs it: the office's own ends with its process. */
 type Stop = () => Promise<void>;
-type Local = { ready: Promise<Stop>; listeners: Set<Listener> };
+type Local = { ready: Promise<Stop>; listeners: Set<Listener>; db?: PGlite };
 const g = globalThis as unknown as { localDatabase?: Local };
 
 /** Start the local database once per process, even when Vite reloads this module. */
 export function startLocalDatabase(): Promise<Stop> {
   g.localDatabase ??= { ready: open(), listeners: new Set() };
   return g.localDatabase.ready;
+}
+
+/**
+ * The database as PGlite's own tar of its folder, for a backup
+ * (office-backup.ts). PGlite takes it between two statements, so it is whole
+ * while the office runs.
+ */
+export async function dumpLocalDatabase(): Promise<Buffer> {
+  await g.localDatabase?.ready;
+  const db = g.localDatabase?.db;
+  if (!db) throw new Error("The office's own database is not running.");
+  return Buffer.from(await (await db.dumpDataDir('none')).arrayBuffer());
 }
 
 /** Hear NOTIFY on a channel, from any process. */
@@ -47,10 +60,13 @@ export function listenLocal(channel: string, fn: (payload: string) => void): voi
 async function open(): Promise<Stop> {
   // Before the files open: another office on this home must not open them too.
   if (LOCAL_DATABASE_SOCKET) await socketFree(LOCAL_DATABASE_SOCKET);
+  // A backup the owner chose to restore goes in while the files are closed.
+  applyStagedRestore();
   // A new version's first start copies the database aside before it opens it.
   backUpForNewVersion();
   mkdirSync(LOCAL_DATABASE_DIR, { recursive: true });
   const db = await PGlite.create(LOCAL_DATABASE_DIR, { extensions: { vector } });
+  g.localDatabase!.db = db;
   await db.exec('create extension if not exists vector');
   // Postgres only sends a notification to a session that asked for it.
   await db.exec('listen office');

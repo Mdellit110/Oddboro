@@ -12,6 +12,7 @@ backlog. Read a doc's status before acting on it: **proposed** (not agreed),
 - `remote-desk.md`. **Built.** Reaching the office from a phone over Tailscale: the home computer, `tailscale serve` to the phone's door, `ODDBORO_EXTRA_HOSTS`, and the check that it is closed to everyone else.
 - `architecture.md`. **Built.** The picture: the parts, one function per job, and where each new kind of thing starts and which check catches a missed place.
 - `project-sessions.md`. **Built.** Native Codex and Claude Code sessions: start or attach, permissions, and recovery.
+- `chat-update-boundaries.md`. **Built.** Update status and owner controls in chat, and the limits on untrusted instructions.
 
 ## Later
 

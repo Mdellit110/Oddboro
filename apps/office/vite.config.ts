@@ -139,6 +139,8 @@ export default defineConfig(({ command }) => ({
     sveltekit({ adapter: adapter() })
   ],
   define: { __SITE_URL__: JSON.stringify(siteUrl()) },
+  // The first file picked in Hire must not reload the page while Vite prepares its parser.
+  optimizeDeps: { include: ['yaml'] },
   // The office's addresses through Caddy (lib/server/address.ts).
   server: {
     port,

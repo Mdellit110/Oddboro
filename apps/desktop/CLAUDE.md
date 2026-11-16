@@ -59,8 +59,11 @@ digits>`, answered with HMAC-SHA256 under the key of `oddboro-proof:` and
    `office page loaded: <url>` once the window has the page, and the words
    of every dialog it shows (`dialog: ...`), written before the dialog waits
    for OK. The office adds `office:` lines (each startup step's time,
-   `ready`, a new version's `first start of X after Y`) and `page:` lines
-   (the page's boot and its errors), as `apps/office/CLAUDE.md` says. Past
+   `ready`, a new version's `first start of X after Y`, a run that failed or
+   was stopped) and `page:` lines (the page's boot and its errors), as
+   `apps/office/CLAUDE.md` says. The shell starts each of Node's lines, from
+   stdout and stderr both, with the time in UTC, and reads them as bytes, so
+   a line that is not UTF-8 still goes in and never stalls Node. Past
    10 MB the log moves to `office.log.1` when Node next starts.
 6. Restarts Node when it dies: after 1s, 5s, then 30s, at most 5 times in 10
    minutes. Then it shows the log tail and quits. Each restart gets a new
@@ -144,6 +147,13 @@ port, 3 no Node, 4 no office server, 5 a bad server URL, 6 the server would
 not start or keep running (no randomness for the key counts as not starting),
 7 no window. 0 is a quit.
 
+Setup’s **Save support report** downloads the latest recognized office log events.
+If startup fails, the shell saves `office.support.txt` beside the log and gives its
+location in the error dialog. Each failure replaces the previous report. Both paths
+use `apps/office/src/lib/server/support-report.js`. If the bundled Node is missing,
+the report still contains the app version, system, exit code and failure reason.
+Saving a report works with online diagnostics off.
+
 ## The contract with the server
 
 - Entry: `<resources>/server/apps/office/build/index.js`, run with cwd
@@ -162,13 +172,12 @@ not start or keep running (no randomness for the key counts as not starting),
 | `ODDBORO_PORT`                 | the same                                                   |
 | `HOST`                         | `127.0.0.1`                                                |
 | `ORIGIN`                       | `http://127.0.0.1:<port>`                                  |
-| `BODY_SIZE_LIMIT`              | `12M` for chat imports; attachments keep their own limit   |
+| `BODY_SIZE_LIMIT`              | `16G`, for a backup to restore; the office limits the rest |
 | `ODDBORO_HOME`                 | `~/.oddboro` (`%USERPROFILE%\.oddboro`), unless set        |
 | `ODDBORO_CODE`                 | `<resources>/server`                                       |
 | `ODDBORO_DB_PORT`              | passed through when the shell's env sets it; Windows only  |
 | `PATH`                         | the login-shell PATH from step 3                           |
 | `ODDBORO_VERSION`              | the app's version, like `0.0.4`                            |
-| `BODY_SIZE_LIMIT`              | `11M`, so a 10 MB file attached in a chat gets through     |
 | `ODDBORO_UPDATES`              | `1` in release builds, which update themselves             |
 | `ODDBORO_SECRETS`              | `shell` on a Mac: the shell keeps the office's secrets     |
 | `ODDBORO_GOOGLE_CLIENT_SECRET` | the Google sign-in client's secret, when the build had one |
@@ -312,7 +321,8 @@ Every update is required. `src-tauri/src/update.rs` runs them with
   third-party package under `dependencies` that `UNBUNDLED` does not name
   (Sentry's two): its build bundles the rest, so they belong in
   `devDependencies` (0.0.5 shipped 16,000 files of them, #13). It fails if
-  any page chunk is over 500 kB. It fetches the Node
+  any page chunk is over 500 kB, and prints a GitHub Actions warning for
+  one over 400 kB. It fetches the Node
   binary for this machine's Node version, system and chip, and checks it
   against nodejs.org's sums (Windows's comes as a zip, unpacked with
   Windows's own `tar`). `scripts/smoke.ts --stage` then checks the stage.
@@ -431,8 +441,11 @@ Windows; `Info.plist`, `codesign`, `spctl` and the stapled ticket on a Mac);
 it starts with no dialog; the real window shows the welcome and Next moves it
 to the name step; a request without the app's key gets 403, a read too, while
 the page's built files under `/_app/` load; the log has the window loading
-the page and the page booting, with no page errors; it quits with Node and
-both ports gone; it starts twice more; on Windows it uninstalls.
+the page and the page booting, with no page errors; the shell's launch line
+and the office's own `office: port <n>, home <folder>` line name the port and
+home the run set (NEW-1694: each side works them out, and the shell hands them
+over); it quits with Node and both ports gone; it starts twice more; on
+Windows it uninstalls.
 
 The real app's shell keeps its key to itself, so the rows that need the
 office's answers run where a key can come along. `--stage` starts the staged
@@ -470,6 +483,13 @@ runner it asks for `--replace-installed`. Quit Oddboro first: Linux and
 Windows keep to one at a time. Results go to `--out`: `results.json`,
 `summary.md`, `office.log`, `shell.log` and a screenshot. The run's home
 goes when it ends, pass or fail; `--keep` keeps it for a look.
+
+Where it runs: `--stage` in Checks (`ci.yml`) on every pull request, on all
+three systems. `--from` on an unsigned 9.9.9 build in `app-smoke.yml`, on
+every pull request that changes the app (Windows, macOS 15, Ubuntu 22.04)
+and by hand (Run workflow) on all six release machines, then in `release.yml` on
+the signed builds before each draft. A failed row's words are in the job's
+summary table; the results, logs and screenshot are its `smoke-*` artifact.
 
 ### Secrets
 

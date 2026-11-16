@@ -211,16 +211,24 @@
   const decide = (a: AskRow, decision: 'approve' | 'deny' | 'iterate') =>
     act(async () => {
       const picks = a.plan?.items.map((_, i) => i).filter((i) => !skip[i]);
-      const send = () =>
+      const send = (actsOnHandOffs?: boolean) =>
         call<{ hires?: AskRow[]; task?: TaskRow | null }>(`/api/asks/${a.id}`, {
           decision,
           reason,
           report: reportWhenDone,
-          picks
+          picks,
+          actsOnHandOffs
         });
-      // Raise to Act waits for the owner's Act check, the first time only.
-      const raisesToAct = decision === 'approve' && a.kind === 'level' && a.level === 'act';
-      const r = raisesToAct ? await withActCheck(send) : await send();
+      // Raise to Act waits for the owner's Act check, the first time only,
+      // then for their choice for work another Odd hands the Odd. An Odd
+      // already at Act is not asked: the yes changes nothing.
+      const odd = staff.find((s) => s.id === a.staffId);
+      const raisesToAct =
+        decision === 'approve' &&
+        a.kind === 'level' &&
+        a.level === 'act' &&
+        odd?.permission !== 'act';
+      const r = raisesToAct ? await withActCheck(odd?.name ?? a.staffId, send) : await send();
       if (!r) return;
       if (r.hires?.length) onplan(r.hires);
       // An approved access ask turns into the connect task it made, in place.
@@ -834,6 +842,20 @@
                     disabled={busy}
                     onclick={() => hostedSignIn(t, index)}>Sign in</button
                   >
+                  <details class="mt-2 text-xs text-muted">
+                    <summary class="cursor-pointer">The service won't let me sign in</summary>
+                    <p class="mt-2">
+                      If your organization blocks the app, check with the person who manages the
+                      account. Once they approve it, return here and click Sign in.
+                    </p>
+                    {#if s.action.google}
+                      <p class="mt-2">
+                        If Google says Oddboro is limited to test users or has reached its user
+                        limit, open an Odd's chat and choose More, then Report a bug. Include the
+                        error message only. The report is public.
+                      </p>
+                    {/if}
+                  </details>
                 {:else if s.action?.kind === 'postal'}
                   {#if s.done}
                     {#if s.answer}<p class="mt-1.5 text-xs text-muted">{s.answer}</p>{/if}
@@ -877,9 +899,23 @@
                   {:else}
                     {@const list = toolList[index]}
                     <p class="mt-2 text-xs text-muted">
-                      Read only reaches the tools marked reads only: the ones the service says only
-                      read, less any whose name says it changes something. Read and write reaches
-                      every tool.
+                      {#if list.some((tool) => tool.readOnly)}
+                        Read only reaches the tools marked reads only: the ones the service says
+                        only read, less any whose name says it changes something. Read and write
+                        reaches every tool.
+                      {:else if list.length}
+                        None of these tools only read, so a Read only grant reaches none of them.
+                        Read and write reaches every tool. To share a saved result instead,
+                        <a
+                          class="text-sea underline"
+                          href={siteLink('/info/folder-sharing/')}
+                          target="_blank"
+                          rel="noreferrer">give the Odd a folder it can read</a
+                        >.
+                      {:else}
+                        The service returned no tools. Check the account and its access, then
+                        reconnect.
+                      {/if}
                     </p>
                     <ul class="mt-1.5 flex max-h-48 flex-col gap-1 overflow-y-auto">
                       {#each list as tool (tool.name)}
@@ -943,7 +979,8 @@
           class="mt-1 w-full resize-none rounded-lg bg-raise px-3 py-2 text-sm outline-none placeholder:text-faint"
           placeholder="Anything your Odds should know"
           bind:value={note}></textarea>
-        {#if from}
+        <!-- A connect-only ask's task starts no work of its own: the proposal it serves does. -->
+        {#if from && !desk.connectOnly.includes(t.id)}
           <p class="mt-2 text-[11px] text-faint">
             {from.name} picks up from here as soon as you mark it done.
           </p>

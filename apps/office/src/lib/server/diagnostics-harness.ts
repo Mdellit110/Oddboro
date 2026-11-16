@@ -57,8 +57,7 @@ export function tempOffice(prefix: string): { folder: string; settings: string }
     ODDBORO_HOME: folder,
     ODDBORO_ENV: settings,
     ODDBORO_DB_PORT: '9',
-    ODDBORO_LOCAL_DB: '1',
-    OLLAMA_URL: 'http://127.0.0.1:9'
+    ODDBORO_LOCAL_DB: '1'
   });
   delete process.env.OFFICE_DIAGNOSTICS;
   delete process.env.ODDBORO_DIAGNOSTICS_DSN;

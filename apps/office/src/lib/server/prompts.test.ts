@@ -1,7 +1,8 @@
 // What each kind of run an Odd makes is told, held word for word in
 // prompts.test.ts.snapshot beside this file: a chat, a chat with an outside
 // tool held back by the level, the Office Manager's chat, a hire's hello, a
-// job, and one follow-up of each kind. A change to what Odds are told fails
+// job, one follow-up of each kind, and a hand-off to an Odd the owner lets act
+// on its own on work from colleagues. A change to what Odds are told fails
 // here until it is accepted with `npm run prompts:accept -w @oddboro/office`,
 // so review reads it line by line. The cases share one database, so a new
 // case goes at the end, where it moves no id in the cases before it. Run with
@@ -52,7 +53,7 @@ async function dueRun(id: number): Promise<Gave> {
   assert.ok(due, `follow-up ${id} is not due`);
   const f = await L.startFollowUp(id);
   assert.ok(f, `follow-up ${id} could not start`);
-  const r = await followThrough(f, due.ask, due.report, due.task, due.goal);
+  const r = await followThrough(f, due.ask, due.task, due.goal);
   assert.equal(r.outcome, 'done', r.text);
   return JSON.parse(r.text) as Gave;
 }
@@ -140,15 +141,6 @@ const FOLLOW_UPS: Record<FollowUpKind, () => Promise<number>> = {
     await L.decideAsk(id, 'deny', 'Monday is full.');
     return startedBy(id, 'denied');
   },
-  feedback: async () => {
-    await L.addReport('paige', 'The week ahead', 'Three meetings and one lunch.');
-    const [r] = await L.pg<{ id: number }[]>`
-      select id from reports where title = 'The week ahead'`;
-    const [f] = await L.pg<{ id: number }[]>`
-      insert into follow_ups (staff_id, kind, report_id, note)
-      values ('paige', 'feedback', ${r.id}, 'Put the lunch first.') returning id`;
-    return f.id;
-  },
   task_done: async () => {
     const t = await L.giveTask('paige', {
       title: 'Choose a day for the party',
@@ -183,8 +175,21 @@ const FOLLOW_UPS: Record<FollowUpKind, () => Promise<number>> = {
   },
   resume: async () => {
     const h = await gave('lead', 'sam', { title: 'Count the lamps' });
-    await L.answerThread(h.thread, 'Count the desk lamps too.');
+    // The owner's no to an ask the lead raised there wakes it with their words.
+    const { ask } = await L.raiseAsk('lead', {
+      title: 'Count only the floor lamps',
+      why: 'They are the ones on the list.',
+      ifApproved: 'Sam counts the floor lamps.',
+      threadId: h.thread
+    });
+    await L.decideAsk(ask.id, 'deny', 'Count the desk lamps too.');
     return onThread('lead', 'resume', h.thread);
+  },
+  answered: async () => {
+    // A no with no words to an ask on no work wakes its Odd once with the answer.
+    const id = await askFromPaige('Book the hall for Friday');
+    await L.decideAsk(id, 'deny', null);
+    return startedBy(id, 'answered');
   },
   edited: async () => {
     const notes = join(folder, 'staff', 'cleo', 'notes');
@@ -209,3 +214,10 @@ for (const kind of L.FOLLOW_UP_KINDS)
     onPlatform('linux', async () => {
       t.assert.snapshot(told(await dueRun(await FOLLOW_UPS[kind]())));
     }));
+
+test("a hand-off to an Odd at Act that acts on its own on colleagues' work is told exactly what its snapshot holds", (t) =>
+  onPlatform('linux', async () => {
+    await L.pg`update staff set permission = 'act', acts_on_hand_offs = true where id = 'paige'`;
+    const h = await gave('lead', 'paige', { title: 'Count the cups' });
+    t.assert.snapshot(told(await dueRun(h.id)));
+  }));

@@ -5,11 +5,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { and, eq } from 'drizzle-orm';
-import { asks, followUps, staff, tasks } from '../src/schema.ts';
+import { asks, connectors, followUps, staff, tasks, threads } from '../src/schema.ts';
 import { db } from './pglite.ts';
 
-// The ledger rows a decision writes embed nothing: no Ollama answers here.
-process.env.OLLAMA_URL = 'http://127.0.0.1:9';
 const { answeredWith, decideAsk, desk, finishTask, raiseAsk, standsFor } =
   await import('../src/office.ts');
 
@@ -88,6 +86,37 @@ test('a no answers both, and only the first starts a run to read why', async () 
     denied.map((f) => f.askId),
     [first.id]
   );
+  // The denied run tells the Odd the no for both: neither ask, on no work, wakes it again.
+  const answered = await db.select().from(followUps).where(eq(followUps.kind, 'answered'));
+  assert.deepEqual(
+    answered.filter((f) => f.askId === first.id || f.askId === twin.id),
+    []
+  );
+});
+
+test('a no to a folder ask answers its twin on a thread, and that thread hears it', async () => {
+  const [work] = await db
+    .insert(threads)
+    .values({ title: 'Sort the notes', hubId: 'paige', holderId: 'paige' })
+    .returning();
+  const folder = { path: '/tmp/twin-asks-folder', level: 'read' as const };
+  const ask = {
+    kind: 'folder' as const,
+    title: 'Read the notes folder',
+    why: 'w',
+    ifApproved: 'i',
+    folder
+  };
+  const { ask: first } = await raiseAsk('paige', ask);
+  const { ask: twin } = await raiseAsk('paige', { ...ask, threadId: work.id });
+  await decideAsk(first.id, 'deny', null);
+  assert.equal((await row(twin.id)).status, 'denied');
+  assert.ok(!(await shown()).includes(twin.id), 'the twin does not come back on the desk');
+  const onThread = await db.select().from(followUps).where(eq(followUps.threadId, work.id));
+  assert.deepEqual(
+    onThread.map((f) => f.askId),
+    [twin.id]
+  );
 });
 
 test('an ask for more than the first is no twin: both show, and an answer to the bigger one answers the smaller', async () => {
@@ -139,7 +168,7 @@ test('for switches and office tools, a yes answers each open ask for no more, an
       await db.delete(followUps);
       await db
         .update(asks)
-        .set({ status: 'denied' })
+        .set({ status: 'denied', decidedAt: new Date() })
         .where(and(eq(asks.kind, kind), eq(asks.status, 'open')));
     };
 
@@ -187,4 +216,21 @@ test('for switches and office tools, a yes answers each open ask for no more, an
     assert.deepEqual(await withIds(answered.id), [], kind);
     assert.deepEqual(await withIds(elsewhere.id), [], kind);
   }
+});
+
+test('finishing setup starts only a twin that has work to resume', async () => {
+  await db.update(connectors).set({ readyAt: null }).where(eq(connectors.id, 'gmail'));
+  const { ask: setup } = await raiseAsk('paige', {
+    title: 'Prepare mail',
+    why: 'For later',
+    ifApproved: 'Make mail available.',
+    access: { connector: 'gmail', level: 'read', connectOnly: true }
+  });
+  const work = await askFor('gmail');
+  const before = await carryOuts();
+  await decideAsk(setup.id, 'approve', null);
+  const [connection] = await db.select().from(tasks).where(eq(tasks.askId, setup.id));
+  await finishTask(connection.id, true, null);
+  assert.deepEqual((await carryOuts()).slice(before.length), [work.id]);
+  assert.deepEqual(await standsFor((await row(work.id))!), []);
 });

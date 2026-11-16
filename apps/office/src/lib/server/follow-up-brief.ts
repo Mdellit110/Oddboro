@@ -14,15 +14,7 @@ import {
   switchesSaid,
   zoneName
 } from '@oddboro/ledger';
-import type {
-  AskRow,
-  FollowUpRow,
-  GoalRow,
-  Level,
-  ReportRow,
-  TaskRow,
-  Unparked
-} from '@oddboro/ledger';
+import type { AskRow, FollowUpRow, GoalRow, Level, TaskRow, Unparked } from '@oddboro/ledger';
 import { flat, ownerAnswers, pickedUpLine } from '@oddboro/ledger/desk-answers';
 import { workPath } from '@oddboro/ledger/work-paths';
 import { filterWords } from '@oddboro/ledger/filters';
@@ -44,7 +36,7 @@ export function waitEnded(u: Unparked): string[] {
   ];
 }
 
-/** The owner's answers a hub picks its thread up with, one a line (`answerThread`). */
+/** The owner's answers a run reads, one a line: a hub's pick-up on its thread (`answerLead`), and an `answered` run. */
 const answers = (note: string | null): string[] =>
   (note ?? '').split('\n').map((line) => `- ${line}`);
 
@@ -52,13 +44,13 @@ const answers = (note: string | null): string[] =>
 export function followUpBrief(
   f: FollowUpRow,
   a?: AskRow,
-  r?: ReportRow,
   t?: { row: TaskRow; files: string[] },
   g?: GoalRow,
   {
     also = [],
     draftOnly = false,
-    level
+    level,
+    actsOnHandOffs = false
   }: {
     /** Twins answered with `a` whose work this carry-out does too (`standsFor`). */
     also?: AskRow[];
@@ -66,6 +58,8 @@ export function followUpBrief(
     draftOnly?: boolean;
     /** The Odd's level: only at Draft is it offered a standing yes after a call. */
     level?: Level;
+    /** The owner lets this Odd act on its own on work from colleagues (`staff.actsOnHandOffs`). */
+    actsOnHandOffs?: boolean;
   } = {}
 ): string[] {
   switch (f.kind) {
@@ -74,23 +68,24 @@ export function followUpBrief(
     case 'first_day':
       return firstDayBrief();
     case 'goal':
-      return goalBrief(f, r, g);
+      return goalBrief(f, g);
     case 'task_done':
-      return taskDoneBrief(f, r, t);
+      return taskDoneBrief(f, t);
     case 'carry_out':
-      return carryOutBrief(f, a, also, draftOnly, level);
+      return carryOutBrief(f, a, also, draftOnly, level, actsOnHandOffs);
     case 'denied':
       return deniedBrief(f, a);
     case 'rework':
       return reworkBrief(f, a);
+    case 'answered':
+      return answeredBrief(f);
     // A hand-off and a hand-back reach here only with their row or thread
     // missing, and an edit never does (`editBrief` comes first in staff.ts):
-    // each gets the feedback brief, as an older `feedback` row does.
-    case 'feedback':
+    // with nothing else to go on, each reads its note as the owner's feedback.
     case 'hand_off':
     case 'handed_back':
     case 'edited':
-      return feedbackBrief(f, r);
+      return feedbackBrief(f);
     default: {
       const missed: never = f.kind;
       throw new Error(`No brief for a ${String(missed)} follow-up`);
@@ -155,15 +150,16 @@ function firstDayBrief(): string[] {
     'You joined the office today, and you just said hello to {owner} in chat. Get started now, so they never have to ask.',
     '',
     '1. Read your job description, notes/intake.md if you have one, my_goals and my_jobs.',
-    '2. If you cannot do good work without answers from {owner}, put only the questions your intake did not answer in the response of give_owner_a_task, then stop.',
-    `3. If a tool you need is not in my_access, ask for it with ask_for_access. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, ask with ask_for_switch when my_access says {owner} can switch it on.`,
-    '4. Otherwise do the first piece of real work your job calls for, now: the first run of your job, or the first thing your job description says to do, so {owner} sees it today. Work for a goal you serve is not yours to start: the Odd who leads it hands you each piece.',
-    '5. Your reply goes on their desk. Write it to {owner}: what you did, and what comes next.'
+    '2. Check what the office already knows about your job: search relevant Ledger entries when you have access, and read relevant work already shared with you. For anything still missing, check the colleagues listed in your prompt. If one can help and you can hand off, give them the work and finish this run. Their answer brings you back.',
+    '3. Give {owner} a task only for what still needs them after that check. A decision or preference only {owner} can make goes to {owner}, never to a colleague. Ask only the questions your intake and the office could not answer. Say why no colleague can do it, then stop.',
+    `4. If a tool you need is not in my_access, ask for it with ask_for_access. For ${SWITCH_NAMES.commands} or ${SWITCH_NAMES.web}, ask with ask_for_switch when my_access says {owner} can switch it on.`,
+    '5. Otherwise do the first piece of real work your job calls for, now: the first run of your job, or the first thing your job description says to do, so {owner} sees it today. Work for a goal you serve is not yours to start: the Odd who leads it hands you each piece.',
+    '6. Your reply goes on their desk. Write it to {owner}: what you did, and what comes next.'
   ];
 }
 
-function goalBrief(f: FollowUpRow, r?: ReportRow, g?: GoalRow): string[] {
-  if (!g) return feedbackBrief(f, r);
+function goalBrief(f: FollowUpRow, g?: GoalRow): string[] {
+  if (!g) return feedbackBrief(f);
   return [
     `{owner} set a new goal. Plan how the office meets it, and bring them the plan.`,
     '',
@@ -181,12 +177,8 @@ function goalBrief(f: FollowUpRow, r?: ReportRow, g?: GoalRow): string[] {
   ];
 }
 
-function taskDoneBrief(
-  f: FollowUpRow,
-  r?: ReportRow,
-  t?: { row: TaskRow; files: string[] }
-): string[] {
-  if (!t) return feedbackBrief(f, r);
+function taskDoneBrief(f: FollowUpRow, t?: { row: TaskRow; files: string[] }): string[] {
+  if (!t) return feedbackBrief(f);
   const answers = ownerAnswers(t.row.steps).map(
     (a) => `- They answered "${a.step}" with: ${a.answer}`
   );
@@ -297,7 +289,8 @@ function carryOutBrief(
   a: AskRow | undefined,
   also: AskRow[],
   draftOnly: boolean,
-  level?: Level
+  level?: Level,
+  actsOnHandOffs = false
 ): string[] {
   // A connect task's end starts this run and wakes the work parked on that task at once.
   const askLines = [...askLinesOf(a), ...(f.pickedUp ?? []).map((t) => `- ${pickedUpLine(t)}`)];
@@ -354,8 +347,8 @@ function carryOutBrief(
       return [
         // A yes to Draft reaches a run held to Draft anyway, so only a yes to Act
         // carried out in one says the run does not have it. A level carry-out is
-        // held to Draft only when it serves a colleague's hand-off (staff.ts), as
-        // the line says.
+        // held to Draft only when it serves a colleague's hand-off and the owner
+        // chose to be asked first on such work (staff.ts), as the line says.
         ...(a.level !== 'act'
           ? [`${said}, and this run has it.`]
           : draftOnly
@@ -364,7 +357,9 @@ function carryOutBrief(
               ]
             : [
                 `${said}, and this run has it.`,
-                'Work a colleague hands you, and a thread you pick back up, still runs at Draft at most.'
+                actsOnHandOffs
+                  ? '{owner} lets you act on your own on work a colleague hands you, so it runs at Act too. A thread you pick back up still runs at Draft at most.'
+                  : 'Work a colleague hands you, and a thread you pick back up, still runs at Draft at most.'
               ]),
         ...alsoAnswers('level'),
         '',
@@ -463,15 +458,26 @@ function reworkBrief(f: FollowUpRow, a?: AskRow): string[] {
   ];
 }
 
-function feedbackBrief(f: FollowUpRow, r?: ReportRow): string[] {
+/**
+ * The owner answered something the Odd raised on no thread and no hand-off:
+ * nothing else carries the answer back, so this run hears it.
+ */
+function answeredBrief(f: FollowUpRow): string[] {
   return [
-    `{owner} read your report "${r?.title}" and gave feedback. Work out what it means, then act on it.`,
+    '{owner} answered something you raised:',
+    '',
+    ...answers(f.note),
+    '',
+    '1. If it changes what you should do, do it now.',
+    '2. Otherwise say so, and stop.'
+  ];
+}
+
+function feedbackBrief(f: FollowUpRow): string[] {
+  return [
+    '{owner} gave feedback. Work out what it means, then act on it.',
     '',
     `- Their feedback: ${f.note}`,
-    '',
-    'The report:',
-    '',
-    r?.body ?? '',
     '',
     '1. Work inside the office that they asked for, such as notes or a file in your folder, do now.',
     `2. Anything that changes one of your jobs, or something outside the office ${ACT_WRITE}: raise_ask first, one exact action per ask.`,

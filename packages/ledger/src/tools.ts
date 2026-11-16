@@ -17,6 +17,8 @@ export type OfficeTool = {
   withProject?: boolean;
   /** Offered only while the Odd holds a service at Read and write, even by `always`. */
   withWrite?: boolean;
+  /** Offered only while the owner attached a skill to the Odd, even by `always`. */
+  withSkills?: boolean;
   /**
    * Offered only in a chat, where the office sets the owner's words
    * (`OWNER_SAID` in mcp-run.ts), even by `always`: the tool acts on what the
@@ -91,6 +93,13 @@ const TOOLS = [
     withWrite: true
   },
   { id: 'my_jobs', name: 'Its jobs', does: 'Sees its own jobs and schedules.', always: true },
+  {
+    id: 'read_skill',
+    name: 'Read its skills',
+    does: 'Reads the full instructions of a skill you attached to it, before it follows one. A skill gives it no tools, folders or permissions.',
+    always: true,
+    withSkills: true
+  },
   {
     id: 'leave_office',
     name: 'Ask to leave',
@@ -178,6 +187,13 @@ const TOOLS = [
     id: 'hand_off',
     name: 'Hand off work',
     does: 'Gives a colleague a piece of work. The colleague starts at once, and the result comes back to it to pick each next step, or a time to pick the work back up. It says up front how many steps it expects. Needing more than it expected, or expecting a lot, asks you first.'
+  },
+  {
+    id: 'oddboro_update',
+    name: 'Oddboro updates',
+    does: 'Reads this app’s update status and can check for a new version. Shows update controls in chat; only you can choose Install now.',
+    always: true,
+    inChat: true
   },
   {
     id: 'poke_owner',
@@ -321,6 +337,8 @@ export type ToolRun = {
   project?: boolean;
   /** The Odd holds a service at Read and write. */
   write?: boolean;
+  /** The owner attached at least one skill to the Odd. */
+  skills?: boolean;
   /** A chat, where the office sets the owner's words (`OWNER_SAID`). */
   chat: boolean;
   /** The Odd is the Office Manager. */
@@ -331,7 +349,7 @@ export type ToolRun = {
  * Whether `run` is offered the office tool `id`: its Odd, holding `granted`,
  * has it (`hasTool`), it is a tool the Odd calls (not `prompt`), and each
  * condition the tool's row sets holds (`withGmail`, `withProject`, `withWrite`,
- * `inChat`, `notToManager`).
+ * `withSkills`, `inChat`, `notToManager`).
  * The tool server registers by it.
  */
 export const isOffered = (granted: readonly string[], id: string, run: ToolRun): boolean => {
@@ -342,6 +360,7 @@ export const isOffered = (granted: readonly string[], id: string, run: ToolRun):
     (!row?.withGmail || run.gmail) &&
     (!row?.withProject || run.project === true) &&
     (!row?.withWrite || run.write === true) &&
+    (!row?.withSkills || run.skills === true) &&
     (!row?.inChat || run.chat) &&
     (!row?.notToManager || !run.manager)
   );

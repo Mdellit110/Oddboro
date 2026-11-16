@@ -29,7 +29,11 @@ errors came in (`src/lib/server/health.ts`). The page reports its boot and
 every error it hits to `POST /api/client-log` (`src/hooks.client.ts`, as
 JSON like every action), which writes one `page:` line each, cut to 600
 characters, at most 30 a minute, with `oddboro:` defused so a page never
-speaks to the shell.
+speaks to the shell. A run that fails or is stopped writes one line to stderr
+(`run` in `staff.ts`, `runEndLine`): `office: <Odd>'s <kind> run failed: ` or
+`stopped: `, then the first line of why, cut to 200 characters, defused the
+same way. Never the owner's message or the reply. The shell puts the time on
+every line.
 
 The keychain is the system's own secret store (`@oddboro/ledger/secrets`,
 through `src/lib/server/keychain.ts`). In the Mac app the shell keeps it:
@@ -52,7 +56,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
 2. `/atlas/atlas.png` and `/atlas/atlas.json` serve the compiled atlas from
    `packages/sprites/dist/`.
 3. The page builds a `Floor` (`src/lib/floor/engine.ts`): sprites by draw
-   pass, sky behind windows, and sun shafts and dust by day. At night every
+   pass, sky behind windows, and sun shafts and dust by day, unless the
+   office's weather is overcast (see "Weather"). At night every
    sprite wears a tint by the hour, emissive pixels ride on top of their own
    sprite at full brightness, and each lamp adds a glow cut to its room.
    Doors open only for an Odd stepping through them. The hour is always
@@ -63,7 +68,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    reading. Where it stands is real state: an open ask or task from it puts
    it outside the owner's door (`wait`), a running job puts it to work in its room,
    and so does a thread of its own a colleague holds (its tag reads "Waiting on
-   <colleague>"; `wantOf` in the page), and otherwise it wanders between work and breaks. A free Odd's own
+   <colleague>"; `floorMode` in `src/lib/staff/odd-now.ts`), and otherwise it wanders between work and breaks. A free Odd's own
    clock starts when it arrives, for a random stay that depends on the
    activity (`STAY` in the page), so Odds never all get up at once. An
    Odd on a job stays at it until the job ends. While an Odd walks, its
@@ -161,7 +166,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    restart mid-run marks it failed rather than run it twice. When the owner
    gave the answer on a card in the Odd's own chat, the route gets `chat: true`,
    the follow-up keeps that card (`chatCard`, set by `followUp`, `setGoal` or
-   `answerThread` in the ledger), and as the run ends `endFollowUp` adds its
+   `answerLead` in the ledger), and as the run ends `endFollowUp` adds its
    reply to that chat as one `told` line whose `re` names the card
    (`answerInChat` in `staff.ts`); a failed run's line says so in one line and
    carries `runFailed`, never `failed`, which would mark the owner's line before
@@ -173,8 +178,11 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    while it walks in, and it says hello there in the session later chats
    resume. What the hello says, and whether a first day follows, come from
    `firstDayOf` in `src/lib/server/first-day.ts`. A hire with a job then gets a
-   `first_day` follow-up that starts its work at once: questions the intake left open go on the desk as a
-   task, missing tools as an access ask, otherwise the first real piece of
+   `first_day` follow-up that starts its work at once: it checks its intake,
+   relevant Ledger entries, shared work and colleagues before asking the owner.
+   A colleague's work goes through a hand-off when allowed; only what still
+   needs the owner goes on the desk as a task, missing tools as an access ask,
+   otherwise the first real piece of
    work, whose result goes on the desk. A hire with no job starts nothing: it
    runs only when handed work. One serving a goal joins the goal's thread as a
    colleague, and the hire route links it to the goal before it approves the
@@ -185,7 +193,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    once, each hire becomes a hire ask the page opens in its own hire window,
    and the owner's steps land as a task. Every plan goes on its goal's thread,
    whatever run raised it, and once those parts exist the answer brings the
-   manager back there (`answerThread`), told to lead the work by handing each
+   manager back there (`answerLead` in the ledger), told to lead the work by handing each
    piece on; a denied one, told not to start it. The plan's hire asks go on
    that thread too, so hiring one brings the manager back again, to hand the
    hire its first piece.
@@ -322,10 +330,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    when lessons change (`version`).
 9. The Odd's panel has three groups, each an icon and a word (the icon
    alone when the bar is under 18rem): **Chat** (the chat alone, with no
-   row of tabs), **Data** (a files icon: Lessons and Storage) and
-   **Settings** (its own four tabs, below). A group opens on the tab it was
-   last on; the Lessons tab counts its guesses, and the Data group itself
-   shows no count. It opens on Chat. Storage
+   row of tabs), **Knowledge** (a book icon: Skills, Lessons and Storage;
+   a persona Odd has no Skills) and **Settings** (its own four tabs,
+   below). A group opens on the tab it was last on; the Lessons tab counts
+   its guesses, and the Knowledge group itself shows no count. It opens on Chat. Storage
    (`StorageTab.svelte`, what a row lists and says in `storage-list.ts`) is a tree of everything the Odd kept in its own
    folder, then, under Shared work, its part of each thread it is on (by the
    test `workFile` uses, `workTitles` in the ledger), one folder per piece of
@@ -480,7 +488,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    it in the Odd's own `attachments/` (`src/lib/server/chat-files.ts`)
    under `<date>-<time>-<4 random hex>-<name>`, never over another file,
    then the message names them by tag and kept name. The run's message
-   ends with each tag's full path (`attachedBrief` in `staff.ts`), and the
+   ends with each tag's full path (`attachedBrief` in `chat-run.ts`), and the
    run opens them with its own file tools; Codex, whose `view_image` is
    off, gets the pictures as `--image`. `chat.jsonl` keeps them on the
    owner's line (`files`), and the chat shows them from
@@ -544,7 +552,7 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    install. `src/lib/server/staff.ts` runs `claude -p` on the owner's login for chats,
    job runs, follow-ups and drafts, or `grok -p` for an Odd that runs on Grok,
    `codex exec` for one on Codex, or `gemini` for one on Gemini (`staff.agent`;
-   each but Claude Code gets ready through `LAUNCHES` in `src/lib/server/cli.ts`). The owner picks it in the hire
+   each gets ready through `LAUNCHES` in `src/lib/server/cli.ts`). The owner picks it in the hire
    window's Model step, stored with the hire before its hello runs, and on the
    Settings tab's Model tab (`AccessTab.svelte`), which both show
    `ModelPicker.svelte`; both list the tools `/api/agents` finds on PATH
@@ -601,6 +609,19 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `changeLevel` and `hire` throw `ActCheckNeeded`, so a level ask's yes
    leaves the ask open. Read and Draft never need it, and an Odd already at
    Act stays there. No Odd's prompt or tool sees the check.
+   Right after the check passes, or at once when it was passed before, the
+   same three actions ask what happens when another Odd hands that Odd work
+   (`HandOffChoice.svelte`, in the check's look), every time an Odd goes to
+   Act from a lower level and never for one already there. Ask me first is
+   picked to start with every time, by design: no permission is given unless
+   the owner picks it. Cancel changes nothing. The raise sends the pick as
+   `actsOnHandOffs` (Settings PATCH, the ask POST, the hire POST), and the
+   office keeps the stored value when none comes. The words live in the
+   ledger's `HAND_OFF_CHOICE`. While the Odd is at Act, the Settings tab shows
+   the same two options under Permission level (PATCH with `actsOnHandOffs`
+   alone, `setActsOnHandOffs`, refused below Act); below Act they are hidden
+   and the stored value stays. Each change writes its own access line, such as
+   "Let Ada act on its own on work from colleagues".
    The Settings tab has four tabs, Model first, then Office, Folders and
    Services, each an icon and a word, the icon alone when the bar is under
    22rem (a container query). Office, Folders and Services each have a search
@@ -666,14 +687,18 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `FolderWarning.svelte` shows it with a warning icon, a More info link to
    the site's `/info/folder-sharing/`, and Accept and Cancel; Accept sends the
    same change again with `accept`, on this tab and on a folder ask's Give
-   access. `setFolder` refuses one inside or holding
-   a folder the Odd already has ("That folder is inside one this Odd already
-   has, or holds one."); the line shows under the field. An Odd asks for a
-   folder with `ask_for_folder` (item 7), for Run commands or Browse the web
-   with `ask_for_switch`, for a higher level with `ask_for_level`, and for
-   office tools with `ask_for_office_tool`, never with steps for this tab: a
-   rule in
-   `house.ts` says so. The
+   access. `setFolder` refuses a folder on Can read inside one on Can write,
+   either way round ("A folder on Can read can't sit inside one on Can write.
+   This Odd can already change everything in it.",
+   `FOLDER_REFUSED.readInsideChange`), and one that would hold a folder
+   dropped for holding keys ("That folder holds one of this Odd's folders that
+   has your keys or sign-ins.", `FOLDER_REFUSED.nested`); the line shows under
+   the field. Since the tab adds
+   each folder at Can read first, a folder to change goes inside one to read in
+   either order. An Odd asks for a folder with `ask_for_folder` (item 7), for Run
+   commands or Browse the web with `ask_for_switch`, for a higher level with
+   `ask_for_level`, and for office tools with `ask_for_office_tool`, never with
+   steps for this tab: a rule in `house.ts` says so. The
    list reads the profile's folders, each with the home folder written `~`
    (`shown`), so it loads nothing of its own and the staff route has no GET;
    a level change or Remove sends the path as stored. A folder that holds or
@@ -849,7 +874,9 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    `~/.aws`, `~/.gnupg`, `~/.config`, `~/Library`, `~/AppData`,
    `~/.claude.json`, `~/.google_workspace_mcp` (where
    that MCP server keeps its sign-ins for other apps on the Mac), `~/.grok`,
-   `~/.codex`, `~/.gemini`, `~/.docker` and `~/.kube`, everything
+   `~/.codex`, `~/.gemini`, `~/.docker` and `~/.kube`, and the Linux
+   browsers' and keyrings' folders `~/.mozilla`, `~/.local/share/keyrings`,
+   `~/.pki`, `~/snap` and `~/.var/app`, everything
    in `~/.oddboro` besides `staff/` and `data/` (and `threads/<id>/` for a
    run on that thread), every other
    Odd's folder, and everything in `~/.claude` besides this run's sessions.
@@ -1016,6 +1043,10 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    call without both is refused and holds nothing. The run hears that
    nothing changed yet. A tool the Odd uses without asking (`grants.standing`,
    the ledger's `standing.ts`) goes straight through in any run with a place,
+   but one a colleague's words reach (one that serves a colleague's hand-off,
+   or a lead's pick-up of a result) while the owner asks first on
+   that Odd's work from colleagues (`actsOnHandOffs` off, `handedOver` in the
+   ledger's `capabilities.ts`): there each call waits for the owner's yes,
    is listed without the two fields, and each such call rides on the run's
    next held call to that service (`before`), which the desk lists as "Made
    without asking before this call", so a commit shows what it applies.
@@ -1042,7 +1073,15 @@ pieces under 3,900 bytes a line, so no value is on a command line.
    carry-out of an approval ask, the owner's yes to that exact action, runs
    at the Odd's level) passes its ceiling as `CEILING` the same way, so `my_access`
    says Draft and why, with a write grant read only, as the prompt does
-   (`capped`, `accessInRun`).
+   (`capped`, `accessInRun`). When the owner lets the Odd act on its own on
+   work from colleagues (`staff.acts_on_hand_offs`), the hand-off's own run
+   and every run that serves it keep the Odd's level; the hub's pick-up, a
+   thread picked back up and a lesson run stay at Draft. A run a colleague's
+   words reach (one that serves a hand-off, or the hub's pick-up of a result)
+   passes `FROM_COLLEAGUE`, so `my_access` leaves out the standing yeses it
+   does not have there. An Odd at Act is told what the owner chose, in its
+   prompt and in `my_access` (`handOffsLine`). `run-ceiling.test.ts` checks
+   every state with the choice off and on.
    Physical mail signs in to LegalZoom's read-only endpoint. The owner chooses
    one PMB for the office on the Desk. A run receives only list, details, and
    scanned text. The gateway supplies the chosen PMB and checks the Odd still
@@ -1141,11 +1180,28 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     A thread its hub parked with `resume_at` wakes at that time: the clock
     starts the hub's `resume` follow-up. One parked on a task (`after_task`)
     wakes when that task is done or dropped, with no clock. So does a thread the usage window
-    held, at the window's reset (`usage-window.ts` in the ledger).
+    held, at the window's reset (`handedOff` in the ledger's `src/work/hand-offs.ts`).
     A manual run leaves the schedule where it was, and the Office Manager's report data
     (office times) tells the two apart. The Jobs tab edits a job in place, and opens the Odd's job description
     in the document editor (`src/lib/ui/JobDescription.svelte`); a save
-    refuses if the description changed since the owner opened it. While an
+    refuses if the description changed since the owner opened it. On an Odd
+    that is not the Office Manager or a persona, the owner can open a Claude
+    agent file here to compare and edit its proposed instructions. The section
+    lists the file's servers as the hire window does (`AgentFileServers.svelte`),
+    less any tool the Odd already holds or has asked for (`sortFor`). Save
+    updates the same Odd through the description route, then raises those
+    access asks at read, as a hire does; a refused save raises none. The file's
+    tools and permission mode are never taken. A local Odd's Skills tab, under
+    Knowledge, lists the SKILL.md files the owner attached, each by name with
+    when to use it and Remove (`src/lib/ui/StaffSkills.svelte`, the ledger's
+    `staff_skills`). Add a skill reads the name and when to use it from the
+    file's front matter (`src/lib/staff/skill.ts`); the owner writes what is
+    missing, can change either, and reads the text before Save. A name already
+    saved shows the saved copy beside the new one. A save or a Remove applies
+    only while the saved copy is the one the owner saw. Every run lists each
+    skill's name and when to use it under "Your skills" (`skillsSection` in
+    `house.ts`), never its text, and the Odd reads one with the office tool
+    `read_skill`. A skill grants no tool, folder or permission. While an
     update is about to install it starts no scheduled job (item 17).
     Every job run is told the time it is for and the time it is now
     (`src/lib/server/job-brief.ts`); Run now is for the moment it is pressed. A
@@ -1171,8 +1227,18 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     EOF
     ```
 
-12. **Hire** on the office plate opens a five-step drawer
-    (`src/lib/ui/HireDrawer.svelte`). Step one makes the person's look
+12. **Hire** on the office plate opens the hire drawer
+    (`src/lib/ui/HireDrawer.svelte`). An owner can start it from a Claude Code
+    agent Markdown file with Import. Its name, description, instructions and
+    supported model fill the same form, and the form names in plain words the
+    settings left in the file. A header that does not parse says so in one
+    sentence. Each MCP server the file lists by an https address, or by a name
+    the office's tools have (`knownTools`), becomes an access ask at read on the
+    desk when the Odd is hired (`src/lib/server/imported-servers.ts`), so nothing
+    connects without the owner's yes. The form's lines about the file are
+    `src/lib/ui/AgentFileServers.svelte`. A server that runs a command is listed in
+    the form and never run or asked for. Picking another choice clears the
+    import. Step one makes the person's look
     (`src/lib/ui/LookStudio.svelte`), drawn or built. Drawn: the owner
     describes them, LookStudio asks `/api/looks`, and
     the owner sees the portrait and the walk, then redraws with a note or keeps it.
@@ -1193,8 +1259,8 @@ pieces under 3,900 bytes a line, so no value is on a command line.
     untick it; a proposal can say either way. "Draft it" drafts the job
     description. Both run as the office (`src/lib/server/office-run.ts`),
     never as an Odd, so a new office can hire its first. An office run goes
-    to the office's tool (`officeAgent()`): on Grok or Codex through that
-    tool's own launch (`LAUNCHES` in `cli.ts`) and sandbox, in a folder of
+    to the office's tool (`officeAgent()`) through its launch (`LAUNCHES` in
+    `cli.ts`): on Grok or Codex with that tool's own sandbox, in a folder of
     its own under `<home>/office/runs` that reads nothing else, has no MCP,
     web or network, and goes when the run ends, pictures and all. A hire with
     no tool picked starts on the office's tool. Opened from a
@@ -1600,7 +1666,7 @@ welcomed, the page loads the sample's empty lot (`currentOffice({ lot: true })`,
 the start panel, titled "{name}'s Lot" until the office stands on it. The
 command center's buttons and tabs appear there once the first run is over, so
 the owner meets the panel first. The cards: Your computer (`MacCard`, the checks
-from `/api/setup`, and Notifications: a test of the Mac's (`notifyMac` in `src/lib/server/notify.ts`, which macOS shows as Oddboro's in the app and as Script Editor's from the repo) with the way to System Settings if it does not show, and, outside the app, the browser's for the Desk; the owner moves on with Next), their name, Your AI (`AiCard`, item 18: a tile per tool, the picked one the office's tool, and its panel below: Claude Code's installs it through `/api/setup/claude` and is `ClaudeCard`, a Claude plan tab with the account Claude Code is signed in to, from `claude auth status`, and Sign in with Claude or Switch account, or an API key tab, with a model picker in both. On Claude Code, Sonnet cannot draw looks or design offices: `canDraw()` in `claude.ts` refuses them, and the later cards offer only the ready-made managers and Main Street; the model,
+from `/api/setup`, and Notifications: a test of the computer's (`notifyMac` in `src/lib/server/notify.ts`, which macOS shows as Oddboro's in the app and as Script Editor's from the repo) with that system's own steps if it does not show (`notify-help.ts`, shown by `NotifyHelp.svelte`: System Settings on a Mac, Settings on Windows, and on Linux a check that notifications are on and that the desktop has a notification service), and, outside the app, the browser's for the Desk; the owner moves on with Next), their name, Your AI (`AiCard`, item 18: a tile per tool, the picked one the office's tool, and its panel below: Claude Code's installs it through `/api/setup/claude` and is `ClaudeCard`, a Claude plan tab with the account Claude Code is signed in to, from `claude auth status`, and Sign in to Claude Code or Switch account, or an API key tab, with a model picker in both. On Claude Code, Sonnet cannot draw looks or design offices: `canDraw()` in `claude.ts` refuses them, and the later cards offer only the ready-made managers and Main Street; the model,
 or an API key kept in the keychain; `src/lib/server/claude.ts` passes both to
 every run. Next waits until the picked tool is signed in), the Office Manager (`ManagerCard`: four ready-made ones from
 `GET /api/onboarding`, or one described and drawn by `/api/looks` while the
@@ -1635,7 +1701,7 @@ a ready-made one), a bus drives up the street, and they walk from the bus stop
 to the owner's desk, where their card opens on the chat. Skip, under the caption
 while they come, sends the bus off and puts them at the desk at once
 (`StaffActor.arrive`). Until the office has
-moved in, the page keeps the floor it raised (`landing`) rather than reloading on the move. "Good Morning, Neighbor" opens the music over it. The music is a player (`music.svelte.ts`, one per page) over the 25 tracks in `static/audio/`, named in `tracks.ts`: a random order that skips the last few played, loved tracks twice as often, passed ones never, repeat one, and the Mac's media keys. Later visits play only if the owner left it on. Every choice is per viewer in localStorage. The tracks are AAC with every tag stripped but the title, since Safari won't play Opus, and LICENSE-ASSETS keeps the folder out of the Apache license. The bottom of the start panel (`FloorControls.svelte`), there during the first run and after, holds the player on the start side (the track's name, then love, back, play, next, repeat, pass, then the seek bar with the time, and a speaker that opens a vertical volume slider with a mute). A hairline separates it from the end side, where the light and, under it, the zoom stack at the same width. The light: Auto follows the office clock, the sun and the moon hold the floor at day or night for that viewer. Then the zoom: Fit shows the whole office in the room the panels leave (and stops following an Odd), and minus and plus step a crisp level out or in (`Floor.zoomBy`), gliding. A plan that fails twice raises the sample instead.
+moved in, the page keeps the floor it raised (`landing`) rather than reloading on the move. "Good Morning, Neighbor" opens the music over it. The music is a player (`music.svelte.ts`, one per page) over the 25 tracks in `static/audio/`, named in `tracks.ts`: a random order that skips the last few played, loved tracks twice as often, passed ones never, repeat one, and the Mac's media keys. Later visits play only if the owner left it on. Every choice is per viewer in localStorage. The player also offers focus noise (`static/sounds/focus-noise.m4a`, a 32 second pink noise loop whose end crossfades into its start): the player's icon is a button with a caret that opens a menu, Soundtrack or Focus noise, and the icon becomes three waves while the noise is on. The song stays loaded and paused meanwhile, so switching back resumes it where it stopped. The noise plays through Web Audio (a looping buffer and a gain node for the volume), since an `<audio loop>` leaves about 50 ms of silence at each restart; its audio context is made at the first play and suspended whenever the noise stops. The tracks are AAC with every tag stripped but the title, since Safari won't play Opus, and LICENSE-ASSETS keeps the folder out of the Apache license. The bottom of the start panel (`FloorControls.svelte`), there during the first run and after, holds the player on the start side (the icon and its menu, the track's name, then love, back, play, next, repeat, pass, then the seek bar with the time, and a speaker that opens a vertical volume slider with a mute). A hairline separates it from the end side, where the light and, under it, the zoom stack at the same width. The light: Auto follows the office clock, the sun and the moon hold the floor at day or night for that viewer. Then the zoom: Fit shows the whole office in the room the panels leave (and stops following an Odd), and minus and plus step a crisp level out or in (`Floor.zoomBy`), gliding. A plan that fails twice raises the sample instead.
 
 ## The office's address
 
@@ -1644,18 +1710,24 @@ falling back to `oddboro.localhost` where a network's DNS drops that answer.
 The desktop app (`ODDBORO_APP`) skips all of this: it opens the office in its own
 window, onboarding shows no address step, and it never touches Caddy.
 
-Caddy takes ports 80 and 443 and hands everything to the office on 4500
-(`src/lib/server/address.ts`, the Address row on the first card). With nothing on
-port 80 the office runs its own Caddy as `com.oddboro.caddy`, downloading it
-from Caddy's releases (checked against the published checksum) if the Mac has
+Caddy takes ports 80 and 443 and hands everything to the office on its own
+port, `OFFICE_PORT` (4500, or `ODDBORO_PORT`) (`src/lib/server/address.ts`,
+the Address row on the first card). With nothing on port 80 the office runs
+its own Caddy as `com.oddboro.caddy`, downloading it from Caddy's releases (checked against the published checksum) if the Mac has
 none. With the owner's Caddy on port 80 it adds two routes and a certificate
 policy through Caddy's admin API (127.0.0.1:2019, with an explicit origin, which
 that API wants), touches none of their files, and adds them again when the
 office starts and when a page loads (`keepAddress`). With anything else on port
-80 it stays at `:4500`; on Windows that is often http.sys, Windows' own web
-server. On Windows the office's own Caddy listens on 127.0.0.1 and [::1]
-only (`ownCaddyfile`), so the firewall never asks. On a Mac it listens on
-every address, since a process the owner runs can bind a port under 1024
+80 it stays at the office's own port; on Windows that is often http.sys,
+Windows' own web server. Port 80 is looked at with `ss` on Linux,
+`/usr/sbin/lsof` on a Mac and PowerShell on Windows, each through `probe`. A
+look that fails, times out or finds its command missing gives `unchecked`,
+never free, since reading it as free would offer a Caddy that cannot start:
+the address then stays at the office's own port and the card says it could
+not look. The card shows that port from the server (`shownAddress` in
+`src/lib/address.ts`). On Windows the office's own Caddy listens on 127.0.0.1
+and [::1] only (`ownCaddyfile`), so the firewall never asks. On a Mac it
+listens on every address, since a process the owner runs can bind a port under 1024
 only there (127.0.0.1 and ::1 were refused, measured), so other machines on
 the network can reach it, and what keeps an Odd's commands off it is the
 deny list each run gets (`macAddresses`, item 9). Linux was not measured and
@@ -1718,6 +1790,15 @@ it.", reads too, which a browser shows as a plain page.
 - Without the key, only these get in: the sign-in callbacks (rule 5), as
   GETs to those two exact paths; the shell's proof request; a run's call to
   its gateway with its token; and a link for the owner's browser.
+- Those, and the shell's and a run's way past rule 3, are judged on the
+  address the request was sent to (`sentTo`), never on the path SvelteKit
+  hands the handle. Kit takes `/__data.json` off a data request, and a remote
+  function call under `/_app/remote/` names its page in a header the caller
+  writes, so either could otherwise pass as an exception. The table of
+  hostile and legitimate targets in `src/lib/server/request-targets.ts` runs
+  through the guard in the app (`app-key.test.ts`), from source
+  (`owner-page.test.ts`) and through the dev server's rule
+  (`vite-config.test.ts`).
 - The owner's browser has no key. When the window opens an office address in
   a new window (a file attached in a chat), the shell asks
   `POST /api/browser-link` for a code for that path and opens the address
@@ -1837,6 +1918,85 @@ account.
    `src/lib/server/diagnostics.ts` and `src/lib/server/hosts.ts` import
    nothing that brings in Postgres.
 
+## Weather
+
+The weather where the owner is, as a pill beside the desk count. Off until
+the owner turns it on in Setup. The decision is in `docs/decisions/`
+(grep `weather`).
+
+1. Setup's Weather section (`WeatherSection.svelte`) takes a country (the
+   ones GeoNames covers, `POSTAL_COUNTRIES` in `src/lib/weather.ts`, starting
+   at the browser's region), a postal code and °C or °F (°F for the US,
+   Liberia and Myanmar until the owner picks). Show weather is
+   `PUT /api/weather`.
+2. The lookup (`src/lib/server/postal-codes.ts`) downloads
+   `download.geonames.org/export/zip/<CC>.zip`, reads `<CC>.txt` out of it
+   with Node's zlib (`zip.ts`), and finds the code: whole, then the part the
+   file lists (GB, GG, JE and IM drop the last three characters, CA keeps three,
+   NL four), then the longest listed start (a coarse area, a ZIP+4). In IE,
+   MT, CL, CN, AR and BR, whose files hold coarse areas, it takes the listed
+   code sharing the most of its start. Anything else not found answers
+   `missing` with the closest code, which Setup offers as Use. Nothing of the
+   file is kept.
+3. The setting is `OFFICE_WEATHER` in `.env`, as JSON: country, the code as
+   typed, the place ("Seattle, WA 98101", which Setup shows as Matched),
+   latitude and longitude to one decimal, and the unit. Every window and the
+   app share it. The same country and code again change only the unit, with
+   no lookup. Turn off (`DELETE`) clears it. Each change sends
+   `{ type: 'weather' }` on the live line, and every page asks again.
+4. The forecast (`src/lib/server/weather.ts`) is MET Norway's
+   `locationforecast/2.0/compact`, asked by the server alone, with
+   `Oddboro/<version> https://oddboro.com` as the User-Agent and gzip. One
+   cache serves every window: it asks only when a page asks after the last
+   answer's Expires (read against MET Norway's Date), sends
+   `If-Modified-Since` with the last `Last-Modified`, and shares one request
+   among pages asking at once. A failure keeps the last series and its
+   reason: 10 minutes, doubling to 6 hours, or an hour, doubling, after a 429
+   or 403. Each answer serves the hour that has started from the kept series
+   (`currentHour`): temperature, cloud and the raw `symbol_code`.
+5. `GET /api/weather` answers the setting, that hour, the reason a check
+   failed, and `next`: the series' next hour or the expiry, whichever is
+   first. The page (`weather.svelte.ts`) asks as it opens, then on the page's
+   15 s clock only once `next` has passed, and only while
+   `document.visibilityState` is visible (`askNow`); `visibilitychange`
+   catches up. Off, `next` is null and the page asks nothing until the live
+   line says the setting changed.
+6. The pill (`WeatherPill.svelte`) sits in the desk pill's row with the same
+   classes: an icon for the sky (`WeatherIcon.svelte`, one per family in
+   `SKIES`: `skyOf` maps every MET Norway symbol to one) and the temperature.
+   A click opens the place, the sky in words (`conditionWords`), the time of
+   the last answer, why the last check failed, Change in Setup, and the
+   credit to MET Norway and GeoNames. A failed check greys the pill and adds a
+   coral dot; the last report stays.
+7. The floor draws each sky (`Floor.setWeather(symbol)`), only while the
+   light is Auto; holding day or night shows the clock's sky. `lookOf` in
+   `src/lib/floor/sky.ts` reads the symbol: what falls (rain, sleet, snow),
+   how hard (light, steady, heavy), thunder, drifting clouds, fog. The
+   drawing is `src/lib/floor/weather-layer.ts`, over whatever floor is
+   loaded: outdoors is any cell in no indoor room or hall and no wall,
+   and the panes are the sprites tagged `window`.
+   - The window sky (`skyBand`) is the clock's, softened for partly cloudy,
+     grey at the hour's brightness under cloud, darker in rain or snow and
+     darkest in a storm. Overcast also stops the sun shafts and dims the
+     scene a little by day (`dimOf`).
+   - Partly cloudy: a small cloud crosses each pane, a pixel every two
+     seconds, all in step. Fog: a haze over the grounds that thins toward
+     the building, drawn once.
+   - Rain, sleet and snow fall over the grounds from one pool of `POOL`
+     sprites made once; `placeFall` wraps each mark into the view, so all
+     are on screen, and the field stays fixed to the world. Heavier symbols
+     fall thicker and faster. Rain slants, darker over pale stone, flecks
+     on hard ground, and at night catches the street lamps. Snow sways and
+     settles on the grounds over 15 minutes, fading over 30 after.
+   - Thunder: a soft flash over the grounds and the panes every 8 to 25
+     seconds (`flashStep`), fading over four ticks, and one flash in three
+     draws a pixel bolt over the grounds.
+   - Everything steps on the ambient clock (12 a second). A sky with nothing
+     moving (clear, cloudy, fog) asks for no draw, and partly cloudy only
+     when its clouds move. A hidden page stops it with the rest of the
+     floor. Under reduced motion nothing moves: the marks hold still, and
+     there is no flash or bolt.
+
 ## A New Altitude account
 
 An owner who already has a New Altitude account can sign in to it in Setup
@@ -1936,8 +2096,9 @@ the persona's voice.
    sends the owner's words and the hands' report, cut to fit 4,000
    characters, to `<issuer>/<slug>/stream`. A chat sends its earlier answered
    exchanges and keeps the door's session in the Odd's folder. Any answer but
-   `answered` fails the run with a one-line note and the report, so no work
-   is lost and nothing counts as done without the persona: a follow-up drops
+   `answered` fails the run with a note and the report. An interrupted answer
+   shows the words the persona returned above the report. Nothing counts as done
+   without the complete answer: a follow-up drops
    the hands' Outcome line, and a chat shows no sign-in card (the persona's
    access is its own, item 5). Stop cancels the call to the door. An answered
    follow-up keeps the hands' Outcome line after the voice. Every other
@@ -2016,41 +2177,46 @@ the persona's voice.
 2. `npm run service:uninstall -w apps/office` removes it. Stop it before
    running `npm run dev`, since both want port 4500.
 3. The office starts its own database, so nothing else has to. A database in
-   Docker needs Docker Desktop to start at login. Ollama must run for search
-   by meaning; without it the ledger falls back to words.
+   Docker needs Docker Desktop to start at login. Search by meaning runs inside
+   the office once the owner downloads the search model from Setup
+   (`POST /api/setup/search`); without it the ledger falls back to words.
 
 ## Where things live
 
-| Path                                  | What it holds                                                                                                                         |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/lib/floor/`                      | The PixiJS floor and the Odds on it                                                                                                   |
-| `src/lib/staff/roster.ts`             | The Odd shape the page gets (`StaffProfile`), hiring looks, and the label for each activity                                           |
-| `src/lib/ui/`                         | The card and its tabs, the Desk, the Ledger, hiring, chat                                                                             |
-| `src/lib/server/`                     | Staff runs, office runs, looks, the job clock, events, keychain. Where to start a change there: [CLAUDE.md](src/lib/server/CLAUDE.md) |
-| `src/lib/server/profile.ts`           | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                                |
-| `src/lib/server/sandbox.ts`           | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the refusal line  |
-| `src/lib/server/aws.ts`               | AWS: the office's one sign-in, each AWS tool's role and the read check, the names-only Secrets Manager tool, and keys from AWS        |
-| `src/lib/site.ts`                     | Links to the public site's guides (`siteLink`): `localhost:4501` under `npm run dev`, else oddboro.com, or `ODDBORO_SITE_URL`         |
-| `src/routes/api/`                     | One folder per thing the page reads or changes                                                                                        |
-| `src/lib/server/office-design.ts`     | Drawing an office from the owner's words, and where Odds move to                                                                      |
-| `src/lib/server/design-job.ts`        | The drawing as a job on the server, which pages follow                                                                                |
-| `src/lib/ui/onboarding/`              | A new owner's first visit: the cards, the reveal's story, the music                                                                   |
-| `src/lib/floor/reveal.ts`             | The office going up beat by beat, and the bus                                                                                         |
-| `src/lib/diagnostics.ts`              | What a report may carry, and when a trace is taken: the server's, the relay's and the page's one rule                                 |
-| `src/lib/server/diagnostics.ts`       | The SDK's options and the gate every report passes, with the owner's answer                                                           |
-| `src/lib/server/account.ts`           | The New Altitude sign-in: start, callback, refresh, sign out                                                                          |
-| `src/lib/account.ts`                  | The account and its states, shared by the server and the page                                                                         |
-| `src/lib/server/persona.ts`           | The personas New Altitude offers: sync, each persona's sign-in, install, Disconnect                                                   |
-| `src/lib/server/persona-package.ts`   | A persona's package checked before the office trusts it                                                                               |
-| `src/lib/server/persona-offered.ts`   | The names and slugs on offer at the last read, as one prompt line for an Odd that can propose a hire                                  |
-| `src/lib/server/persona-run.ts`       | A persona Odd's run: its hands, then its voice, and every word sent to its door                                                       |
-| `src/lib/server/persona-door.ts`      | The persona's door on New Altitude: its address, scope, what a turn sends and what comes back                                         |
-| `src/lib/persona.ts`                  | The offers, the quiet reasons and their lines, shared by the server and the page                                                      |
-| `src/lib/ui/persona-offers.svelte.ts` | The page's offers and each persona's wait or problem, with Add, Reconnect, Disconnect and Check again                                 |
-| `src/lib/ui/PersonaQuiet.svelte`      | A quiet persona Odd's line and its one button                                                                                         |
-| `src/lib/server/hosts.ts`             | The office's names through Caddy (`HOSTS`), alone so reporting loads before Postgres                                                  |
-| `scripts/office-service.ts`           | The login service                                                                                                                     |
-| `src/app.css`                         | Tokens. Every colour in the chrome reads these.                                                                                       |
+| Path                                  | What it holds                                                                                                                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/floor/`                      | The PixiJS floor and the Odds on it                                                                                                                                          |
+| `src/lib/staff/roster.ts`             | The Odd shape the page gets (`StaffProfile`), hiring looks, and the label for each activity                                                                                  |
+| `src/lib/ui/`                         | The card and its tabs, the Desk, the Ledger, hiring, chat                                                                                                                    |
+| `src/lib/server/`                     | Staff runs, office runs, looks, the job clock, events, keychain. Where to start a change there: [CLAUDE.md](src/lib/server/CLAUDE.md)                                        |
+| `src/lib/server/profile.ts`           | An Odd as the page gets it (`toProfile`): its stored switches and folders, and what its runs reach now                                                                       |
+| `src/lib/server/sandbox.ts`           | What a run's commands reach: the variables hidden from them, Claude Code's sandbox, the developer tool folders, and the refusal line                                         |
+| `src/lib/server/aws.ts`               | AWS: the office's one sign-in, each AWS tool's role and the read check, the names-only Secrets Manager tool, and keys from AWS                                               |
+| `src/lib/site.ts`                     | Links to the public site's guides (`siteLink`): `localhost:4501` under `npm run dev`, else oddboro.com, or `ODDBORO_SITE_URL`                                                |
+| `src/routes/api/`                     | One folder per thing the page reads or changes                                                                                                                               |
+| `src/lib/server/office-design.ts`     | Drawing an office from the owner's words, and where Odds move to                                                                                                             |
+| `src/lib/server/design-job.ts`        | The drawing as a job on the server, which pages follow                                                                                                                       |
+| `src/lib/ui/onboarding/`              | A new owner's first visit: the cards, the reveal's story, the music                                                                                                          |
+| `src/lib/floor/reveal.ts`             | The office going up beat by beat, and the bus                                                                                                                                |
+| `src/lib/weather.ts`                  | The weather's setting, report, skies, words and units, shared by the server and the page                                                                                     |
+| `src/lib/server/weather.ts`           | The weather setting in `.env`, and the one MET Norway cache that honours Expires                                                                                             |
+| `src/lib/server/postal-codes.ts`      | A postal code looked up in its country's GeoNames file, on this computer                                                                                                     |
+| `src/lib/diagnostics.ts`              | What a report may carry, and when a trace is taken: the server's, the relay's and the page's one rule                                                                        |
+| `src/lib/server/diagnostics.ts`       | The SDK's options and the gate every report passes, with the owner's answer                                                                                                  |
+| `src/lib/server/account.ts`           | The New Altitude sign-in: start, callback, refresh, sign out                                                                                                                 |
+| `src/lib/account.ts`                  | The account and its states, shared by the server and the page                                                                                                                |
+| `src/lib/server/persona.ts`           | The personas New Altitude offers: sync, each persona's sign-in, install, Disconnect                                                                                          |
+| `src/lib/server/persona-package.ts`   | A persona's package checked before the office trusts it                                                                                                                      |
+| `src/lib/server/persona-offered.ts`   | The names and slugs on offer at the last read, as one prompt line for an Odd that can propose a hire                                                                         |
+| `src/lib/server/persona-run.ts`       | A persona Odd's run: its hands, then its voice, and every word sent to its door                                                                                              |
+| `src/lib/server/persona-door.ts`      | The persona's door on New Altitude: its address, scope, what a turn sends and what comes back                                                                                |
+| `src/lib/persona.ts`                  | The offers, the quiet reasons and their lines, shared by the server and the page                                                                                             |
+| `src/lib/ui/persona-offers.svelte.ts` | The page's offers and each persona's wait or problem, with Add, Reconnect, Disconnect and Check again                                                                        |
+| `src/lib/ui/PersonaQuiet.svelte`      | A quiet persona Odd's line and its one button                                                                                                                                |
+| `src/lib/server/office-backup.ts`     | Back up this office and Restore from a backup: the download, taking a file back, and starting again so it goes in. What a backup holds is in the ledger's `office-backup.ts` |
+| `src/lib/server/hosts.ts`             | The office's names through Caddy (`HOSTS`), alone so reporting loads before Postgres                                                                                         |
+| `scripts/office-service.ts`           | The login service                                                                                                                                                            |
+| `src/app.css`                         | Tokens. Every colour in the chrome reads these.                                                                                                                              |
 
 ## Rules for this app
 
@@ -2069,6 +2235,12 @@ the persona's voice.
   first text it shows (plain text until then), so the first page carries
   none of PixiJS, layerchart or markdown-it. Import a floor module's values only through `index.ts`; a
   type import is free.
+- Panels and dialogs that open on a click load when they open, with
+  `{#await import('…') then { default: X }}` at the render site in
+  `src/routes/+page.svelte`. Only what shows at start (the plate, the top bar,
+  the floor controls, the Odds rail, the side panel frame) is imported at the
+  top. The first run's guide loads beside the floor, and the Odd's card and the
+  Desk are fetched once after the floor draws, so they open at once.
 - Third-party packages go under `devDependencies` in `package.json`, even
   the ones the office runs: the build bundles those, and the app ships only
   what the workspace packages load (`apps/desktop/scripts/stage.ts`).

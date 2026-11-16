@@ -36,6 +36,7 @@ import {
 import { home, isOfficeFile, isWhereNamed } from './home.ts';
 import { trustSystemCertificates } from './certificates.ts';
 import { advancedMode, projectConnections } from './project-sessions.ts';
+import { skillsOf } from './staff-skills.ts';
 
 trustSystemCertificates();
 const ME = process.env.STAFF_ID ?? '';
@@ -75,6 +76,7 @@ const RUN: ToolRun = {
     (await advancedMode()) &&
     (await projectConnections(ME)).length > 0,
   write: held.some((g) => g.level === 'act'),
+  skills: (await skillsOf(ME)).length > 0,
   chat: OWNER_SAID !== undefined,
   manager: me.role === MANAGER_ROLE
 };
@@ -118,7 +120,7 @@ const CEILING = parseLevel(process.env.CEILING);
  * it raises carry it. The hub's runs hand off into it and may park it.
  */
 const THREAD_ID = Number(process.env.THREAD_ID) || undefined;
-/** Set by the office for every run: a thread it puts work on keeps it (`keepRun`, `runsGoing`). */
+/** Set by the office for every run: a thread it puts work on keeps it (`keepRun` in work/hand-offs.ts, `runsGoing`). */
 const RUN_KEY = process.env.RUN_KEY || undefined;
 /**
  * Set by the office for a run that only reads the owner's reason or edit for a

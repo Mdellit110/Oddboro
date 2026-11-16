@@ -36,6 +36,7 @@ import { CHAT_REQUEST_BYTES } from '../staff/chat-input.ts';
 // page is https, so `fromOwnerPage` compares what the browser itself says.
 import type { Handle } from '@sveltejs/kit/hooks';
 import { IN_APP } from '@oddboro/ledger';
+import { BACKUP_MAX_BYTES } from '@oddboro/ledger/office-backup';
 import {
   fromShell,
   fromWindow,
@@ -91,8 +92,18 @@ const SHELL_PATHS = new Set(['/api/update', '/api/browser-link']);
  */
 const CALLBACKS = new Set(['/account/callback', '/connect/callback']);
 
+/**
+ * The address the request was sent to. Kit gives `handle` another path in
+ * two cases: it takes `/__data.json` off a data request, and a remote
+ * function call (`/_app/remote/`) names its page in a header the caller
+ * writes. So the rules that let a request in without the page's own headers
+ * judge this one, which no header can change.
+ */
+const sentTo = (request: Request): URL => new URL(request.url);
+
 /** In the app: true when the request carries the key, or is one of the few that come without it. */
-function carriesKey(request: Request, url: URL): boolean {
+function carriesKey(request: Request): boolean {
+  const url = sentTo(request);
   const path = url.pathname;
   const get = request.method === 'GET';
   return (
@@ -128,7 +139,7 @@ async function fits(request: Request, limit: number): Promise<boolean> {
 /** The server's `handle`: every request passes here before a route sees it. */
 export const guardOffice: Handle = async ({ event, resolve }) => {
   const { request } = event;
-  if (IN_APP && !carriesKey(request, event.url)) return refuse(OPEN_FROM_APP);
+  if (IN_APP && !carriesKey(request)) return refuse(OPEN_FROM_APP);
   if (
     !fromThisComputer({
       forwardedFor: request.headers.get('x-forwarded-for'),
@@ -137,11 +148,12 @@ export const guardOffice: Handle = async ({ event, resolve }) => {
   )
     return refuse(NOT_THIS_COMPUTER);
   if (!toThisOffice(request)) return refuse('This office answers only at its own address');
+  const path = sentTo(request).pathname;
   if (
     READS.has(request.method) ||
     fromOwnerPage(request) ||
-    (SHELL_PATHS.has(event.url.pathname) && fromShell(request)) ||
-    (event.url.pathname.startsWith(`${GATEWAY_PATH}/`) && fromRun(request))
+    (SHELL_PATHS.has(path) && fromShell(request)) ||
+    (path.startsWith(`${GATEWAY_PATH}/`) && fromRun(request))
   ) {
     const chat =
       request.method === 'POST' && /^\/api\/staff\/[a-z0-9-]+\/chat\/?$/.test(event.url.pathname);
@@ -150,10 +162,18 @@ export const guardOffice: Handle = async ({ event, resolve }) => {
     const upload =
       request.method === 'POST' &&
       /^\/api\/staff\/[a-z0-9-]+\/attachments\/?$/.test(event.url.pathname);
-    const limit = chat ? CHAT_REQUEST_BYTES : upload ? FILE_MAX : 512 * 1024;
+    // A backup to restore is the whole office, checked as it arrives (office-backup.ts).
+    const restore = request.method === 'POST' && event.url.pathname === '/api/backup/restore';
+    const limit = chat
+      ? CHAT_REQUEST_BYTES
+      : upload
+        ? FILE_MAX
+        : restore
+          ? BACKUP_MAX_BYTES
+          : 512 * 1024;
     if (
       request.body &&
-      (chat || upload || process.env.ODDBORO_APP) &&
+      (chat || upload || restore || process.env.ODDBORO_APP) &&
       !(await fits(request, limit))
     )
       return new Response('That request is too large', { status: 413 });

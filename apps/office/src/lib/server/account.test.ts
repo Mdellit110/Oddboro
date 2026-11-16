@@ -68,7 +68,6 @@ Object.assign(process.env, {
   ODDBORO_ENV: settings,
   ODDBORO_PORT: '4517',
   ODDBORO_LOCAL_DB: '1',
-  OLLAMA_URL: 'http://127.0.0.1:9',
   ODDBORO_ACCOUNT_SITE: `${fake.origin}/`
 });
 const { startLocalDatabase } = await import('@oddboro/ledger/local-db');
@@ -359,6 +358,15 @@ test('an older sign-in page is refused before any exchange, and the newest still
   assert.equal(grants('authorization_code').length, exchanges);
   assert.equal((await callbackPage(newer.toString())).title, 'Signed in');
   assert.deepEqual(accountStatus(), SIGNED_IN);
+});
+
+test('a refused sign-in gives the reason and leaves the current account signed in', async () => {
+  const exchanges = grants('authorization_code').length;
+  const denied = await callbackPage('error=access_denied');
+  assert.match(denied.message, /did not grant access/);
+  assert.match((await callbackPage('error=temporarily_unavailable')).message, /Wait a little/);
+  assert.deepEqual(accountStatus(), SIGNED_IN);
+  assert.equal(grants('authorization_code').length, exchanges);
 });
 
 test('a sign-in page that lands while a sign-in holds tokens is refused, and the tokens stay', async () => {

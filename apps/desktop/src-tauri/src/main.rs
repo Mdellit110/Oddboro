@@ -40,7 +40,7 @@ const NO_NODE: &str = "Oddboro cannot find its copy of Node. Reinstall Oddboro."
 const NO_SERVER: &str = "Oddboro cannot find the office server. Reinstall Oddboro.";
 
 /// Why the shell quit, as its exit code, so a script can tell without the
-/// dialog the owner saw. The dialog's words go to the log too (`alert`).
+/// dialog the owner saw. The dialog's words go to the log too (`startup_error`).
 mod exit {
     pub const PORT_TAKEN: i32 = 2;
     pub const NO_NODE: i32 = 3;
@@ -159,13 +159,13 @@ fn start(app: &AppHandle, diagnostics: Option<&Diagnostics>) {
     }
 
     if server::port_taken(port) {
-        alert(
+        fail(
             app,
+            exit::PORT_TAKEN,
             &format!(
                 "Another office is already running on port {port}. Oddboro will quit rather than share it.\n\nQuit the other office, then open Oddboro again."
             ),
         );
-        app.exit(exit::PORT_TAKEN);
         return;
     }
     let Some(node) = node_binary() else {
@@ -205,7 +205,12 @@ fn start(app: &AppHandle, diagnostics: Option<&Diagnostics>) {
         if let Some(d) = diagnostics {
             d.gave_up(&why);
         }
-        fail(app, exit::SERVER_FAILED, &why.message(&server.log_tail()));
+        startup_error(
+            app,
+            exit::SERVER_FAILED,
+            &why.message(&server.log_tail()),
+            why.report(),
+        );
     }
 }
 
@@ -548,22 +553,79 @@ fn toggle_open_at_login(app: &AppHandle, item: &CheckMenuItem<tauri::Wry>) {
     let _ = item.set_checked(launcher.is_enabled().unwrap_or(false));
 }
 
-/// Shows an error. Only call it off the main thread: it waits for OK.
-/// The words go to the log first, on one line: the dialog waits for someone to
-/// press OK, which nobody does in a test or a support case.
-fn alert(app: &AppHandle, message: &str) {
+/// Keep the latest startup report beside the office log, even if no window opens.
+fn startup_error(app: &AppHandle, code: i32, message: &str, reason: &str) {
+    let log = env::log_file();
     let line = message.split_whitespace().collect::<Vec<_>>().join(" ");
-    server::note(&env::log_file(), &format!("dialog: {line}"));
+    server::note(&log, &format!("dialog: {line}"));
+    let report_path = log.with_extension("support.txt");
+    let version = app.package_info().version.to_string();
+    let report = startup_report(&version, reason, code, &log);
+    let message = if save_startup_report(&report_path, &report).is_ok() {
+        format!(
+            "{message}\n\nSupport report saved to {}",
+            report_path.display()
+        )
+    } else {
+        format!("{message}\n\nThe support report could not be saved.")
+    };
     app.dialog()
         .message(message)
         .title("Oddboro")
         .kind(MessageDialogKind::Error)
         .blocking_show();
+    app.exit(code);
+}
+
+fn save_startup_report(path: &std::path::Path, report: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut file =
+        tempfile::NamedTempFile::new_in(path.parent().unwrap_or(std::path::Path::new(".")))?;
+    file.write_all(report.as_bytes())?;
+    file.persist(path)?;
+    Ok(())
+}
+
+fn startup_report(version: &str, reason: &str, code: i32, log: &std::path::Path) -> String {
+    // This also works when the office bundle cannot start. A missing Node
+    // still leaves the owner the exact startup failure and exit code.
+    let module = concat!(
+        include_str!("../../../office/src/lib/server/support-report.js"),
+        "\nprocess.stdout.write(await supportReport(process.argv[1], process.argv[2]));"
+    );
+    let detailed = node_binary()
+        .and_then(|node| {
+            std::process::Command::new(node)
+                .env_remove("NODE_OPTIONS")
+                .args(["--input-type=module", "-e", module, "--"])
+                .arg(log)
+                .arg(version)
+                .output()
+                .ok()
+        })
+        .filter(|out| out.status.success())
+        .and_then(|out| String::from_utf8(out.stdout).ok());
+    let mut report = detailed.unwrap_or_else(|| {
+        format!(
+            "Oddboro support report\nVersion: {version}\nSystem: {} {}\nOffice log unavailable.\n",
+            std::env::consts::OS,
+            std::env::consts::ARCH
+        )
+    });
+    report.push_str(&format!("Startup failure ({code}): {reason}\n"));
+    report
 }
 
 fn fail(app: &AppHandle, code: i32, message: &str) {
-    alert(app, message);
-    app.exit(code);
+    let reason = match code {
+        exit::PORT_TAKEN => "Office port already in use",
+        exit::NO_NODE => NO_NODE,
+        exit::NO_SERVER => NO_SERVER,
+        exit::BAD_URL => "Invalid office address",
+        exit::NO_WINDOW => "Office window could not open",
+        _ => "Office could not start",
+    };
+    startup_error(app, code, message, reason);
 }
 
 /// What the launch line says the shell opens: the server `ODDBORO_SERVER_URL`
