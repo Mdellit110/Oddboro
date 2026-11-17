@@ -494,6 +494,46 @@ test('a computer with no secret store gets a plain reason and nothing is sent', 
   assert.equal(fake.seen.length, before);
 });
 
+test('a phone can replace an expired return and finish its own current sign-in once', async (t) => {
+  const phone = await import('../../routes/api/phone/sign-in/+server.ts');
+  const { ACCOUNT_PLACE } = await import('./account.ts');
+
+  const submit = (url: string, expected = new URL(url).searchParams.get('state')) =>
+    send({
+      route: '/api/phone/sign-in',
+      method: 'POST',
+      headers: { ...PAGE, 'content-type': 'application/json' },
+      body: JSON.stringify({ url, state: expected }),
+      resolve: phone.POST as Handler
+    });
+  const exchanges = grants('authorization_code').length;
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let expired: URLSearchParams;
+  try {
+    expired = await returnFrom();
+    t.mock.timers.tick(15 * 60_000);
+  } finally {
+    t.mock.timers.reset();
+  }
+  assert.equal((await submit(ACCOUNT_PLACE.redirect + '?' + expired)).status, 400);
+  assert.equal(accountStatus().state, 'out');
+  assert.equal(grants('authorization_code').length, exchanges);
+  const address = ACCOUNT_PLACE.redirect + '?' + (await returnFrom());
+  assert.equal((await submit(address, 'another request')).status, 400);
+  assert.equal(
+    (await submit(address.replace(ACCOUNT_PLACE.redirect, 'https://example.invalid/elsewhere')))
+      .status,
+    400
+  );
+  assert.equal((await submit(address + '&error=access_denied')).status, 400);
+  assert.equal(grants('authorization_code').length, exchanges);
+  assert.equal((await submit(address)).status, 200);
+  assert.deepEqual(accountStatus(), SIGNED_IN);
+  assert.equal((await submit(address)).status, 400);
+  assert.equal(grants('authorization_code').length, exchanges + 1);
+  await account('DELETE');
+});
+
 test('no token, code, verifier, state or email reaches .env or the logs, and no timer stays behind', async () => {
   assert.equal(readFileSync(settings, 'utf8'), SETTINGS);
   // Every value the fake handed out or took in while the tests above ran.

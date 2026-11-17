@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+  import PhoneSignInReturn from './PhoneSignInReturn.svelte';
   import { QUIET_LINE, type Quiet } from '#lib/persona.ts';
   import { checkAgain, connect, personas } from './persona-offers.svelte.ts';
 
@@ -33,6 +34,7 @@
       onclick={cancel}>Cancel</button
     >
   </div>
+  {#key url}<PhoneSignInReturn start={url} />{/key}
 {/snippet}
 
 <div class="flex flex-col gap-2">

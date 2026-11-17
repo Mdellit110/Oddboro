@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { opened } from './PersonaQuiet.svelte';
   import { onMount, untrack } from 'svelte';
   import type { HireProposal, MissedRuns, Schedule } from '@oddboro/ledger';
   import { LEVEL_LABEL, LEVELS, type Level } from '@oddboro/ledger/access';
@@ -362,17 +363,14 @@
               {#if o.joined === 'installed'}
                 <p class="mt-auto py-2 text-muted">Works here</p>
               {:else if mine?.waiting}
-                <a
-                  class="mt-auto py-2 text-sea underline underline-offset-2"
-                  href={mine.waiting}
-                  target="_blank"
-                  rel="noopener">Finish on the sign-in page</a
-                >
+                {@render opened(mine.waiting, () => (asked[o.slug] = {}))}
               {:else}
                 <button
                   class="mt-auto w-full rounded-lg bg-sea px-3 py-2 font-medium text-night disabled:opacity-40"
                   disabled={mine?.busy}
-                  onclick={() => hirePersona(o.slug)}>Hire {o.name}</button
+                  onclick={() =>
+                    hirePersona(o.slug, o.slug === suggested?.slug ? from?.askId : undefined)}
+                  >Hire {o.name}</button
                 >
               {/if}
               {#if mine?.problem}

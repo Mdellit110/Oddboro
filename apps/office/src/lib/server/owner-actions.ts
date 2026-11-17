@@ -58,6 +58,11 @@ export const TASK_OPS = [
 ] as const;
 export type TaskOp = (typeof TASK_OPS)[number];
 
+const personaReturn = {
+  mayRecord: ['hire', 'work'],
+  when: "A hire, and a work row for each part of its look, when a persona's sign-in finishes in an open office with no Odd of it yet."
+} as const;
+
 export const OWNER_ACTIONS = {
   // The owner's New Altitude account lives in the system's secret store, and
   // the reports switch in the settings file; none of them is a record.
@@ -81,10 +86,8 @@ export const OWNER_ACTIONS = {
   },
   // The account's sign-in is setup. A persona's comes back here too, and
   // wakes its quiet Odd or adds it.
-  'GET /account/callback': {
-    mayRecord: ['hire', 'work'],
-    when: "A hire, and a work row for each part of its look, when a persona's sign-in finishes in an open office with no Odd of it yet."
-  },
+  'GET /account/callback': personaReturn,
+  'POST /api/phone/sign-in': personaReturn,
   'POST /api/accounts': { records: 'access' },
   'PATCH /api/accounts': { records: 'access' },
   'DELETE /api/accounts': { records: 'access' },

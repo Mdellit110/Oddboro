@@ -698,6 +698,9 @@
   onMount(() => {
     let disposed = false;
     seen = deskKeys(desk);
+    const hire = Number(new URL(location.href).searchParams.get('hire'));
+    const proposed = desk.asks.find((a) => a.kind === 'hire' && a.id === hire);
+    if (proposed) hireProposal(proposed);
     // A new owner's first visit opens on its own song; later visits play if the owner left the music on.
     startMusic(firstRun);
     try {

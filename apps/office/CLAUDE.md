@@ -1537,9 +1537,10 @@ window's, a card whose yes may send something out (a reply, or a held call the
 office did not put in words, `sendsOut`) and every kind with its own review
 get Open only, and a task shows its steps done. Open shows the same
 `DeskDrawer.svelte` over the list with `away`
-set: no hire window is there, and nothing reaches the office computer's folder
-picker or a sign-in that comes back to it, so a hire ask, a hosted or AWS
-sign-in step and a folder ask's Change say "Open this at the office".
+set. A hire ask links to the existing hire window on the same device. A hosted
+service or New Altitude sign-in can return through the private field on the
+waiting request. The office validates the registered address, the one-use state
+and the saved verifier. AWS sign-in and picking a folder use the office computer.
 Selecting a report's text to chat about it stays at the computer too.
 Everything else answers as on the computer, through the same routes.
 Messages (`PhoneMessages.svelte`) lists every Odd with its dot and its chat's

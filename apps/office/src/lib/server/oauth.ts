@@ -316,7 +316,10 @@ export class KeychainProvider implements OAuthClientProvider {
   }
   state() {
     const s = randomUUID();
-    this.place.pending.set(s, this.id);
+    const pending = this.place.pending;
+    for (const [state, id] of pending) if (id === this.id) pending.delete(state);
+    pending.set(s, this.id);
+    setTimeout(() => pending.delete(s), 15 * 60_000).unref();
     return s;
   }
   clientInformation() {

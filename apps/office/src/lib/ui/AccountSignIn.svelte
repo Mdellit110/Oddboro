@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PhoneSignInReturn from './PhoneSignInReturn.svelte';
   import { checkAccount, signIn, switchAccount } from './account-actions.ts';
   import { account } from './account.svelte.ts';
 
@@ -97,6 +98,7 @@
     >
     <button class={plain} onclick={() => (waiting = undefined)}>Cancel</button>
   </div>
+  {#key waiting.url}<PhoneSignInReturn start={waiting.url} />{/key}
 {:else}
   {#if view.question}
     <p class="text-[1.3em] font-semibold text-ink">{view.question}</p>
