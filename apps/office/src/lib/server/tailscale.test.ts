@@ -55,13 +55,9 @@ for (const [platform, sudo] of [
       })
     ));
 
-  test(`on ${platform}, no Tailscale, or one off or signed out, says so`, () =>
-    onPlatform(platform, async () => {
-      // The fixed install folders are not on this test machine.
-      assert.deepEqual(await withEnv({ PATH: join(folder, 'nowhere') }, () => phoneDesk()), {
-        tailscale: 'missing'
-      });
-      await withTailscale(async () => {
+  test(`on ${platform}, a stopped or signed-out Tailscale reads as off`, () =>
+    onPlatform(platform, () =>
+      withTailscale(async () => {
         assert.deepEqual(await phoneDesk(answers({ BackendState: 'NeedsLogin' })), {
           tailscale: 'off'
         });
@@ -72,9 +68,18 @@ for (const [platform, sudo] of [
           throw new Error('not running');
         };
         assert.deepEqual(await phoneDesk(fails), { tailscale: 'off' });
-      });
-    }));
+      })
+    ));
 }
+
+// Linux looks only on PATH, so an empty PATH represents a machine without
+// Tailscale even when the host has the Mac app or the Windows installer.
+test('Setup reports a missing Tailscale command', () =>
+  onPlatform('linux', () =>
+    withEnv({ PATH: '' }, async () => {
+      assert.deepEqual(await phoneDesk(answers(running)), { tailscale: 'missing' });
+    })
+  ));
 
 test('serve counts only when the name sends to this office', () => {
   for (const proxy of [
