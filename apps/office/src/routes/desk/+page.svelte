@@ -19,6 +19,7 @@
   import { chatRequest, replyAbout, type Delivered } from '#lib/ui/chat-about.svelte.ts';
   import { close, openReport, wins } from '#lib/ui/windows.svelte.ts';
   import { buzzOff, buzzOn, buzzState, type BuzzState } from '#lib/ui/phone-buzz.ts';
+  import { chipCounts } from '#lib/ui/phone/phone-desk.ts';
   import { waitingKey } from '#lib/desk.ts';
   import PhoneCall from '#lib/ui/phone/PhoneCall.svelte';
   import PhoneDesk from '#lib/ui/phone/PhoneDesk.svelte';
@@ -47,7 +48,7 @@
   let toStart = $state<Record<string, Work[]>>({});
   /** Bumps on a change an open chat reloads for, as on the computer. */
   let version = $state(0);
-  const waiting = $derived(desk.asks.length + desk.tasks.length + desk.reports.length);
+  const waiting = $derived(chipCounts(desk).all);
 
   const TABS: Tab[] = ['home', 'goals', 'messages', 'desk'];
   let tab = $state<Tab>('home');

@@ -12,14 +12,20 @@ import { mustDo } from '#lib/ui/task-steps.ts';
 export type DeskCard =
   | { kind: 'ask'; key: string; row: AskRow }
   | { kind: 'task'; key: string; row: TaskRow }
+  | {
+      kind: 'project';
+      key: string;
+      row: Omit<Desk['projectWork'][number], 'at'> & { createdAt: Date };
+    }
   | { kind: 'report'; key: string; row: ReportRow };
 
-export type Chip = 'all' | 'asks' | 'tasks' | 'reports';
+export type Chip = 'all' | 'asks' | 'tasks' | 'reports' | 'projects';
 export const CHIPS: { id: Chip; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'asks', label: 'Asks' },
   { id: 'tasks', label: 'Tasks' },
-  { id: 'reports', label: 'Reports' }
+  { id: 'reports', label: 'Reports' },
+  { id: 'projects', label: 'Projects' }
 ];
 
 /** A button on a card: Open, a one-tap answer, or one that opens a chat. */
@@ -106,6 +112,7 @@ export function askButtons(a: AskRow): CardButton[] {
 export function cardButtons(c: DeskCard): CardButton[] {
   if (c.kind === 'ask') return askButtons(c.row);
   if (c.kind === 'task') return [OPEN];
+  if (c.kind === 'project') return [];
   return [
     { id: 'reply', label: 'Reply' },
     { id: 'read', label: 'Read', post: { url: `/api/reports/${c.row.id}`, body: {} } }
@@ -124,30 +131,46 @@ export function deskCards(d: Desk, chip: Chip = 'all'): DeskCard[] {
     key: `report-${row.id}`,
     row
   }));
-  const pick = { all: [...asks, ...tasks, ...reports], asks, tasks, reports }[chip];
+  const projects: DeskCard[] = d.projectWork.map(({ at, ...row }) => ({
+    kind: 'project',
+    key: `project-${row.id}`,
+    row: { ...row, createdAt: at }
+  }));
+  const pick = {
+    all: [...asks, ...tasks, ...reports, ...projects],
+    asks,
+    tasks,
+    reports,
+    projects
+  }[chip];
   return pick.sort(newestFirst);
 }
 
 /** How many items each chip shows. */
 export const chipCounts = (d: Desk): Record<Chip, number> => ({
-  all: d.asks.length + d.tasks.length + d.reports.length,
+  all: d.asks.length + d.tasks.length + d.reports.length + d.projectWork.length,
   asks: d.asks.length,
   tasks: d.tasks.length,
-  reports: d.reports.length
+  reports: d.reports.length,
+  projects: d.projectWork.length
 });
 
 /** Home's Waiting on you: what needs a yes or no, which is the asks, held calls among them. Newest first. */
 export const waitingOnYou = (d: Desk): DeskCard[] => deskCards(d, 'asks');
 
 /** A card's kind in a word or two, for its label. */
-export const kindWord = (c: DeskCard): string =>
-  c.kind === 'ask'
-    ? c.row.kind === 'call'
-      ? 'Held call'
-      : 'Ask'
-    : c.kind === 'task'
-      ? 'Task'
-      : 'Report';
+export function kindWord(c: DeskCard): string {
+  switch (c.kind) {
+    case 'ask':
+      return c.row.kind === 'call' ? 'Held call' : 'Ask';
+    case 'project':
+      return 'Project work';
+    case 'task':
+      return 'Task';
+    case 'report':
+      return 'Report';
+  }
+}
 
 /**
  * A task's progress: "1 of 3 steps done", how far along as a fraction, and
@@ -167,7 +190,7 @@ export function taskProgress(t: TaskRow): { line: string; done: number; signIn: 
 
 /** The line under a card's title: why an ask was raised, or a report's first line. */
 export function cardLine(c: DeskCard): string {
-  const text = c.kind === 'report' ? c.row.body : c.row.why;
+  const text = c.kind === 'project' ? c.row.prompt : c.kind === 'report' ? c.row.body : c.row.why;
   const first = text.split('\n').find((l) => l.trim()) ?? '';
   return first.replace(/^#+\s*/, '').trim();
 }
